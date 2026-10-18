@@ -37,6 +37,7 @@ export function LegendSwatch({ entry }: { entry: ExtrasLegendEntry }) {
       />
     )
   }
+  if (s.kind === 'outline') return <span className="xs-swatch xs-swatch-outline" aria-hidden="true" style={{ border: `2px ${s.line} ${s.color}` }} />
   if (s.kind === 'camera') return <CameraGlyph variant={s.variant} />
   if (s.kind === 'direction') return <span className="xs-swatch xs-swatch-dir" aria-hidden="true" />
   return <span className="xs-swatch xs-swatch-raster" aria-hidden="true" />

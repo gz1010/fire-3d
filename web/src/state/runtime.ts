@@ -1,14 +1,22 @@
 // App-level runtime hooks: rAF playback, live polling (manifest 60 s, aircraft 10 s, catalog 5 min, live status),
 // URL state (?incident=&t=&mode=) and keyboard shortcuts. Mounted once by App so they keep running while the
-// panels are collapsed.
+// panels are collapsed. Brief 2: there is no default incident (no link = the California overview); history entries
+// for opening and leaving fires are written by state/history.ts.
 import { useEffect } from 'react'
-import type { IncidentSummary, Mode } from '../api/types'
+import type { Mode } from '../api/types'
 import { defaultTimeFor, getTimeBounds, useStore } from './store'
 
 const HOUR = 3_600_000
 
+/** Play starts from the window start: at its end, before it, or still at the latest observation a zoom focus showed
+ *  (decision 10: Play animates the whole spread). */
+export function playStartsOver(timeMs: number, w: { startMs: number; endMs: number }, focusTimeMs: number | null): boolean {
+  return timeMs >= w.endMs - 60_000 || timeMs < w.startMs || (focusTimeMs != null && Math.abs(timeMs - focusTimeMs) < 1000)
+}
+
 /** Advance store.timeMs with requestAnimationFrame while `playing` (speed in hours per second). Stops at the end of
- *  the visible window; pressing play at the end restarts from the window start. */
+ *  the visible window; pressing play at the end (or at a zoom focus's latest observation) restarts from the window
+ *  start. */
 export function usePlayback(): void {
   const playing = useStore((s) => s.playing)
   useEffect(() => {
@@ -19,7 +27,8 @@ export function usePlayback(): void {
       s0.setPlaying(false)
       return
     }
-    if (s0.timeMs >= w0.endMs - 60_000 || s0.timeMs < w0.startMs) s0.setTimeMs(w0.startMs)
+    if (playStartsOver(s0.timeMs, w0, s0.focusTimeMs)) s0.setTimeMs(w0.startMs)
+    if (s0.focusTimeMs != null) useStore.setState({ focusTimeMs: null })
     let raf = 0
     let last = performance.now()
     const tick = (now: number) => {
@@ -45,8 +54,10 @@ export function usePlayback(): void {
 const visible = () => typeof document === 'undefined' || !document.hidden
 
 /** Live mode polling: manifest every 60 s (bundle files reload when built_ms changes), aircraft every 10 s into
- *  store.aircraft, the live catalog every 5 min and /live/status every 60 s. Paused while the tab is hidden. */
-export function useLivePolling(): void {
+ *  store.aircraft, the live catalog every 5 min (also on the overview) and /live/status every 60 s. Paused while the
+ *  tab is hidden. `aircraft: false` skips the aircraft poll (the map workspace shows no aircraft, so it does not ask
+ *  the ADS-B providers every 10 s; adsb.fi, the fallback, is for light non-commercial use). */
+export function useLivePolling({ aircraft = true }: { aircraft?: boolean } = {}): void {
   const mode = useStore((s) => s.mode)
   const id = useStore((s) => s.incidentId)
   const ready = useStore((s) => s.manifest?.status === 'ready')
@@ -59,7 +70,7 @@ export function useLivePolling(): void {
   }, [mode, id])
 
   useEffect(() => {
-    if (mode !== 'live' || !id || !ready) return
+    if (mode !== 'live' || !id || !ready || !aircraft) return
     const poll = () => visible() && void useStore.getState().refreshAircraft()
     poll()
     const t = window.setInterval(poll, 10_000)
@@ -68,19 +79,23 @@ export function useLivePolling(): void {
       window.clearInterval(t)
       document.removeEventListener('visibilitychange', poll)
     }
-  }, [mode, id, ready, aircraftAll])
+  }, [mode, id, ready, aircraftAll, aircraft])
 
   useEffect(() => {
     if (mode !== 'live') return
     const st = useStore.getState()
     void st.refreshLiveStatus()
     const t1 = window.setInterval(() => visible() && void useStore.getState().refreshLiveStatus(), 60_000)
-    const t2 = window.setInterval(() => visible() && void useStore.getState().loadCatalog({ modes: ['live'] }), 5 * 60_000)
-    return () => {
-      window.clearInterval(t1)
-      window.clearInterval(t2)
-    }
+    return () => window.clearInterval(t1)
   }, [mode])
+
+  // the active-fire list: inside a live fire and on the overview (CAL FIRE's list is cached 5-10 min server-side)
+  const overview = id == null
+  useEffect(() => {
+    if (mode !== 'live' && !overview) return
+    const t = window.setInterval(() => visible() && void useStore.getState().loadCatalog({ lists: ['live'] }), 5 * 60_000)
+    return () => window.clearInterval(t)
+  }, [mode, overview])
 }
 
 export interface UrlParams {
@@ -174,13 +189,4 @@ export function useHotkeys(): void {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
-}
-
-/** Default incident (SPEC 9.4). */
-export function pickDefault(live: IncidentSummary[], historical: IncidentSummary[], mode: Mode | null): string | null {
-  const liveReady = live.filter((i) => i.bundle_status === 'ready').sort((a, b) => (b.acres ?? 0) - (a.acres ?? 0))[0]
-  if (mode !== 'historical' && liveReady) return liveReady.id
-  const eaton = historical.find((i) => i.year === 2025 && /\beaton\b/i.test(i.name))
-  if (mode === 'live' && live[0]) return live[0].id
-  return eaton?.id ?? historical[0]?.id ?? live[0]?.id ?? null
 }

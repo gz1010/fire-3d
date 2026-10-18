@@ -67,6 +67,8 @@ A 3D wildfire analysis app for **California**, built on real data:
 | Weather ensemble (**live only**) | `https://ensemble-api.open-meteo.com/v1/ensemble?…&models=gfs025` (31 members: control + `_member01…30`) or `models=ecmwf_ifs025` (51) | Keys look like `wind_speed_10m_member07`. Multi-location works. **Only covers ~the last 90 days plus the forecast** (range 2026-07-16…2026-11-21 on 2026-10-16), so it cannot be used for 2025. |
 | Weather historical | `https://historical-forecast-api.open-meteo.com/v1/forecast?…&start_date=YYYY-MM-DD&end_date=…&models=gfs_hrrr` | Archived HRRR forecasts; works for 2025. Fallback: `https://archive-api.open-meteo.com/v1/archive` (ERA5). Free tier is ~10k calls/day, so cache everything. |
 | ADS-B | `https://api.adsb.lol/v2/point/{lat}/{lon}/{radius_nm}`, `https://api.adsb.lol/v2/type/{ICAO type}`; fallback `https://opendata.adsb.fi/api/v2/lat/{lat}/lon/{lon}/dist/{nm}` (free for non-commercial use) when adsb.lol is unreachable | Response `{ac:[…], now, total}` (adsb.fi: `{aircraft:[…], now (s), resultCount}`). Aircraft fields: `hex`, `flight` (callsign, space-padded), `r` (registration), `t` (ICAO type), `lat`, `lon`, `alt_baro` (ft, or the string "ground"), `alt_geom`, `gs` (kt), `track`, `category`, `seen`, `squawk`. |
+| NWS fire weather alerts (no key; added 2026-10-18) | `GET https://api.weather.gov/alerts/active?area=CA&event=Red%20Flag%20Warning,Fire%20Weather%20Watch` (header `User-Agent: Fire-3d/0.1 (research prototype)`, `Accept: application/geo+json`); zone polygons `GET https://api.weather.gov/zones/fire/{UGC}` | GeoJSON CAP alerts; fire weather alerts carry `geometry: null` and list their fire weather zones in `geocode.UGC` / `affectedZones`; P-VTEC in `parameters.VTEC` (e.g. `/O.CON.KLOX.FW.W.0005.000000T0000Z-261018T0300Z/`). Open data, free to use; a User-Agent is required (optional contact via `FIRE3D_NWS_CONTACT`). NWS keeps no archive: past dates answer an empty list. Cached 2 min (alerts) / 30 days (zones). |
+| NWS alert archive (Iowa Environmental Mesonet, no key; added 2026-10-18) | `GET https://mesonet.agron.iastate.edu/json/vtec_events_bypoint.py?lat=&lon=&sdate=YYYY-MM-DD&edate=`, `/json/vtec_event.py?wfo=LOX&year=2025&phenomena=FW&significance=W&etn=1`, `/geojson/vtec_event.py?…` (same query) | Public domain ("may be used freely by anyone for any lawful purpose"), an archived copy of NWS products, not an NWS source. bypoint lists events by their start date (look back about 14 days); `vtec_event` gives per-zone `utc_product_issue`, `utc_issue`, `utc_expire` (final; a watch upgraded or cancelled before it began ends before it begins) and the original text products (`report`, `svs[]`); the geojson features' `id` is the UGC. Cached 30 days (30 min while the window touches the last day). |
 | Satellite passes (NASA CMR, no key; added 2026-10-17) | `GET https://cmr.earthdata.nasa.gov/search/granules.json?short_name={SN}&version={V}&point={lon},{lat}&temporal={iso},{iso}&sort_key=-start_date&page_size=200` (header `Client-Id: fire3d`) | Granules of the active-fire products FIRMS is made from. Live (LANCE NRT): `VNP14IMG_NRT` v2 (Suomi NPP), `VJ114IMG_NRT` v2 (NOAA-20), `VJ214IMG_NRT` v2 (NOAA-21), `MOD14` v6.1NRT (Terra), `MYD14` v6.1NRT (Aqua). Archive: `VNP14IMG`/`VJ114IMG`/`VJ214IMG` v002, `MOD14`/`MYD14` v061. Fields used: `time_start`/`time_end` (6-min VIIRS, 5-min MODIS granules; FIRMS `acq_time` falls inside), `day_night_flag`, `updated` (publication, 0.75–3 h after acquisition). A granule containing the fire's point is a pass over it (§8.3). |
 
 ## 3. Repo layout
@@ -295,7 +297,7 @@ and README.
 | Method | Path | Response |
 |---|---|---|
 | GET | `/api/health` | `{ok: true, version}` |
-| GET | `/api/incidents?mode=live\|historical&min_acres=300` | `{mode, updated_ms, incidents: IncidentSummary[]}`. Historical default `min_acres=300`, sorted by acres desc. Live: all active `Type ∈ {Wildfire, Fire}` incidents, sorted by `detections_24h` then acres. |
+| GET | `/api/incidents?mode=live\|historical&min_acres=300&year=2025` | `{mode, updated_ms, incidents: IncidentListRow[], year?}`. Historical: CAL FIRE's list of `year` (default 2025; e.g. `year=2026` for the current season, refreshed every 30 min and overlaid with the fresher live-list records), default `min_acres=300`, sorted by acres desc; every row keeps mode `"historical"` (`is_active` says whether CAL FIRE still lists the fire as active; `/api/incidents/{id}` resolves such a fire as live); the response says which `year` it lists. Live: all active `Type ∈ {Wildfire, Fire}` incidents, sorted by `detections_24h` then acres (`year` is ignored). Rows (BRIEF-2) are `IncidentSummary` + `bbox_lonlat: [w, s, e, n] \| null`: the analysis area (`manifest.grid.bbox_lonlat`) of a ready bundle, else null. |
 | GET | `/api/incidents/{id}` | `{summary: IncidentSummary, manifest: IncidentManifest \| null, job: JobStatus \| null}` |
 | POST | `/api/incidents/{id}/build?force=false` | `JobStatus`. Builds or rebuilds the bundle in the background; returns the existing job if one is running. |
 | POST | `/api/incidents/{id}/forecast` body `{start_ms?: number, horizon_h?: number = 72, ensemble?: "auto" \| "gfs025" \| "ecmwf_ifs025" \| "perturbed" \| "none", members?: number}` | `JobStatus`. Default `start_ms`: live = `time_range.now_ms`, the latest observation of the fire: a confirmed satellite pass after the last detection counts (§8.3), so a fire that went quiet starts at the latest pass with its last mapped area, not at its last detection; historical = 24 h after ignition. `"auto"`: live → gfs025, historical → perturbed. |
@@ -303,6 +305,10 @@ and README.
 | GET | `/api/bundles/{id}/{path:path}` | Static bundle files, gzip, `Cache-Control: no-cache` + ETag. Path traversal must be impossible. |
 | GET | `/api/incidents/{id}/aircraft?all=0` | `{updated_ms, source: "adsb.lol" \| "adsb.fi", radius_nm, aircraft: Aircraft[], note?}`. `source` names the provider that answered (adsb.fi is the fallback while adsb.lol is unreachable). Live incidents only (historical → empty list plus a note). Every provider failing or rate-limited → empty list plus a note (never an error status). Cached 10 s. |
 | GET | `/api/live/status` | `{last_refresh_ms, next_refresh_ms, active_incidents, detections_24h_ca, auto_build}` |
+| GET | `/api/geocode?q=<US street address \| California town \| ZIP code>` | Map-first redesign (shapes in docs/redesign/CONTRACT.md §6 and §13 location). A street address (house number first) is proxied to the US Census Geocoder (`Public_AR_Current`, cached 30 days); a California town or a 5-digit ZIP code is matched locally in `backend/fire3d/data/gazetteer_ca.json` (2026 Census Gazetteer Files, no upstream call; replies say `kind` and `local: true`). Coordinates are parsed by the browser (400 here). 503 when the local index is missing. |
+| GET | `/api/extras/{evacuations,cameras,cameras/latest,imagery,sources}` | Optional official and public sources (CONTRACT §12.1): Cal OES evacuation zones, public cameras, recent satellite imagery; `?incident=<id>` or `?bbox=w,s,e,n`. Upstream failures answer 200 with an honest status, never invented data. |
+| GET | `/api/official/calfire?incident={id}` | BRIEF-2. `CalFireOfficial`: CAL FIRE's current record of the incident (its own numbers and `Updated` time), every change of acres, containment, active or final status Fire-3d has recorded since it first checked (append-only `data/official/calfire/<UniqueId>.jsonl`, outside the bundles), and caveats. Each call is a check and records the current record. Past fires have only CAL FIRE's final record. |
+| GET | `/api/official/fire-weather?incident={id}&at_ms=&margin_km=15` | BRIEF-2. `FireWeather`: NWS Red Flag Warnings and Fire Weather Watches whose zones meet the incident's analysis area + `margin_km`, verbatim, with `covers_reported_location` and `nearest_km`. The present (no `at_ms`, or within 6 h of now, or later): the live NWS list (one statewide request, cached 2 min; zone polygons cached 30 days). An older `at_ms`, or any `at_ms` of a historical incident: the Iowa Environmental Mesonet archive (`archived: true`); a historical incident without `at_ms`, or an archive failure, is `not_available_for_past_dates`, never "no alerts". Without `incident`: every current California alert. |
 
 ```ts
 interface JobStatus {
@@ -317,6 +323,44 @@ interface Aircraft {
   lat: number; lon: number; x: number; z: number;
   alt_m: number | null; agl_m: number | null; gs_kt: number | null; track_deg: number | null;
   seen_s: number; on_ground: boolean;
+}
+```
+
+Official endpoints (BRIEF-2; built in `backend/fire3d/api/official.py`, details in `docs/redesign/CONTRACT.md` §13). An upstream failure is not an HTTP error: they answer 200 with `status: "unavailable"` (or `"not_available_for_past_dates"` for the archive). Errors: 400 bad id, 404 unknown incident, 422 bad query, 429 Fire-3d's own request limit (NWS 30/min, IEM 30/min). JSON is `Cache-Control: no-store`.
+
+```ts
+interface IncidentListRow extends IncidentSummary { bbox_lonlat: [number, number, number, number] | null }
+interface OfficialEnvelope {
+  kind: "calfire" | "fire_weather";
+  status: "available" | "unavailable" | "not_available_for_past_dates";
+  reason_code: "past_date" | "upstream_error" | "not_covered" | null; reason: string | null;
+  source: { name: string; url: string; credit: string; license?: string; terms_url?: string };
+  retrieved_ms: number | null;        // when Fire-3d fetched it from the source
+  source_updated_ms: number | null;   // the source's own update time
+  requested_at_ms: number | null; now_ms: number; incident_id: string | null; caveats: string[];
+}
+interface CalFireOfficial extends OfficialEnvelope {
+  incident_url: string | null; agencies: string | null;   // CAL FIRE's AgencyNames, verbatim
+  current: { acres: number | null; percent_contained: number | null; is_active: boolean; final: boolean;
+             updated_ms: number | null; extinguished_ms: number | null } | null;
+  changes: { updated_ms: number | null; seen_ms: number; acres?: [number | null, number | null];
+             percent_contained?: [number | null, number | null]; is_active?: [boolean, boolean]; final?: [boolean, boolean] }[];
+  recording_since_ms: number | null;
+}
+interface FireWeatherAlert {
+  id: string; url: string | null; office_url: string | null; event: "Red Flag Warning" | "Fire Weather Watch";
+  vtec: { office: string; phenomena: string; significance: string; etn: number; action: string } | null;
+  sender_name: string | null; sent_ms: number | null; effective_ms: number | null; onset_ms: number | null;
+  expires_ms: number | null; ends_ms: number | null;
+  headline: string | null; nws_headline: string | null; description: string | null; instruction: string | null;
+  area_desc: string | null; ugcs: string[]; message_type: string | null; status: string;
+  covers_reported_location: boolean | null; nearest_km: number | null; archived: boolean;
+  phase: "upcoming" | "in_effect" | "ended";
+}
+interface FireWeather extends OfficialEnvelope {
+  alerts: FireWeatherAlert[];
+  zones: GeoJSON.FeatureCollection;   // simplified outlines; properties { ugc, name, alert_ids }
+  area_bbox: [number, number, number, number] | null; reported_location: [number, number] | null;   // lon, lat
 }
 ```
 

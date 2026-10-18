@@ -23,8 +23,8 @@ from fire3d.api import live
 from fire3d.api.jobs import JobManager, set_manager
 from fire3d.build import pipeline
 from fire3d.contracts import (
-    AircraftResponse, HealthResponse, IncidentDetailResponse, IncidentListResponse, IncidentManifest, IncidentSummary,
-    JobStatus, LiveStatus, contract_problems,
+    AircraftResponse, HealthResponse, IncidentDetailResponse, IncidentListResponse, IncidentListRow, IncidentManifest,
+    IncidentSummary, JobStatus, LiveStatus, contract_problems,
 )
 from fire3d.sources import aircraft as acmod
 from fire3d.timeutil import HOUR_MS
@@ -108,6 +108,40 @@ def test_incident_lists(client, fake):
     assert [s["id"] for s in live_rows] == [LIVE, LIVE_NOBUNDLE]
     assert client.get("/api/incidents", params={"mode": "bogus"}).status_code == 422
     assert client.get("/api/incidents", params={"min_acres": -5}).status_code == 422
+
+
+def test_incident_list_year_and_bbox(client, fake):
+    """BRIEF-2 O-R8: ``year=`` reaches other CAL FIRE years (default 2025); rows carry the ready bundle's area."""
+    pipeline.build_incident(HIST)
+    pipeline.build_incident(LIVE)
+    body = client.get("/api/incidents", params={"mode": "historical"}).json()
+    assert body["year"] == 2025 and [s["id"] for s in body["incidents"]] == [HIST]
+    m = bundle.load_manifest(bundle.bundle_dir(HIST))
+    assert body["incidents"][0]["bbox_lonlat"] == list(m["grid"]["bbox_lonlat"])
+    r = client.get("/api/incidents", params={"mode": "historical", "year": 2026, "min_acres": 0})
+    assert r.status_code == 200 and contract_problems(IncidentListResponse, r.content) == []
+    season = r.json()
+    assert season["year"] == 2026 and {s["id"] for s in season["incidents"]} == {LIVE, LIVE_NOBUNDLE}
+    assert all(s["mode"] == "historical" for s in season["incidents"])           # the list's mode; see is_active
+    rows = {s["id"]: s for s in season["incidents"]}
+    assert rows[LIVE]["is_active"] and rows[LIVE]["bbox_lonlat"] == list(bundle.load_manifest(bundle.bundle_dir(LIVE))["grid"]["bbox_lonlat"])
+    assert rows[LIVE_NOBUNDLE]["bbox_lonlat"] is None and rows[LIVE_NOBUNDLE]["bundle_status"] == "none"
+    live = client.get("/api/incidents", params={"mode": "live", "year": 2025}).json()   # year applies to historical only
+    assert "year" not in live and {s["id"] for s in live["incidents"]} == {LIVE, LIVE_NOBUNDLE}
+    assert all("bbox_lonlat" in s for s in live["incidents"])
+    assert client.get("/api/incidents", params={"mode": "historical", "year": 1999}).status_code == 422
+
+
+def test_incident_list_year_fallback_uses_bundles_of_that_year(client, fixtures_dir, monkeypatch):
+    def broken(*a, **k):
+        raise ConnectionError("CAL FIRE unreachable")
+
+    monkeypatch.setattr(catalog, "get_catalog", broken)
+    y2026 = client.get("/api/incidents", params={"mode": "historical", "year": 2026}).json()["incidents"]
+    assert "fixture-live" in [s["id"] for s in y2026] and all(s["year"] == 2026 for s in y2026)
+    assert all(s["bbox_lonlat"] and len(s["bbox_lonlat"]) == 4 for s in y2026)
+    y2025 = client.get("/api/incidents", params={"mode": "historical", "year": 2025}).json()["incidents"]
+    assert "fixture-demo" in [s["id"] for s in y2025] and "fixture-live" not in [s["id"] for s in y2025]
 
 
 def test_incident_list_falls_back_to_bundles(client, fixtures_dir, monkeypatch):
@@ -393,7 +427,9 @@ def test_cors_localhost_only(client):
 def test_summary_rows_validate(client, fake):
     rows = client.get("/api/incidents", params={"mode": "live"}).json()["incidents"]
     for row in rows:
-        assert contract_problems(IncidentSummary, row) == []
+        assert contract_problems(IncidentListRow, row) == []
+        summary = {k: v for k, v in row.items() if k != "bbox_lonlat"}     # a row is a summary + bbox_lonlat
+        assert contract_problems(IncidentSummary, summary) == []
 
 
 def test_copied_fixture_bundle_build_is_noop(client, tmp_data_dir, monkeypatch):

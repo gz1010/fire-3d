@@ -1,19 +1,27 @@
-// Updates feed (owner: timeline-feed; CONTRACT §8, BRIEF §10): Key Events promoted into the right panel, plus agency
-// perimeters, satellite passes and the selected forecast run. Every item shows a plain title and detail, its time,
-// its source and what kind of information it is; automated items say so. Newest first.
-//   Live: everything, newest first; updates that arrive while the page is open are marked "New".
+// Updates feed (owner: official-web since brief 2, earlier timeline-feed; CONTRACT §8, §13, BRIEF §10): Key Events
+// promoted into the right panel, plus agency perimeters, satellite passes, the selected forecast run and the official
+// and optional sources. Every item shows a plain title and detail, its time (with the time zone), its source and what
+// kind of information it is; automated items say so; official items name their issuer, their own times and a link.
+// Newest first.
+//   Filters: Official (agencies' own updates) · All · Key events.
+//   Live: everything, newest first; a day's satellite passes are one row; updates that arrive while the page is open
+//   are marked "New"; a quiet-period row says when satellites last saw new heat (never an all-clear).
 //   Replay: key events by default; the feed shows what had happened by the replay time, later updates sit behind a
 //   "later" toggle.
 // Clicking an item selects it, moves the timeline to its time and flies the map / Forensic camera to it
-// (selectFeedItem); clicking it again closes its details. Items without a location stay usable, with no fake target.
+// (selectFeedItem; official items fit and highlight their area and never seek into a forecast); clicking it again
+// closes its details. Items without a location stay usable, with no fake target.
 // Keyboard: the list is one Tab stop (roving focus); ↑/↓ move between updates, Home/End jump, Enter opens one.
-// Optional sources (evacuation status, cameras, recent imagery) join through `extraItems` (already FeedItems).
-import { Check, ChevronDown, ChevronRight, Copy, LocateFixed, MapPin, Plus, Search, Trash2, X } from 'lucide-react'
+// Public is calm: plain words, no run ids, no "+ Note" (Command keeps them).
+import { Archive, Check, ChevronDown, ChevronRight, Copy, ExternalLink, LocateFixed, MapPin, Plus, Search, Trash2, X } from 'lucide-react'
 import { memo, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as RKeyboardEvent } from 'react'
 import { useShallow } from 'zustand/react/shallow'
+import { agoText, fmtWhen } from '../../extras/format'
 import { fmtLatLon } from '../../lib/format'
 import { lonLatToLocal } from '../../lib/reproject'
 import { fmtDateTime, fmtDay, fmtRelative, fmtTime, tzLabel } from '../../lib/time'
+import { fitOfficialBounds } from '../../official/select'
+import { useOfficialRuntime } from '../../official/runtime'
 import { useAnnotations, useIncidentAnnotations } from '../../state/annotations'
 import { lastIndexAtOrBefore } from '../../state/selectors'
 import { useStore } from '../../state/store'
@@ -26,6 +34,7 @@ import {
   feedCompareMs,
   feedView,
   filterFeed,
+  focusFeedItem,
   isLaterItem,
   isNewFeedItem,
   rovingIndex,
@@ -35,20 +44,21 @@ import {
   type FeedBaseline,
   type FeedFilter,
 } from './feedModel'
-import { AUTOMATED_NOTE, KIND_META, topicStyle } from './feedMeta'
+import { AUTOMATED_NOTE, EMPTY_FEED, EMPTY_REPLAY, KIND_META, topicStyle } from './feedMeta'
 import type { FeedItem, FeedTopic } from './types'
 import './updatesFeed.css'
 
 export interface UpdatesFeedProps {
-  /** Updates from the optional sources (evacuation status, cameras, recent imagery) in FeedItem form, e.g.
-   *  `evacuationFeedItems(...)` from web/src/extras. Pass a memoised array: a new array rebuilds the feed. */
+  /** Updates from the optional and official sources in FeedItem form (`useExtrasFeedItems()`). Pass a memoised
+   *  array: a new array rebuilds the feed. */
   extraItems?: readonly FeedItem[]
 }
 
 const NO_EXTRA: readonly FeedItem[] = []
+const TEN_MIN = 600_000
 
-/** Tooltips of the two filters, naming only what this feed actually holds. */
-function filterTips(items: readonly FeedItem[]): { all: string; key: string } {
+/** Tooltips of the filters, naming only what this feed actually holds. */
+function filterTips(items: readonly FeedItem[]): Record<FeedFilter, string> {
   const has = (t: FeedTopic) => items.some((i) => i.topic === t)
   const parts: [boolean, string][] = [
     [true, 'key events'],
@@ -56,13 +66,30 @@ function filterTips(items: readonly FeedItem[]): { all: string; key: string } {
     [has('detection'), 'satellite passes'],
     [has('forecast'), 'the forecast run'],
     [has('evacuation'), 'official evacuation status'],
+    [has('calfire'), 'CAL FIRE record changes'],
+    [has('fire-weather'), 'NWS fire weather alerts'],
     [has('camera'), 'public cameras'],
     [has('imagery'), 'new satellite images'],
   ]
   const all = parts.filter(([on]) => on).map(([, text]) => text)
-  const keyExtra = items.some((i) => i.key && i.topic === 'evacuation') ? ', your notes and evacuation orders' : ' and your notes'
   const list = all.length > 1 ? `${all.slice(0, -1).join(', ')} and ${all[all.length - 1]}` : all[0]
-  return { all: `Everything: ${list}`, key: `Only the key events detected for this fire${keyExtra}` }
+  return {
+    official: "Only agencies' own updates: evacuation status, CAL FIRE's record, NWS fire weather alerts, reported start and containment",
+    all: `Everything: ${list}`,
+    key: 'The key events detected for this fire, official updates and your notes',
+  }
+}
+
+const FILTERS: { id: FeedFilter; label: string }[] = [
+  { id: 'official', label: 'Official' },
+  { id: 'all', label: 'All' },
+  { id: 'key', label: 'Key events' },
+]
+
+function emptyText(filter: FeedFilter): string {
+  if (filter === 'official') return "No official updates from Fire-3d's sources for this fire. That is not an all-clear: follow local officials."
+  if (filter === 'key') return 'No key events were detected for this fire.'
+  return EMPTY_FEED
 }
 
 export function UpdatesFeed({ extraItems = NO_EXTRA }: UpdatesFeedProps = {}) {
@@ -81,7 +108,8 @@ export function UpdatesFeed({ extraItems = NO_EXTRA }: UpdatesFeedProps = {}) {
     })),
   )
   const units = useWorkspace((s) => s.units)
-  const command = useWorkspace((s) => s.preset === 'command')
+  const preset = useWorkspace((s) => s.preset)
+  const command = preset === 'command'
   const notes = useIncidentAnnotations(d.incidentId)
   // default: everything for live fires (what changed recently), key events for replays (the story); a choice sticks
   const [userFilter, setFilter] = useState<FeedFilter | null>(null)
@@ -89,7 +117,10 @@ export function UpdatesFeed({ extraItems = NO_EXTRA }: UpdatesFeedProps = {}) {
   const [showLater, setShowLater] = useState(false)
   const [adding, setAdding] = useState(false)
   const nowMs = useNow(30_000)
+  // the quiet-period row and "today" wording need the clock; rebuild at most every 10 minutes for them
+  const wallMs = Math.floor(nowMs / TEN_MIN) * TEN_MIN
   const listRef = useRef<HTMLOListElement | null>(null)
+  const live = d.manifest?.mode === 'live'
 
   const items = useMemo(
     () =>
@@ -105,9 +136,12 @@ export function UpdatesFeed({ extraItems = NO_EXTRA }: UpdatesFeedProps = {}) {
             forecast: d.forecast,
             units,
             extra: extraItems,
+            preset,
+            groupPasses: live,
+            wallMs,
           })
         : [],
-    [d.manifest, d.events, notes, d.timeseries, d.weather, d.perimeters, d.detections, d.forecast, units, extraItems],
+    [d.manifest, d.events, notes, d.timeseries, d.weather, d.perimeters, d.detections, d.forecast, units, extraItems, preset, live, wallMs],
   )
   const shown = useMemo(() => filterFeed(items, filter), [items, filter])
   // re-render on the timeline only when it crosses an item's time (not every playback frame)
@@ -134,11 +168,10 @@ export function UpdatesFeed({ extraItems = NO_EXTRA }: UpdatesFeedProps = {}) {
   }, [d.selected])
 
   if (!d.manifest)
-    return <p className="uf-empty">{d.loading ? 'Loading incident updates…' : d.incidentId ? 'Updates appear once the incident data is ready.' : 'Choose an incident to see its updates.'}</p>
+    return <p className="uf-empty">{d.loading ? 'Loading incident updates…' : d.incidentId ? 'Updates appear once the incident data is ready.' : 'Choose a fire to see its updates.'}</p>
 
-  const live = d.manifest.mode === 'live'
   const { listed, later, currentId } = feedView(shown, threshold, live, showLater)
-  const keyCount = items.filter((i) => i.key).length
+  const counts: Record<FeedFilter, number> = { official: items.filter((i) => i.kind === 'official').length, all: items.length, key: items.filter((i) => i.key).length }
   const tips = filterTips(items)
   const selectedRow = d.selected != null ? (listed.find((i) => selectionId(i) === d.selected)?.id ?? null) : null
   const tabStop = rovingTabStop(
@@ -162,19 +195,20 @@ export function UpdatesFeed({ extraItems = NO_EXTRA }: UpdatesFeedProps = {}) {
     <div className={`uf ${command ? 'is-command' : ''}`}>
       <div className="uf-bar">
         <div className="uf-seg" role="group" aria-label="Which updates to show">
-          <button type="button" aria-pressed={filter === 'all'} onClick={() => setFilter('all')} data-tip={tips.all}>
-            All <span className="uf-count">{items.length}</span>
-          </button>
-          <button type="button" aria-pressed={filter === 'key'} onClick={() => setFilter('key')} data-tip={tips.key}>
-            Key events <span className="uf-count">{keyCount}</span>
-          </button>
+          {FILTERS.map((f) => (
+            <button key={f.id} type="button" aria-pressed={filter === f.id} onClick={() => setFilter(f.id)} data-tip={tips[f.id]}>
+              {f.label} <span className="uf-count">{counts[f.id]}</span>
+            </button>
+          ))}
         </div>
         <span className="uf-order">Newest first</span>
-        <button type="button" className="uf-add-btn" aria-expanded={adding} onClick={() => setAdding((a) => !a)} data-tip="Pin a note at the timeline time">
-          <Plus size={13} /> Note
-        </button>
+        {command && (
+          <button type="button" className="uf-add-btn" aria-expanded={adding} onClick={() => setAdding((a) => !a)} data-tip="Pin a note at the timeline time">
+            <Plus size={13} /> Note
+          </button>
+        )}
       </div>
-      {adding && d.incidentId && <AddNote incidentId={d.incidentId} onDone={() => setAdding(false)} />}
+      {adding && command && d.incidentId && <AddNote incidentId={d.incidentId} onDone={() => setAdding(false)} />}
       {!live && later.length > 0 && (
         <button type="button" className="uf-later" aria-expanded={showLater} onClick={() => setShowLater((v) => !v)}>
           {showLater ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
@@ -183,13 +217,7 @@ export function UpdatesFeed({ extraItems = NO_EXTRA }: UpdatesFeedProps = {}) {
         </button>
       )}
       {listed.length === 0 ? (
-        <p className="uf-empty">
-          {shown.length === 0
-            ? filter === 'key'
-              ? 'No key events were detected for this fire.'
-              : 'No updates for this fire yet.'
-            : 'Nothing had happened yet at the replay time. Press play or move the timeline.'}
-        </p>
+        <p className="uf-empty">{shown.length === 0 ? emptyText(filter) : `${EMPTY_REPLAY} Press play or move the timeline.`}</p>
       ) : (
         <>
           <span id="uf-keys-help" className="uf-sr">
@@ -257,19 +285,24 @@ interface RowProps {
   onFocusRow: (id: string) => void
 }
 
+const STATUS_LABEL: Partial<Record<NonNullable<FeedItem['status']>, string>> = { expired: 'Expired', cancelled: 'Cancelled', upcoming: 'Upcoming' }
+
 const FeedRow = memo(function FeedRow({ item, selected, later, current, isNew, live, command, nowMs, incidentId, tabbable, onFocusRow }: RowProps) {
   const topic = topicStyle(item.topic)
   const kind = KIND_META[item.kind]
   const Icon = topic.Icon
   const KindIcon = kind.Icon
-  const compact = !item.key && item.topic === 'detection'
-  const cls = ['uf-item', selected && 'is-selected', later && 'is-later', current && 'is-current', compact && 'is-compact'].filter(Boolean).join(' ')
+  const compact = !item.key && item.topic === 'detection' && !item.children?.length
+  const ended = item.status === 'expired' || item.status === 'cancelled'
+  const cls = ['uf-item', selected && 'is-selected', later && 'is-later', current && 'is-current', compact && 'is-compact', item.kind === 'official' && 'is-official', ended && 'is-ended']
+    .filter(Boolean)
+    .join(' ')
   const t = item.tMs
-  // Clock time (Command adds the zone) over the date (replay) or how long ago (live). Stacked, so the narrow time
-  // column leaves room for the kind and "Automated" chips on one line; older live items keep their date on line 1.
+  // Clock time with the time zone over how long ago (live, today), the day (older live items) or the date (replay).
   const recent = live && fmtDay(t) === fmtDay(nowMs)
-  const line1 = command ? `${fmtTime(t)} ${tzLabel(t)}` : live && !recent ? fmtDateTime(t) : fmtTime(t)
-  const line2 = live ? fmtRelative(t, nowMs) : fmtDay(t)
+  const line1 = item.timeNotGiven ? 'Time not given' : `${fmtTime(t)} ${tzLabel(t)}`
+  const line2 = item.timeNotGiven ? (item.checkedMs != null ? `checked ${agoText(item.checkedMs, nowMs)}` : null) : live ? (recent ? fmtRelative(t, nowMs) : fmtDay(t)) : fmtDay(t)
+  const status = item.status ? STATUS_LABEL[item.status] : undefined
   return (
     <li className={cls} data-feed-id={selectionId(item)}>
       <button
@@ -295,6 +328,12 @@ const FeedRow = memo(function FeedRow({ item, selected, later, current, isNew, l
               <KindIcon size={11} aria-hidden="true" />
               {kind.label}
             </span>
+            {status && <span className={`uf-status is-${item.status}`}>{status}</span>}
+            {item.archived && (
+              <span className="uf-archived" data-tip="An archived copy of the official product (Iowa Environmental Mesonet), not the live source">
+                <Archive size={10} aria-hidden="true" /> Archived copy
+              </span>
+            )}
             {item.automated && <span className="uf-auto" data-tip={AUTOMATED_NOTE}>Automated</span>}
             <span className="uf-src">{item.source}</span>
           </span>
@@ -306,14 +345,14 @@ const FeedRow = memo(function FeedRow({ item, selected, later, current, isNew, l
           )}
         </span>
         <span className="uf-time">
-          <time dateTime={new Date(t).toISOString()} data-tip={`${fmtDateTime(t)} ${tzLabel(t)}`}>
+          <time dateTime={new Date(t).toISOString()} data-tip={item.timeNotGiven ? 'The source gives no time for this update' : `${fmtDateTime(t)} ${tzLabel(t)}`}>
             {line1}
           </time>
           {line2 && <span className="uf-rel">{line2}</span>}
           {later && <span className="uf-rel">later</span>}
         </span>
       </button>
-      {selected && <FeedDetails item={item} incidentId={incidentId} />}
+      {selected && <FeedDetails item={item} incidentId={incidentId} command={command} nowMs={nowMs} />}
     </li>
   )
 })
@@ -327,16 +366,80 @@ function copyText(text: string): Promise<boolean> {
   return Promise.resolve(false)
 }
 
-function FeedDetails({ item, incidentId }: { item: FeedItem; incidentId: string | null }) {
+function ExtLink({ href, children }: { href: string; children: string }) {
+  return (
+    <a className="uf-link" href={href} target="_blank" rel="noreferrer noopener">
+      {children}
+      <ExternalLink size={11} aria-hidden="true" />
+    </a>
+  )
+}
+
+/** Issuer, the issuer's own times, Fire-3d's check time, notes and links of an official item. */
+function OfficialDetails({ item, nowMs }: { item: FeedItem; nowMs: number }) {
+  const times: { label: string; ms: number }[] = []
+  if (item.issuedMs != null) times.push({ label: 'Issued', ms: item.issuedMs })
+  if (item.updatedMs != null) times.push({ label: item.topic === 'calfire' ? 'Updated by CAL FIRE' : 'Updated by the issuer', ms: item.updatedMs })
+  if (item.expiresMs != null) times.push({ label: item.status === 'expired' ? 'Ended' : 'Until', ms: item.expiresMs })
+  return (
+    <>
+      {item.issuer && (
+        <p className="uf-note">
+          <span className="uf-label">Issued by</span> <strong>{item.issuer}</strong>
+        </p>
+      )}
+      {times.length > 0 && (
+        <dl className="uf-facts">
+          {times.map((t) => (
+            <div key={t.label}>
+              <dt>{t.label}</dt>
+              <dd>{fmtWhen(t.ms, nowMs)}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {item.notes
+        ?.filter((n) => !item.detail?.includes(n))
+        .map((n) => (
+          <p key={n} className="uf-note">
+            {n}
+          </p>
+        ))}
+      {item.sections && item.sections.length > 0 && (
+        <details className="uf-sections">
+          <summary>Official text ({item.sections.map((s) => s.label).join(', ')})</summary>
+          {item.sections.map((s) => (
+            <p key={s.label} className="uf-quote">
+              <span className="uf-label">{s.label}</span> {s.text}
+            </p>
+          ))}
+        </details>
+      )}
+      <p className="uf-note uf-links">
+        {item.url && <ExtLink href={item.url}>Open source</ExtLink>}
+        {item.links?.map((l) => (
+          <ExtLink key={l.url} href={l.url}>
+            {l.label}
+          </ExtLink>
+        ))}
+        {item.checkedMs != null && <span className="uf-muted">Checked by Fire-3d {agoText(item.checkedMs, nowMs)}</span>}
+      </p>
+    </>
+  )
+}
+
+function FeedDetails({ item, incidentId, command, nowMs }: { item: FeedItem; incidentId: string | null; command: boolean; nowMs: number }) {
   const [copied, setCopied] = useState(false)
+  const highlighted = useOfficialRuntime((s) => s.highlight?.id === item.id)
   const kind = KIND_META[item.kind]
   const loc = item.location
   const coords = loc ? fmtLatLon(loc.lat, loc.lon) : null
   const orig = item.original
-  const showOrig = orig != null && (orig.detail !== item.detail || orig.title !== item.title)
+  const showOrig = orig != null && (orig.detail !== item.detail || orig.title !== item.title) && (command || item.topic !== 'forecast')
+  const official = item.kind === 'official'
   return (
     <div className="uf-more" id={`uf-more-${item.id}`}>
-      {item.detail && item.topic === 'detection' && <p className="uf-more-detail">{item.detail}</p>}
+      {item.detail && item.topic === 'detection' && !item.children?.length && <p className="uf-more-detail">{item.detail}</p>}
       {item.facts && item.facts.length > 0 && (
         <dl className="uf-facts">
           {item.facts.map((f) => (
@@ -344,20 +447,37 @@ function FeedDetails({ item, incidentId }: { item: FeedItem; incidentId: string 
               <dt>{f.label}</dt>
               <dd>
                 {f.text}
-                {f.scientific && <span className="uf-sci">{f.scientific}</span>}
+                {f.scientific && (command || !official) && <span className="uf-sci">{f.scientific}</span>}
               </dd>
             </div>
           ))}
         </dl>
       )}
+      {item.children && item.children.length > 0 && (
+        <ul className="uf-children" aria-label="Satellite passes of this day">
+          {item.children.map((c) => (
+            <li key={c.id}>
+              <button type="button" className="uf-child" onClick={() => focusFeedItem(c)} data-tip="Move the timeline to this pass and show it on the map">
+                <span className="uf-child-time">
+                  {fmtTime(c.tMs)} {tzLabel(c.tMs)}
+                </span>
+                <span className="uf-child-text">
+                  {c.title.replace(/^Satellite pass: /, '')} · {c.source.replace(/^NASA FIRMS \(|\)$/g, '')}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       <p className="uf-note">
         <strong>{kind.label}.</strong> {kind.meaning}
         {item.automated ? ` ${AUTOMATED_NOTE}` : ''}
       </p>
-      {item.kind !== 'annotation' && (
+      {official && <OfficialDetails item={item} nowMs={nowMs} />}
+      {item.kind !== 'annotation' && !official && (
         <p className="uf-note">
           <span className="uf-label">Source</span> {item.source}
-          {orig && orig.source !== item.source && <span className="uf-sci"> ({orig.source})</span>}
+          {orig && orig.source !== item.source && (command || item.topic !== 'forecast') && <span className="uf-sci"> ({orig.source})</span>}
         </p>
       )}
       {showOrig && (
@@ -389,11 +509,28 @@ function FeedDetails({ item, incidentId }: { item: FeedItem; incidentId: string 
           </button>
         </p>
       ) : (
-        <p className="uf-note uf-muted">No map location for this update.</p>
+        !item.bounds && <p className="uf-note uf-muted">No map location for this update.</p>
       )}
-      {!item.seekable && <p className="uf-note uf-muted">Not a point on the incident timeline, so selecting it does not move the time.</p>}
+      {!item.seekable && (
+        <p className="uf-note uf-muted">
+          {official ? 'Shown as official status, not a point on the incident timeline: selecting it does not move the time.' : 'Not a point on the incident timeline, so selecting it does not move the time.'}
+        </p>
+      )}
       <div className="uf-actions">
-        {loc && (
+        {item.bounds && (
+          <button
+            type="button"
+            className="uf-btn"
+            aria-pressed={highlighted}
+            onClick={() => {
+              if (item.highlight) useOfficialRuntime.getState().setHighlight(item.highlight)
+              fitOfficialBounds(item.bounds)
+            }}
+          >
+            <LocateFixed size={13} /> Show area on map
+          </button>
+        )}
+        {loc && !item.bounds && (
           <button type="button" className="uf-btn" onClick={() => useStore.getState().requestFlyTo(loc.x, loc.z)}>
             <LocateFixed size={13} /> Show on map
           </button>

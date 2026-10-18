@@ -174,10 +174,20 @@
 }
 
 /* ------------------------------------------------------------------------------------------ controls */
+/* two rows: the main controls, then (3D) the orbit group; the toolbar is as wide as its widest row. Its own stacking
+   level keeps the one-time gesture hint (which hangs below it) above the updates panel. */
 .fxm-ctl {
+  position: relative;
+  z-index: 4;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.fxm-ctl-row {
+  display: flex;
   align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
+  gap: 6px;
 }
 .fxm-ctl-sep {
   width: 1px;
@@ -245,10 +255,20 @@
 .fxm-bm-short {
   display: none;
 }
-/* phones: one row of controls (short basemap name; "Return to incident" keeps its icon and accessible name) */
+/* phones: one row of controls (short basemap name; "Return to incident" keeps its icon and accessible name); the 3D
+   orbit group wraps onto its own row with shorter text buttons */
 @media (max-width: 520px) {
   .fxm-basemap-btn {
     min-width: 0;
+  }
+  .fxm-orbit {
+    gap: 4px;
+  }
+  .fxm-orbit .fxm-ctl-sep {
+    display: none;
+  }
+  .fxm-orbit-text {
+    padding: 0 7px;
   }
   .fxm-bm-long,
   .fxm-ctl-sep,
@@ -268,6 +288,47 @@
   .fxm-compass svg {
     transition: none;
   }
+}
+
+/* 3D orbit group (brief 2, O-R14): its own row under the controls, right-aligned */
+.fxm-orbit {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.fxm-orbit-text {
+  height: 30px;
+  padding: 0 9px;
+  font-size: var(--m-fs-xs);
+  white-space: nowrap;
+}
+.fxm-orbit-text:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.fxm-orbit-text:focus-visible {
+  outline: none;
+  box-shadow: var(--m-focus-ring);
+}
+.fxm-orbit-hint {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: min(300px, calc(100vw - 32px));
+  padding: 8px 8px 8px 12px;
+  border-radius: var(--m-radius);
+  border: 1px solid var(--m-border-strong);
+  background: var(--m-panel-strong);
+  box-shadow: inset 3px 0 0 var(--m-accent), var(--m-shadow);
+  color: var(--m-text);
+  font-size: var(--m-fs-sm);
+  line-height: 1.4;
+  z-index: 3;
 }
 
 /* ------------------------------------------------------------------------------------------ legend */
@@ -437,6 +498,11 @@
   border-radius: 0;
   border-top: 2px solid var(--m-perimeter);
 }
+.fxm-sw-nearby {
+  height: 0;
+  border-radius: 0;
+  border-top: 2px dashed rgba(255, 120, 73, 0.75);
+}
 .fxm-sw-aoi {
   height: 0;
   border-radius: 0;
@@ -456,6 +522,44 @@
   margin: 0 3px;
   border-radius: 50%;
   border: 2.5px solid var(--m-text);
+}
+/* overview fire markers (map/overviewLayers.ts): filled orange + white ring = active; hollow amber = other fires */
+.fxm-sw-fire-active,
+.fxm-sw-fire-past {
+  width: 12px;
+  height: 12px;
+  margin: 0 3px;
+  border-radius: 50%;
+}
+.fxm-sw-fire-active {
+  background: #ff5a1f;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 1.5px rgba(6, 10, 16, 0.72);
+}
+.fxm-sw-fire-past {
+  background: rgba(255, 190, 90, 0.2);
+  border: 1.6px solid #ffc46b;
+  box-shadow: 0 0 0 1.5px rgba(6, 10, 16, 0.72);
+}
+/* 3D buildings: a muted block (shapes only) */
+.fxm-sw-buildings {
+  width: 12px;
+  height: 12px;
+  margin: 0 3px;
+  border-radius: 1px;
+  background: linear-gradient(180deg, #c3c9d1, #6b7686);
+  opacity: 0.85;
+}
+/* aerial photos: a small photo tile */
+.fxm-sw-photo {
+  width: 14px;
+  height: 11px;
+  border-radius: 2px;
+  background: linear-gradient(135deg, #5d6a52 0 40%, #8a7f68 40% 70%, #44505c 70%);
+  border: 1px solid var(--m-border-strong);
+}
+.fxm-legend-photo {
+  color: var(--m-text-2);
 }
 
 /* ------------------------------------------------------------------------------------------ scale + credits */

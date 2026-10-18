@@ -71,11 +71,23 @@ const enc = encodeURIComponent
 
 export const getHealth = (opts?: FetchOptions) => fetchJson<HealthResponse>(api('/health'), opts)
 
-/** GET /api/incidents?mode=&min_acres= (historical default min_acres = 300 server-side). */
-export function getIncidents(mode: Mode, minAcres?: number, opts?: FetchOptions) {
+export interface IncidentListOptions extends FetchOptions {
+  /** Historical lists: the CAL FIRE year (brief 2, I2). The server default stays 2025, so callers pass it explicitly. */
+  year?: number
+}
+
+/** GET /api/incidents?mode=&min_acres=&year= (historical default min_acres = 300 and year = 2025 server-side). */
+export function getIncidents(mode: Mode, minAcres?: number, opts?: IncidentListOptions) {
+  const { year, ...fetchOpts } = opts ?? {}
+  return fetchJson<IncidentListResponse>(api(`/incidents?${incidentListQuery(mode, minAcres, year)}`), fetchOpts)
+}
+
+/** Query string of the incident list request (exported for tests). */
+export function incidentListQuery(mode: Mode, minAcres?: number, year?: number): string {
   const q = new URLSearchParams({ mode })
   if (minAcres != null) q.set('min_acres', String(minAcres))
-  return fetchJson<IncidentListResponse>(api(`/incidents?${q}`), opts)
+  if (year != null && mode === 'historical') q.set('year', String(year))
+  return q.toString()
 }
 
 export const getIncident = (id: string, opts?: FetchOptions) => fetchJson<IncidentDetailResponse>(api(`/incidents/${enc(id)}`), opts)

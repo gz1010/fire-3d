@@ -1,5 +1,6 @@
-/* Updates feed (owner: timeline-feed). Lives inside the shell's .mw-updates-body (which scrolls); uses the --m-*
-   tokens. Kinds are told apart by label + glyph, the selection by the cyan bar, later items by dimming + "later". */
+/* Updates feed and "Official now" (owner: official-web since brief 2, earlier timeline-feed). The feed lives inside the
+   shell's .mw-updates-body (which scrolls); uses the --m-* tokens. Kinds are told apart by label + glyph, the selection
+   by the cyan bar, later items by dimming + "later". Text sizes: body >= 12 px, tags 10.5-11 px (brief 2 C-R9). */
 
 .uf {
   display: flex;
@@ -479,4 +480,335 @@
       background-color 120ms ease,
       box-shadow 120ms ease;
   }
+}
+
+/* ---- brief 2 (official-web): official rows, links, statuses, grouped passes ---------------------------------- */
+.uf-status {
+  display: inline-flex;
+  align-items: center;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 4px;
+  border: 1px dashed var(--m-border-strong);
+  color: var(--m-text-2);
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.uf-status.is-upcoming {
+  border-style: solid;
+  color: var(--m-text);
+}
+.uf-archived {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--m-text-2);
+  font-size: 10.5px;
+  white-space: nowrap;
+  cursor: help;
+}
+.uf-item.is-official:not(.is-selected) {
+  box-shadow: inset 2px 0 0 color-mix(in srgb, #8ee0a8 55%, transparent);
+}
+.uf-item.is-ended:not(.is-selected) .uf-title {
+  color: var(--m-text-2);
+}
+.uf-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--m-accent);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.uf-link:hover {
+  color: var(--m-text);
+}
+.uf-link:focus-visible {
+  outline: none;
+  box-shadow: var(--m-focus-ring);
+  border-radius: 3px;
+}
+.uf-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+.uf-sections {
+  margin: 0;
+}
+.uf-sections > summary {
+  cursor: pointer;
+  color: var(--m-text);
+  font-weight: 500;
+}
+.uf-sections > summary:focus-visible {
+  outline: none;
+  box-shadow: var(--m-focus-ring);
+  border-radius: 3px;
+}
+.uf-quote {
+  margin: 6px 0 0;
+  padding-left: 8px;
+  border-left: 2px solid var(--m-border-strong);
+  color: var(--m-text);
+}
+.uf-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+.uf-child {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid var(--m-border);
+  border-radius: var(--m-radius-sm);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--m-text);
+  font: inherit;
+  font-size: var(--m-fs-xs);
+  text-align: left;
+  cursor: pointer;
+}
+.uf-child:hover {
+  background: var(--m-hover);
+}
+.uf-child-time {
+  font-family: var(--m-font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--m-text-2);
+}
+.uf-child-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ---- "Official now" (mounted by the shell at the top of the updates panel / phone sheet) ---------------------- */
+.on {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 7px 8px 8px;
+  border-bottom: 1px solid var(--m-border);
+  background: color-mix(in srgb, var(--m-panel-strong) 94%, #8ee0a8 6%);
+  color: var(--m-text);
+  font-size: var(--m-fs-sm);
+}
+.on-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: #8ee0a8;
+}
+.on-head > svg {
+  flex: none;
+}
+.on-head h3 {
+  flex: none;
+  margin: 0;
+  font-size: var(--m-fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.on-head-sub {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--m-text-2);
+  font-size: var(--m-fs-xs);
+}
+.on-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.on-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: 5px 8px 6px;
+  border: 1px solid var(--m-border);
+  border-radius: var(--m-radius-sm);
+  background: rgba(0, 0, 0, 0.24);
+}
+.on-row.is-alert {
+  border-color: color-mix(in srgb, var(--m-evac-order) 55%, var(--m-border));
+}
+.on-row-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 20px;
+  font-size: var(--m-fs-xs);
+  color: var(--m-text-2);
+}
+.on-row-icon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  color: var(--m-text-2);
+}
+.on-row.is-alert .on-row-icon {
+  color: #ff9ccd;
+}
+.on-row-label {
+  flex: none;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--m-text);
+}
+.on-row-src {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.on-row-aside {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  margin-left: auto;
+}
+.on-line {
+  margin: 0;
+  line-height: 1.35;
+  color: var(--m-text);
+}
+.on-line strong {
+  font-weight: 600;
+}
+.on-meta {
+  margin: 0;
+  font-size: var(--m-fs-xs);
+  line-height: 1.35;
+  color: var(--m-text-2);
+}
+.on-quote {
+  margin: 2px 0 0;
+  padding-left: 7px;
+  border-left: 2px solid var(--m-border-strong);
+  font-size: var(--m-fs-xs);
+  line-height: 1.35;
+  color: var(--m-text);
+}
+.on-zone + .on-zone,
+.on-alert + .on-alert {
+  margin-top: 3px;
+  padding-top: 3px;
+  border-top: 1px dashed var(--m-border);
+}
+.on-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: 3px;
+}
+.on-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid var(--m-border-strong);
+  border-radius: var(--m-radius-sm);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--m-text);
+  font: inherit;
+  font-size: var(--m-fs-xs);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.on-btn:hover {
+  background: var(--m-hover);
+}
+.on-btn[aria-pressed='true'] {
+  background: var(--m-accent-bg);
+  border-color: transparent;
+}
+.on-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-right: 8px;
+  color: var(--m-accent);
+  font-size: var(--m-fs-xs);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+.on-row-aside .on-link {
+  margin-right: 0;
+}
+.on-link:hover {
+  color: var(--m-text);
+}
+.on-link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--m-accent);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.on-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  align-self: flex-start;
+  margin-top: 1px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--m-text-2);
+  font: inherit;
+  font-size: var(--m-fs-xs);
+  cursor: pointer;
+}
+.on-more:hover {
+  color: var(--m-text);
+}
+.on-more svg.is-open {
+  transform: rotate(180deg);
+}
+.on-extra {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 2px;
+}
+.on :is(button, a):focus-visible {
+  outline: none;
+  box-shadow: var(--m-focus-ring);
+  border-radius: 3px;
+}
+.on-foot {
+  margin: 0;
+  font-size: var(--m-fs-xs);
+  line-height: 1.35;
+  color: var(--m-text-2);
 }

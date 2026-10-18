@@ -1,0 +1,327 @@
+{
+ "burnedHome-public-390": {
+  "incident": "2025-eaton-fire-dbfa57",
+  "sel": {
+   "lat": 34.18964,
+   "lon": -118.13739,
+   "source": "address",
+   "label": "600 E Mariposa St, Altadena, CA 91001"
+  },
+  "fireCard": null,
+  "panels": {
+   "updates": false,
+   "analysis": false,
+   "layers": false
+  },
+  "view": {
+   "lon": -118.1374,
+   "lat": 34.1896,
+   "z": 15
+  },
+  "focus": "",
+  "search": {
+   "x": 8,
+   "y": 56,
+   "w": 374,
+   "h": 65,
+   "vis": true
+  },
+  "pop": {
+   "x": 0,
+   "y": 0,
+   "w": 0,
+   "h": 0,
+   "vis": false
+  },
+  "popText": "",
+  "card": {
+   "x": 8,
+   "y": 341,
+   "w": 374,
+   "h": 491,
+   "vis": true
+  },
+  "cardText": "600 E Mariposa St, Altadena, CA 91001Approximate Street address, interpolated (not a rooftop)Near hereInside the estimated burned area Estimate Burned around Jan 8, 07:39 PST (estimate) · 198 ft from its edge · from satellite detections up to Jan 8, 19:40 PSTOfficial information Evacuation orders: not shown for past datesOfficial Fire weather alert here: Red Flag Warning until Jan 10, 14:48 PSTA weather warning, not an evacuation orderFollow local officials. CAL FIRE · Cal OESWhat could bring fire hereModel In the experimental model (re-run on past weather), 0 of 31 simulated fires reached here by Jan 11, 00:18 PST (72 h). Not a safety guarantee.Estimate The fire reached this spot around Jan 8, 07:39 PST, but none of the simulated fires did. More about this location",
+  "strip": {
+   "x": 8,
+   "y": 788,
+   "w": 374,
+   "h": 32,
+   "vis": true
+  },
+  "stripText": "Address34.18964° N, 118.13739° W",
+  "sheet": null,
+  "unobstructed": 0.2828762038218495,
+  "scrollW": 390,
+  "errs": [],
+  "reqs": [
+   "GET /api/geocode?q=600%20E%20Mariposa%20St%2C%20Altadena%2C%20CA%2091001"
+  ]
+ },
+ "henderson-390": {
+  "incident": "2026-henderson-fire-3e3dfe",
+  "sel": {
+   "lat": 33.3446,
+   "lon": -117.3925,
+   "source": "coords",
+   "label": null
+  },
+  "fireCard": null,
+  "panels": {
+   "updates": false,
+   "analysis": false,
+   "layers": false
+  },
+  "view": {
+   "lon": -117.3925,
+   "lat": 33.3446,
+   "z": 14
+  },
+  "focus": "",
+  "search": {
+   "x": 8,
+   "y": 56,
+   "w": 374,
+   "h": 65,
+   "vis": true
+  },
+  "pop": {
+   "x": 0,
+   "y": 0,
+   "w": 0,
+   "h": 0,
+   "vis": false
+  },
+  "popText": "",
+  "card": {
+   "x": 8,
+   "y": 341,
+   "w": 374,
+   "h": 391,
+   "vis": true
+  },
+  "cardText": "33.34460° N, 117.39250° W Entered coordinatesNear here1.0 mi east of the estimated burned area Estimate StaleFrom satellite detections up to Oct 16, 15:30 PDT (2 d ago)Official informationOfficial No evacuation order or warning listed hereFollow local officials. CAL FIRE · Cal OESWhat could bring fire hereModel In the experimental model, 0 of 31 simulated fires reached here by Oct 20, 15:50 PDT (72 h). Not a safety guarantee. More about this location",
+  "strip": {
+   "x": 8,
+   "y": 788,
+   "w": 374,
+   "h": 32,
+   "vis": true
+  },
+  "stripText": "Selected33.34460° N, 117.39250° W",
+  "sheet": null,
+  "unobstructed": 0.2828762038218495,
+  "scrollW": 390,
+  "errs": [],
+  "reqs": []
+ },
+ "outside-390": {
+  "incident": "2025-eaton-fire-dbfa57",
+  "sel": {
+   "lat": 34.083,
+   "lon": -118.115,
+   "source": "click",
+   "label": null
+  },
+  "fireCard": null,
+  "panels": {
+   "updates": false,
+   "analysis": false,
+   "layers": false
+  },
+  "view": {
+   "lon": -118.115,
+   "lat": 34.083,
+   "z": 10.06
+  },
+  "focus": "",
+  "search": {
+   "x": 8,
+   "y": 56,
+   "w": 374,
+   "h": 65,
+   "vis": true
+  },
+  "pop": {
+   "x": 0,
+   "y": 0,
+   "w": 0,
+   "h": 0,
+   "vis": false
+  },
+  "popText": "",
+  "card": {
+   "x": 8,
+   "y": 341,
+   "w": 374,
+   "h": 491,
+   "vis": true
+  },
+  "cardText": "34.08300° N, 118.11500° W Point picked on the mapNear here5.7 mi south of the estimated burned area Estimate From satellite detections up to Jan 8, 19:40 PSTOutside the modeled area: the model and the fire reconstruction do not cover this spot. Unknown, not low risk.Official information Evacuation orders: not shown for past datesOfficial Fire weather alert here: Red Flag Warning until Jan 10, 14:48 PSTA weather warning, not an evacuation orderFollow local officials. CAL FIRE · Cal OESWhat could bring fire hereUnknown The experimental model does not cover this spot (outside the modeled area). Unknown, not low. More about this location",
+  "strip": {
+   "x": 8,
+   "y": 788,
+   "w": 374,
+   "h": 32,
+   "vis": true
+  },
+  "stripText": "Selected34.08300° N, 118.11500° W",
+  "sheet": null,
+  "unobstructed": 0.2828762038218495,
+  "scrollW": 390,
+  "errs": [],
+  "reqs": []
+ },
+ "burnedHome-command-390": {
+  "incident": "2025-eaton-fire-dbfa57",
+  "sel": {
+   "lat": 34.18964,
+   "lon": -118.13739,
+   "source": "address",
+   "label": "600 E Mariposa St, Altadena, CA 91001"
+  },
+  "fireCard": null,
+  "panels": {
+   "updates": false,
+   "analysis": false,
+   "layers": false
+  },
+  "view": {
+   "lon": -118.1374,
+   "lat": 34.1896,
+   "z": 15
+  },
+  "focus": "",
+  "search": {
+   "x": 8,
+   "y": 56,
+   "w": 374,
+   "h": 65,
+   "vis": true
+  },
+  "pop": {
+   "x": 0,
+   "y": 0,
+   "w": 0,
+   "h": 0,
+   "vis": false
+  },
+  "popText": "",
+  "card": {
+   "x": 8,
+   "y": 324,
+   "w": 374,
+   "h": 476,
+   "vis": true
+  },
+  "cardText": "600 E Mariposa St, Altadena, CA 91001Approximate Street address, interpolated (not a rooftop)Near hereInside the estimated burned area Estimate Burned around Jan 8, 07:39 PST (estimate) · 198 ft from its edge · from satellite detections up to Jan 8, 19:40 PSTOfficial information Evacuation orders: not shown for past datesOfficial Fire weather alert here: Red Flag Warning until Jan 10, 14:48 PSTA weather warning, not an evacuation orderFollow local officials. CAL FIRE · Cal OESWhat could bring fire here0%Model 0 of 31 model runs burned this spot by Jan 11, 00:18 PST (72 h). Not a safety guarantee.Estimate The fire reached this spot around Jan 8, 07:39 PST, but none of the simulated fires did. More about this location",
+  "strip": {
+   "x": 8,
+   "y": 788,
+   "w": 374,
+   "h": 32,
+   "vis": true
+  },
+  "stripText": "Address34.18964° N, 118.13739° W",
+  "sheet": null,
+  "unobstructed": 0.2645983336371369,
+  "scrollW": 390,
+  "errs": [],
+  "reqs": [
+   "GET /api/geocode?q=600%20E%20Mariposa%20St%2C%20Altadena%2C%20CA%2091001"
+  ]
+ },
+ "zip-Paradise-1440": {
+  "incident": null,
+  "sel": null,
+  "fireCard": null,
+  "panels": {
+   "updates": true,
+   "analysis": false,
+   "layers": false
+  },
+  "view": {
+   "lon": -119.305,
+   "lat": 37.4198,
+   "z": 5.16
+  },
+  "focus": "loc-search-input",
+  "search": {
+   "x": 12,
+   "y": 52,
+   "w": 360,
+   "h": 66,
+   "vis": true
+  },
+  "pop": {
+   "x": 12,
+   "y": 124,
+   "w": 360,
+   "h": 275,
+   "vis": true
+  },
+  "popText": "Towns and ZIP areas · approximateParadisetown · near Chico · town center, approximateParadisecensus-designated place · near Bishop · town center, approximateParadise Parkcensus-designated place · town center, approximateTowns and ZIP areas: U.S. Census Bureau Gazetteer Files. Picking one moves the map; then enter a street address or click the map.",
+  "card": null,
+  "cardText": "",
+  "strip": {
+   "x": 12,
+   "y": 796,
+   "w": 280,
+   "h": 79,
+   "vis": true
+  },
+  "stripText": "California overviewNo fire openSelected pointClick the map or search to select a point",
+  "sheet": null,
+  "unobstructed": 0.7178484549816744,
+  "scrollW": 1440,
+  "errs": [],
+  "reqs": [
+   "GET /api/geocode?q=Paradise"
+  ]
+ },
+ "phoneSheet": {
+  "before": {
+   "panels": {
+    "updates": false,
+    "analysis": false,
+    "layers": true
+   },
+   "sheet": {
+    "x": 8,
+    "y": 112,
+    "w": 374,
+    "h": 547,
+    "vis": true
+   }
+  },
+  "list": {
+   "panels": {
+    "updates": false,
+    "analysis": false,
+    "layers": false
+   },
+   "pop": {
+    "x": 8,
+    "y": 127,
+    "w": 374,
+    "h": 275,
+    "vis": true
+   },
+   "popText": "Towns and ZIP areas · approximateParadisetown · near Chico · town center, approximateParadisecensus-designated place · near Bishop · town center, approximateParadise Parkcensus-designated place · town center, approximateTowns and ZIP areas: U.S. Census Bureau Gazetteer Files. Picking one moves the map; then enter a street address or click the map.",
+   "sheet": null
+  },
+  "picked": {
+   "focus": "",
+   "view": {
+    "lon": -121.6064,
+    "lat": 39.7542,
+    "z": 11
+   },
+   "popText": "Showing Paradise (town center, approximate). To check a spot, enter a street address with a house number, or click the map.Towns and ZIP areas: U.S. Census Bureau Gazetteer Files."
+  },
+  "errs": [],
+  "reqs": [
+   "GET /api/geocode?q=Paradise"
+  ]
+ }
+}

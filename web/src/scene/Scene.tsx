@@ -22,6 +22,7 @@ import { CameraRig } from './camera/CameraRig'
 import { SceneFx } from './fx'
 import { LookDriver } from './LookDriver'
 import { SceneOverlays } from './overlays/SceneOverlays'
+import { SelectionPin } from './overlays/SelectionPin'
 import { PerfMonitor } from './perf/PerfMonitor'
 import { PostFX } from './post/PostFX'
 import { ProbeDriver } from './probe/ProbeDriver'
@@ -90,6 +91,7 @@ function SceneContent() {
       {assets && <Terrain assets={assets} />}
       <CameraRig assets={assets} />
       <ProbeDriver assets={assets} />
+      {assets && <SelectionPin assets={assets} />}
       <PerfMonitor />
       <SceneFx />
       <PostFX />

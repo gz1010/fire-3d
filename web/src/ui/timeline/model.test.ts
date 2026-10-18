@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ForecastManifest, ForecastSummary, IncidentManifest, Mode } from '../../api/types'
-import { STALE_AFTER_MS, ZONE_MIN, activeStop, allocateFractions, buildCompactTimeline, clampToData, describeTime, labelsCoverPoints, spreadLabels, trackScale } from './model'
+import { STALE_AFTER_MS, ZONE_MIN, activeStop, allocateFractions, buildCompactTimeline, clampToData, describeTime, forecastWord, labelsCoverPoints, spreadLabels, trackScale } from './model'
 
 const H = 3_600_000
 const T0 = Date.UTC(2026, 9, 16, 3) // record start
@@ -160,7 +160,7 @@ describe('compact timeline: historical replay', () => {
   it('disables the forecast stops of a replay without a hindcast, without inventing positions', () => {
     const none = manifest('historical', { endH: 66 })
     const m = buildCompactTimeline(none, null, T0, years)
-    expect(stop(m, 'now')).toMatchObject({ available: false, tMs: null, posMs: null, reason: 'No hindcast has been run for this replay' })
+    expect(stop(m, 'now')).toMatchObject({ available: false, tMs: null, posMs: null, reason: 'The model has not been re-run on the weather of this replay' })
     for (const id of ['h24', 'h48', 'h72']) expect(stop(m, id)).toMatchObject({ available: false, posMs: null })
     expect(m.unavailable).toBeNull()
     expect(m.trackEndMs).toBe(end)
@@ -242,3 +242,12 @@ describe('track scale', () => {
     expect(f.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 9)
   })
 })
+
+describe('forecastWord (brief 2 C-R8: plain words in Public)', () => {
+  it('says forecast live, hindcast in Command replay and model re-run in Public replay', () => {
+    expect(forecastWord('live', false)).toBe('forecast')
+    expect(forecastWord('historical', true)).toBe('hindcast')
+    expect(forecastWord('historical', false)).toBe('model re-run')
+  })
+})
+

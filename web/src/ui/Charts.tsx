@@ -15,6 +15,7 @@ import { loadForecastLayer, loadLayer } from '../lib/raster'
 import { HOUR_MS, fmtDateTime, laWallTicks, tickStepHours, tzLabel } from '../lib/time'
 import { interpAt, lastIndexAtOrBefore } from '../state/selectors'
 import { useStore, type TimeWindow } from '../state/store'
+import { useWorkspace } from '../state/workspace'
 import { MenuItem, Popover } from './controls'
 import { useElementSize } from './hooks'
 import { useTimelineWindow } from './timelineModel'
@@ -23,6 +24,32 @@ import { isOpenMeteo } from '../lib/dataCredits'
 
 type Lin = ScaleLinear<number, number>
 const M = { l: 38, r: 10, t: 8, b: 17 }
+
+/** How the charts name the model. Forensic and Command name the run ("Forecast <run id>", P50, P10–P90); Public's
+ *  Analysis drawer (map workspace) uses plain words without run ids (brief 2 C-R8), and a past fire's run is a model
+ *  re-run on past weather, never called a forecast or a hindcast. */
+function useModelNames(fc: ForecastManifest | null, mode: IncidentManifest['mode'] | undefined) {
+  const plain = useWorkspace((s) => s.workspace === 'map' && s.preset === 'public')
+  if (!fc) return null
+  if (!plain)
+    return {
+      band: `Forecast ${fc.run_id}`,
+      bandTip: `Forecast ${fc.run_id}: P50 line with the P10–P90 band; click to toggle`,
+      p50: 'forecast P50',
+      range: 'P10–P90',
+      ros: 'P50',
+      rosTip: `Forecast ${fc.run_id} median ROS`,
+    }
+  const name = mode === 'historical' ? 'Model re-run on past weather' : 'Model forecast'
+  return {
+    band: mode === 'historical' ? 'Model re-run' : 'Model forecast',
+    bandTip: `${name} (experimental): the middle run as a line and the range of 80 % of the runs as a band; click to toggle`,
+    p50: 'model, middle run',
+    range: '80 % of runs',
+    ros: 'Model',
+    rosTip: `${name} (experimental): the middle run`,
+  }
+}
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
 // ------------------------------------------------------------------------------------------------ shared pieces
@@ -333,6 +360,7 @@ function nowOf(m: IncidentManifest | null, f: ForecastManifest | null): number |
 
 export function FireAreaChart() {
   const { ts, fc, manifest } = useStore(useShallow((s) => ({ ts: s.timeseries, fc: s.forecast, manifest: s.manifest })))
+  const names = useModelNames(fc, manifest?.mode)
   const win = useTimelineWindow()
   const [ref, { width: w, height: h }] = useElementSize<HTMLDivElement>()
   const [showFc, setShowFc] = useState(true)
@@ -373,10 +401,10 @@ export function FireAreaChart() {
       const s = fc.series
       const p = interpAt(s.t_ms, s.area_acres_p50, t)
       if (p != null) {
-        out.push({ key: <i className="rk rk-dash" style={{ ['--c' as string]: 'var(--chart-forecast)' }} />, label: 'forecast P50', value: `${fmtNumber(p)} ac` })
+        out.push({ key: <i className="rk rk-dash" style={{ ['--c' as string]: 'var(--chart-forecast)' }} />, label: names?.p50 ?? 'forecast P50', value: `${fmtNumber(p)} ac` })
         out.push({
           key: <i className="rk rk-band" style={{ ['--c' as string]: 'var(--chart-forecast)' }} />,
-          label: 'P10–P90',
+          label: names?.range ?? 'P10–P90',
           value: `${fmtNumber(interpAt(s.t_ms, s.area_acres_p10, t) ?? p)}–${fmtNumber(interpAt(s.t_ms, s.area_acres_p90, t) ?? p)}`,
         })
       }
@@ -397,7 +425,7 @@ export function FireAreaChart() {
       legend={
         <>
           <LegendKey kind="line" color="var(--chart-observed)" label="Observed" short="Obs." />
-          {fc && <LegendKey kind="band" color="var(--chart-forecast)" label={`Forecast ${fc.run_id}`} short="Fcst" off={!showFc} onClick={() => setShowFc(!showFc)} tip={`Forecast ${fc.run_id}: P50 line with the P10–P90 band; click to toggle`} />}
+          {fc && names && <LegendKey kind="band" color="var(--chart-forecast)" label={names.band} short="Fcst" off={!showFc} onClick={() => setShowFc(!showFc)} tip={names.bandTip} />}
         </>
       }
       menu={
@@ -443,6 +471,7 @@ export function FireAreaChart() {
 
 export function RosChart() {
   const { ts, fc, manifest, weather } = useStore(useShallow((s) => ({ ts: s.timeseries, fc: s.forecast, manifest: s.manifest, weather: s.weather })))
+  const names = useModelNames(fc, manifest?.mode)
   const win = useTimelineWindow()
   const [ref, { width: w, height: h }] = useElementSize<HTMLDivElement>()
   const hasFrp = Boolean(ts?.frp_mw_per_h?.some((v) => v > 0))
@@ -488,7 +517,7 @@ export function RosChart() {
     const o = ts ? interpAt(ts.t_ms, ts.ros_ch_per_h, t) : null
     if (o != null) out.push({ key: <i className="rk rk-line" style={{ ['--c' as string]: 'var(--chart-observed)' }} />, label: 'observed', value: `${fmtNumber(o, o < 10 ? 1 : 0)} ch/h` })
     const p = fc ? interpAt(fc.series.t_ms, fc.series.ros_ch_per_h_p50, t) : null
-    if (p != null) out.push({ key: <i className="rk rk-dash" style={{ ['--c' as string]: 'var(--chart-forecast)' }} />, label: 'forecast P50', value: `${fmtNumber(p, p < 10 ? 1 : 0)} ch/h` })
+    if (p != null) out.push({ key: <i className="rk rk-dash" style={{ ['--c' as string]: 'var(--chart-forecast)' }} />, label: names?.p50 ?? 'forecast P50', value: `${fmtNumber(p, p < 10 ? 1 : 0)} ch/h` })
     if (potOn && weather) {
       const v = interpAt(weather.t_ms, weather.at_fire.ros_ch_per_h_potential, t)
       if (v != null) out.push({ key: <i className="rk rk-line" style={{ ['--c' as string]: 'var(--text-2)' }} />, label: 'potential', value: `${fmtNumber(v, v < 10 ? 1 : 0)} ch/h` })
@@ -516,7 +545,7 @@ export function RosChart() {
       legend={
         <>
           <LegendKey kind="line" color="var(--chart-observed)" label="Observed" short="Obs." />
-          {fc && <LegendKey kind="dash" color="var(--chart-forecast)" label="P50" tip={`Forecast ${fc.run_id} median ROS`} />}
+          {fc && names && <LegendKey kind="dash" color="var(--chart-forecast)" label={names.ros} tip={names.rosTip} />}
           {hasFrp && <LegendKey kind="strip" color="var(--chart-frp)" label="FRP" off={!showFrp} onClick={() => setShowFrp(!showFrp)} tip="Fire radiative power (GOES when available), hourly; click to toggle" />}
         </>
       }

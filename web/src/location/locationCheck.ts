@@ -21,6 +21,8 @@ import type {
   AddressDetails,
   ArrivalQuantile,
   DetectionCheck,
+  DrynessContext,
+  EdgeRiseContext,
   ForecastCheck,
   LocationCheckInput,
   LocationRasters,
@@ -58,13 +60,12 @@ function slotGap(slot: RasterSlot): ModelGap | null {
 }
 
 // ------------------------------------------------------------------------------------------------- point
-function locationType(p: SelectedLocation, address: AddressDetails | null): string {
+function locationType(p: SelectedLocation): string {
   switch (p.source) {
     case 'address': {
-      if (p.adjusted) return 'Street address · pin moved by you from the interpolated Census position'
-      // the card's Approximate tag leads this line
-      const r = addressRange(address?.fromAddress, address?.toAddress)
-      return `Street address · interpolated along ${r ? `house numbers ${r}` : "the street's address range"}, not a rooftop position`
+      if (p.adjusted) return 'Street address, pin moved by you from the interpolated Census position'
+      // the card's Approximate tag leads this line; the house-number range is in the details (caveats)
+      return 'Street address, interpolated (not a rooftop)'
     }
     case 'coords':
       return p.adjusted ? 'Entered coordinates · pin moved by you' : 'Entered coordinates'
@@ -83,7 +84,7 @@ function pointInfo(p: SelectedLocation, address: AddressDetails | null): PointIn
     lon: p.lon,
     label: p.label ?? p.matchedAddress ?? formatLatLon(p.lat, p.lon, 5),
     source: p.source,
-    locationType: locationType(p, address),
+    locationType: locationType(p),
     approximate: p.approximate ?? false,
     adjusted: p.adjusted ?? false,
     address,
@@ -326,6 +327,19 @@ function windContext(weather: WeatherFile | null, timeMs: number, local: [number
   return { state: 'none' }
 }
 
+/** Humidity and 1-h dead fuel moisture at the fire for the same hour as the wind reading (none without one). */
+function drynessContext(weather: WeatherFile | null, timeMs: number): DrynessContext {
+  if (!weather || !weather.t_ms?.length) return { state: 'none' }
+  const i = nearestIndex(weather.t_ms, timeMs)
+  const tMs = weather.t_ms[i]
+  if (Math.abs(tMs - timeMs) > WIND_MAX_GAP_MS) return { state: 'none' }
+  const rh = weather.at_fire?.rh_pct?.[i]
+  const fm1 = weather.at_fire?.fm1_pct?.[i]
+  if (!finite(rh) && !finite(fm1)) return { state: 'none' }
+  const isForecast = weather.forecast_from_ms != null && tMs >= weather.forecast_from_ms
+  return { state: 'ok', tMs, rhPct: finite(rh) ? rh : null, fm1Pct: finite(fm1) ? fm1 : null, isForecast, source: weather.source }
+}
+
 // ------------------------------------------------------------------------------------------------- terrain
 /** Slope (%) and downslope aspect (degrees from true north) from the elevation grid's neighbouring pixels (central
  *  differences on the stored values, one-sided at the AOI edge). Aspect is null on ground flatter than 1 %. */
@@ -396,6 +410,21 @@ function terrainContext(rasters: LocationRasters, local: [number, number] | null
   return { state: 'ok', elevationM, slopePct, aspectDeg, fuelCode, fuelLabel, fuelName, burnable }
 }
 
+/** Ground at the point versus at the nearest fire edge point (both sampled from the elevation model). */
+function edgeRiseContext(perimeter: PerimeterCheck, rasters: LocationRasters, local: [number, number] | null, grid: ManifestGrid | null, areaGap: ModelGap | null): EdgeRiseContext {
+  if (perimeter.state !== 'ok') return { state: 'none', reason: 'no_edge' }
+  if (perimeter.inside) return { state: 'none', reason: 'inside' }
+  if (areaGap || !local || !grid) return { state: 'none', reason: 'outside_modeled_area' }
+  const el = rasters.elevation.status === 'ready' ? rasters.elevation.layer : null
+  if (!el) return { state: 'none', reason: 'no_elevation' }
+  const edge = lonLatToLocal(perimeter.nearest.lon, perimeter.nearest.lat, grid)
+  if (!insideAoi(edge[0], edge[1], grid.extent_m)) return { state: 'none', reason: 'outside_modeled_area' }
+  const a = sampleLayer(el, local[0], local[1], grid.extent_m)
+  const b = sampleLayer(el, edge[0], edge[1], grid.extent_m)
+  if (a.kind !== 'value' || b.kind !== 'value' || !Number.isFinite(a.value) || !Number.isFinite(b.value)) return { state: 'none', reason: 'no_elevation' }
+  return { state: 'ok', pointElevM: a.value, edgeElevM: b.value, riseM: a.value - b.value, distanceM: perimeter.distanceM }
+}
+
 // ------------------------------------------------------------------------------------------------- sources, caveats
 function dataSource(manifest: IncidentManifest | null, re: RegExp) {
   return manifest?.data_sources.find((d) => re.test(d.name)) ?? null
@@ -422,7 +451,7 @@ function sourcesFor(input: LocationCheckInput, r: Omit<LocationReport, 'sources'
     if (r.terrain.fuelCode != null) out.push({ name: fuels?.name ?? `LANDFIRE ${manifest?.fuels_edition ?? ''} fuels`.trim(), kind: 'reference', timeMs: fuels?.fetched_ms ?? null, detail: 'Fuel model (FBFM40)' })
   }
   const a = r.point.address
-  if (r.point.source === 'address') out.push({ name: `${a?.source ?? 'U.S. Census Bureau Geocoder'}${a ? ` (${a.benchmark})` : ''}`, kind: 'reference', timeMs: a?.fetchedMs ?? null, detail: 'Address position interpolated along the street address range' })
+  if (r.point.source === 'address') out.push({ name: `${a?.source ?? 'U.S. Census Bureau Geocoder'}${a?.benchmark ? ` (${a.benchmark})` : ''}`, kind: 'reference', timeMs: a?.fetchedMs ?? null, detail: 'Address position interpolated along the street address range' })
   return out
 }
 
@@ -431,8 +460,10 @@ function caveatsFor(input: LocationCheckInput, r: Omit<LocationReport, 'sources'
   if (isDemoBundle(input.manifest?.id ?? input.summary?.id, input.manifest)) out.push('Demo bundle with simulated data: this is not a real fire.')
   if (r.modeledArea === 'outside')
     out.push('Outside the modeled area: Fire-3d models only the incident’s analysis area, so the forecast and fire reconstruction say nothing about this spot. Its risk is unknown, not low.')
-  if (r.point.source === 'address' && !r.point.adjusted)
-    out.push('The address position is interpolated along the street’s address range by the U.S. Census Bureau Geocoder; it is approximate, not a rooftop location. Drag the pin to correct it.')
+  if (r.point.source === 'address' && !r.point.adjusted) {
+    const range = addressRange(r.point.address?.fromAddress, r.point.address?.toAddress)
+    out.push(`The address position is interpolated along ${range ? `house numbers ${range} of the street` : 'the street’s address range'} by the U.S. Census Bureau Geocoder; it is approximate, not a rooftop location. Drag the pin to correct it.`)
+  }
   if (r.perimeter.state === 'ok' && r.perimeter.basis === 'reconstructed')
     out.push('No mapped perimeter exists for this time, so the burned area is an estimate reconstructed from satellite detections.')
   if (r.observedFire.state !== 'gap') out.push('Burn times at this spot are estimates interpolated between satellite passes and mapped perimeters.')
@@ -460,17 +491,21 @@ export function checkLocation(input: LocationCheckInput): LocationReport {
   const areaGap: ModelGap | null = modeledArea === 'no_bundle' ? 'no_bundle' : modeledArea === 'outside' ? 'outside_modeled_area' : null
   const address = input.address && point.source === 'address' ? input.address : null
   const edgeDistanceM = modeledArea === 'inside' && local ? Math.min(extent / 2 - Math.abs(local[0]), extent / 2 - Math.abs(local[1])) : null
+  const perimeter = perimeterCheck(input, grid, local)
   const base: Omit<LocationReport, 'sources' | 'caveats'> = {
     point: pointInfo(point, address),
     modeledArea,
     local: local ? { x: local[0], z: local[1] } : null,
     edgeDistanceM,
-    perimeter: perimeterCheck(input, grid, local),
+    perimeter,
     observedFire: observedFireCheck(input, local, areaGap),
     nearestDetection: detectionCheck(input, local),
     forecast: forecastCheck(input, local, areaGap),
     wind: windContext(input.weather, timeMs, local, modeledArea === 'inside'),
     terrain: terrainContext(input.rasters, local, grid, areaGap),
+    dryness: drynessContext(input.weather, timeMs),
+    edgeRise: edgeRiseContext(perimeter, input.rasters, local, grid, areaGap),
+    latestObservationMs: manifest?.time_range?.now_ms ?? null,
     timeMs,
     computedAtMs: nowMs,
   }

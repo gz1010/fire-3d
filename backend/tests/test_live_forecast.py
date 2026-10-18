@@ -74,6 +74,8 @@ def test_adjustment_origin_shifts_the_decay() -> None:
     assert np.all(b < a)
     note = ensemble.adjustment_note(dataclasses.replace(st, adjustment_origin_ms=ORIGIN - 12 * H), ORIGIN)
     assert "12 h before the start" in note and "0.22 at the start" in note
+    # the stated formula is the one the engine uses: 0.5 x (0.1 + 0.9 x e^(-lead/12 h)) (docs/validation.md 3.3)
+    assert "0.5 x (0.1 + 0.9 x e^(-lead/12 h))" in note
     assert "relaxing toward 0.05" in ensemble.adjustment_note(st)
 
 

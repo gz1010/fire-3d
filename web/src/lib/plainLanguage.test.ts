@@ -141,6 +141,9 @@ describe('forecast wording (period, probability, uncertainty)', () => {
     const f = { ...EATON, issued_ms: Date.UTC(2026, 9, 17, 19, 7), weather: { source: 'open-meteo:historical-forecast:gfs_hrrr', ensemble: 'perturbed' as const, members: 31 } }
     const hind = forecastDescription(f, 'historical')
     expect(hind.title).toBe('Hindcast (72\u00a0h)') // no-break space: the unit never wraps away
+    // Public (plain words, brief 2 C-R8): never "hindcast"
+    expect(forecastDescription(f, 'historical', { plain: true }).title).toBe('Model re-run on past weather (72\u00a0h)')
+    expect(forecastDescription(f, 'live', { plain: true }).title).toBe('Spread forecast (72\u00a0h)')
     expect(hind.period).toBe('Jan 8, 00:18 – Jan 11, 00:18 PST (72\u00a0h)')
     expect(keepUnits('in 3 h, 40 min or 2 days; 72 hours')).toBe('in 3\u00a0h, 40\u00a0min or 2\u00a0days; 72 hours')
     expect(hind.issued).toMatch(/^Model re-run Oct 17, 2026 12:07 PDT, after the fire/)

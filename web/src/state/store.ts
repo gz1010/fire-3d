@@ -5,6 +5,11 @@
 // Async actions are race-guarded: every incident switch bumps a token and late responses for an older selection
 // are dropped. Jobs (build / forecast / refresh) are polled every second; on completion the manifest is re-fetched
 // and bundle files are reloaded when `built_ms` changed (files are fetched with ?v=built_ms, so caches bust).
+// Brief 2 (CONTRACT §13 shell): no incident = the California overview. closeIncident() returns to it, an unknown id
+// (404) falls back to it with `missingIncidentId`, and a build starts only when a caller asks for one explicitly.
+// Decision 10: focusIncidentFromMap(id | null) focuses a prepared fire when the map zooms in on it and returns to the
+// overview when it zooms out (debounced, no build, no framing, no history step; `incidentSource: 'zoom'`). The last
+// shown fires' bundle data stay cached, so focusing or opening one again is instant.
 import { create } from 'zustand'
 import { bundleUrl, describeError, fetchJson, getAircraft, getIncident, getIncidents, getJob, getLiveStatus, isNotFound, postBuild, postForecast } from '../api/client'
 import type {
@@ -22,6 +27,18 @@ import type {
   TimeseriesFile,
   WeatherFile,
 } from '../api/types'
+import { CATALOG_LISTS, catalogApply, catalogFail, catalogPatch, catalogPending, EMPTY_CATALOG, listsForModes, type CatalogList, type CatalogState } from './catalog'
+import { PAST_YEAR, SEASON_MIN_ACRES, SEASON_YEAR } from './overview'
+
+export type { CatalogList, CatalogState } from './catalog'
+
+/** How the shown incident (or, with incidentId null, the overview) was reached (CONTRACT §13 shell). The map frames
+ *  a new incident unless it was focused by zoom. */
+export type IncidentSource = 'zoom' | 'card' | 'search' | 'link' | 'picker' | 'history' | 'other'
+/** Quick zooms in and out within this time never change what is shown. */
+export const FOCUS_DEBOUNCE_MS = 300
+/** Recently shown fires whose bundle data stay in memory. */
+export const INCIDENT_CACHE_SIZE = 4
 
 export type LayerKey =
   | 'terrain'
@@ -57,17 +74,6 @@ export type RightTab = 'layers' | 'analysis' | 'evidence' | 'notes'
 export type WindowPreset = 'all' | '7d' | '72h'
 /** Addition: header tabs "Incident" | "Aircraft (n)" (aircraft = live only). */
 export type HeaderTab = 'incident' | 'aircraft'
-
-export interface CatalogState {
-  live: IncidentSummary[]
-  historical: IncidentSummary[]
-  loading: boolean
-  error: string | null
-  /** Addition: historical acreage threshold of the loaded list (server default 300; UI toggle 100). */
-  minAcres: number
-  /** Addition: server `updated_ms` of the last successful list per mode. */
-  updatedMs: { live: number | null; historical: number | null }
-}
 
 export interface FlyTo {
   x: number
@@ -174,8 +180,18 @@ export interface AppState {
   aircraftMeta: AircraftMeta
   /** Addition: /api/live/status (polled in live mode). */
   liveStatus: LiveStatus | null
-  /** Addition: start a build automatically when an unbuilt incident is selected (SPEC 9.4). */
+  /** Addition: the Forensic settings switch "Prepare analysis when I pick an unprepared fire" (was "Auto-build unbuilt incidents", SPEC 9.4). Off by default since brief 2:
+   *  the incident picker passes it as `selectIncident`'s autoBuild; the fire card's "Prepare analysis" builds always. */
   autoBuild: boolean
+  /** Brief 2: the id of a selection that answered 404 (unknown or old link, fire no longer listed); the store went
+   *  back to the overview and the overview shows a notice. Cleared by the next selection or setMissingIncidentId(null). */
+  missingIncidentId: string | null
+  /** Decision 10: how the shown incident was reached ('zoom' = focusIncidentFromMap; on the overview: 'zoom' after a
+   *  zoom-out, null after closeIncident or at start). Set in the same update as incidentId. */
+  incidentSource: IncidentSource | null
+  /** Decision 10: the time a zoom focus set (the latest observation); the first Play from it starts at the window start,
+   *  so it animates the spread. null otherwise. */
+  focusTimeMs: number | null
 
   // ---- synchronous setters (one per field) + conveniences
   setMode: (mode: Mode) => void
@@ -230,14 +246,24 @@ export interface AppState {
   setAutoBuild: (v: boolean) => void
   /** Addition: move the time by `deltaMs`, clamped to the incident's time bounds. */
   stepTime: (deltaMs: number) => void
+  /** Brief 2: back to the California overview. Stops job polling, drops late responses of the previous selection and
+   *  resets the incident and every per-incident field; the catalog, time and data context stay. */
+  closeIncident: () => void
+  setMissingIncidentId: (id: string | null) => void
+  /** Decision 10 (called by the map's viewport logic): focus a prepared fire, or null = back to the overview. Debounced
+   *  (FOCUS_DEBOUNCE_MS, the last call wins); ids without a ready analysis are ignored; never builds or frames; keeps the
+   *  selection, preset, perspective, basemap and view. */
+  focusIncidentFromMap: (id: string | null) => void
 
   // ---- async loaders
-  /** Fetch the catalogs (both modes by default; historical with `minAcres`, default 300). */
-  loadCatalog: (opts?: { minAcres?: number; modes?: Mode[] }) => Promise<void>
+  /** Fetch the incident lists, each on its own (all three by default: live, the 2026 season and 2025 with
+   *  `minAcres`, default 300). `modes` is the older form: live -> active fires, historical -> the 2025 list. */
+  loadCatalog: (opts?: { minAcres?: number; modes?: Mode[]; lists?: CatalogList[] }) => Promise<void>
   /** Load an incident: summary/manifest/job; when ready also timeseries/events/weather/detections/perimeters and
    *  the newest ready forecast. Sets time (live: now_ms; historical: start + 40 %) and the default profile path.
-   *  `autoBuild` starts a build when the bundle is missing. */
-  selectIncident: (id: string, opts?: { autoBuild?: boolean; keepTime?: boolean }) => Promise<void>
+   *  `autoBuild: true` starts a build when the bundle is missing (callers pass it only for an explicit request).
+   *  A 404 returns to the overview and sets `missingIncidentId`. */
+  selectIncident: (id: string, opts?: { autoBuild?: boolean; keepTime?: boolean; source?: Exclude<IncidentSource, 'zoom'> }) => Promise<void>
   /** POST build, then poll the job; refreshes the manifest when it finishes. */
   startBuild: (force?: boolean) => Promise<JobStatus | null>
   /** POST forecast (historical default start = current timeline time), poll, then select the new run. */
@@ -258,6 +284,62 @@ let pollTimer: ReturnType<typeof setTimeout> | null = null
 let pollJobId: string | null = null
 let watchTimer: ReturnType<typeof setTimeout> | null = null
 let aircraftSeq = 0
+/** Per-list request counters: an older answer for the same list never overwrites a newer one. */
+const listSeq: Record<CatalogList, number> = { live: 0, season: 0, historical: 0 }
+let focusTimer: ReturnType<typeof setTimeout> | null = null
+
+/** A shown fire's bundle data, kept after it is left (decision 10: re-focusing is instant). */
+interface CachedIncident {
+  summary: IncidentSummary
+  manifest: IncidentManifest
+  timeseries: TimeseriesFile | null
+  events: EventsFile | null
+  weather: WeatherFile | null
+  detections: DetectionsFile | null
+  perimeters: PerimetersFile | null
+  forecast: ForecastManifest | null
+  profilePath: [number, number][]
+}
+/** Insertion order = least recently used first. */
+const incidentCache = new Map<string, CachedIncident>()
+
+function cacheGet(id: string): CachedIncident | undefined {
+  const e = incidentCache.get(id)
+  if (e) {
+    incidentCache.delete(id)
+    incidentCache.set(id, e)
+  }
+  return e
+}
+
+function cachePut(id: string, e: CachedIncident): void {
+  incidentCache.delete(id)
+  incidentCache.set(id, e)
+  while (incidentCache.size > INCIDENT_CACHE_SIZE) incidentCache.delete(incidentCache.keys().next().value as string)
+}
+
+/** Ids of the cached fires, least recently used first (tests, dev). */
+export function cachedIncidentIds(): string[] {
+  return [...incidentCache.keys()]
+}
+
+export function clearIncidentCache(): void {
+  incidentCache.clear()
+}
+
+/** Decision 10: a zoom focus shows the whole spread: live -> the latest observation; historical -> the end of the
+ *  observed record. */
+export function latestObservationMs(m: Pick<IncidentManifest, 'mode' | 'time_range'>): number {
+  return m.mode === 'live' ? m.time_range.now_ms : m.time_range.end_ms
+}
+
+/** Can the map focus this fire by zoom? Only with a ready analysis (catalog row or cache): never a build. */
+export function canFocus(id: string, s: Pick<AppState, 'summary' | 'manifest' | 'catalog'>): boolean {
+  if (incidentCache.has(id)) return true
+  if (s.summary?.id === id && s.manifest?.status === 'ready') return true
+  const rows = [...s.catalog.live, ...s.catalog.season, ...s.catalog.historical]
+  return rows.some((r) => r.id === id && r.bundle_status === 'ready')
+}
 
 /** Visible time range of the current incident: [start, max(end, newest forecast end)] (null without manifest). */
 export function getTimeBounds(s: Pick<AppState, 'manifest' | 'forecast'>): TimeWindow | null {
@@ -303,6 +385,7 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 const emptyAircraftMeta: AircraftMeta = { source: null, radiusNm: null, note: null, error: null, polledMs: null }
 
 const perIncidentReset = {
+  focusTimeMs: null,
   summary: null,
   manifest: null,
   job: null,
@@ -342,20 +425,17 @@ async function fetchForecast(m: IncidentManifest, runId: string): Promise<Foreca
 }
 
 /** Replace one incident's summary inside the catalog lists (keeps bundle_status chips fresh). */
-function patchCatalog(c: CatalogState, s: IncidentSummary): CatalogState {
-  const patch = (list: IncidentSummary[]) => {
-    const i = list.findIndex((x) => x.id === s.id)
-    if (i < 0) return list
-    const out = list.slice()
-    out[i] = s
-    return out
-  }
-  return { ...c, live: patch(c.live), historical: patch(c.historical) }
+const patchCatalog = (c: CatalogState, s: IncidentSummary): CatalogState => catalogPatch(c, s)
+
+function fetchList(list: CatalogList, minAcres: number) {
+  if (list === 'live') return getIncidents('live')
+  if (list === 'season') return getIncidents('historical', SEASON_MIN_ACRES, { year: SEASON_YEAR })
+  return getIncidents('historical', minAcres, { year: PAST_YEAR })
 }
 
 export const useStore = create<AppState>()((set, get) => {
   /** Fetch the bundle JSON files + newest ready forecast and apply them in one update. */
-  async function loadBundleFiles(m: IncidentManifest, token: number, keepTime: boolean): Promise<void> {
+  async function loadBundleFiles(m: IncidentManifest, token: number, keepTime: boolean, latest = false): Promise<void> {
     const v = m.built_ms
     const url = (p: string) => bundleUrl(m.id, p, v)
     const prevRun = keepTime ? get().forecastRunId : null
@@ -385,6 +465,9 @@ export const useStore = create<AppState>()((set, get) => {
     const keep = keepTime && wasShown && bounds != null && prev.timeMs >= bounds.startMs && prev.timeMs <= bounds.endMs
     // live: a user parked at the previous "now" follows the new latest observation
     const followNow = keepTime && wasShown && m.mode === 'live' && Math.abs(prev.timeMs - pm.time_range.now_ms) < 60_000
+    // a zoom focus opens on the latest observation (the whole spread); explicit opens keep their default
+    const fresh = latest ? latestObservationMs(m) : defaultTimeFor(m)
+    const timeMs = followNow ? m.time_range.now_ms : keep ? prev.timeMs : fresh
     set({
       manifest: m,
       timeseries,
@@ -394,7 +477,8 @@ export const useStore = create<AppState>()((set, get) => {
       perimeters,
       forecast,
       forecastRunId: forecast ? forecast.run_id : null,
-      timeMs: followNow ? m.time_range.now_ms : keep ? prev.timeMs : defaultTimeFor(m),
+      timeMs,
+      focusTimeMs: latest && !keep && !followNow ? timeMs : keep || followNow ? prev.focusTimeMs : null,
       timeWindow: windowFor(prev.windowPreset, m, forecast),
       profilePath: keep && prev.profilePath.length ? prev.profilePath : (m.default_profile_path ?? []),
       // the five JSON files are part of every bundle (SPEC 5): a failure is worth a retry banner
@@ -406,6 +490,132 @@ export const useStore = create<AppState>()((set, get) => {
     if (pollTimer) clearTimeout(pollTimer)
     pollTimer = null
     pollJobId = null
+  }
+
+  function cancelFocus() {
+    if (focusTimer) clearTimeout(focusTimer)
+    focusTimer = null
+  }
+
+  /** Keep the shown fire's data for a quick return (only a fully loaded, ready bundle). */
+  function stashCurrent() {
+    const s = get()
+    const m = s.manifest
+    if (!s.incidentId || !s.summary || m?.status !== 'ready' || m.id !== s.incidentId || s.incidentLoading) return
+    cachePut(s.incidentId, {
+      summary: s.summary,
+      manifest: m,
+      timeseries: s.timeseries,
+      events: s.events,
+      weather: s.weather,
+      detections: s.detections,
+      perimeters: s.perimeters,
+      forecast: s.forecast,
+      profilePath: s.profilePath,
+    })
+  }
+
+  /** The state a cached fire is shown with at once (time per the opening rule). */
+  function cachedState(c: CachedIncident, latest: boolean): Partial<AppState> {
+    const m = c.manifest
+    const timeMs = latest ? latestObservationMs(m) : defaultTimeFor(m)
+    return {
+      summary: c.summary,
+      mode: c.summary.mode,
+      manifest: m,
+      timeseries: c.timeseries,
+      events: c.events,
+      weather: c.weather,
+      detections: c.detections,
+      perimeters: c.perimeters,
+      forecast: c.forecast,
+      forecastRunId: c.forecast?.run_id ?? null,
+      timeMs,
+      focusTimeMs: latest ? timeMs : null,
+      timeWindow: windowFor(get().windowPreset, m, c.forecast),
+      profilePath: c.profilePath.length ? c.profilePath : (m.default_profile_path ?? []),
+    }
+  }
+
+  /** Leave the shown fire for the overview (explicit close: source null; zoom-out: 'zoom'). */
+  function leaveIncident(source: IncidentSource | null) {
+    stashCurrent()
+    selectToken++
+    aircraftSeq++
+    stopPolling()
+    stopWatch()
+    set({ ...perIncidentReset, incidentId: null, incidentSource: source, incidentLoading: false, profilePath: [], headerTab: 'incident' })
+  }
+
+  /** Show fire `id` (selectIncident and zoom focus): a cached fire at once, then revalidated; else the summary, the
+   *  manifest and the bundle files. */
+  async function openIncident(id: string, o: { source: IncidentSource; autoBuild?: boolean; keepTime?: boolean }): Promise<void> {
+    const latest = o.source === 'zoom'
+    const token = ++selectToken
+    stopPolling()
+    stopWatch()
+    const same = get().incidentId === id
+    if (!same) stashCurrent()
+    const cached = same ? undefined : cacheGet(id)
+    set({
+      incidentId: id,
+      incidentSource: o.source,
+      incidentLoading: true,
+      missingIncidentId: null,
+      ...(same ? { incidentError: null } : { ...perIncidentReset, headerTab: 'incident' as HeaderTab }),
+      ...(cached ? cachedState(cached, latest) : {}),
+    })
+    try {
+      const detail = await getIncident(id)
+      if (token !== selectToken) return
+      set((s) => ({ summary: detail.summary, job: detail.job, mode: detail.summary.mode, catalog: patchCatalog(s.catalog, detail.summary) }))
+      const m = detail.manifest
+      const shown = get().manifest
+      if (m && m.status === 'ready') {
+        // a cached fire with the same build keeps its files (a newer forecast run is picked up below)
+        if (cached && shown?.status === 'ready' && shown.id === m.id && shown.built_ms === m.built_ms) {
+          set({ manifest: m })
+          const cur = get().forecastRunId
+          const newest = m.forecasts.find((f) => f.status === 'ready')
+          if (newest && newest.run_id !== cur && !m.forecasts.some((f) => f.run_id === cur && f.status === 'ready')) await get().selectForecast(newest.run_id)
+          else if (!cur && newest) await get().selectForecast(newest.run_id)
+        } else await loadBundleFiles(m, token, Boolean(o.keepTime && same), latest)
+      } else {
+        set({ manifest: m })
+      }
+      if (token !== selectToken) return
+      const job = detail.job
+      if (job && (job.status === 'queued' || job.status === 'running')) {
+        pollJob(job.id, id, job.kind === 'forecast' ? (done) => selectFinishedForecast(done) : undefined)
+      } else if ((!m || m.status === 'error') && detail.summary.bundle_status !== 'building') {
+        if (o.autoBuild && !latest && !(m?.status === 'error')) void get().startBuild(false)
+      } else if (m?.status === 'building' || detail.summary.bundle_status === 'building') {
+        watchBuilding(id, token)
+      }
+    } catch (e) {
+      if (token !== selectToken) return
+      if (isNotFound(e)) {
+        // an unknown or old link (or a fire CAL FIRE no longer lists): back to the overview with a notice (none for a
+        // zoom focus, which the map decides by itself); a Retry could not help
+        incidentCache.delete(id)
+        selectToken++
+        stopPolling()
+        stopWatch()
+        set({
+          ...perIncidentReset,
+          incidentId: null,
+          incidentSource: latest ? 'zoom' : null,
+          incidentLoading: false,
+          profilePath: [],
+          headerTab: 'incident',
+          missingIncidentId: latest ? null : id,
+        })
+        return
+      }
+      set({ incidentError: errMsg(e) })
+    } finally {
+      if (token === selectToken) set({ incidentLoading: false })
+    }
   }
 
   function stopWatch() {
@@ -478,7 +688,7 @@ export const useStore = create<AppState>()((set, get) => {
 
   return {
     mode: 'live',
-    catalog: { live: [], historical: [], loading: false, error: null, minAcres: 300, updatedMs: { live: null, historical: null } },
+    catalog: EMPTY_CATALOG,
     incidentId: null,
     ...perIncidentReset,
     timeMs: Date.now(),
@@ -499,7 +709,9 @@ export const useStore = create<AppState>()((set, get) => {
     headerTab: 'incident',
     aircraftAll: false,
     liveStatus: null,
-    autoBuild: true,
+    autoBuild: false,
+    missingIncidentId: null,
+    incidentSource: null,
 
     setMode: (mode) => set((s) => ({ mode, headerTab: mode === 'live' ? s.headerTab : 'incident' })),
     setCatalog: (c) => set((s) => ({ catalog: { ...s.catalog, ...c } })),
@@ -556,6 +768,25 @@ export const useStore = create<AppState>()((set, get) => {
       void get().refreshAircraft()
     },
     setAutoBuild: (autoBuild) => set({ autoBuild }),
+    setMissingIncidentId: (missingIncidentId) => set({ missingIncidentId }),
+    closeIncident: () => {
+      cancelFocus()
+      leaveIncident(null)
+    },
+    focusIncidentFromMap: (id) => {
+      const s = get()
+      // a fire without a ready analysis is never focused (and never built) by zoom: nothing changes
+      if (id != null && !canFocus(id, s)) return
+      cancelFocus()
+      if (id === s.incidentId) return
+      focusTimer = setTimeout(() => {
+        focusTimer = null
+        const cur = get()
+        if (id === cur.incidentId) return
+        if (id == null) leaveIncident('zoom')
+        else if (canFocus(id, cur)) void openIncident(id, { source: 'zoom' })
+      }, FOCUS_DEBOUNCE_MS)
+    },
     stepTime: (deltaMs) =>
       set((s) => {
         const b = getTimeBounds(s)
@@ -563,67 +794,26 @@ export const useStore = create<AppState>()((set, get) => {
       }),
 
     loadCatalog: async (opts) => {
-      const modes = opts?.modes ?? (['live', 'historical'] as Mode[])
+      const lists = opts?.lists ?? (opts?.modes ? listsForModes(opts.modes) : [...CATALOG_LISTS])
       const minAcres = opts?.minAcres ?? get().catalog.minAcres
-      set((s) => ({ catalog: { ...s.catalog, loading: true, error: null, minAcres } }))
-      const [live, hist] = await Promise.allSettled([
-        modes.includes('live') ? getIncidents('live') : Promise.resolve(null),
-        modes.includes('historical') ? getIncidents('historical', minAcres) : Promise.resolve(null),
-      ])
-      const errors = [live, hist].filter((r): r is PromiseRejectedResult => r.status === 'rejected').map((r) => errMsg(r.reason))
-      set((s) => {
-        // a newer request for another threshold may have finished first: keep the latest threshold's list
-        const histOk = hist.status === 'fulfilled' && hist.value && s.catalog.minAcres === minAcres
-        return {
-          catalog: {
-            ...s.catalog,
-            live: live.status === 'fulfilled' && live.value ? live.value.incidents : s.catalog.live,
-            historical: histOk && hist.value ? hist.value.incidents : s.catalog.historical,
-            loading: false,
-            error: errors.length ? [...new Set(errors)].join('; ') : null,
-            updatedMs: {
-              live: live.status === 'fulfilled' && live.value ? live.value.updated_ms : s.catalog.updatedMs.live,
-              historical: histOk && hist.value ? hist.value.updated_ms : s.catalog.updatedMs.historical,
-            },
-          },
-        }
-      })
+      set((s) => ({ catalog: catalogPending(s.catalog, lists, minAcres) }))
+      // each list is applied as soon as it arrives; an older answer for the same list is dropped
+      await Promise.all(
+        lists.map(async (list) => {
+          const seq = ++listSeq[list]
+          try {
+            const res = await fetchList(list, minAcres)
+            if (seq === listSeq[list]) set((s) => ({ catalog: catalogApply(s.catalog, list, res) }))
+          } catch (e) {
+            if (seq === listSeq[list]) set((s) => ({ catalog: catalogFail(s.catalog, list, errMsg(e)) }))
+          }
+        }),
+      )
     },
 
     selectIncident: async (id, opts) => {
-      const token = ++selectToken
-      stopPolling()
-      stopWatch()
-      const same = get().incidentId === id
-      set({
-        incidentId: id,
-        incidentLoading: true,
-        ...(same ? { incidentError: null } : { ...perIncidentReset, headerTab: 'incident' as HeaderTab }),
-      })
-      try {
-        const detail = await getIncident(id)
-        if (token !== selectToken) return
-        set((s) => ({ summary: detail.summary, job: detail.job, mode: detail.summary.mode, catalog: patchCatalog(s.catalog, detail.summary) }))
-        const m = detail.manifest
-        if (m && m.status === 'ready') {
-          await loadBundleFiles(m, token, Boolean(opts?.keepTime && same))
-        } else {
-          set({ manifest: m })
-        }
-        if (token !== selectToken) return
-        const job = detail.job
-        if (job && (job.status === 'queued' || job.status === 'running')) {
-          pollJob(job.id, id, job.kind === 'forecast' ? (done) => selectFinishedForecast(done) : undefined)
-        } else if ((!m || m.status === 'error') && detail.summary.bundle_status !== 'building') {
-          if (opts?.autoBuild && get().autoBuild && !(m?.status === 'error')) void get().startBuild(false)
-        } else if (m?.status === 'building' || detail.summary.bundle_status === 'building') {
-          watchBuilding(id, token)
-        }
-      } catch (e) {
-        if (token === selectToken) set({ incidentError: errMsg(e) })
-      } finally {
-        if (token === selectToken) set({ incidentLoading: false })
-      }
+      cancelFocus()
+      await openIncident(id, { source: opts?.source ?? 'other', autoBuild: opts?.autoBuild, keepTime: opts?.keepTime })
     },
 
     startBuild: async (force = false) => {

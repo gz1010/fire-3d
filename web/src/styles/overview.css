@@ -1,0 +1,771 @@
+/* Brief 2 shell additions (owner: shell; CONTRACT §13 shell): the California overview list (right column on desktop,
+   peek sheet on phones), the fire card (left column on desktop, bottom sheet on phones), the header title and
+   "← All fires", the "Official" tag, the not-prepared and missing-fire notices, and Forensic's "Open a fire first".
+   Sizes follow the brief 2 minimums (civilian audit R9): body 13 px, meta 12 px, tags and headings 11 px. */
+
+/* ------------------------------------------------------------------------------------------------ tag */
+.mw-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: var(--m-radius-pill);
+  border: 1px solid var(--m-border-strong);
+  color: var(--m-text-2);
+  font: 600 11px / 1 var(--m-font-ui);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex: none;
+}
+.mw-tag.is-official {
+  color: var(--m-official-ink);
+  border-color: var(--m-official-line);
+}
+
+/* ------------------------------------------------------------------------------------------------ header */
+.mw-hdr-title {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--m-fs-lg);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+.mw-hdr-title-sub {
+  color: var(--m-text-2);
+  font-weight: 500;
+}
+.mw-allfires {
+  flex: none;
+  height: 32px;
+  padding: 0 10px 0 8px;
+}
+.mw-updates-toggle .mw-btn-label {
+  font-size: var(--m-fs-sm);
+}
+
+/* ------------------------------------------------------------------------------------------------ fire card slot */
+.mw-firecard {
+  --chrome-side: left;
+  grid-area: card;
+  width: min(var(--m-card-w), 100%);
+  max-height: 100%;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-radius: var(--m-radius);
+}
+.mw-firecard:empty {
+  display: none;
+}
+/* one card at a time in the left column: an open fire card hides the location card (a new point closes it) */
+.mw.has-firecard .mw-card {
+  display: none;
+}
+.mw.is-collapsed .mw-firecard {
+  display: none;
+}
+
+/* ------------------------------------------------------------------------------------------------ fire card */
+.fc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 11px 12px 10px 14px;
+  border-top: 3px solid var(--m-fire-observed);
+  font-size: var(--m-fs-md);
+  line-height: 1.45;
+}
+.fc-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.fc-head > .mw-icon-btn {
+  margin: -4px -6px 0 auto;
+  flex: none;
+}
+.fc-titles {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.mw .fc-title {
+  font-size: var(--m-fs-lg);
+  font-weight: 650;
+  line-height: 1.25;
+}
+.fc-title:focus-visible {
+  box-shadow: none;
+  text-decoration: underline 2px var(--m-accent);
+  text-underline-offset: 4px;
+}
+.fc-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 8px;
+  margin-top: 4px !important;
+  font-size: var(--m-fs-sm);
+  color: var(--m-text-2);
+}
+.fc-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: var(--m-radius-pill);
+  border: 1px solid var(--m-border-strong);
+  font: 600 11px / 1 var(--m-font-ui);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.fc-chip.is-live {
+  color: var(--m-fire-front);
+  border-color: rgba(255, 90, 31, 0.6);
+}
+.fc-chip.is-year {
+  color: var(--m-text-2);
+}
+.fc-official {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px 10px 9px;
+  border: 1px solid var(--m-official-line);
+  border-radius: var(--m-radius-sm);
+  background: rgba(5, 9, 14, 0.45);
+}
+.fc-source {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--m-fs-sm);
+  color: var(--m-text-2);
+}
+.fc-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.fc-facts dt {
+  font-size: var(--m-fs-sm);
+  color: var(--m-text-2);
+}
+.fc-facts dd {
+  margin: 1px 0 0;
+  font-size: var(--m-fs-md);
+  font-weight: 600;
+  color: var(--m-text);
+  white-space: nowrap;
+}
+.fc-status.is-active {
+  color: var(--m-fire-front);
+}
+.fc-status.is-contained {
+  color: var(--m-ok);
+}
+.fc-updated {
+  font-size: var(--m-fs-sm);
+  color: var(--m-text-2);
+}
+.fc-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  font-size: var(--m-fs-sm);
+  font-weight: 500;
+  color: var(--m-accent-text);
+  text-decoration: none;
+}
+.fc-link:hover,
+.fc-link:focus-visible {
+  text-decoration: underline;
+}
+.fc-analysis {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: var(--m-fs-md);
+  color: var(--m-text);
+}
+.fc-analysis.is-ready,
+.fc-analysis.is-building {
+  flex-direction: row;
+  align-items: center;
+  gap: 7px;
+}
+.fc-analysis.is-error > p:first-child {
+  color: var(--m-warn);
+}
+.fc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--m-ok);
+  flex: none;
+}
+.fc-analysis-note,
+.fc-hint,
+.fc-note,
+.fc-empty {
+  font-size: var(--m-fs-sm);
+  color: var(--m-text-2);
+}
+.fc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.fc-actions .mw-btn {
+  height: 32px;
+  font-size: var(--m-fs-sm);
+}
+.fc-actions .fc-main {
+  flex: 1 1 100%;
+  height: 34px;
+  font-size: var(--m-fs-md);
+}
+
+/* ------------------------------------------------------------------------------------------------ overview list */
+.ov-panel {
+  min-height: 0;
+}
+/* California's official block (NWS fire weather alerts) above the list: it scrolls when tall, the list keeps the room */
+.ov-official {
+  max-height: 34%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-bottom: 1px solid var(--m-border);
+}
+.ov-filters {
+  padding: 8px 12px 6px;
+  flex: none;
+}
+.ov-filters .seg-count {
+  margin-left: 4px;
+  opacity: 0.85;
+}
+.ov-source {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 8px 7px 12px;
+  border-bottom: 1px solid var(--m-border);
+  font-size: var(--m-fs-sm);
+  line-height: 1.35;
+  color: var(--m-text-2);
+  flex: none;
+}
+.ov-refresh {
+  margin-left: auto;
+  flex: none;
+}
+.ov-warn {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--m-border);
+  font-size: var(--m-fs-sm);
+  color: var(--m-warn);
+  flex: none;
+}
+.ov-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.ov-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+}
+.ov-row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: var(--m-radius-sm);
+  color: var(--m-text);
+  text-align: left;
+}
+.ov-row:hover {
+  background: var(--m-hover);
+}
+.ov-row.is-current {
+  background: var(--m-select-soft);
+  box-shadow: inset 2px 0 0 var(--m-select);
+}
+/* the map's overview markers: active fires filled orange, other fires hollow amber */
+.ov-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--m-fire-observed);
+  background: var(--m-fire-observed);
+}
+.ov-dot.is-contained,
+.ov-dot.is-out {
+  background: transparent;
+  border-color: var(--m-forecast);
+}
+.ov-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ov-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--m-fs-md);
+  font-weight: 600;
+}
+.ov-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--m-fs-sm);
+  color: var(--m-text-2);
+}
+.ov-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+.ov-acres {
+  font-size: var(--m-fs-sm);
+  color: var(--m-text);
+  white-space: nowrap;
+}
+.ov-ready {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--m-ok);
+  white-space: nowrap;
+}
+.ov-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 14px;
+  font-size: var(--m-fs-md);
+  color: var(--m-text-2);
+}
+.ov-state.is-error {
+  flex-direction: column;
+  align-items: flex-start;
+  color: var(--m-text);
+}
+.ov-foot {
+  padding: 7px 12px 9px;
+  border-top: 1px solid var(--m-border);
+  font-size: var(--m-fs-sm);
+  line-height: 1.4;
+  color: var(--m-text-2);
+  flex: none;
+}
+
+/* phones, sheet closed: one line above the coordinates */
+.ov-peek {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--m-border);
+  border-radius: var(--m-radius);
+  background: var(--m-panel-strong);
+  -webkit-backdrop-filter: var(--m-panel-blur);
+  backdrop-filter: var(--m-panel-blur);
+  box-shadow: var(--m-shadow);
+  color: var(--m-text);
+  font-size: var(--m-fs-md);
+  text-align: left;
+}
+.ov-peek-icon {
+  color: var(--m-fire-observed);
+  flex: none;
+}
+.ov-peek-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------------------------------------ notices */
+.mw-notprepared,
+.mw-missing {
+  max-width: min(640px, calc(100vw - 24px));
+}
+.mw-notprepared .btn {
+  flex: none;
+}
+
+/* ------------------------------------------------------------------------------------------------ desktop overview */
+/* the overview has no timeline: the bottom row keeps coordinates, legend, note and credits */
+.mw.is-overview .mw-updates {
+  --chrome-side: none;
+}
+.mw.is-overview.has-updates .mw-updates {
+  --chrome-side: right;
+}
+
+/* ------------------------------------------------------------------------------------------------ phones */
+@media (max-width: 760px) {
+  .mw-hdr-title {
+    font-size: var(--m-fs-md);
+  }
+  .mw-allfires {
+    width: 34px;
+    padding: 0;
+  }
+  .mw-allfires .mw-btn-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  /* the fire card is a bottom sheet, like the location card */
+  .mw-firecard {
+    --chrome-side: bottom;
+    grid-area: auto;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    max-height: calc(100% - 56px);
+    z-index: 7;
+  }
+  .mw.has-sheet .mw-firecard {
+    display: none;
+  }
+  .fc-card {
+    background: var(--m-panel-strong);
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.55);
+  }
+  .fc-actions .mw-btn {
+    flex: 1 1 calc(50% - 3px);
+  }
+  /* overview: the peek line (or the open list sheet) sits at the bottom; a card replaces the peek */
+  .mw.is-overview .mw-updates {
+    --chrome-side: bottom;
+  }
+  .mw.is-overview.has-firecard:not(.has-updates) .mw-updates,
+  .mw.is-overview.has-selection:not(.has-updates) .mw-updates {
+    display: none;
+  }
+  .ov-panel .ov-body {
+    flex: 1 1 auto;
+  }
+}
+
+/* ------------------------------------------------------------------------------------------------ Forensic: no fire */
+.fx-empty {
+  display: flex;
+  flex-direction: column;
+}
+.fx-empty-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 52px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--m-border);
+  background: var(--m-panel-strong);
+  flex: none;
+}
+.fx-empty-where {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--m-text-2);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fx-empty-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 24px 16px;
+  overflow: auto;
+}
+.fx-empty-list {
+  display: flex;
+  flex-direction: column;
+  width: min(460px, 100%);
+  max-height: calc(100vh - 100px);
+  min-height: 0;
+}
+.fx-empty-text {
+  padding: 10px 14px 4px;
+  font-size: var(--m-fs-md);
+  color: var(--m-text-2);
+}
+.fx-empty-actions {
+  padding: 6px 14px 4px;
+}
+.fx-empty-card {
+  width: min(340px, 100%);
+  flex: none;
+}
+@media (max-width: 760px) {
+  .fx-empty-main {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px 8px;
+  }
+  .fx-empty-main.has-card .fx-empty-list {
+    display: none;
+  }
+  .fx-empty-list,
+  .fx-empty-card {
+    width: auto;
+    max-height: none;
+  }
+  .fx-empty-where {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------------------------------------ updates panel */
+/* phones: the labelled Updates button and its official badge (orders, warnings, fire weather alerts) */
+.mw-updates-toggle {
+  position: relative;
+}
+.mw-hdr-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 2px;
+  padding: 0 5px;
+  border-radius: var(--m-radius-pill);
+  font: 700 11px / 1 var(--m-font-ui);
+  color: #fff;
+  background: var(--m-evac-warning);
+}
+.mw-hdr-badge.is-order {
+  background: var(--m-evac-order);
+}
+.mw-hdr-badge.is-fire-weather {
+  background: var(--m-nws, #f472b6);
+  color: #1a0b14;
+}
+/* "Official now" (official-web) sits above data status and the feed */
+.mw-official-slot {
+  flex: none;
+}
+.mw-official-slot:empty {
+  display: none;
+}
+/* Public: one freshness line, the rows on demand */
+.mw-status.is-public .mw-status-head {
+  padding: 7px 12px 7px 14px;
+}
+.mw-fresh-line {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--m-fs-sm);
+  color: var(--m-text-2);
+}
+.mw-fresh-line.is-stale {
+  color: var(--m-stale);
+}
+.mw-fresh-more {
+  margin-left: auto;
+  font-size: var(--m-fs-sm);
+  color: var(--m-accent-text);
+  flex: none;
+}
+
+/* ------------------------------------------------------------------------------------------------ official summary */
+/* desktop Public, compact updates panel titled "Official now": three short official statuses (officialSummary.ts) */
+.mw-panel-head.is-official {
+  min-height: 34px;
+  padding-top: 3px;
+  padding-bottom: 3px;
+  gap: 8px;
+}
+.mw-panel-more {
+  margin-left: auto;
+  flex: none;
+}
+.mw-panel-head > .mw-panel-more + .mw-icon-btn:last-child {
+  margin-left: 0;
+}
+.os {
+  padding: 5px 12px 6px 12px;
+}
+.os-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.os-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: start;
+  gap: 7px;
+  font-size: var(--m-fs-sm);
+  line-height: 1.32;
+}
+.os-icon {
+  margin-top: 1px;
+  color: var(--m-text-2);
+}
+.os-label {
+  font-weight: 650;
+  color: var(--m-text);
+}
+.os-text {
+  color: var(--m-text);
+}
+.os-src {
+  color: var(--m-text-2);
+}
+.os-row.is-order .os-icon,
+.os-row.is-order .os-text {
+  color: #f6a8d3;
+}
+.os-row.is-warning .os-icon,
+.os-row.is-alert .os-icon {
+  color: var(--m-evac-warning);
+}
+.os-row.is-muted .os-text,
+.os-row.is-fresh .os-text {
+  color: var(--m-text-2);
+}
+.os-row.is-fresh .os-label {
+  color: var(--m-text);
+}
+.os-row.is-stale .os-icon {
+  color: var(--m-stale);
+}
+.os-stale {
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+.os-foot {
+  margin-top: 5px !important;
+  font-size: var(--m-fs-sm);
+  line-height: 1.32;
+  color: var(--m-text-2);
+}
+
+/* ------------------------------------------------------------------------------------------------ satellite chip */
+/* wide screens: official-web's ImageryChip in the header bar, right above the map controls; its caption (while an
+   image is shown) hangs below the bar over the map */
+.mw-hdr-chip {
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
+  flex: 0 1 var(--m-chip-w);
+  min-width: 120px;
+  height: 32px;
+  overflow: visible;
+}
+.mw-hdr-chip > * {
+  width: 100%;
+}
+
+/* ------------------------------------------------------------------------------------------------ phones (C-R2) */
+@media (max-width: 760px) {
+  /* the labelled Updates button (U-R4): its label stays visible on phones */
+  .mw-hdr-toggle.mw-updates-toggle {
+    width: auto;
+    padding: 0 8px;
+  }
+  .mw-hdr-toggle.mw-updates-toggle .mw-btn-label {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+  }
+  /* the research note and the credits on one line; the full credits open above the bottom row */
+  .mw-footer.is-narrow {
+    position: relative;
+    justify-content: flex-end;
+  }
+  .mw-credits-toggle {
+    --chrome-side: bottom;
+    height: 18px;
+    padding: 0 7px;
+    border-radius: 4px;
+    background: var(--m-chip-opaque);
+    color: var(--m-text-2);
+    font: 500 var(--m-fs-sm) / 18px var(--m-font-ui);
+    pointer-events: auto;
+    white-space: nowrap;
+  }
+  .mw-credits-toggle[aria-expanded='true'] {
+    color: var(--m-text);
+  }
+  .mw-footer.is-open .mw-footer-attrib {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 4px);
+    width: min(374px, calc(100vw - 2 * var(--m-gap)));
+    padding: 6px 8px;
+    border: 1px solid var(--m-border);
+    box-shadow: var(--m-shadow);
+    text-align: left;
+    z-index: 2;
+  }
+  .mw-footer-attrib[hidden] {
+    display: none;
+  }
+  /* compact timeline: the actual current time stays marked on the track; with a location card open, the forecast
+     issue time and the freshness line give way (the card and the Updates sheet carry them) */
+  .mw-timeline .ctl-clock {
+    display: none;
+  }
+  .mw.has-selection .mw-timeline :is(.ctl-fcinfo, .ctl-fresh, .ctl-replay) {
+    display: none;
+  }
+  /* a card or sheet open: the map keeps the room (the satellite chip returns when it closes; the card scrolls) */
+  .mw:is(.has-selection, .has-firecard, .has-sheet) .mw-imagery {
+    display: none;
+  }
+  .mw-card,
+  .mw-firecard {
+    max-height: min(42vh, calc(100% - 56px));
+  }
+}
+
+/* the fire's name keeps its room in the header; Command's identifier chip gives way first (the coordinate strip shows
+   the full identifier) */
+.mw-hdr-start .picker-btn {
+  flex: 0 0 auto;
+}
+.mw-hdr-start .mw-id-chip {
+  flex: 0 1 auto;
+  max-width: 200px;
+}
+@media (max-width: 760px) {
+  .mw-hdr-start .picker-btn {
+    flex: 1 1 auto;
+  }
+}

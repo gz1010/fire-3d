@@ -1,56 +1,97 @@
-// Location search (owner: location; CONTRACT §5.1, BRIEF §8). One explicitly submitted query, no autocomplete:
-// pasted coordinates are read locally (lib/geodesy), incident names are matched in the loaded catalog, and only text
-// that starts with a house number goes to the Census Geocoder proxy (/api/geocode). Census positions are
-// interpolated along address ranges: they are selected as approximate and adjustable, and ambiguous results are
-// listed, never picked silently. Coordinates and incident search work without the geocoder. "/" focuses the box.
-import { Flame, LoaderCircle, MapPin, Search, X } from 'lucide-react'
-import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+// "Check an address" search (owner: location; CONTRACT §5.1, brief 2 C-R1/R3/R4/R5, O-R9). One explicitly submitted
+// query, no autocomplete: pasted coordinates are read locally (lib/geodesy); an exact incident name opens that fire
+// (search.ts); street addresses go to the Census Geocoder proxy and towns / ZIP codes to the local Census Gazetteer
+// index through /api/geocode. Census positions are interpolated along address ranges: they are selected as
+// approximate and adjustable, and ambiguous results are listed, never picked silently. A prepared fire opens
+// explicitly (openFromSearch: framed, source 'search'); an unprepared fire only opens its card (I3), whose "Prepare
+// analysis (1-3 min)" is the one place a build can start.
+// One popover (hint, busy, message or results) closes on Escape, an edit, Clear, an outside click, a map click, a new
+// selection and a pick; every close cancels the lookup in flight and late replies are dropped (search.ts state
+// machine). A fire focused or left by zooming (brief 2 decision 10) changes neither. The popover never covers the
+// location card (searchUi.ts). Phones: focusing the box closes open sheets, and a pick blurs the input. "/" focuses
+// the box.
+import { Building2, Flame, Hash, LoaderCircle, MapPin, Search, X } from 'lucide-react'
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { IncidentSummary } from '../api/types'
-import { describeError } from '../api/client'
 import { distanceM, formatLat, formatLon, type ParsedLatLon } from '../lib/geodesy'
 import { area, distance } from '../lib/plainLanguage'
+import { fireFlyTo } from '../state/overview'
 import { useStore } from '../state/store'
-import { useWorkspace } from '../state/workspace'
-import { addressDetails, addressRange, useAddressDetails } from './addressStore'
-import { geocodeAddress } from './geocodeClient'
-import { likelyMissingWestSign, planSearch, type IncidentHit } from './search'
+import { useWorkspace, type PanelKey } from '../state/workspace'
+import { addressDetails, addressRange, prettyAddress, useAddressDetails } from './addressStore'
+import { geocodeAddress, plainSearchError } from './geocodeClient'
+import { incidentPool } from './incidents'
+import { openFromSearch } from './openFromSearch'
+import {
+  INITIAL_SEARCH,
+  READINESS_LABEL,
+  areaBounds,
+  areaLabel,
+  areaSub,
+  cancelledLookup,
+  decide,
+  incidentAction,
+  likelyMissingWestSign,
+  listCount,
+  planSearch,
+  readiness,
+  searchReducer,
+  type IncidentHit,
+  type Popover,
+  type ResultLists,
+  type SearchEvent,
+  type SearchPlan,
+  type SearchState,
+} from './search'
+import { useSearchUi } from './searchUi'
 import type { GeocodeMatch, GeocodeResponse } from './types'
+import { useNarrow } from './useNarrow'
 import './location.css'
 
-type Status = { tone: 'info' | 'ok' | 'warn' | 'error'; text: string; busy?: boolean } | null
-
-interface Results {
-  incidents: IncidentHit[]
-  addresses: { res: GeocodeResponse; matches: GeocodeMatch[] } | null
-}
-
-const NOTE = 'Street addresses: U.S. Census Bureau Geocoder. Positions are interpolated along the street’s address range (approximate).'
+const ADDRESS_NOTE = 'Street addresses: U.S. Census Bureau Geocoder. Positions are interpolated along the street’s address range (approximate).'
+const GAZETTEER_CREDIT = 'Towns and ZIP areas: U.S. Census Bureau Gazetteer Files.'
+const SHEETS: PanelKey[] = ['updates', 'layers', 'analysis']
 
 /** Zoom for a searched point: neighbourhood scale, or closer if the map is already closer. */
 function flyZoom(): number {
   return Math.min(16, Math.max(14, useWorkspace.getState().view?.zoom ?? 0))
 }
 
-function incidentPool(): IncidentSummary[] {
-  const s = useStore.getState()
-  return [...(s.summary ? [s.summary] : []), ...s.catalog.live, ...s.catalog.historical]
-}
+const fireName = (s: Pick<IncidentSummary, 'name'>) => (/\bfire$/i.test(s.name) ? `the ${s.name}` : s.name)
 
 export function SearchBox() {
   const [text, setText] = useState('')
-  const [status, setStatus] = useState<Status>(null)
-  const [results, setResults] = useState<Results | null>(null)
   const [focused, setFocused] = useState(false)
-  const [lastCoords, setLastCoords] = useState<ParsedLatLon | null>(null)
+  const [state, setState] = useState<SearchState>(INITIAL_SEARCH)
   const units = useWorkspace((s) => s.units)
+  const hasSelection = useWorkspace((s) => s.selection != null)
   const summary = useStore((s) => s.summary)
+  const incidentId = useStore((s) => s.incidentId)
+  const narrow = useNarrow()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const rootRef = useRef<HTMLFormElement | null>(null)
-  const reqRef = useRef<AbortController | null>(null)
+  const belowRef = useRef<HTMLDivElement | null>(null)
+  const stateRef = useRef(state)
+  const ctrls = useRef(new Map<number, AbortController>())
+  const inputId = useId()
   const listId = useId()
   const statusId = useId()
 
-  // "/" focuses the search box (not while typing elsewhere)
+  /** Every transition goes through here: a cancelled lookup is aborted at once. */
+  const dispatch = useCallback((e: SearchEvent) => {
+    const prev = stateRef.current
+    const next = searchReducer(prev, e)
+    if (next === prev) return
+    const c = cancelledLookup(prev, next)
+    if (c != null) {
+      ctrls.current.get(c)?.abort()
+      ctrls.current.delete(c)
+    }
+    stateRef.current = next
+    setState(next)
+  }, [])
+
+  // "/" focuses the box (not while typing elsewhere); unmount cancels a lookup in flight
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null
@@ -60,269 +101,416 @@ export function SearchBox() {
       e.preventDefault()
     }
     window.addEventListener('keydown', onKey)
+    const map = ctrls.current
     return () => {
       window.removeEventListener('keydown', onKey)
-      reqRef.current?.abort()
+      for (const c of map.values()) c.abort()
+      map.clear()
     }
   }, [])
 
-  // confirmations fade after a few seconds (warnings and errors stay until the next edit)
-  useEffect(() => {
-    if (status?.tone !== 'ok') return
-    const t = window.setTimeout(() => setStatus((cur) => (cur === status ? null : cur)), 5000)
-    return () => window.clearTimeout(t)
-  }, [status])
+  // a new selection (map click, event, drag) closes the popover and cancels the lookup. A change of the open fire does
+  // not: zooming focuses and leaves prepared fires on its own (brief 2 decision 10), which is not a new question.
+  useEffect(
+    () =>
+      useWorkspace.subscribe((s, p) => {
+        if (s.selection !== p.selection) dispatch({ type: 'close' })
+      }),
+    [dispatch],
+  )
 
-  // close the result list on outside pointer-down
+  // an outside pointer-down (the map included) closes the popover
+  const open = state.popover.kind !== 'closed'
   useEffect(() => {
-    if (!results) return
+    if (!open) return
     const onDown = (e: PointerEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setResults(null)
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) dispatch({ type: 'close' })
     }
     window.addEventListener('pointerdown', onDown, true)
     return () => window.removeEventListener('pointerdown', onDown, true)
-  }, [results])
+  }, [open, dispatch])
 
-  const close = () => {
-    setResults(null)
-    inputRef.current?.focus()
+  // confirmations fade after a few seconds; warnings, errors and questions stay until the next action
+  useEffect(() => {
+    const p = state.popover
+    if (p.kind !== 'message' || p.tone !== 'ok' || p.lists) return
+    const t = window.setTimeout(() => {
+      if (stateRef.current.popover === p) dispatch({ type: 'close' })
+    }, 5000)
+    return () => window.clearTimeout(t)
+  }, [state.popover, dispatch])
+
+  // publish the popover's box so the location card moves out of its way
+  const setPopoverBox = useSearchUi((s) => s.setPopover)
+  useLayoutEffect(() => {
+    const el = belowRef.current
+    if (!el || !open) {
+      setPopoverBox(null)
+      return
+    }
+    const measure = () => {
+      const r = el.getBoundingClientRect()
+      setPopoverBox(r.height > 0 ? { top: r.top, bottom: r.bottom } : null)
+    }
+    measure()
+    // content changes resize the popover; the observer re-measures them
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    window.addEventListener('resize', measure)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', measure)
+    }
+  }, [open, setPopoverBox])
+  useEffect(() => () => setPopoverBox(null), [setPopoverBox])
+
+  /** After a pick: phones drop the keyboard so the card and the map show. */
+  const afterPick = () => {
+    if (narrow) inputRef.current?.blur()
   }
+
+  const show = (popover: Popover) => dispatch({ type: 'show', popover })
+  const message = (tone: 'info' | 'ok' | 'warn' | 'error', textMsg: string, lists: ResultLists | null = null, fix: { lat: number; lon: number } | null = null, credit: string | null = null) =>
+    show({ kind: 'message', tone, text: textMsg, lists: lists && listCount(lists) ? lists : null, fix, credit })
 
   const chooseCoords = (p: { lat: number; lon: number }, read?: ParsedLatLon) => {
     useWorkspace.getState().selectLocation({ lat: p.lat, lon: p.lon, source: 'coords' }, { fly: true, zoom: flyZoom() })
-    setLastCoords(read ?? null)
     const how = read?.fromLink ? ' (from the map link)' : read?.order === 'lon-lat' ? ' (read as longitude, latitude)' : ''
     const east = read && likelyMissingWestSign(read)
-    setStatus({ tone: east ? 'warn' : 'ok', text: `Showing ${formatLat(p.lat)}, ${formatLon(p.lon)}${how}${east ? ': east longitude, far from California.' : ''}` })
-    setResults(null)
-  }
-
-  const chooseIncident = (s: IncidentSummary) => {
-    setResults(null)
-    setStatus(null)
-    setText('')
-    if (s.id !== useStore.getState().incidentId) void useStore.getState().selectIncident(s.id, { autoBuild: true })
-    else useWorkspace.getState().returnToIncident()
+    if (east) message('warn', `Showing ${formatLat(p.lat)}, ${formatLon(p.lon)}${how}: east longitude, far from California.`, null, { lat: p.lat, lon: -p.lon })
+    else message('ok', `Showing ${formatLat(p.lat)}, ${formatLon(p.lon)}${how}.`)
+    afterPick()
   }
 
   const chooseAddress = (res: GeocodeResponse, m: GeocodeMatch) => {
     useAddressDetails.getState().setDetails(addressDetails(res, m))
     useWorkspace.getState().selectLocation(
-      { lat: m.lat, lon: m.lon, source: 'address', label: m.matched_address, matchedAddress: m.matched_address, approximate: true, adjustable: true },
+      { lat: m.lat, lon: m.lon, source: 'address', label: prettyAddress(m.matched_address), matchedAddress: m.matched_address, approximate: true, adjustable: true },
       { fly: true, zoom: Math.max(15, flyZoom()) },
     )
-    setStatus(null) // the card says it is approximate and adjustable
-    setResults(null)
+    dispatch({ type: 'close' }) // the card says it is approximate and adjustable
+    afterPick()
   }
 
-  const submit = async () => {
-    const q = text.trim()
-    reqRef.current?.abort()
-    reqRef.current = null
-    setLastCoords(null)
-    const plan = planSearch(q, incidentPool())
-    if (plan.kind === 'empty') {
-      setStatus(null)
-      setResults(null)
+  /** A town or ZIP area: fly there and ask for a street address or a map click (it is not a point check). */
+  const chooseArea = (m: GeocodeMatch, others: ResultLists | null) => {
+    const ws = useWorkspace.getState()
+    ws.clearSelection() // the previous point belongs to another search
+    const b = areaBounds(m)
+    ws.requestMapFlyTo({ lon: m.lon, lat: m.lat, bounds: b })
+    message('info', `Showing ${areaLabel(m)}. To check a spot, enter a street address with a house number, or click the map.`, others, null, GAZETTEER_CREDIT)
+    afterPick()
+  }
+
+  const actOnIncident = (hit: IncidentHit) => {
+    const s = hit.summary
+    const act = incidentAction(s, useStore.getState().incidentId)
+    if (act === 'show-current') {
+      useWorkspace.getState().returnToIncident()
+      setText('')
+      message('ok', `Showing ${fireName(s)}.`)
+      afterPick()
       return
     }
-    if (plan.kind === 'coords') return chooseCoords(plan.parsed, plan.parsed)
-    if (plan.kind === 'nothing') {
-      const loading = useStore.getState().catalog.loading
-      setResults(null)
-      setStatus({
-        tone: 'warn',
-        text: loading
-          ? 'The incident list is still loading. Try again in a moment.'
-          : `No incident matches “${q}”. For an address, start with the house number (e.g. 600 E Mariposa St, Altadena, CA). Place names are not searched.`,
-      })
+    if (act === 'open') {
+      setText('')
+      dispatch({ type: 'close' })
+      openFromSearch(s.id) // an explicit open (framed, a history step); never a build
+      afterPick()
       return
     }
-    if (plan.kind === 'incidents') {
-      if (plan.incidents.length === 1 || plan.incidents[0].score === 100) return chooseIncident(plan.incidents[0].summary)
-      setStatus(null)
-      setResults({ incidents: plan.incidents, addresses: null })
-      return
-    }
-    // a street address: Census lookup through the API (incident matches are listed too)
+    // not prepared: show it and open its card, which asks before preparing (1-3 min of public downloads)
+    showFireCard(s)
+  }
+
+  /** Fly to a fire and open its card (I3), as the overview list does. */
+  const showFireCard = (s: IncidentSummary) => {
+    dispatch({ type: 'close' })
+    const req = fireFlyTo(s)
+    if (req) useWorkspace.getState().requestMapFlyTo(req)
+    useWorkspace.getState().setFireCard(s.id)
+    afterPick()
+  }
+
+  const lookup = async (plan: Extract<SearchPlan, { kind: 'lookup' }>) => {
+    dispatch({ type: 'lookup', text: plan.expect === 'address' ? 'Looking up the address (U.S. Census Bureau)…' : 'Searching California towns and ZIP codes…' })
+    const seq = stateRef.current.seq
     const ctrl = new AbortController()
-    reqRef.current = ctrl
-    setResults(plan.incidents.length ? { incidents: plan.incidents, addresses: null } : null)
-    setStatus({ tone: 'info', text: 'Looking up the address (U.S. Census Bureau)…', busy: true })
+    ctrls.current.set(seq, ctrl)
+    const current = () => !ctrl.signal.aborted && stateRef.current.pending === seq
     try {
-      const res = await geocodeAddress(plan.query, { signal: ctrl.signal, timeoutMs: 30_000 })
-      if (ctrl.signal.aborted) return
-      reqRef.current = null
-      if (res.matches.length === 1 && !plan.incidents.length) return chooseAddress(res, res.matches[0])
-      if (!res.matches.length) {
-        setStatus({ tone: 'warn', text: 'No US street address matched. Check the house number, street and city or ZIP code.' })
-        if (!plan.incidents.length) setResults(null)
-        return
-      }
-      const more = (res.total_matches ?? res.matches.length) > res.matches.length ? ` (first ${res.matches.length} of ${res.total_matches})` : ''
-      setStatus({ tone: 'info', text: `${res.matches.length === 1 ? 'One address matches' : `${res.matches.length} addresses match${more}`}: choose one.` })
-      setResults({ incidents: plan.incidents, addresses: { res, matches: res.matches } })
+      const res = await geocodeAddress(plan.query, { signal: ctrl.signal })
+      if (!current()) return // cancelled or superseded: a late reply is dropped
+      ctrls.current.delete(seq)
+      const d = decide(plan, res)
+      if (d.kind === 'address') return chooseAddress(res, d.match)
+      if (d.kind === 'area') return chooseArea(d.match, d.others)
+      if (d.kind === 'incident') return actOnIncident(d.hit)
+      if (d.kind === 'none') return dispatch({ type: 'reply', seq, popover: { kind: 'message', tone: 'warn', text: d.message, lists: null, fix: null } })
+      dispatch({ type: 'reply', seq, popover: { kind: 'results', message: d.message, lists: d.lists, response: res } })
     } catch (e) {
-      if (ctrl.signal.aborted) return
-      reqRef.current = null
-      setStatus({ tone: 'error', text: `Address lookup failed: ${describeError(e)}. Coordinates, map clicks and incident search still work.` })
+      if (!current()) return
+      ctrls.current.delete(seq)
+      if (plan.candidate) return actOnIncident(plan.candidate) // incident search works without the geocoder
+      const lists: ResultLists = { addresses: [], places: [], zips: [], incidents: plan.incidents }
+      dispatch({ type: 'reply', seq, popover: { kind: 'message', tone: 'error', text: plainSearchError(e), lists: listCount(lists) ? lists : null, fix: null } })
     }
   }
 
-  const onListKey = (e: ReactKeyboardEvent<HTMLElement>) => {
+  const submit = () => {
+    const plan = planSearch(text, incidentPool(useStore.getState()))
+    switch (plan.kind) {
+      case 'empty':
+        return dispatch({ type: 'close' })
+      case 'coords':
+        return chooseCoords(plan.parsed, plan.parsed)
+      case 'invalid':
+        return message('warn', plan.message)
+      case 'incident':
+        return actOnIncident(plan.hit)
+      case 'lookup':
+        return void lookup(plan)
+    }
+  }
+
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLElement>) => {
     const items = Array.from(rootRef.current?.querySelectorAll<HTMLButtonElement>('.loc-result') ?? [])
     const i = items.indexOf(document.activeElement as HTMLButtonElement)
-    if (e.key === 'ArrowDown') {
+    if (e.key === 'ArrowDown' && items.length) {
       items[Math.min(items.length - 1, i + 1)]?.focus()
       e.preventDefault()
-    } else if (e.key === 'ArrowUp') {
-      if (i <= 0) inputRef.current?.focus()
+    } else if (e.key === 'ArrowUp' && items.length && i >= 0) {
+      if (i === 0) inputRef.current?.focus()
       else items[i - 1]?.focus()
       e.preventDefault()
-    } else if (e.key === 'Escape' && (results || status)) {
-      // close our popover only (not the shell's drawers, which also listen for Escape)
-      setStatus(null)
-      close()
+    } else if (e.key === 'Escape') {
+      // our popover (and its lookup) first; then an empty box lets go of the focus. Never the shell's drawers.
+      if (stateRef.current.popover.kind !== 'closed' || stateRef.current.pending != null) {
+        dispatch({ type: 'close' })
+        if (document.activeElement !== inputRef.current) inputRef.current?.focus()
+      } else if (document.activeElement === inputRef.current && !text) inputRef.current?.blur()
+      else return
       e.preventDefault()
       e.stopPropagation()
     }
   }
 
-  const fixSign = lastCoords && likelyMissingWestSign(lastCoords) ? { lat: lastCoords.lat, lon: -lastCoords.lon } : null
-  // distance of each address candidate from the selected incident's reported location (helps pick the right one)
+  const fixSign = state.popover.kind === 'message' ? state.popover.fix : null
+  // distance of each address candidate from the open fire's reported location (helps pick the right one)
   const near = summary && Number.isFinite(summary.lat) && Number.isFinite(summary.lon) ? { lat: summary.lat, lon: summary.lon, name: summary.name } : null
-  const showHint = focused && !text && !results && !status
+  const p = state.popover
+  const busy = state.pending != null
+  const lists = p.kind === 'results' ? p.lists : p.kind === 'message' ? p.lists : null
+  const popText = p.kind === 'busy' ? p.text : p.kind === 'message' ? p.text : p.kind === 'results' ? p.message : null
+  const tone = p.kind === 'message' ? p.tone : 'info'
   return (
     <form
       ref={rootRef}
-      className="loc-search"
+      className={`loc-search${open ? ' is-open' : ''}`}
       role="search"
-      aria-label="Search address, coordinates or incident"
+      aria-label="Check an address"
       onSubmit={(e) => {
         e.preventDefault()
-        void submit()
+        submit()
       }}
-      onKeyDown={onListKey}
+      onKeyDown={onKeyDown}
     >
-      <div className="mw-panel loc-search-bar">
-        <Search size={15} aria-hidden="true" className="loc-search-icon" />
-        <input
-          ref={inputRef}
-          className="loc-search-input"
-          type="text"
-          inputMode="search"
-          enterKeyHint="search"
-          autoComplete="off"
-          autoCorrect="off"
-          spellCheck={false}
-          maxLength={200}
-          aria-label="Address, coordinates or incident"
-          aria-describedby={statusId}
-          placeholder="Address, coordinates or incident"
-          value={text}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          onChange={(e) => {
-            setText(e.target.value)
-            if (status?.tone !== 'info' || !status.busy) setStatus(null)
-          }}
-        />
-        {status?.busy && <LoaderCircle size={15} className="loc-spin" aria-hidden="true" />}
-        {text && (
-          <button
-            type="button"
-            className="mw-icon-btn is-sm"
-            aria-label="Clear search"
-            onClick={() => {
-              reqRef.current?.abort()
-              setText('')
-              setStatus(null)
-              setResults(null)
-              inputRef.current?.focus()
+      <div className="mw-panel loc-search-box">
+        <label className="loc-search-label" htmlFor={inputId}>
+          Check an address <span className="loc-search-label-sub">street, town, ZIP code or coordinates</span>
+        </label>
+        <div className="loc-search-bar">
+          <Search size={15} aria-hidden="true" className="loc-search-icon" />
+          <input
+            ref={inputRef}
+            id={inputId}
+            className="loc-search-input"
+            type="text"
+            inputMode="search"
+            enterKeyHint="search"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+            maxLength={200}
+            aria-describedby={statusId}
+            aria-controls={lists ? listId : undefined}
+            placeholder="e.g. 600 E Mariposa St, Altadena"
+            value={text}
+            onFocus={() => {
+              setFocused(true)
+              // phones: an open sheet would hide the results
+              if (narrow) {
+                const ws = useWorkspace.getState()
+                for (const k of SHEETS) if (ws.panels[k]) ws.setPanel(k, false)
+              }
+              if (!useWorkspace.getState().selection) dispatch({ type: 'focus', empty: !text })
             }}
-          >
-            <X size={13} />
+            onBlur={() => {
+              setFocused(false)
+              dispatch({ type: 'blur' })
+            }}
+            onChange={(e) => {
+              setText(e.target.value)
+              dispatch({ type: 'edit', empty: !e.target.value, focused: focused && !hasSelection })
+            }}
+          />
+          {busy && <LoaderCircle size={15} className="loc-spin" aria-hidden="true" />}
+          {text && (
+            <button
+              type="button"
+              className="mw-icon-btn is-sm"
+              aria-label="Clear search"
+              onClick={() => {
+                setText('')
+                dispatch({ type: 'close' })
+                inputRef.current?.focus()
+              }}
+            >
+              <X size={13} />
+            </button>
+          )}
+          <button type="submit" className="mw-btn is-sm loc-search-go" disabled={!text.trim()}>
+            Search
           </button>
-        )}
-        <button type="submit" className="mw-btn is-sm loc-search-go" disabled={!text.trim()}>
-          Search
-        </button>
+        </div>
       </div>
-      <div id={statusId} className="loc-search-below" aria-live="polite">
-        {showHint && (
+      <div ref={belowRef} id={statusId} className="loc-search-below" aria-live="polite">
+        {p.kind === 'hint' && (
           <p className="mw-panel loc-search-hint">
-            Try <span className="mw-mono">600 E Mariposa St, Altadena, CA</span>, <span className="mw-mono">34.2048, -118.1027</span> or an incident name. Press Enter to search.
+            Enter a street address with a house number (<span className="mw-mono">600 E Mariposa St, Altadena</span>), a California town or ZIP code (
+            <span className="mw-mono">91001</span>), coordinates or a fire’s name, then press Enter. Or click the map.
           </p>
         )}
-        {status && !results && (
-          <p className={`mw-panel loc-search-status is-${status.tone}`} role={status.tone === 'error' ? 'alert' : undefined}>
-            {status.text}
+        {(p.kind === 'busy' || p.kind === 'message') && !lists && (
+          <p className={`mw-panel loc-search-status is-${p.kind === 'busy' ? 'info' : tone}`} role={tone === 'error' ? 'alert' : undefined}>
+            {p.kind === 'busy' && <LoaderCircle size={13} className="loc-spin" aria-hidden="true" />}
+            <span>{popText}</span>
             {fixSign && (
               <button type="button" className="mw-link-btn" onClick={() => chooseCoords(fixSign)}>
                 Use {formatLon(fixSign.lon)} instead?
               </button>
             )}
+            {p.kind === 'message' && p.credit && <span className="loc-search-credit">{p.credit}</span>}
           </p>
         )}
-        {results && (
+        {lists && (
           <div className="mw-panel loc-results" id={listId}>
-            {status && <p className={`loc-results-status is-${status.tone}`}>{status.text}</p>}
-            {results.incidents.length > 0 && (
-              <section aria-label="Incidents">
-                <h3 className="mw-eyebrow loc-results-head">Incidents</h3>
-                <ul>
-                  {results.incidents.map(({ summary: s }) => (
-                    <li key={s.id}>
-                      <button type="button" className="loc-result" onClick={() => chooseIncident(s)}>
-                        <Flame size={14} aria-hidden="true" className="loc-result-icon is-fire" />
-                        <span className="loc-result-text">
-                          <span className="loc-result-title">{s.name}</span>
-                          <span className="loc-result-sub">
-                            {[s.year, s.county ? `${s.county} County` : null, s.acres ? area(s.acres, units).text : null, s.is_active ? 'active' : null].filter(Boolean).join(' · ')}
-                          </span>
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </section>
+            {popText && (
+              <p className={`loc-results-status is-${tone}`} role={tone === 'error' ? 'alert' : undefined}>
+                {popText}
+                {p.kind === 'message' && p.credit && <span className="loc-search-credit">{p.credit}</span>}
+              </p>
             )}
-            {results.addresses && (
-              <section aria-label="Street addresses">
-                <h3 className="mw-eyebrow loc-results-head">Addresses · approximate</h3>
-                <ul>
-                  {results.addresses.matches.map((m) => (
-                    <li key={`${m.matched_address}|${m.lat}|${m.lon}`}>
-                      <button type="button" className="loc-result" onClick={() => chooseAddress(results.addresses!.res, m)}>
-                        <MapPin size={14} aria-hidden="true" className="loc-result-icon is-select" />
-                        <span className="loc-result-text">
-                          <span className="loc-result-title">{m.matched_address}</span>
-                          <span className="loc-result-sub">
-                            {near && `${distance(distanceM(near, m), units).text} from ${near.name} · `}
-                            Interpolated along{' '}
-                            {addressRange(m.from_address, m.to_address) ? (
-                              <>
-                                house numbers <span className="loc-nowrap">{addressRange(m.from_address, m.to_address)}</span>
-                              </>
-                            ) : (
-                              'the address range'
-                            )}{' '}
-                            ·{' '}
-                            <span className="mw-mono">
-                              {m.lat.toFixed(5)}, {m.lon.toFixed(5)}
-                            </span>
-                          </span>
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-            {(results.addresses || status?.busy) && <p className="loc-results-note">{NOTE}</p>}
+            <Results
+              lists={lists}
+              response={p.kind === 'results' ? p.response : null}
+              others={p.kind === 'message'}
+              units={units}
+              near={near}
+              currentId={incidentId}
+              onAddress={(res, m) => chooseAddress(res, m)}
+              onArea={(m) => chooseArea(m, null)}
+              onIncident={(h) => actOnIncident(h)}
+            />
           </div>
         )}
       </div>
     </form>
+  )
+}
+
+interface ResultsProps {
+  lists: ResultLists
+  response: GeocodeResponse | null
+  /** The lists are "other matches" after a town was shown. */
+  others: boolean
+  units: ReturnType<typeof useWorkspace.getState>['units']
+  near: { lat: number; lon: number; name: string } | null
+  currentId: string | null
+  onAddress: (res: GeocodeResponse, m: GeocodeMatch) => void
+  onArea: (m: GeocodeMatch) => void
+  onIncident: (h: IncidentHit) => void
+}
+
+function Results({ lists, response, others, units, near, currentId, onAddress, onArea, onIncident }: ResultsProps) {
+  const areas = [...lists.places, ...lists.zips]
+  return (
+    <>
+      {lists.addresses.length > 0 && response && (
+        <section aria-label="Street addresses">
+          <h3 className="mw-eyebrow loc-results-head">Street addresses · approximate</h3>
+          <ul>
+            {lists.addresses.map((m) => {
+              const range = addressRange(m.from_address, m.to_address)
+              return (
+                <li key={`${m.matched_address}|${m.lat}|${m.lon}`}>
+                  <button type="button" className="loc-result" onClick={() => onAddress(response, m)}>
+                    <MapPin size={14} aria-hidden="true" className="loc-result-icon is-select" />
+                    <span className="loc-result-text">
+                      <span className="loc-result-title">{prettyAddress(m.matched_address)}</span>
+                      <span className="loc-result-sub">
+                        {near && `${distance(distanceM(near, m), units).text} from ${near.name} · `}
+                        Interpolated along {range ? <span className="loc-nowrap">house numbers {range}</span> : 'the address range'}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+          <p className="loc-results-note">{ADDRESS_NOTE}</p>
+        </section>
+      )}
+      {areas.length > 0 && (
+        <section aria-label="Towns and ZIP areas">
+          <h3 className="mw-eyebrow loc-results-head">{others ? 'Other towns and ZIP areas' : 'Towns and ZIP areas · approximate'}</h3>
+          <ul>
+            {areas.map((m) => (
+              <li key={`${m.kind}|${m.matched_address}|${m.lat}|${m.lon}`}>
+                <button type="button" className="loc-result" onClick={() => onArea(m)}>
+                  {m.kind === 'zip' ? <Hash size={14} aria-hidden="true" className="loc-result-icon" /> : <Building2 size={14} aria-hidden="true" className="loc-result-icon" />}
+                  <span className="loc-result-text">
+                    <span className="loc-result-title">{m.kind === 'zip' ? `ZIP ${m.zip ?? m.name}` : m.name}</span>
+                    <span className="loc-result-sub">{areaSub(m)}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="loc-results-note">Towns and ZIP areas: U.S. Census Bureau Gazetteer Files. Picking one moves the map; then enter a street address or click the map.</p>
+        </section>
+      )}
+      {lists.incidents.length > 0 && (
+        <section aria-label="Fires">
+          <h3 className="mw-eyebrow loc-results-head">{others ? 'Fires that match' : 'Fires'}</h3>
+          <ul>
+            {lists.incidents.map((h) => {
+              const s = h.summary
+              const r = readiness(s)
+              const current = s.id === currentId
+              const facts = [String(s.year), s.county ? `${s.county} County` : null, s.acres ? area(s.acres, units).text : null, s.is_active ? 'active' : s.percent_contained != null ? `${Math.round(s.percent_contained)}% contained` : null]
+              const opensCard = !current && (r === 'not-prepared' || r === 'failed')
+              return (
+                <li key={s.id}>
+                  <button type="button" className="loc-result" onClick={() => onIncident(h)} title={opensCard ? 'Shows the fire and its card; preparing the analysis is asked there' : undefined}>
+                    <Flame size={14} aria-hidden="true" className="loc-result-icon is-fire" />
+                    <span className="loc-result-text">
+                      <span className="loc-result-title">
+                        {s.name}{' '}
+                        <span className={`loc-chip is-${current ? 'current' : r}`}>{current ? 'Showing' : READINESS_LABEL[r]}</span>
+                      </span>
+                      <span className="loc-result-sub">
+                        {facts.filter(Boolean).join(' · ')}
+                        {opensCard && ' · opens its card'}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      )}
+    </>
   )
 }

@@ -1,10 +1,11 @@
-// React hooks for the optional sources (owner: optional-sources). Each hook fetches when its query changes (keyed by
-// URL, so quantised `at_ms` values from `extrasAtMs` avoid refetching during playback), keeps the previous answer
-// while refreshing, refreshes on the source's cadence while the data is current, and aborts on unmount.
+// React hooks for the optional sources (owner: official-web since brief 2, earlier optional-sources). Each hook reads
+// the shared per-URL cache (jsonQuery.ts; quantised `at_ms` values from `extrasAtMs` avoid refetching during
+// playback): a URL answered recently is shown at once, the previous answer stays while refreshing, current answers
+// refresh on the source's cadence, and a request nobody reads any more is aborted.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { extrasUrl, fetchCameraFrame, type AreaQuery, type ExtrasKind, type ImageryQuery } from './client'
-import { fetchJson } from '../api/client'
 import { requestErrorText } from './format'
+import { useCachedJsonQuery } from './jsonQuery'
 import type { CameraFrameResponse, CamerasResponse, EvacuationsResponse, ImageryResponse } from './types'
 
 /** Refresh cadence while the data is current (matched to the sources' update cadence and the backend caches). */
@@ -22,45 +23,21 @@ export interface ExtrasQueryState<T> {
   refresh: () => void
 }
 
-interface Settled<T> {
-  /** `${url}#${tick}` of the request this answer belongs to. */
-  key: string
-  url: string
-  data: T | null
-  error: string | null
+export const IDLE_QUERY: ExtrasQueryState<never> = { data: null, loading: false, error: null, refresh: () => {} }
+
+/** Same answer, loading flag and error: publishing it again would only re-render the readers. */
+export function sameQueryState<T>(a: ExtrasQueryState<T>, b: ExtrasQueryState<T>): boolean {
+  return a.data === b.data && a.loading === b.loading && a.error === b.error && a.refresh === b.refresh
 }
 
 function useExtrasQuery<T extends { status: string }>(kind: ExtrasKind, query: (ImageryQuery & AreaQuery) | null, enabled: boolean): ExtrasQueryState<T> {
   const url = query && enabled ? extrasUrl(kind, query) : null
-  const [tick, setTick] = useState(0)
-  const [settled, setSettled] = useState<Settled<T> | null>(null)
-  const refresh = useCallback(() => setTick((n) => n + 1), [])
-  const key = url ? `${url}#${tick}` : null
-
-  useEffect(() => {
-    if (!url || !key) return
-    const ctrl = new AbortController()
-    fetchJson<T>(url, { signal: ctrl.signal, timeoutMs: kind === 'imagery' ? 60_000 : 30_000 })
-      .then((data) => setSettled({ key, url, data, error: null }))
-      .catch((e: unknown) => {
-        if (ctrl.signal.aborted) return
-        // keep the previous answer for the same area/time; report the failure next to it
-        setSettled((s) => ({ key, url, data: s?.url === url ? s.data : null, error: requestErrorText(e) }))
-      })
-    return () => ctrl.abort()
-  }, [url, key, kind])
-
-  const same = settled != null && settled.url === url
-  const data = same ? settled.data : null
-  // periodic refresh only while the answer is current (past dates do not change)
-  const current = data != null && data.status !== 'not_available_for_past_dates'
-  useEffect(() => {
-    if (!url || !current) return
-    const id = window.setInterval(refresh, REFRESH_MS[kind])
-    return () => window.clearInterval(id)
-  }, [url, current, kind, refresh])
-
-  return { data, loading: url != null && settled?.key !== key, error: same ? settled.error : null, refresh }
+  // shared per-URL cache (jsonQuery.ts): a re-focused fire shows its last answer at once; past dates do not change
+  return useCachedJsonQuery<T>(url, {
+    refreshMs: REFRESH_MS[kind],
+    timeoutMs: kind === 'imagery' ? 60_000 : 30_000,
+    isCurrent: (d) => d.status !== 'not_available_for_past_dates',
+  })
 }
 
 export function useEvacuations(query: AreaQuery | null, enabled = true): ExtrasQueryState<EvacuationsResponse> {

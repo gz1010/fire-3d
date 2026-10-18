@@ -5,6 +5,7 @@
 import type { Map as MapLibreMap, SourceSpecification } from 'maplibre-gl'
 import type { FeedItem } from '../ui/feed/types'
 import { apiPath } from './client'
+import { fmtDateTime } from '../lib/time'
 import { agoText, durationText, fmtWhen, relativeToText } from './format'
 import type { ExtrasLegendEntry } from './legend'
 import { LayerGroupHandle, type BeforeId, type LayerGroup, type LayerHandleOptions } from './mapLayers'
@@ -114,6 +115,115 @@ export function pickDefaultImagery(data: ImageryResponse | null, startedMs: numb
   return newest(clear) ?? newest(viirs) ?? newest(ok.filter((p) => p.family === 'goes'))
 }
 
+/** The panel's order: images acquired since the fire started (newest first), then images from before it (context,
+ *  newest first), then GOES-West (1-2 km pixels) last. Without a known start: newest first, GOES last. */
+export function orderedProducts(data: ImageryResponse | null, startedMs: number | null = null): ImageryProduct[] {
+  const ps = data?.products ?? []
+  const byTime = byNewest
+  const after = (p: ImageryProduct) => startedMs == null || !Number.isFinite(startedMs) || (p.acquired_end_ms ?? p.acquired_ms) >= startedMs
+  const fine = ps.filter((p) => p.family !== 'goes')
+  return [...fine.filter(after).sort(byTime), ...fine.filter((p) => !after(p)).sort(byTime), ...ps.filter((p) => p.family === 'goes').sort(byTime)]
+}
+
+/** Rows of the panel's list with a heading where the group changes ("Since the fire started", "Before the fire
+ *  (context)", "GOES-West …"); `ordered` comes from orderedProducts. */
+export function withGroupHeadings(ordered: readonly ImageryProduct[], refMs: number, startedMs: number | null, live: boolean): { p: ImageryProduct; t: ImageryTiming; heading: string | null }[] {
+  let last: string | null = null
+  return ordered.map((p) => {
+    const t = imageryTiming(p, refMs, startedMs, live)
+    const group = p.family === 'goes' ? 'GOES-West: every 10 min, 1-2 km pixels' : t.beforeFire ? 'Before the fire (context)' : startedMs != null ? 'Since the fire started' : 'Newest'
+    const heading = group !== last ? group : null
+    last = group
+    return { p, t, heading }
+  })
+}
+
+/** `at_ms` of the per-incident image list used while the imagery layer is off (the chip): null (now) for live fires,
+ *  else the end of the record floored to 30 min (one cache-friendly request per incident). */
+export function imagerySummaryAtMs(manifest: { mode: 'live' | 'historical'; time_range: { end_ms: number } } | null, nowMs: number): number | null {
+  if (!manifest || manifest.mode === 'live') return null
+  return Math.floor(Math.min(manifest.time_range.end_ms, nowMs) / 1_800_000) * 1_800_000
+}
+
+/** Newest first; at the same time a true-color image before a false-color one (what the ground looks like first). */
+export function byNewest(a: ImageryProduct, b: ImageryProduct): number {
+  return b.acquired_ms - a.acquired_ms || Number(b.composite === 'true_color') - Number(a.composite === 'true_color') || a.id.localeCompare(b.id)
+}
+
+/** A product's name for display, in US spelling ("fire false color"). */
+export function productLabel(p: Pick<ImageryProduct, 'label'>): string {
+  return p.label.replace(/colour/g, 'color').replace(/Colour/g, 'Color')
+}
+
+/** Displayable products, newest first, acquired at or before `refMs` (null = no limit). */
+export function usableProducts(data: ImageryResponse | null, refMs: number | null = null): ImageryProduct[] {
+  return (data?.products ?? []).filter((p) => p.available && p.display && (refMs == null || p.acquired_ms <= refMs)).sort(byNewest)
+}
+
+/**
+ * The newest image to offer first (the map chip): the newest displayable Sentinel-2, Landsat or VIIRS image acquired
+ * at or before `refMs`, preferring images taken after the fire started; GOES (1-2 km, every 10 min: always the
+ * newest but too coarse for an incident) only when nothing else exists.
+ */
+export function newestImagery(data: ImageryResponse | null, startedMs: number | null = null, refMs: number | null = null): ImageryProduct | null {
+  const ok = usableProducts(data, refMs)
+  const fine = ok.filter((p) => p.family !== 'goes')
+  if (startedMs != null && Number.isFinite(startedMs)) {
+    const post = fine.find((p) => (p.acquired_end_ms ?? p.acquired_ms) >= startedMs)
+    if (post) return post
+  }
+  return fine[0] ?? ok[0] ?? null
+}
+
+/** "VIIRS NOAA-21" / "Sentinel-2B" / "Landsat 9": the platform with its sensor where it helps. */
+export function platformText(p: Pick<ImageryProduct, 'family' | 'platform' | 'sensor'>): string {
+  if (p.family === 'viirs') return /viirs/i.test(p.platform) ? p.platform : `VIIRS ${p.platform}`
+  if (p.family === 'goes') return p.platform
+  return p.platform
+}
+
+/** "375 m" / "10 m" / "1-2 km": the pixel size in the chip. */
+export function pixelText(p: ImageryProduct): string {
+  if (p.resolution_m >= 1000) return p.resolution_m / 1000 >= 2 ? '1-2 km' : '1 km'
+  return `${p.resolution_m} m`
+}
+
+/** The chip's parts: platform, acquisition time, age (relative to now, or to the replay time) and pixel size. */
+export function imageryChipParts(p: ImageryProduct, refMs: number, live: boolean): { platform: string; time: string; age: string; pixel: string } {
+  // replay: "25 h earlier" (than the replay time; the caption spells it out)
+  const d = refMs - p.acquired_ms
+  const age = live ? agoText(p.acquired_ms, refMs) : Math.abs(d) < 5 * 60_000 ? 'at the replay time' : `${durationText(d)} ${d > 0 ? 'earlier' : 'later'}`
+  return { platform: platformText(p), time: fmtWhen(p.acquired_ms, refMs), age, pixel: pixelText(p) }
+}
+
+/** The chip line: "VIIRS NOAA-21 · Oct 17, 14:30 PDT (18 h ago) · 375 m". */
+export function imageryChipText(p: ImageryProduct, refMs: number, live: boolean): string {
+  const c = imageryChipParts(p, refMs, live)
+  return `${c.platform} · ${c.time} (${c.age}) · ${c.pixel}`
+}
+
+/** Caption parts while an image is on the map: platform (title), time, age, pixel size and cloud cover; the caption
+ *  adds a "not live" badge. */
+export function imageryCaption(p: ImageryProduct, refMs: number, live: boolean): { title: string; parts: string[]; limits: string[] } {
+  const rel = live ? agoText(p.acquired_ms, refMs) : relativeToText(p.acquired_ms, refMs, 'the replay time')
+  const passes = p.family === 'viirs' && p.pass_times_ms.length > 1
+  const limits: string[] = []
+  if (p.family === 'goes') limits.push('Geostationary image every 10 min; pixels too coarse to show the fire edge')
+  else if (p.family === 'viirs') limits.push('Daily image: about one pass a day; smoke and cloud can hide the ground')
+  else limits.push('Revisits every few days; smoke and cloud can hide the ground')
+  if (p.coverage_pct != null && p.coverage_pct < 99.5) limits.push(coverageText(p))
+  return {
+    title: `Satellite image · ${platformText(p)}`,
+    parts: [
+      passes ? `passes ${p.pass_times_ms.map((t) => fmtWhen(t, refMs)).join(' and ')}` : `acquired ${fmtWhen(p.acquired_ms, refMs)}`,
+      rel,
+      resolutionText(p).replace(/^About/, 'about'),
+      p.cloud_cover_pct == null ? 'cloud cover not reported' : `${Math.round(p.cloud_cover_pct)} % cloud (whole scene)`,
+    ],
+    limits,
+  }
+}
+
 export interface ImageryTiming {
   /** "Acquired Oct 13, 12:13 PDT" or the pass list for daily images. */
   acquired: string
@@ -188,8 +298,9 @@ export function imageryLegend(p: ImageryProduct | null, refMs: number): ExtrasLe
       id: `imagery-${p.id}`,
       layer: 'recentImagery',
       label: `Satellite image · ${p.platform}`,
-      detail: `${p.family === 'viirs' && p.pass_times_ms.length > 1 ? 'passes from' : 'acquired'} ${fmtWhen(p.acquired_ms, refMs)} · ${resolutionText(p).toLowerCase()}`,
+      detail: `${p.family === 'viirs' && p.pass_times_ms.length > 1 ? 'passes from' : 'acquired'} ${fmtWhen(p.acquired_ms, refMs)} · ${resolutionText(p).toLowerCase()} · not live`,
       swatch: { kind: 'raster' },
+      compact: `Satellite image · ${platformText(p)} · ${fmtDateTime(p.acquired_ms)}`,
     },
   ]
 }

@@ -1,11 +1,18 @@
-// Shared runtime of the optional sources in the Public/Command workspace (owner: ui-integration; CONTRACT §12.3).
-// ExtrasSync runs the three data hooks once and publishes their answers here, next to the viewer's choices (selected
-// camera, imagery product, zone, opacity). The map layers (map/extrasLayers.ts), the Layers panel, the legend, the
-// credits, the updates feed and the location card all read this store, so each source is fetched only once and only
-// while its layer toggle is on.
+// Shared runtime of the optional sources in the Public/Command workspace (owner: official-web since brief 2, earlier
+// ui-integration; CONTRACT §12.3, §13). ExtrasSync runs the data hooks once and publishes their answers here, next to
+// the viewer's choices (selected camera, imagery product, zone, opacity). The map layers (map/extrasLayers.ts), the
+// Layers panel, the legend, the credits, the updates feed, the location card and the official hooks all read this
+// store, so each source is fetched only once. Official evacuation zones are fetched for the open fire whatever the
+// layer toggle says (the toggle hides them on the map and in the legend only); cameras only while their layer is on.
+// The legend, credit and feed helpers below also carry the official sources (NWS outlines, CAL FIRE and NWS rows).
 import { useMemo } from 'react'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
+import { calfireFeedItems } from '../official/calfire'
+import { forIncident } from '../official/guard'
+import { useOfficialContext } from '../official/context'
+import { fireWeatherCredits, fireWeatherFeedItems, fireWeatherLegend } from '../official/fireWeather'
+import { useFireWeatherData, useOfficialRuntime } from '../official/runtime'
 import { useStore } from '../state/store'
 import { useWorkspace } from '../state/workspace'
 import type { FeedItem } from '../ui/feed/types'
@@ -13,14 +20,14 @@ import { cameraFeedItems, cameraLegend } from './cameras'
 import { cameraCredits, evacuationCredits, imageryCredits, type ExtrasCredit } from './credits'
 import { evacuationFeedItems, evacuationLegend } from './evacuation'
 import { envelopeStatusLine, type StatusLine } from './format'
-import type { CameraFrameState, ExtrasQueryState } from './hooks'
+import { IDLE_QUERY, type CameraFrameState, type ExtrasQueryState } from './hooks'
 import { DEFAULT_IMAGERY_OPACITY, imageryFeedItems, imageryLegend } from './imagery'
 import type { ExtrasLayerKey, ExtrasLegendEntry } from './legend'
 import type { CamerasResponse, EvacuationsResponse, ExtrasEnvelope, ImageryProduct, ImageryResponse } from './types'
 
 const noop = () => {}
 
-export const IDLE_QUERY: ExtrasQueryState<never> = { data: null, loading: false, error: null, refresh: noop }
+export { IDLE_QUERY, sameQueryState } from './hooks'
 export const IDLE_FRAME: CameraFrameState = { cameraId: null, frame: null, loading: false, error: null, request: noop, clear: noop }
 
 export interface ExtrasRuntimeState {
@@ -61,60 +68,98 @@ export const useExtrasRuntime = create<ExtrasRuntimeState>()((set) => ({
   resetChoices: () => set({ productChoice: undefined, cameraId: null, zoneId: null }),
 }))
 
-/** Same answer, loading flag and error: publishing it again would only re-render the readers. */
-export function sameQueryState<T>(a: ExtrasQueryState<T>, b: ExtrasQueryState<T>): boolean {
-  return a.data === b.data && a.loading === b.loading && a.error === b.error && a.refresh === b.refresh
-}
-
 /** The optional-source answers for the layers that are switched on (null for a layer that is off). */
 export function useVisibleExtras(): { evac: EvacuationsResponse | null; cams: CamerasResponse | null; imgs: ImageryResponse | null; product: ImageryProduct | null } {
   const on = useWorkspace(useShallow((s) => ({ evacuation: s.mapLayers.evacuation, cameras: s.mapLayers.cameras, recentImagery: s.mapLayers.recentImagery })))
+  const incidentId = useStore((s) => s.incidentId)
+  // only the open fire's answers (the fire changes as the user zooms; brief 2 decision 10)
   return useExtrasRuntime(
-    useShallow((s) => ({
-      evac: on.evacuation ? s.evac.data : null,
-      cams: on.cameras ? s.cams.data : null,
-      imgs: on.recentImagery ? s.imgs.data : null,
-      product: on.recentImagery ? s.product : null,
-    })),
+    useShallow((s) => {
+      const imgs = on.recentImagery ? forIncident(s.imgs.data, incidentId) : null
+      return {
+        evac: on.evacuation ? forIncident(s.evac.data, incidentId) : null,
+        cams: on.cameras ? forIncident(s.cams.data, incidentId) : null,
+        imgs,
+        product: imgs ? s.product : null,
+      }
+    }),
   )
 }
 
-/** Legend entries of the visible optional layers (official wording, camera kinds, the satellite image shown). */
+/** Legend entries of the visible optional layers (official wording, camera kinds, the satellite image shown) and of
+ *  the NWS fire weather outlines in effect at the reference time (now, or the replay time). */
 export function useExtrasLegend(nowMs: number): ExtrasLegendEntry[] {
   const v = useVisibleExtras()
   const refMs = v.imgs?.reference_ms ?? nowMs
-  return useMemo(() => [...evacuationLegend(v.evac), ...cameraLegend(v.cams), ...imageryLegend(v.product, refMs)], [v.evac, v.cams, v.product, refMs])
+  const fw = useFireWeatherData()
+  const fwRef = useOfficialContext().refMs
+  return useMemo(
+    () => [...evacuationLegend(v.evac), ...fireWeatherLegend(fw, fwRef), ...cameraLegend(v.cams), ...imageryLegend(v.product, refMs)],
+    [v.evac, v.cams, v.product, refMs, fw, fwRef],
+  )
 }
 
-/** Credits of the visible optional layers, as text (CONTRACT §4.4, §12.5). */
+/** Credits of the visible optional layers and of drawn NWS outlines, as text (CONTRACT §4.4, §12.5). */
 export function useExtrasCredits(): ExtrasCredit[] {
   const v = useVisibleExtras()
-  return useMemo(() => [...evacuationCredits(v.evac), ...cameraCredits(v.cams), ...imageryCredits(v.product, v.imgs)], [v.evac, v.cams, v.imgs, v.product])
+  const fw = useFireWeatherData()
+  const fwRef = useOfficialContext().refMs
+  return useMemo(
+    () => [...evacuationCredits(v.evac), ...fireWeatherCredits(fw, fwRef), ...cameraCredits(v.cams), ...imageryCredits(v.product, v.imgs)],
+    [v.evac, v.cams, v.imgs, v.product, fw, fwRef],
+  )
 }
 
 const NO_ITEMS: FeedItem[] = []
 
-/** Feed items of the visible optional layers for UpdatesFeed `extraItems` (memoised; CONTRACT §12.3 item 5). */
+/**
+ * Feed items for UpdatesFeed `extraItems` (memoised; CONTRACT §12.3 item 5, §13): official evacuation status (whatever
+ * the layer toggle says), CAL FIRE record changes, NWS fire weather alerts, and the camera / imagery items of their
+ * visible layers.
+ */
 export function useExtrasFeedItems(): FeedItem[] {
   const v = useVisibleExtras()
-  const { manifest, startMs, endMs, startedMs } = useStore(
+  const ctx = useOfficialContext()
+  const evac = useExtrasRuntime((s) => forIncident(s.evac.data, ctx.incidentId))
+  const calfire = useOfficialRuntime((s) => forIncident(s.calfire.data, ctx.incidentId))
+  const fw = useFireWeatherData()
+  const metric = useWorkspace((s) => s.units === 'metric')
+  const { manifest, summary, startMs, endMs, startedMs } = useStore(
     useShallow((s) => {
       const m = s.manifest?.status === 'ready' ? s.manifest : null
-      return { manifest: m, startMs: m?.time_range.start_ms ?? null, endMs: m?.time_range.end_ms ?? null, startedMs: s.summary?.started_ms ?? null }
+      const sum = s.summary && s.summary.id === s.incidentId ? s.summary : null
+      return { manifest: m, summary: sum, startMs: m?.time_range.start_ms ?? null, endMs: m?.time_range.end_ms ?? null, startedMs: s.summary?.started_ms ?? null }
     }),
   )
   return useMemo(() => {
     const range: [number, number] | null = startMs != null && endMs != null ? [startMs, endMs] : null
-    const items = [...evacuationFeedItems(v.evac, manifest), ...cameraFeedItems(v.cams), ...imageryFeedItems(v.imgs, range, startedMs)]
+    const mode = manifest?.mode ?? summary?.mode ?? 'live'
+    const items = [
+      ...evacuationFeedItems(evac, manifest, { fire: ctx.fire, metric }),
+      ...(ctx.demo ? [] : calfireFeedItems(calfire, { mode, manifest, summary })),
+      ...(ctx.demo ? [] : fireWeatherFeedItems(fw, { mode, refMs: ctx.refMs, manifest, metric })),
+      ...cameraFeedItems(v.cams),
+      ...imageryFeedItems(v.imgs, range, startedMs),
+    ]
     return items.length ? items : NO_ITEMS
-  }, [v.evac, v.cams, v.imgs, manifest, startMs, endMs, startedMs])
+  }, [evac, calfire, fw, ctx, metric, v.cams, v.imgs, manifest, summary, startMs, endMs, startedMs])
 }
 
-/** The optional layers, in legend order. */
-export const EXTRAS_LAYER_KEYS: readonly ExtrasLayerKey[] = ['evacuation', 'cameras', 'recentImagery']
+/** The optional layers, in legend order ('fireWeather' = the NWS outlines, which have no toggle). */
+export const EXTRAS_LAYER_KEYS: readonly ExtrasLayerKey[] = ['evacuation', 'fireWeather', 'cameras', 'recentImagery']
 
-const SOURCE_NAME: Record<ExtrasLayerKey, string> = { evacuation: 'Official evacuation zones', cameras: 'Public cameras', recentImagery: 'Recent satellite imagery' }
-const COMPACT_LABEL: Record<ExtrasLayerKey, string> = { evacuation: 'Evacuation zones (official)', cameras: 'Public cameras', recentImagery: 'Satellite image' }
+const SOURCE_NAME: Record<ExtrasLayerKey, string> = {
+  evacuation: 'Official evacuation zones',
+  fireWeather: 'NWS fire weather alerts',
+  cameras: 'Public cameras',
+  recentImagery: 'Recent satellite imagery',
+}
+const COMPACT_LABEL: Record<ExtrasLayerKey, string> = {
+  evacuation: 'Evacuation zones (official)',
+  fireWeather: 'Fire weather alert (NWS)',
+  cameras: 'Public cameras',
+  recentImagery: 'Satellite image',
+}
 
 type Answer = { data: Pick<ExtrasEnvelope, 'status' | 'reason'> | null; error: string | null }
 
@@ -124,7 +169,7 @@ type Answer = { data: Pick<ExtrasEnvelope, 'status' | 'reason'> | null; error: s
  * that draw something get no line.
  */
 export function extrasStatusLines(
-  on: Record<ExtrasLayerKey, boolean>,
+  on: Partial<Record<ExtrasLayerKey, boolean>>,
   q: { evac: Answer & { data: EvacuationsResponse | null }; cams: Answer & { data: CamerasResponse | null }; imgs: Answer },
   product: ImageryProduct | null,
 ): Partial<Record<ExtrasLayerKey, StatusLine>> {
@@ -150,19 +195,37 @@ export function extrasStatusLines(
   return out
 }
 
-/** Status lines for the switched-on optional layers (see extrasStatusLines). */
+/** Why NWS outlines cannot be drawn for the open fire (past dates without the archive, outages); null otherwise
+ *  (no alert in effect is said in "Official now", not as a legend line). */
+export function fireWeatherStatusLine(d: { status: string; reason: string | null } | null, error: string | null, opts: { hasIncident: boolean; demo: boolean }): StatusLine | null {
+  if (!opts.hasIncident || opts.demo) return null
+  if (error && !d) return { tone: 'error', title: `${SOURCE_NAME.fireWeather}: could not load`, detail: error }
+  if (!d) return null
+  if (d.status === 'not_available_for_past_dates') return { tone: 'muted', title: `${SOURCE_NAME.fireWeather}: not available for this time`, detail: d.reason }
+  if (d.status === 'unavailable') return { tone: 'warn', title: `${SOURCE_NAME.fireWeather}: unavailable`, detail: d.reason }
+  return null
+}
+
+/** Status lines for the switched-on optional layers (see extrasStatusLines) and for the NWS outlines. */
 export function useExtrasStatus(): Partial<Record<ExtrasLayerKey, StatusLine>> {
   const on = useWorkspace(useShallow((s) => ({ evacuation: s.mapLayers.evacuation, cameras: s.mapLayers.cameras, recentImagery: s.mapLayers.recentImagery })))
   const q = useExtrasRuntime(useShallow((s) => ({ evac: s.evac, cams: s.cams, imgs: s.imgs, product: s.product })))
-  return useMemo(() => extrasStatusLines(on, q, q.product), [on, q])
+  const fw = useOfficialRuntime(useShallow((s) => ({ data: s.fireWeather.data, error: s.fireWeather.error })))
+  const ctx = useOfficialContext()
+  return useMemo(() => {
+    const out = extrasStatusLines(on, q, q.product)
+    const l = fireWeatherStatusLine(fw.data, fw.error, { hasIncident: ctx.hasIncident, demo: ctx.demo })
+    return l ? { ...out, fireWeather: l } : out
+  }, [on, q, fw, ctx.hasIncident, ctx.demo])
 }
 
-/** One compact legend entry per optional layer that draws something: its first (most important) swatch. */
+/** One compact legend entry per optional layer that draws something: its first (most important) swatch, labelled
+ *  by the entry's own compact label (the satellite image names its platform and time) or the layer's short name. */
 export function compactExtrasLegend(entries: readonly ExtrasLegendEntry[]): { layer: ExtrasLayerKey; entry: ExtrasLegendEntry; label: string }[] {
   const out: { layer: ExtrasLayerKey; entry: ExtrasLegendEntry; label: string }[] = []
   for (const k of EXTRAS_LAYER_KEYS) {
     const first = entries.find((e) => e.layer === k)
-    if (first) out.push({ layer: k, entry: first, label: COMPACT_LABEL[k] })
+    if (first) out.push({ layer: k, entry: first, label: first.compact ?? COMPACT_LABEL[k] })
   }
   return out
 }

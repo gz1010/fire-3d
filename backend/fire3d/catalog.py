@@ -1,7 +1,10 @@
 """Incident catalog: CAL FIRE lists + FIRMS live feeds -> IncidentSummary (SPEC 4.4, 6, 8.1). Owner: firedata agent.
 
-* Historical: the CAL FIRE 2025 list, fire types only (Wildfire/Fire), ``acres >= min_acres`` (default 300; pass 0
-  for all), sorted by acres desc. ``detections_24h`` is None.
+* Historical: the CAL FIRE list of one year (default :data:`HISTORICAL_YEAR` = 2025; ``year=`` for others, e.g. the
+  2026 season), fire types only (Wildfire/Fire), ``acres >= min_acres`` (default 300; pass 0 for all), sorted by
+  acres desc. ``detections_24h`` is None and every row keeps mode "historical" (the list's mode; ``is_active`` says
+  whether CAL FIRE still lists the fire as active). The current year's list is refreshed every 30 min and overlaid
+  with the fresher live-list records of the same fires (and live fires it does not list yet).
 * Live: every incident CAL FIRE lists as active with ``Type`` in {Wildfire, Fire}, sorted by ``detections_24h``
   desc then acres desc. ``detections_24h`` counts the California detections of the keyless 24h FIRMS feeds (VIIRS
   x3 + MODIS) near the incident: within ``max(5 km, 2 x the radius of a circle of its acreage)`` (capped at 25 km);
@@ -9,8 +12,10 @@
 * ``bundle_status`` / ``bundle_built_ms`` come from ``DATA_DIR/incidents/{id}/manifest.json`` at call time.
 * Ids: ``f"{year}-{slugify(name)}-{uid[:6].lower()}"`` (SPEC 4.4), year = UTC year of ``Started``.
 
-Base lists are cached in memory (live 5 min, historical 1 h) on top of the fire3d.http cache; ``refresh=True``
-refetches CAL FIRE and the FIRMS feeds.
+Base lists are cached in memory (live 5 min, the current year 10 min, past years 1 h) on top of the fire3d.http
+cache; ``refresh=True`` refetches CAL FIRE and the FIRMS feeds. Every CAL FIRE list this module fetches feeds the
+CAL FIRE status history (``sources.calfire_history``): active fires and already tracked ones, so a fire that leaves
+the live list gets its record after containment from its year's list.
 """
 
 from __future__ import annotations
@@ -36,6 +41,7 @@ DEFAULT_MIN_ACRES = 300.0
 FIRE_TYPES = frozenset({"wildfire", "fire"})
 LIVE_CACHE_S = 300.0
 HISTORICAL_CACHE_S = 3600.0
+CURRENT_YEAR_CACHE_S = 600.0
 DET_RADIUS_MIN_M = 5000.0
 DET_RADIUS_FACTOR = 2.0
 DET_RADIUS_MAX_M = 25000.0
@@ -172,10 +178,74 @@ def assign_detections(incidents: list[tuple[float, float, float]], lat: np.ndarr
     return counts
 
 
+def record_history(recs: list[dict], key: str) -> None:
+    """Feed CAL FIRE's status history (fire types only); never breaks the catalog."""
+    from .sources import calfire, calfire_history
+
+    try:
+        calfire_history.record([r for r in recs if (r.get("type") or "").lower() in FIRE_TYPES], list_name=key,
+                               seen_ms=calfire.fetched_ms(key))
+    except Exception as e:  # noqa: BLE001 - history is a side record
+        log.warning("CAL FIRE history not recorded (%s): %s", key, config.mask_secrets(e))
+
+
+def _record_left_live(live_recs: list[dict]) -> None:
+    """Tracked fires that left the live list: record their latest record from their year's list (cached)."""
+    from .sources import calfire, calfire_history
+
+    try:
+        missing = calfire_history.missing_active(r.get("uid", "") for r in live_recs)
+    except Exception as e:  # noqa: BLE001
+        log.warning("CAL FIRE history: tracked fires not checked: %s", e)
+        return
+    for year, uids in sorted(missing.items()):
+        try:
+            recs = calfire.list_year(year)
+        except calfire.CalFireError as e:
+            log.info("CAL FIRE history: %d list unavailable: %s", year, config.mask_secrets(e))
+            continue
+        record_history([r for r in recs if r.get("uid") in uids], calfire.list_key({"inactive": "true", "year": year}))
+
+
+def _with_live_records(recs: list[dict], year: int) -> list[dict]:
+    """The current year's records with each fire's live-list record where that one is at least as new, plus live
+    fires of ``year`` that the (cached) year list does not include yet."""
+    from .sources import calfire
+
+    try:
+        live = calfire.list_live()
+    except calfire.CalFireError as e:
+        log.info("CAL FIRE %d list: live overlay skipped: %s", year, config.mask_secrets(e))
+        return recs
+    record_history(live, "live")
+    by_uid = {r["uid"]: r for r in live if r.get("uid") and r.get("year") == year}
+    out = []
+    for r in recs:
+        fresh = by_uid.pop(r.get("uid"), None)
+        out.append(fresh if fresh is not None and (fresh.get("updated_ms") or 0) >= (r.get("updated_ms") or 0) else r)
+    return out + list(by_uid.values())
+
+
+def year_records(year: int, refresh: bool = False) -> list[dict]:
+    """CAL FIRE's cleaned records of ``year`` (``sources.calfire.list_year``; the current year overlaid with the live
+    list, see :func:`_with_live_records`), recorded into the status history."""
+    from .sources import calfire
+
+    year = int(year)
+    recs = calfire.list_year(year, refresh=refresh)
+    record_history(recs, calfire.list_key({"inactive": "true", "year": year}))
+    if year >= time.gmtime().tm_year:
+        recs = _with_live_records(recs, year)
+    return recs
+
+
 def _live_base(refresh: bool) -> list[IncidentSummary]:
     from .sources import calfire, firms
 
-    recs = [r for r in calfire.list_live(refresh=refresh) if r.get("is_active") and r.get("type", "").lower() in FIRE_TYPES]
+    raw = calfire.list_live(refresh=refresh)
+    record_history(raw, "live")
+    _record_left_live(raw)
+    recs = [r for r in raw if r.get("is_active") and r.get("type", "").lower() in FIRE_TYPES]
     summaries = [s for s in (summary_from_record(r, "live") for r in recs) if s is not None]
     counts: list[int | None] = [None] * len(summaries)
     try:
@@ -193,34 +263,38 @@ def _live_base(refresh: bool) -> list[IncidentSummary]:
     return out
 
 
-def _historical_base(refresh: bool) -> list[IncidentSummary]:
-    from .sources import calfire
-
-    recs = [r for r in calfire.list_year(HISTORICAL_YEAR, refresh=refresh) if r.get("type", "").lower() in FIRE_TYPES]
+def _historical_base(refresh: bool, year: int = HISTORICAL_YEAR) -> list[IncidentSummary]:
+    recs = [r for r in year_records(year, refresh=refresh) if r.get("type", "").lower() in FIRE_TYPES]
     out = [s for s in (summary_from_record(r, "historical") for r in recs) if s is not None]
     out.sort(key=lambda s: (-(s.acres or 0.0), s.name))
     return out
 
 
-def _base(mode: Mode, refresh: bool) -> list[IncidentSummary]:
-    ttl = LIVE_CACHE_S if mode == "live" else HISTORICAL_CACHE_S
+def _base(mode: Mode, refresh: bool, year: int = HISTORICAL_YEAR) -> list[IncidentSummary]:
+    if mode == "live":
+        key, ttl = "live", LIVE_CACHE_S
+    else:
+        key = f"historical:{int(year)}"
+        ttl = CURRENT_YEAR_CACHE_S if int(year) >= time.gmtime().tm_year else HISTORICAL_CACHE_S
     with _lock:
-        hit = _cache.get(mode)
+        hit = _cache.get(key)
         if hit is not None and not refresh and time.monotonic() - hit[0] < ttl:
             return hit[1]
-    rows = _live_base(refresh) if mode == "live" else _historical_base(refresh)
+    rows = _live_base(refresh) if mode == "live" else _historical_base(refresh, int(year))
     with _lock:
-        _cache[mode] = (time.monotonic(), rows)
+        _cache[key] = (time.monotonic(), rows)
     return rows
 
 
-def get_catalog(mode: Mode, min_acres: float | None = None, refresh: bool = False) -> list[IncidentSummary]:
-    """Live: all active Wildfire/Fire incidents sorted by detections_24h then acres. Historical: 2025 incidents
-    with acres >= ``min_acres`` (default 300) sorted by acres desc. ``bundle_status`` reflects bundles on disk.
+def get_catalog(mode: Mode, min_acres: float | None = None, refresh: bool = False,
+                year: int | None = None) -> list[IncidentSummary]:
+    """Live: all active Wildfire/Fire incidents sorted by detections_24h then acres. Historical: the incidents of
+    ``year`` (default :data:`HISTORICAL_YEAR`) with acres >= ``min_acres`` (default 300) sorted by acres desc;
+    ``year`` is ignored for live. ``bundle_status`` reflects bundles on disk.
     Raises ``sources.calfire.CalFireError`` when CAL FIRE is unreachable and nothing is cached."""
     if mode not in ("live", "historical"):
         raise ValueError(f"mode must be 'live' or 'historical', got {mode!r}")
-    rows = _base(mode, refresh)
+    rows = _base(mode, refresh, int(year) if year is not None else HISTORICAL_YEAR)
     lo = min_acres if min_acres is not None else (DEFAULT_MIN_ACRES if mode == "historical" else None)
     if lo:
         rows = [s for s in rows if (s.acres or 0.0) >= lo]
@@ -259,7 +333,7 @@ def get_summary(incident_id: str) -> IncidentSummary | None:
     if parsed and parsed[0] != HISTORICAL_YEAR:
         year, slug, uid6 = parsed
         try:
-            for r in calfire.list_year(year):
+            for r in year_records(year):
                 if r.get("uid", "").startswith(uid6) and slugify(r.get("name", "")) == slug:
                     s = summary_from_record(r, "live" if r.get("is_active") else "historical")
                     if s is not None:

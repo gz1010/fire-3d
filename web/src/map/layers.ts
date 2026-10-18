@@ -4,8 +4,11 @@
 // satellite detections = true-size sensor footprints (outlined squares, filled only when recent; GOES dashed),
 // drawn beneath the fire edges; modeled area = dashed light line with "Outside modeled area" labels outside it;
 // events = white dots; reported location = ring + label.
-// Fills, rasters and lines go directly below the basemap's first label layer (draped on terrain in 3D); point markers
-// and our own labels go on top of the basemap labels.
+// Fills, rasters and lines go directly below the basemap's labels and 3D buildings (draped on terrain in 3D); point
+// markers and our own labels go on top of the basemap labels.
+// Aerial theme (brief 2, O-R11): on photos the modeled-area and perimeter lines get a dark casing, the area labels are
+// 12 px with wider halos, and from z13 the observed fill turns lighter (its bright edge stays) while detection
+// footprints become fainter outlines, so the photo stays visible at close zoom.
 import type { LayerSpecification } from 'maplibre-gl'
 import { TOKENS } from './overlayModel'
 
@@ -22,6 +25,7 @@ export const SRC = {
   aoiLabels: 'fx-aoi-labels',
   events: 'fx-events',
   incident: 'fx-incident',
+  nearby: 'fx-nearby-perimeters',
 } as const
 
 export const LYR = {
@@ -34,14 +38,20 @@ export const LYR = {
   observedEdge: 'fx-observed-edge',
   perimetersOld: 'fx-perimeters-old',
   perimetersLatest: 'fx-perimeters-latest',
+  nearbyCasing: 'fx-nearby-casing',
+  nearbyLine: 'fx-nearby-line',
   detectionsFill: 'fx-detections-fill',
   detectionsLine: 'fx-detections-line',
   detectionsGoes: 'fx-detections-goes',
   detectionsDot: 'fx-detections-dot',
+  aoiCasing: 'fx-aoi-casing',
   aoiLine: 'fx-aoi-line',
+  perimetersCasing: 'fx-perimeters-casing',
   eventsCircle: 'fx-events-circle',
   incidentCircle: 'fx-incident-circle',
+  incidentHit: 'fx-incident-hit',
   perimetersLabel: 'fx-perimeters-label',
+  nearbyLabel: 'fx-nearby-label',
   aoiLabel: 'fx-aoi-label',
   eventsLabel: 'fx-events-label',
   incidentLabel: 'fx-incident-label',
@@ -49,13 +59,20 @@ export const LYR = {
 
 export const HATCH_IMAGE = 'fx-hatch'
 
-/** Label / line colours for our layers: 'light' text on the dark and aerial basemaps, 'dark' text on the road map. */
-export type MapTheme = 'dark' | 'light'
+/** Label / line colours for our layers: light ink on the dark map, dark ink on the road map, light ink plus casings and
+ *  close-zoom lightening on the aerial photos. */
+export type MapTheme = 'dark' | 'light' | 'aerial'
 
 const THEME = {
   dark: { ink: TOKENS.text, halo: 'rgba(8,12,18,0.92)', aoi: TOKENS.aoi, aoiText: 'rgba(232,237,243,0.82)', perimText: '#ffc2a6', marker: TOKENS.text, eventStroke: TOKENS.textInverse },
   light: { ink: '#16202b', halo: 'rgba(255,255,255,0.92)', aoi: 'rgba(22,32,43,0.72)', aoiText: '#26313d', perimText: '#9a3412', marker: '#16202b', eventStroke: '#16202b' },
+  aerial: { ink: TOKENS.text, halo: 'rgba(4,7,11,0.92)', aoi: 'rgba(240,244,248,0.82)', aoiText: '#f0f4f8', perimText: '#ffd2bd', marker: TOKENS.text, eventStroke: TOKENS.textInverse },
 } as const
+
+/** Dark casing drawn under lines on the aerial photos. */
+export const AERIAL_CASING = 'rgba(4,7,11,0.62)'
+/** Aerial: the observed fill fades from full at z12.5 to this opacity at z13.5 (its edge line stays bright). */
+export const AERIAL_CLOSE_FILL_OPACITY = 0.55
 
 /** Below this zoom detections are dots at the pixel centre; from it on, true-size sensor footprints. */
 export const FOOTPRINT_MINZOOM = 13
@@ -68,7 +85,7 @@ const FONT_BOLD = ['Noto Sans Bold']
 export const LAYER_GROUPS = {
   observed: [LYR.observedRaster, LYR.observedGlow, LYR.observedEdge],
   forecast: [LYR.forecastRaster, LYR.forecastHatch, LYR.forecastLine10, LYR.forecastLine50],
-  perimeters: [LYR.perimetersOld, LYR.perimetersLatest, LYR.perimetersLabel],
+  perimeters: [LYR.perimetersCasing, LYR.perimetersOld, LYR.perimetersLatest, LYR.perimetersLabel, LYR.nearbyCasing, LYR.nearbyLine, LYR.nearbyLabel],
   detections: [LYR.detectionsFill, LYR.detectionsLine, LYR.detectionsGoes, LYR.detectionsDot],
   events: [LYR.eventsCircle, LYR.eventsLabel],
 } as const
@@ -76,7 +93,8 @@ export const LAYER_GROUPS = {
 /** Draped layers (inserted below the basemap labels), bottom to top. */
 export function drapedLayers(theme: MapTheme = 'dark'): LayerSpecification[] {
   const t = THEME[theme]
-  return [
+  const aerial = theme === 'aerial'
+  const layers: LayerSpecification[] = [
     {
       id: LYR.forecastRaster,
       type: 'raster',
@@ -87,7 +105,11 @@ export function drapedLayers(theme: MapTheme = 'dark'): LayerSpecification[] {
       id: LYR.observedRaster,
       type: 'raster',
       source: SRC.observedRaster,
-      paint: { 'raster-resampling': 'nearest', 'raster-fade-duration': 0, 'raster-opacity': 1 },
+      paint: {
+        'raster-resampling': 'nearest',
+        'raster-fade-duration': 0,
+        'raster-opacity': aerial ? ['interpolate', ['linear'], ['zoom'], 12.5, 1, 13.5, AERIAL_CLOSE_FILL_OPACITY] : 1,
+      },
     },
     {
       id: LYR.detectionsFill,
@@ -96,8 +118,8 @@ export function drapedLayers(theme: MapTheme = 'dark'): LayerSpecification[] {
       minzoom: FOOTPRINT_MINZOOM,
       filter: ['==', ['get', 'age'], 0],
       // footprints overlap heavily on large fires (hundreds per pass): a light wash and thin outlines keep the fire,
-      // the forecast and the roads readable underneath
-      paint: { 'fill-color': TOKENS.detection, 'fill-opacity': 0.08 },
+      // the forecast and the roads readable underneath; on the photos, outlines only
+      paint: { 'fill-color': TOKENS.detection, 'fill-opacity': aerial ? 0 : 0.08 },
     },
     {
       id: LYR.detectionsLine,
@@ -108,7 +130,7 @@ export function drapedLayers(theme: MapTheme = 'dark'): LayerSpecification[] {
       paint: {
         'line-color': ['match', ['get', 'age'], 0, TOKENS.detection, TOKENS.detectionOld],
         'line-width': ['interpolate', ['linear'], ['zoom'], 9, 0.6, 14, 1.2],
-        'line-opacity': ['match', ['get', 'age'], 0, 0.6, 0.25],
+        'line-opacity': ['match', ['get', 'age'], 0, aerial ? 0.42 : 0.6, aerial ? 0.18 : 0.25],
       },
     },
     {
@@ -117,7 +139,7 @@ export function drapedLayers(theme: MapTheme = 'dark'): LayerSpecification[] {
       source: SRC.detections,
       minzoom: FOOTPRINT_MINZOOM,
       filter: ['==', ['get', 'age'], 2],
-      paint: { 'line-color': TOKENS.detection, 'line-width': 1, 'line-opacity': 0.4, 'line-dasharray': [2, 2] },
+      paint: { 'line-color': TOKENS.detection, 'line-width': 1, 'line-opacity': aerial ? 0.3 : 0.4, 'line-dasharray': [2, 2] },
     },
     {
       id: LYR.detectionsDot,
@@ -188,17 +210,36 @@ export function drapedLayers(theme: MapTheme = 'dark'): LayerSpecification[] {
       paint: { 'line-color': TOKENS.perimeter, 'line-width': 1.6 },
     },
     {
+      // other prepared fires in view (decision 10): their latest perimeter, lighter and dashed
+      id: LYR.nearbyLine,
+      type: 'line',
+      source: SRC.nearby,
+      layout: { 'line-join': 'round' },
+      paint: { 'line-color': TOKENS.perimeter, 'line-width': aerial ? 1.6 : 1.3, 'line-opacity': 0.7, 'line-dasharray': [3, 2] },
+    },
+    {
       id: LYR.aoiLine,
       type: 'line',
       source: SRC.aoi,
-      paint: { 'line-color': t.aoi, 'line-width': 1.4, 'line-dasharray': [4, 3] },
+      paint: { 'line-color': t.aoi, 'line-width': aerial ? 1.6 : 1.4, 'line-dasharray': [4, 3] },
     },
   ]
+  if (!aerial) return layers
+  // casings under the perimeter and modeled-area lines (a solid dark band; the lines draw on top of it)
+  const casing = (id: string, source: string, width: unknown, before: string): void => {
+    const i = layers.findIndex((l) => l.id === before)
+    layers.splice(i, 0, { id, type: 'line', source, layout: { 'line-join': 'round' }, paint: { 'line-color': AERIAL_CASING, 'line-width': width as number, 'line-blur': 0.4 } })
+  }
+  casing(LYR.perimetersCasing, SRC.perimeters, ['case', ['get', 'latest'], 4.2, 3], LYR.perimetersOld)
+  casing(LYR.nearbyCasing, SRC.nearby, 3.4, LYR.nearbyLine)
+  casing(LYR.aoiCasing, SRC.aoi, 3.6, LYR.aoiLine)
+  return layers
 }
 
 /** Point markers and our labels (added after the basemap labels). */
 export function topLayers(theme: MapTheme = 'dark'): LayerSpecification[] {
   const t = THEME[theme]
+  const aerial = theme === 'aerial'
   return [
     {
       id: LYR.eventsCircle,
@@ -225,6 +266,13 @@ export function topLayers(theme: MapTheme = 'dark'): LayerSpecification[] {
       },
     },
     {
+      // invisible touch target around the reported location (>= 24 px across): a click opens the fire card
+      id: LYR.incidentHit,
+      type: 'circle',
+      source: SRC.incident,
+      paint: { 'circle-radius': 12, 'circle-color': '#000000', 'circle-opacity': 0, 'circle-pitch-alignment': 'map' },
+    },
+    {
       id: LYR.perimetersLabel,
       type: 'symbol',
       source: SRC.perimeters,
@@ -234,11 +282,28 @@ export function topLayers(theme: MapTheme = 'dark'): LayerSpecification[] {
         'symbol-spacing': 420,
         'text-field': ['get', 'label'],
         'text-font': FONT_REGULAR,
-        'text-size': 11,
+        'text-size': aerial ? 12 : 11,
         'text-offset': [0, -0.8],
         'text-max-angle': 30,
       },
-      paint: { 'text-color': t.perimText, 'text-halo-color': t.halo, 'text-halo-width': 1.4 },
+      paint: { 'text-color': t.perimText, 'text-halo-color': t.halo, 'text-halo-width': aerial ? 1.6 : 1.4 },
+    },
+    {
+      id: LYR.nearbyLabel,
+      type: 'symbol',
+      source: SRC.nearby,
+      minzoom: 9.5,
+      layout: {
+        'symbol-placement': 'line',
+        'symbol-spacing': 520,
+        'text-field': ['get', 'label'],
+        'text-font': FONT_REGULAR,
+        'text-size': aerial ? 11.5 : 10.5,
+        'text-offset': [0, -0.8],
+        'text-max-angle': 30,
+        'text-optional': true,
+      },
+      paint: { 'text-color': t.perimText, 'text-halo-color': t.halo, 'text-halo-width': aerial ? 1.6 : 1.3, 'text-opacity': 0.85 },
     },
     {
       id: LYR.aoiLabel,
@@ -248,13 +313,13 @@ export function topLayers(theme: MapTheme = 'dark'): LayerSpecification[] {
       layout: {
         'text-field': 'Outside modeled area',
         'text-font': FONT_REGULAR,
-        'text-size': 10.5,
+        'text-size': aerial ? 12 : 10.5,
         'text-anchor': ['match', ['get', 'side'], 'n', 'bottom', 's', 'top', 'w', 'right', 'left'],
         'text-offset': ['match', ['get', 'side'], 'n', ['literal', [0, -0.4]], 's', ['literal', [0, 0.4]], 'w', ['literal', [-0.6, 0]], ['literal', [0.6, 0]]],
         'text-letter-spacing': 0.04,
         'text-optional': true,
       },
-      paint: { 'text-color': t.aoiText, 'text-halo-color': t.halo, 'text-halo-width': 1.2 },
+      paint: { 'text-color': t.aoiText, 'text-halo-color': t.halo, 'text-halo-width': aerial ? 1.6 : 1.2 },
     },
     {
       id: LYR.eventsLabel,

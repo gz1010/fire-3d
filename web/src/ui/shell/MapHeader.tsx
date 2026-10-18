@@ -1,19 +1,41 @@
-// Compact Public/Command header (owner: shell, CONTRACT §3; BRIEF §2, §6): brand, incident picker, workspace switch,
-// demo badge, preset switch and the toggles for the secondary panels (Analysis drawer, Layers & settings). Command
-// adds the incident identifier from 1280 px (narrower, the name keeps the room and the coordinate strip shows the
-// identifier). Below 1024 px the workspace and preset switches move into a menu; below 761 px the updates panel gets a
-// header toggle too (it is a bottom sheet there).
-import { BarChart3, Check, Copy, Layers, ListChecks, Maximize2, Menu } from 'lucide-react'
+// Compact Public/Command header (owner: shell, CONTRACT §3; BRIEF §2, §6; brief 2 O-R3, C-R8, U-R4): brand, then
+// "California · all fires" on the overview or "← All fires" + the incident picker inside a fire, the single
+// "Public · Command · Forensic" switch, the demo badge and the toggles for the secondary panels (Analysis drawer, only
+// inside a fire; Layers & settings). Command adds the incident identifier from 1280 px (narrower, the name keeps the
+// room and the coordinate strip shows the identifier). Below 1024 px the switch moves into a menu; below 761 px the
+// updates panel gets a labelled header toggle with a badge for active official orders, warnings and fire weather
+// alerts (it is a bottom sheet there).
+import { ArrowLeft, BarChart3, Check, Copy, Layers, ListChecks, Maximize2, Menu } from 'lucide-react'
 import { useRef, useState, type ReactNode } from 'react'
+import { ImageryChip } from '../../extras/ImageryChip'
+import { useOfficialBadge } from '../../official/hooks'
 import { useStore } from '../../state/store'
 import { isDemoBundle, useWorkspace, type PanelKey } from '../../state/workspace'
 import { Popover } from '../controls'
 import { Logo } from '../Header'
 import { IncidentPicker } from '../IncidentPicker'
-import { PresetSwitch, WorkspaceSwitch } from './WorkspaceSwitch'
+import { goToOverview } from './fireActions'
+import { useMediaQuery, WIDE_QUERY } from './hooks'
+import { ViewSwitch } from './WorkspaceSwitch'
 
 /** Header button that opens / closes a workspace panel; `data-panel-toggle` lets drawers hand focus back to it. */
-export function PanelToggle({ panel, icon, label, tip, className, iconOnly }: { panel: PanelKey; icon: ReactNode; label: string; tip: string; className?: string; iconOnly?: boolean }) {
+export function PanelToggle({
+  panel,
+  icon,
+  label,
+  tip,
+  className,
+  iconOnly,
+  badge,
+}: {
+  panel: PanelKey
+  icon: ReactNode
+  label: string
+  tip: string
+  className?: string
+  iconOnly?: boolean
+  badge?: ReactNode
+}) {
   const open = useWorkspace((s) => s.panels[panel])
   const togglePanel = useWorkspace((s) => s.togglePanel)
   return (
@@ -28,9 +50,12 @@ export function PanelToggle({ panel, icon, label, tip, className, iconOnly }: { 
       {icon}
       {/* visually hidden (not removed) when icon-only, so it stays the accessible name */}
       <span className="mw-btn-label">{label}</span>
+      {badge}
     </button>
   )
 }
+
+const BADGE_TEXT = { order: 'evacuation order', warning: 'evacuation warning', 'fire-weather': 'fire weather alert' } as const
 
 function DemoBadge() {
   return (
@@ -68,12 +93,13 @@ function IncidentIdChip() {
   )
 }
 
-/** Compact screens: workspace, preset and panel toggles in one menu. */
+/** Compact screens: the view switch and the panel toggles in one menu. */
 function HeaderMenu() {
   const [open, setOpen] = useState(false)
   const anchor = useRef<HTMLButtonElement | null>(null)
   const panels = useWorkspace((s) => s.panels)
   const togglePanel = useWorkspace((s) => s.togglePanel)
+  const overview = useStore((s) => s.incidentId == null)
   const item = (key: PanelKey, icon: ReactNode, label: string) => (
     <button
       type="button"
@@ -95,28 +121,24 @@ function HeaderMenu() {
         ref={anchor}
         type="button"
         className={`mw-btn mw-hdr-toggle is-icon mw-hdr-menu ${open ? 'is-active' : ''}`}
-        aria-label="Menu: workspace, preset and panels"
+        aria-label="Menu: view and panels"
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
         <Menu size={16} />
       </button>
-      <Popover anchor={anchor} open={open} onClose={() => setOpen(false)} placement="bottom-end" width={292} className="mw-menu-pop" label="Workspace menu">
+      <Popover anchor={anchor} open={open} onClose={() => setOpen(false)} placement="bottom-end" width={300} className="mw-menu-pop" label="View menu">
         <div className="mw-menu">
           <div className="mw-menu-group">
-            <span className="mw-menu-label">Workspace</span>
-            <WorkspaceSwitch size="sm" className="mw-seg-fill" />
-          </div>
-          <div className="mw-menu-group">
-            <span className="mw-menu-label">Preset</span>
-            <PresetSwitch size="sm" className="mw-seg-fill" />
+            <span className="mw-menu-label">View</span>
+            <ViewSwitch size="sm" className="mw-seg-fill" />
           </div>
           <div className="mw-menu-group">
             <span className="mw-menu-label">Panels</span>
-            {item('updates', <ListChecks size={15} />, 'Incident updates')}
+            {item('updates', <ListChecks size={15} />, overview ? 'California fires' : 'Incident updates')}
             {item('layers', <Layers size={15} />, 'Layers, basemap & settings')}
-            {item('analysis', <BarChart3 size={15} />, 'Analysis charts')}
+            {!overview && item('analysis', <BarChart3 size={15} />, 'Analysis charts')}
           </div>
         </div>
       </Popover>
@@ -124,11 +146,32 @@ function HeaderMenu() {
   )
 }
 
+/** Phones: the updates sheet toggle, labelled, with a badge while official orders, warnings or fire weather alerts
+ *  are active near the fire (U-R4). The badge counts official items only; no badge is never an all-clear. */
+function UpdatesToggle() {
+  const { count, level } = useOfficialBadge()
+  const badge =
+    count > 0 && level ? (
+      <span className={`mw-hdr-badge is-${level}`}>
+        <span aria-hidden="true">{count}</span>
+        <span className="mw-sr-only">
+          {' '}
+          ({count} official item{count === 1 ? '' : 's'} active, the most urgent a {BADGE_TEXT[level]})
+        </span>
+      </span>
+    ) : null
+  return <PanelToggle panel="updates" icon={<ListChecks size={15} />} label="Updates" tip="Incident updates and official information" className="mw-narrow-only mw-updates-toggle" badge={badge} />
+}
+
 export function MapHeader() {
   const demo = useStore((s) => isDemoBundle(s.incidentId, s.manifest))
+  const overview = useStore((s) => s.incidentId == null)
   const command = useWorkspace((s) => s.preset === 'command')
   const collapsed = useStore((s) => s.panelsCollapsed)
   const loading = useStore((s) => s.incidentLoading || s.catalog.loading)
+  // wide screens: the satellite chip sits in the bar, right above the map controls (it adds no chrome over the map);
+  // narrower, App puts it in the top row next to the controls
+  const wide = useMediaQuery(WIDE_QUERY)
   return (
     <div className="mw-hdr">
       <div className="mw-hdr-start">
@@ -137,15 +180,31 @@ export function MapHeader() {
           <span className="mw-brand-name">Fire-3d</span>
         </span>
         <span className="mw-hdr-sep" aria-hidden="true" />
-        <IncidentPicker />
-        {command && <IncidentIdChip />}
+        {overview ? (
+          <h1 className="mw-hdr-title">
+            California <span className="mw-hdr-title-sub">· all fires</span>
+          </h1>
+        ) : (
+          <>
+            <button type="button" className="mw-btn mw-allfires" onClick={goToOverview} data-tip="Back to the California overview of all fires">
+              <ArrowLeft size={14} />
+              <span className="mw-btn-label">All fires</span>
+            </button>
+            <IncidentPicker />
+            {command && <IncidentIdChip />}
+          </>
+        )}
       </div>
       <div className="mw-hdr-mid mw-wide-only">
-        <WorkspaceSwitch />
+        <ViewSwitch />
       </div>
       <div className="mw-hdr-end">
         {demo && <DemoBadge />}
-        <PresetSwitch className="mw-wide-only" />
+        {wide && !overview && !collapsed && (
+          <span className="mw-hdr-chip">
+            <ImageryChip />
+          </span>
+        )}
         {collapsed && (
           <button type="button" className="mw-btn mw-hdr-toggle" onClick={() => useStore.getState().setPanelsCollapsed(false)} data-tip="Panels are hidden (H)">
             <Maximize2 size={14} />
@@ -154,8 +213,8 @@ export function MapHeader() {
           </button>
         )}
         <span className="mw-hdr-sep mw-wide-only" aria-hidden="true" />
-        <PanelToggle panel="updates" icon={<ListChecks size={15} />} label="Updates" tip="Incident updates" className="mw-narrow-only" iconOnly />
-        <PanelToggle panel="analysis" icon={<BarChart3 size={15} />} label="Analysis" tip="Analysis charts: burned area, spread speed, terrain profile" className="mw-hide-narrow" />
+        {!overview && <UpdatesToggle />}
+        {!overview && <PanelToggle panel="analysis" icon={<BarChart3 size={15} />} label="Analysis" tip="Analysis charts: burned area, spread speed, terrain profile" className="mw-hide-narrow" />}
         <PanelToggle panel="layers" icon={<Layers size={15} />} label="Layers" tip="Layers, basemap, forecast run and units" className="mw-hide-narrow" />
         <span className="mw-compact-only">
           <HeaderMenu />

@@ -1,0 +1,52 @@
+/* Forensic Key Events: the kind glyph of each row, with a corner dot for automated items (owner: official-web; brief 2
+   U-R11). The row layout itself is in styles/dock.css; these sit in its last grid column, before the time. Kinds differ
+   by glyph, never by colour alone. */
+.ke-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.ke-kind {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  color: var(--text-2);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 40%, transparent);
+}
+.ke-kind.is-official {
+  color: #8ee0a8;
+}
+.ke-kind.is-model {
+  color: #f5b45a;
+}
+.ke-kind.is-estimate {
+  color: #f2c97d;
+}
+.ke-kind.is-observation {
+  color: #8ec5ff;
+}
+.ke-kind.is-annotation {
+  color: #cbb9ef;
+}
+/* automated (Fire-3d detected it, not a person or agency): a dot on the glyph's corner, spelled out in its label */
+.ke-kind.is-auto {
+  position: relative;
+  border-radius: 4px 4px 4px 4px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 40%, transparent);
+  outline: 1px dashed color-mix(in srgb, currentColor 35%, transparent);
+  outline-offset: -1px;
+}
+.ke-kind.is-auto::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 1.5px var(--bg-1, #0d120e);
+}

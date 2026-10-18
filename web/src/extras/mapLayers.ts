@@ -134,12 +134,17 @@ export class LayerGroupHandle {
     const before = this.resolveBefore()
     const top = resolveBeforeId(map, this.topBeforeId)
     for (const l of next.layers) {
+      const target = l.placement === 'below-labels' ? before : top
       if (map.getLayer(l.spec.id)) {
         map.setLayoutProperty(l.spec.id, 'visibility', this.visible ? 'visible' : 'none')
+        // After a style (re)load, restore the stacking: MapLibre fires 'styledata' (when this group re-adds itself, before
+        // map-core's fire layers exist, so it falls back below the labels) before 'style.load' (when map-core re-adds its
+        // fire layers below ours). Without the move, evacuation zones and NWS outlines end up above the fire.
+        if (force && target !== l.spec.id) map.moveLayer(l.spec.id, target)
         continue
       }
       const spec = { ...l.spec, layout: { ...(l.spec as { layout?: object }).layout, visibility: this.visible ? 'visible' : 'none' } } as LayerSpecification
-      map.addLayer(spec, l.placement === 'below-labels' ? before : top)
+      map.addLayer(spec, target)
     }
   }
 

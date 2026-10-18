@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clipRect, MIN_VISIBLE_PX, parseDockSide, safeInsetsFor, unionArea, unobstructedShare, type ChromeRect } from './layout'
+import { clipRect, MIN_VISIBLE_PX, parseDockSide, pointHidden, safeInsetsFor, unionArea, unobstructedShare, type ChromeRect } from './layout'
 
 const rect = (left: number, top: number, w: number, h: number, side: ChromeRect['side'] = 'none'): ChromeRect => ({ left, top, right: left + w, bottom: top + h, side })
 
@@ -65,5 +65,17 @@ describe('unionArea / unobstructedShare', () => {
     expect(unobstructedShare([], 1440, 900)).toBe(1)
     expect(unobstructedShare([rect(0, 0, 1440, 225)], 1440, 900)).toBeCloseTo(0.75, 10)
     expect(unobstructedShare([rect(0, 0, 10, 10)], 0, 900)).toBe(0)
+  })
+})
+
+describe('pointHidden (pin above the phone sheet)', () => {
+  const ins = { top: 110, right: 8, bottom: 300, left: 8 }
+  it('flags points under the chrome or within the margin of it', () => {
+    expect(pointHidden({ x: 195, y: 400 }, 390, 844, ins)).toBe(false)
+    expect(pointHidden({ x: 195, y: 600 }, 390, 844, ins)).toBe(true) // under the bottom sheet
+    expect(pointHidden({ x: 195, y: 520 }, 390, 844, ins, 36)).toBe(true) // its label would be
+    expect(pointHidden({ x: 195, y: 90 }, 390, 844, ins)).toBe(true) // under the search box
+    expect(pointHidden({ x: 2, y: 400 }, 390, 844, ins)).toBe(true)
+    expect(pointHidden({ x: Number.NaN, y: 400 }, 390, 844, ins)).toBe(false)
   })
 })

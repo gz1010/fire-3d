@@ -1,10 +1,11 @@
-// Updates feed model (owner: timeline-feed; CONTRACT §8, BRIEF §10): events.json + annotations (Key Events) plus,
-// when given, agency perimeters, satellite passes, the selected forecast run and items from the optional sources
-// (`extra`), as plain-language feed items in chronological order; and the one selection action shared by the feed,
-// map markers and timeline markers.
+// Updates feed model (owner: official-web since brief 2, earlier timeline-feed; CONTRACT §8, BRIEF §10): events.json
+// + annotations (Key Events) plus, when given, agency perimeters, satellite passes, the selected forecast run and items
+// from the optional and official sources (`extra`), as plain-language feed items in chronological order; and the one
+// selection action shared by the feed, map markers and timeline markers.
 // Wording rules: every item says what kind of information it is; automated items (Fire-3d event detection, model
 // output, satellite sensors) are flagged `automated` and never worded as human reporting; estimated positions are
-// flagged `approximate`; the producer's original wording (scientific units) is kept in `original`.
+// flagged `approximate`; the producer's original wording (scientific units) is kept in `original`. Official items keep
+// their issuer, own times and link; they fit and highlight their area when selected and never seek into a forecast.
 import type { Detection, FireEvent, ForecastManifest, IncidentManifest, Perimeter, TimeseriesFile, WeatherFile } from '../../api/types'
 import { cardinal, satelliteName } from '../../lib/format'
 import {
@@ -23,10 +24,12 @@ import {
   windSummary,
 } from '../../lib/plainLanguage'
 import { localToLonLat } from '../../lib/reproject'
-import { fmtDateTimeYear, tzLabel } from '../../lib/time'
+import { fmtDateTime, fmtDateTimeYear, fmtDay, fmtTime, startOfLaDay, tzLabel } from '../../lib/time'
+import { fitOfficialBounds } from '../../official/select'
+import { useOfficialRuntime } from '../../official/runtime'
 import type { Annotation } from '../../state/annotations'
 import { getTimeBounds, useStore } from '../../state/store'
-import type { Units } from '../../state/workspace'
+import { useWorkspace, type Preset, type Units } from '../../state/workspace'
 import type { FeedFact, FeedItem, FeedKind, FeedTopic } from './types'
 
 const HOUR = 3_600_000
@@ -52,6 +55,13 @@ export interface FeedInput {
   /** Items made by other producers in FeedItem form (the optional sources: official evacuation status, public
    *  cameras, recently acquired imagery), merged in time order as given; repeated ids and invalid times are dropped. */
   extra?: readonly FeedItem[] | null
+  // ---- additions (official-web, brief 2)
+  /** Public uses plain words ("model re-run on past weather"); Command keeps the technical terms. Default public. */
+  preset?: Preset
+  /** Live: one row per day for the satellite passes ("Satellite passes today: 9"), each pass in its details. */
+  groupPasses?: boolean
+  /** The current time (live "today" wording and the quiet-period row); quantise it to limit rebuilds. */
+  wallMs?: number
 }
 
 function locate(m: IncidentManifest | null, x?: number, z?: number): FeedItem['location'] {
@@ -360,15 +370,22 @@ function passItem(p: ReturnType<typeof satellitePasses>[number], c: Ctx): FeedIt
     seekable: true,
     eventId: null,
     original: { title: `${p.instrument} ${p.satellite}`, detail: `${n} detections, footprint ${p.dets[0].footprint_m} m`, source: `FIRMS ${p.instrument} ${p.satellite}` },
-    facts: [],
+    facts: [{ label: 'Heat detections', text: n.toLocaleString('en-US'), scientific: null }],
     approximate: location != null,
     locationLabel: location ? 'Center of the detections' : null,
   }
 }
 
-function forecastItem(f: ForecastManifest, m: IncidentManifest): FeedItem {
+/** Public wording of the ensemble: "31 simulated fires, each with different weather" (no ensemble names). */
+export function plainRuns(members: number, ensemble: ForecastManifest['weather']['ensemble']): string {
+  if (ensemble === 'none' || members <= 1) return members === 1 ? 'one simulated fire with one weather series' : `${members} simulated fires with one weather series`
+  return `${members} simulated fires, each with slightly different weather`
+}
+
+function forecastItem(f: ForecastManifest, m: IncidentManifest, preset: Preset): FeedItem {
   const live = m.mode === 'live'
-  const runs = ensemblePhrase(f.weather.ensemble, f.weather.members)
+  const command = preset === 'command'
+  const runs = command ? ensemblePhrase(f.weather.ensemble, f.weather.members) : plainRuns(f.weather.members, f.weather.ensemble)
   return {
     id: `forecast:${f.run_id}`,
     topic: 'forecast',
@@ -376,10 +393,12 @@ function forecastItem(f: ForecastManifest, m: IncidentManifest): FeedItem {
     // live: listed when it was issued; replay: a hindcast belongs at the start of the period it re-runs
     tMs: live ? f.issued_ms : f.start_ms,
     seekMs: f.start_ms,
-    title: keepUnits(live ? `Spread forecast issued (${f.horizon_h} h)` : `Hindcast starts (${f.horizon_h} h)`),
+    title: keepUnits(live ? `Spread forecast issued (${f.horizon_h} h)` : command ? `Hindcast starts (${f.horizon_h} h)` : `Model re-run on past weather starts (${f.horizon_h} h)`),
     detail: live
       ? `Covers ${keepUnits(forecastPeriod(f))}: ${runs}. Shows where model runs spread the fire; experimental, not an official prediction.`
-      : `The forecast model was re-run on ${fmtDateTimeYear(f.issued_ms)} ${tzLabel(f.issued_ms)} for ${keepUnits(forecastPeriod(f))} (${runs}), to compare with what happened.`,
+      : command
+        ? `The forecast model was re-run on ${fmtDateTimeYear(f.issued_ms)} ${tzLabel(f.issued_ms)} for ${keepUnits(forecastPeriod(f))} (${runs}), to compare with what happened.`
+        : `Fire-3d re-ran its experimental spread model on the weather of ${keepUnits(forecastPeriod(f))} (${runs}), after the fire, to compare with what happened.`,
     source: 'Fire-3d spread model',
     automated: true,
     key: false,
@@ -387,14 +406,92 @@ function forecastItem(f: ForecastManifest, m: IncidentManifest): FeedItem {
     location: null,
     seekable: true,
     eventId: null,
-    original: { title: f.run_id, detail: `${f.weather.ensemble}, ${f.weather.members} members, ${f.horizon_h} h, engine ${f.model?.engine ?? 'unknown'}`, source: f.weather.source },
+    // the run id and ensemble name are Command detail (C-R8: no run ids in the Public feed)
+    original: command ? { title: f.run_id, detail: `${f.weather.ensemble}, ${f.weather.members} members, ${f.horizon_h} h, engine ${f.model?.engine ?? 'unknown'}`, source: f.weather.source } : null,
     facts: [],
     approximate: false,
     locationLabel: null,
   }
 }
 
-const TOPIC_ORDER: Partial<Record<FeedTopic, number>> = { ignition: 0, forecast: 1, perimeter_update: 2, perimeter: 3, detection: 9, annotation: 10 }
+/** A day's satellite passes as one row (live): "Satellite passes today: 9", each pass selectable in its details.
+ *  Days with a single pass keep the pass row itself. */
+export function groupPassesByDay(passes: readonly FeedItem[], wallMs: number | null): FeedItem[] {
+  const byDay = new Map<number, FeedItem[]>()
+  for (const p of passes) {
+    const d = startOfLaDay(p.tMs)
+    byDay.set(d, [...(byDay.get(d) ?? []), p])
+  }
+  const out: FeedItem[] = []
+  for (const [day, list] of byDay) {
+    if (list.length === 1) {
+      out.push(list[0])
+      continue
+    }
+    const sorted = list.slice().sort((a, b) => a.tMs - b.tMs)
+    const newest = sorted[sorted.length - 1]
+    const dets = sorted.reduce((n, p) => n + (Number(p.facts?.find((f) => f.label === 'Heat detections')?.text.replace(/,/g, '')) || 0), 0)
+    const today = wallMs != null && startOfLaDay(wallMs) === day
+    const sats = [...new Set(sorted.map((p) => p.source.replace(/^NASA FIRMS \(|\)$/g, '')))]
+    out.push({
+      id: `passes:${day}`,
+      topic: 'detection',
+      kind: 'observation',
+      tMs: newest.tMs,
+      title: `Satellite passes ${today ? 'today' : `on ${fmtDay(day)}`}: ${sorted.length}`,
+      detail: `${dets ? `${dets.toLocaleString('en-US')} heat detections in ` : ''}${sorted.length} passes (${sats.join('; ')}), newest ${fmtTime(newest.tMs)} ${tzLabel(newest.tMs)}. Detections show where heat was seen, not the exact fire edge.`,
+      source: 'NASA FIRMS',
+      automated: true,
+      key: false,
+      confidence: 'observed',
+      location: newest.location,
+      seekable: true,
+      eventId: null,
+      original: null,
+      facts: [],
+      approximate: newest.location != null,
+      locationLabel: newest.location ? "Center of the newest pass's detections" : null,
+      children: sorted.slice().reverse(),
+    })
+  }
+  return out
+}
+
+/** Live quiet-period row: no new heat seen by satellites since the latest detection (later passes saw none), or the
+ *  newest detection is old. Never worded as "out" or "safe". Null when there is nothing to say. */
+export function quietItem(m: Pick<IncidentManifest, 'mode' | 'time_range'>, wallMs: number, staleAfterMs = 6 * HOUR): FeedItem | null {
+  if (m.mode !== 'live') return null
+  const det = m.time_range.last_detection_ms
+  const pass = m.time_range.last_pass_ms
+  if (det == null || !Number.isFinite(det)) return null
+  const later = pass != null && Number.isFinite(pass) && pass > det + 10 * 60_000
+  const old = wallMs - det > staleAfterMs
+  if (!later && !old) return null
+  const when = `${fmtDateTime(det)} ${tzLabel(det)}`
+  return {
+    id: `quiet:${det}`,
+    topic: 'quiet',
+    kind: 'observation',
+    tMs: later ? (pass as number) : det,
+    title: later ? `No new heat seen by satellites since ${when}` : `No new satellite heat detection since ${when}`,
+    detail: later
+      ? `Later satellite passes (the newest at ${fmtDateTime(pass as number)} ${tzLabel(pass as number)}) saw no new heat over the fire. Smoke, cloud or smoldering can hide fire; this is not an all-clear.`
+      : 'Satellites pass over only a few times a day, so gaps are normal. Smoke, cloud or smoldering can hide fire; this is not an all-clear.',
+    source: 'NASA FIRMS and satellite pass times',
+    automated: true,
+    key: false,
+    confidence: 'observed',
+    location: null,
+    seekable: false,
+    eventId: null,
+    original: null,
+    facts: [],
+    approximate: false,
+    locationLabel: null,
+  }
+}
+
+const TOPIC_ORDER: Partial<Record<FeedTopic, number>> = { ignition: 0, forecast: 1, perimeter_update: 2, perimeter: 3, detection: 9, quiet: 9, annotation: 10 }
 
 /** Feed items, oldest first (the panel may render newest first). Key Events always; perimeters, satellite passes and
  *  the forecast run only when their inputs are given. */
@@ -432,9 +529,16 @@ export function buildFeedItems(input: FeedInput): FeedItem[] {
   }
   const eventTimes = events.filter((e) => e.type === 'perimeter_update').map((e) => e.t_ms)
   for (const p of c.perimeters) if (!eventTimes.some((t) => Math.abs(t - p.t_ms) <= SAME_TIME_MS)) items.push(perimeterItem(p, c))
-  if (input.detections?.length) for (const p of satellitePasses(input.detections)) items.push(passItem(p, c))
+  if (input.detections?.length) {
+    const passes = satellitePasses(input.detections).map((p) => passItem(p, c))
+    items.push(...(input.groupPasses ? groupPassesByDay(passes, input.wallMs ?? null) : passes))
+  }
   const f = input.forecast
-  if (f && manifest && f.incident_id === manifest.id && f.status === 'ready') items.push(forecastItem(f, manifest))
+  if (f && manifest && f.incident_id === manifest.id && f.status === 'ready') items.push(forecastItem(f, manifest, input.preset ?? 'public'))
+  if (manifest && input.wallMs != null) {
+    const q = quietItem(manifest, input.wallMs)
+    if (q) items.push(q)
+  }
   if (input.extra?.length) {
     const ids = new Set(items.map((i) => i.id))
     for (const x of input.extra) {
@@ -446,10 +550,13 @@ export function buildFeedItems(input: FeedInput): FeedItem[] {
   return items.sort((p, q) => p.tMs - q.tMs || (TOPIC_ORDER[p.topic] ?? 5) - (TOPIC_ORDER[q.topic] ?? 5) || p.id.localeCompare(q.id))
 }
 
-export type FeedFilter = 'key' | 'all'
+export type FeedFilter = 'official' | 'all' | 'key'
 
+/** Official: official items only (agencies' own updates). Key events: events.json, notes and any key item. */
 export function filterFeed(items: readonly FeedItem[], filter: FeedFilter): FeedItem[] {
-  return filter === 'all' ? items.slice() : items.filter((i) => i.key)
+  if (filter === 'all') return items.slice()
+  if (filter === 'official') return items.filter((i) => i.kind === 'official')
+  return items.filter((i) => i.key)
 }
 
 export interface FeedView {
@@ -491,10 +598,13 @@ export interface FeedBaseline {
   lateTopics: ReadonlySet<FeedTopic>
 }
 
+/** Ids of the items and of the passes grouped inside them. */
+const allIds = (items: readonly FeedItem[]) => items.flatMap((i) => [i.id, ...(i.children?.map((c) => c.id) ?? [])])
+
 export function feedBaseline(incidentId: string, items: readonly FeedItem[]): FeedBaseline {
   return {
     incidentId,
-    ids: new Set(items.map((i) => i.id)),
+    ids: new Set(allIds(items)),
     forecastT: items.reduce((m, i) => (i.topic === 'forecast' ? Math.max(m, i.tMs) : m), -Infinity),
     lateTopics: new Set(items.filter((i) => LATE_TOPICS.has(i.topic)).map((i) => i.topic)),
   }
@@ -504,12 +614,15 @@ export function feedBaseline(incidentId: string, items: readonly FeedItem[]): Fe
 export function extendFeedBaseline(b: FeedBaseline, items: readonly FeedItem[]): FeedBaseline | null {
   const first = items.filter((i) => LATE_TOPICS.has(i.topic) && !b.lateTopics.has(i.topic))
   if (!first.length) return null
-  return { ...b, ids: new Set([...b.ids, ...first.map((i) => i.id)]), lateTopics: new Set([...b.lateTopics, ...first.map((i) => i.topic)]) }
+  return { ...b, ids: new Set([...b.ids, ...allIds(first)]), lateTopics: new Set([...b.lateTopics, ...first.map((i) => i.topic)]) }
 }
 
-/** Live only: an item that arrived after the baseline (a data refresh added it). Notes are never "new". */
+/** Live only: an item that arrived after the baseline (a data refresh added it). Notes are never "new"; a day of
+ *  satellite passes is new when it holds a new pass. */
 export function isNewFeedItem(b: FeedBaseline | null, incidentId: string | null, item: FeedItem, live: boolean): boolean {
-  if (!live || !b || b.incidentId !== incidentId || item.kind === 'annotation' || b.ids.has(item.id)) return false
+  if (!live || !b || b.incidentId !== incidentId || item.kind === 'annotation') return false
+  if (item.children?.length) return item.children.some((c) => !b.ids.has(c.id))
+  if (b.ids.has(item.id)) return false
   return item.topic !== 'forecast' || item.tMs > b.forecastT
 }
 
@@ -545,17 +658,39 @@ export const feedCompareMs = (item: Pick<FeedItem, 'seekMs' | 'tMs'>): number =>
 /** The id the feed and the markers use for "selected": the event / annotation id, else the item id. */
 export const selectionId = (item: Pick<FeedItem, 'eventId' | 'id'>): string => item.eventId ?? item.id
 
-/** Select an item: pause, seek (when seekable, clamped to the timeline), select it, and fly there when geolocated.
- *  The fly uses the existing store.flyTo nonce (local x/z): the Forensic camera and the map both follow it. Items
- *  without coordinates stay selectable; nothing invents a target for them. */
+/** Where selecting an item moves the timeline: its time clamped to the timeline; official items only inside the
+ *  observed record (never into a forecast period); null = no seek. */
+export function seekTarget(item: Pick<FeedItem, 'seekable' | 'seekMs' | 'tMs' | 'kind'>, bounds: { startMs: number; endMs: number } | null, observed: { startMs: number; endMs: number } | null): number | null {
+  if (!item.seekable) return null
+  const target = item.seekMs ?? item.tMs
+  if (item.kind === 'official') {
+    if (!observed || target < observed.startMs || target > observed.endMs) return null
+    return target
+  }
+  return bounds ? Math.min(bounds.endMs, Math.max(bounds.startMs, target)) : target
+}
+
+/** Move the timeline and the map to an item without selecting it (a pass inside a day's group of passes). */
+export function focusFeedItem(item: FeedItem): void {
+  const s = useStore.getState()
+  s.setPlaying(false)
+  const m = s.manifest?.status === 'ready' ? s.manifest : null
+  const target = seekTarget(item, getTimeBounds(s), m ? { startMs: m.time_range.start_ms, endMs: m.time_range.now_ms } : null)
+  if (target != null) s.setTimeMs(target)
+  if (item.location) s.requestFlyTo(item.location.x, item.location.z)
+}
+
+/** Select an item: pause, seek (see seekTarget), select it, highlight its official area, and fly there: official
+ *  areas are fitted on the map; other geolocated items use the existing store.flyTo nonce (local x/z), which the
+ *  Forensic camera and the map both follow. Items without coordinates stay selectable; nothing invents a target. */
 export function selectFeedItem(item: FeedItem): void {
   const s = useStore.getState()
   s.setPlaying(false)
-  if (item.seekable) {
-    const target = item.seekMs ?? item.tMs
-    const b = getTimeBounds(s)
-    s.setTimeMs(b ? Math.min(b.endMs, Math.max(b.startMs, target)) : target)
-  }
+  const m = s.manifest?.status === 'ready' ? s.manifest : null
+  const target = seekTarget(item, getTimeBounds(s), m ? { startMs: m.time_range.start_ms, endMs: m.time_range.now_ms } : null)
+  if (target != null) s.setTimeMs(target)
   s.setSelectedEventId(selectionId(item))
-  if (item.location) s.requestFlyTo(item.location.x, item.location.z)
+  useOfficialRuntime.getState().setHighlight(item.highlight ?? null)
+  if (item.bounds && useWorkspace.getState().workspace === 'map') fitOfficialBounds(item.bounds)
+  else if (item.location) s.requestFlyTo(item.location.x, item.location.z)
 }

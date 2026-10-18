@@ -258,7 +258,7 @@ export function ensemblePhrase(ensemble: EnsembleKind, members: number): string 
 }
 
 export interface ForecastDescription {
-  /** "Spread forecast (72 h)" / "Hindcast (72 h)". */
+  /** "Spread forecast (72 h)" / "Hindcast (72 h)" (plain: "Model re-run on past weather (72 h)"). */
   title: string
   /** forecastPeriod(f). */
   period: string
@@ -280,13 +280,18 @@ export interface ForecastDescription {
 export const keepUnits = (s: string): string => s.replace(/(\d) (h|min|days)\b/g, '$1\u00a0$2')
 
 /** Plain description of a forecast run: period, probability, uncertainty (BRIEF §9). Historical runs are hindcasts:
- *  the model re-run for a past period, issued after the fact. */
-export function forecastDescription(f: Pick<ForecastManifest, 'start_ms' | 'horizon_h' | 'issued_ms' | 'weather'>, mode: Mode): ForecastDescription {
+ *  the model re-run for a past period, issued after the fact. `plain` (Public, brief 2 C-R8) names a hindcast in plain
+ *  words: "Model re-run on past weather". */
+export function forecastDescription(
+  f: Pick<ForecastManifest, 'start_ms' | 'horizon_h' | 'issued_ms' | 'weather'>,
+  mode: Mode,
+  opts: { plain?: boolean } = {},
+): ForecastDescription {
   const end = forecastEndMs(f)
   const n = f.weather.members
   const hind = mode === 'historical'
   return {
-    title: keepUnits(`${hind ? 'Hindcast' : 'Spread forecast'} (${f.horizon_h} h)`),
+    title: keepUnits(`${hind ? (opts.plain ? 'Model re-run on past weather' : 'Hindcast') : 'Spread forecast'} (${f.horizon_h} h)`),
     period: keepUnits(forecastPeriod(f)),
     issued: hind ? `Model re-run ${fmtDateTimeYear(f.issued_ms)} ${tzLabel(f.issued_ms)}, after the fire, to compare with what happened` : `Issued ${when(f.issued_ms)}`,
     runs: ensemblePhrase(f.weather.ensemble, n),

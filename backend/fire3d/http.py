@@ -256,6 +256,23 @@ def _cache_read(key: str, ttl_s: float | None) -> Response | None:
     return Response(int(meta.get("status", 200)), meta.get("url", ""), content, meta.get("content_type", ""), True, int(meta.get("fetched_ms", st.st_mtime * 1000)))
 
 
+def peek_cache(method: str, url: str, params: Params = None, ttl_s: float | None = DEFAULT_TTL_S) -> Response | None:
+    """The cached 2xx response that :func:`request` with these arguments would return without touching the network,
+    or None. Lets callers spend a rate-limit slot only on real requests (bodyless requests only)."""
+    if ttl_s is not None and ttl_s <= 0:
+        return None
+    return _cache_read(cache_key(method.upper(), url, params), ttl_s)
+
+
+def evict_cache(method: str, url: str, params: Params = None) -> None:
+    """Drop one cache entry, e.g. a 2xx answer that turned out to be unusable (the cache stores every 2xx)."""
+    for p in _cache_paths(cache_key(method.upper(), url, params)):
+        try:
+            p.unlink()
+        except FileNotFoundError:
+            pass
+
+
 def _cache_write(key: str, resp: Response) -> None:
     body_p, meta_p = _cache_paths(key)
     try:

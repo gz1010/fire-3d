@@ -235,9 +235,16 @@ describe('feed items: perimeters, satellite passes, forecast', () => {
   })
 
   it('places the forecast at its issue time (live) or at the start of the re-run period (replay)', () => {
-    const hind = byId(full(), 'forecast:fc-1')
+    const hind = byId(full({ preset: 'command' }), 'forecast:fc-1')
     expect(hind).toMatchObject({ tMs: T0 + 31 * H, seekMs: T0 + 31 * H, title: 'Hindcast starts (72\u00a0h)' })
     expect(hind.detail).toMatch(/re-run on .* to compare with what happened\./)
+    expect(hind.original?.title).toBe('fc-1') // Command keeps the run id
+    // Public: plain words and no run id (brief 2 C-R8)
+    const plain = byId(full(), 'forecast:fc-1')
+    expect(plain.title).toBe('Model re-run on past weather starts (72\u00a0h)')
+    expect(plain.detail).toMatch(/^Fire-3d re-ran its experimental spread model on the weather of .* simulated fires, each with slightly different weather\), after the fire, to compare with what happened\.$/)
+    expect(plain.original).toBeNull()
+    expect(`${plain.title} ${plain.detail} ${plain.source}`).not.toContain('fc-1')
     const live = byId(full({ manifest: manifest('live'), forecast: forecast('live') }), 'forecast:fc-1')
     expect(live).toMatchObject({ tMs: T0 + 90 * H, seekMs: T0 + 31 * H, title: 'Spread forecast issued (72\u00a0h)' })
     expect(full({ forecast: forecast('historical', 'another-fire') }).some((i) => i.topic === 'forecast')).toBe(false)

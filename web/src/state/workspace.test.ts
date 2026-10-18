@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { useMapRuntime } from '../map/mapStore'
 import { useStore } from './store'
-import { DEFAULT_MAP_LAYERS, incidentFlyTo, isDemoBundle, parseWorkspaceParams, useWorkspace, writeWorkspaceParams } from './workspace'
+import { DEFAULT_MAP_LAYERS, defaultBasemap, effectiveBasemap, incidentFlyTo, isDemoBundle, parseWorkspaceParams, useWorkspace, writeWorkspaceParams } from './workspace'
 
 describe('workspace URL params', () => {
   it('parses valid values and ignores invalid ones', () => {
@@ -29,6 +30,55 @@ describe('workspace URL params', () => {
     expect(u.searchParams.get('basemap')).toBe('roads')
     expect(u.searchParams.get('units')).toBe('metric')
   })
+
+  it("writes the basemap only when the user's pick differs from the preset's default (never a fallback)", () => {
+    const w = (preset: 'public' | 'command', basemapPick: 'dark' | 'roads' | 'aerial' | null) =>
+      writeWorkspaceParams(new URL('http://x/'), { workspace: 'map', preset, perspective: '2d', units: 'us', basemapPick }).searchParams.get('basemap')
+    expect(w('public', null)).toBeNull()
+    expect(w('public', 'aerial')).toBeNull()
+    expect(w('public', 'dark')).toBe('dark')
+    expect(w('command', null)).toBeNull()
+    expect(w('command', 'dark')).toBeNull()
+    expect(w('command', 'aerial')).toBe('aerial')
+    expect(w('command', 'roads')).toBe('roads')
+  })
+})
+
+describe('basemap default per preset (decision 5)', () => {
+  beforeEach(() => useWorkspace.setState({ preset: 'public', basemapPick: null, basemapFallback: null, basemap: 'aerial' }))
+
+  it('Public opens on aerial, Command on dark', () => {
+    expect(defaultBasemap('public')).toBe('aerial')
+    expect(defaultBasemap('command')).toBe('dark')
+    expect(effectiveBasemap({ basemapPick: null, preset: 'public' })).toBe('aerial')
+    expect(effectiveBasemap({ basemapPick: 'roads', preset: 'command' })).toBe('roads')
+    expect(effectiveBasemap({ basemapFallback: 'dark', basemapPick: 'aerial', preset: 'public' })).toBe('dark')
+  })
+
+  it('a preset switch follows the new default unless the user picked one', () => {
+    const ws = useWorkspace.getState()
+    ws.setPreset('command')
+    expect(useWorkspace.getState().basemap).toBe('dark')
+    ws.setPreset('public')
+    expect(useWorkspace.getState().basemap).toBe('aerial')
+    ws.setBasemap('roads')
+    ws.setPreset('command')
+    expect(useWorkspace.getState()).toMatchObject({ basemap: 'roads', basemapPick: 'roads' })
+  })
+
+  it("the map's fallback never counts as a pick and a pick clears it", () => {
+    const ws = useWorkspace.getState()
+    ws.setBasemapFallback('dark')
+    expect(useWorkspace.getState()).toMatchObject({ basemap: 'dark', basemapPick: null, basemapFallback: 'dark' })
+    ws.setPreset('command')
+    ws.setPreset('public')
+    expect(useWorkspace.getState().basemap).toBe('dark')
+    ws.setBasemapFallback(null)
+    expect(useWorkspace.getState().basemap).toBe('aerial')
+    ws.setBasemapFallback('dark')
+    ws.setBasemap('aerial')
+    expect(useWorkspace.getState()).toMatchObject({ basemap: 'aerial', basemapPick: 'aerial', basemapFallback: null })
+  })
 })
 
 describe('workspace store', () => {
@@ -37,10 +87,37 @@ describe('workspace store', () => {
     useStore.setState({ incidentId: null })
   })
 
-  it('defaults to the Public map in 2D with US units', () => {
-    const s = useWorkspace.getState()
-    expect([s.workspace, s.preset, s.perspective, s.basemap, s.units]).toEqual(['map', 'public', '2d', 'dark', 'us'])
+  it('defaults to the Public map in 2D on aerial with US units, no fire card, the 2026 season', () => {
+    const s = useWorkspace.getInitialState()
+    expect([s.workspace, s.preset, s.perspective, s.basemap, s.basemapPick, s.units]).toEqual(['map', 'public', '2d', 'aerial', null, 'us'])
     expect(s.mapLayers.cameras).toBe(false)
+    expect(s.fireCardId).toBeNull()
+    expect(s.overviewFilter).toBe('season')
+  })
+
+  it('opens and closes fire cards; a new point or another fire closes the card', () => {
+    const ws = useWorkspace.getState()
+    ws.setFireCard('2026-a')
+    expect(useWorkspace.getState().fireCardId).toBe('2026-a')
+    expect(useWorkspace.getState().mapFlyTo).toBeNull() // never moves the camera
+    ws.selectLocation({ lat: 34, lon: -118, source: 'click' })
+    expect(useWorkspace.getState().fireCardId).toBeNull()
+    // the card of the fire that opens stays; any other card closes on an incident change
+    ws.setFireCard('2026-b')
+    useStore.setState({ incidentId: '2026-b' })
+    expect(useWorkspace.getState().fireCardId).toBe('2026-b')
+    useStore.setState({ incidentId: null })
+    expect(useWorkspace.getState().fireCardId).toBeNull()
+  })
+
+  it('drops the view on overview -> fire and fire -> overview', () => {
+    const v = { centerLon: -119.4, centerLat: 37.2, zoom: 5.2, bearing: 0, pitch: 0 }
+    useWorkspace.setState({ view: v })
+    useStore.setState({ incidentId: '2026-a' })
+    expect(useWorkspace.getState().view).toBeNull()
+    useWorkspace.setState({ view: v })
+    useStore.setState({ incidentId: null })
+    expect(useWorkspace.getState().view).toBeNull()
   })
 
   it('selects, flies only on request, and marks dragged pins as adjusted', () => {
@@ -52,6 +129,8 @@ describe('workspace store', () => {
     expect(fly).toMatchObject({ lon: -118.11, lat: 34.21, zoom: 15 })
     ws.requestMapFlyTo({ lon: 0, lat: 0 })
     expect(useWorkspace.getState().mapFlyTo?.nonce).toBe((fly?.nonce ?? 0) + 1)
+    ws.requestMapFlyTo({ lon: 1, lat: 2, bounds: [0, 1, 2, 3], source: 'official' })
+    expect(useWorkspace.getState().mapFlyTo).toMatchObject({ source: 'official', bounds: [0, 1, 2, 3] })
     ws.moveSelection(34.215, -118.105)
     expect(useWorkspace.getState().selection).toMatchObject({ lat: 34.215, lon: -118.105, label: '1 Main St', adjusted: true, approximate: false, source: 'address' })
     ws.selectLocation({ lat: 123, lon: 0, source: 'coords' })
@@ -68,6 +147,19 @@ describe('workspace store', () => {
     useWorkspace.getState().selectLocation({ lat: 34, lon: -118, source: 'address' })
     useStore.setState({ incidentId: 'c' })
     expect(useWorkspace.getState().selection?.source).toBe('address')
+  })
+
+  it('returns to the fire through the mounted map, else to its analysis area', () => {
+    const frameFire = vi.fn()
+    useStore.setState({ incidentId: 'a', summary: { lat: 34, lon: -118 } as never, manifest: { grid: { bbox_lonlat: [-118.2, 34.1, -118.0, 34.3] } } as never })
+    useMapRuntime.setState({ actions: { frameFire } as never })
+    useWorkspace.getState().returnToIncident()
+    expect(frameFire).toHaveBeenCalledOnce()
+    expect(useWorkspace.getState().mapFlyTo).toBeNull()
+    useMapRuntime.setState({ actions: null })
+    useWorkspace.getState().returnToIncident()
+    expect(useWorkspace.getState().mapFlyTo).toMatchObject({ bounds: [-118.2, 34.1, -118.0, 34.3] })
+    useStore.setState({ summary: null, manifest: null })
   })
 
   it('frames incidents by AOI bounds, else by reported coordinates', () => {

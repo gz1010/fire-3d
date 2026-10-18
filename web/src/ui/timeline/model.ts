@@ -123,7 +123,7 @@ function missingReason(status: ForecastAvailability, live: boolean): string {
     case 'failed':
       return 'The forecast run failed'
     default:
-      return live ? 'No forecast has been run for this fire yet' : 'No hindcast has been run for this replay'
+      return live ? 'No forecast has been run for this fire yet' : 'The model has not been re-run on the weather of this replay'
   }
 }
 
@@ -180,7 +180,7 @@ export function buildCompactTimeline(
       available: fc != null,
       reason: fc ? null : missingReason(status, false),
       posMs: fc ? fc.startMs : null,
-      description: 'Start of the hindcast (a model re-run of this past period)',
+      description: 'Start of the model re-run on past weather',
     })
   }
   for (const h of STOP_HOURS) {
@@ -360,4 +360,9 @@ export function trackScale(m: Pick<CompactTimelineModel, 'startMs' | 'trackEndMs
     return t3
   }
   return { zones, toFrac, toTime }
+}
+
+/** "forecast" (live), "hindcast" (Command replay) or "model re-run" (Public replay: plain words, brief 2 C-R8). */
+export function forecastWord(mode: Mode, command: boolean): string {
+  return mode === 'live' ? 'forecast' : command ? 'hindcast' : 'model re-run'
 }

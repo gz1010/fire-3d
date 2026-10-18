@@ -3,8 +3,11 @@ import { CAMERAS_SAMPLE, EVAC_SAMPLE, IMAGERY_SAMPLE } from './__fixtures__/samp
 import { cameraLegend } from './cameras'
 import { evacuationLegend } from './evacuation'
 import { imageryLegend, pickDefaultImagery } from './imagery'
-import { compactExtrasLegend, extrasStatusLines, IDLE_QUERY, sameQueryState } from './runtime'
+import { compactExtrasLegend, EXTRAS_LAYER_KEYS, extrasStatusLines, fireWeatherStatusLine, IDLE_QUERY, sameQueryState } from './runtime'
+import { fireWeatherLegend } from '../official/fireWeather'
+import { FW_EATON_ARCHIVE } from '../official/__fixtures__/samples'
 import type { CamerasResponse, EvacuationsResponse } from './types'
+import { fmtDateTime } from '../lib/time'
 
 const ALL_ON = { evacuation: true, cameras: true, recentImagery: true }
 const ALL_OFF = { evacuation: false, cameras: false, recentImagery: false }
@@ -52,7 +55,7 @@ describe('compactExtrasLegend', () => {
     const entries = [...imageryLegend(product, IMAGERY_SAMPLE.reference_ms), ...cameraLegend(CAMERAS_SAMPLE), ...evacuationLegend(EVAC_SAMPLE)]
     const c = compactExtrasLegend(entries)
     expect(c.map((x) => x.layer)).toEqual(['evacuation', 'cameras', 'recentImagery'])
-    expect(c.map((x) => x.label)).toEqual(['Evacuation zones (official)', 'Public cameras', 'Satellite image'])
+    expect(c.map((x) => x.label)).toEqual(['Evacuation zones (official)', 'Public cameras', `Satellite image · ${product!.platform} · ${fmtDateTime(product!.acquired_ms)}`])
     // the most urgent official wording comes first (orders before warnings)
     expect(c[0].entry.label).toBe('Evacuation Order')
     expect(c[0].entry.swatch.kind).toBe('hatch')
@@ -72,3 +75,25 @@ describe('sameQueryState', () => {
     expect(sameQueryState(a, { ...a, error: 'x' })).toBe(false)
   })
 })
+
+describe('official additions (brief 2)', () => {
+  it('puts the NWS outlines in the legend order and labels them in the compact row', () => {
+    expect(EXTRAS_LAYER_KEYS).toEqual(['evacuation', 'fireWeather', 'cameras', 'recentImagery'])
+    const entries = [...evacuationLegend(EVAC_SAMPLE), ...fireWeatherLegend(FW_EATON_ARCHIVE, 1736366400000)]
+    expect(compactExtrasLegend(entries).map((x) => [x.layer, x.label])).toEqual([
+      ['evacuation', 'Evacuation zones (official)'],
+      ['fireWeather', 'Fire weather alert (NWS)'],
+    ])
+  })
+
+  it('says when NWS alerts cannot be shown, never "none" for an outage or a past date', () => {
+    const opts = { hasIncident: true, demo: false }
+    expect(fireWeatherStatusLine({ status: 'not_available_for_past_dates', reason: 'Archive down.' }, null, opts)).toEqual({ tone: 'muted', title: 'NWS fire weather alerts: not available for this time', detail: 'Archive down.' })
+    expect(fireWeatherStatusLine({ status: 'unavailable', reason: 'NWS down.' }, null, opts)?.tone).toBe('warn')
+    expect(fireWeatherStatusLine(null, 'Could not reach the Fire-3d server.', opts)?.tone).toBe('error')
+    expect(fireWeatherStatusLine({ status: 'available', reason: null }, null, opts)).toBeNull()
+    expect(fireWeatherStatusLine(null, 'x', { hasIncident: false, demo: false })).toBeNull()
+    expect(fireWeatherStatusLine(null, 'x', { hasIncident: true, demo: true })).toBeNull()
+  })
+})
+

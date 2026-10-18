@@ -27,6 +27,9 @@ export interface IncidentSummary {
   detections_24h: number | null // live only
   bundle_status: 'none' | 'building' | 'ready' | 'error'
   bundle_built_ms: number | null
+  /** List rows only (brief 2, I2): the built bundle's analysis-area box [w, s, e, n] in lon/lat; null or absent when the
+   *  fire has no ready bundle. */
+  bbox_lonlat?: [number, number, number, number] | null
 }
 
 export type LayerGrid = 'render' | 'fire' | 'image' | 'points'
@@ -318,6 +321,8 @@ export interface IncidentListResponse {
   mode: Mode
   updated_ms: number
   incidents: IncidentSummary[]
+  /** Historical lists: the CAL FIRE year served (brief 2: `?year=`; the server default stays 2025). */
+  year?: number
 }
 
 export interface IncidentDetailResponse {

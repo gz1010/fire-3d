@@ -2,12 +2,16 @@
 // selected location, the shared geographic view, map fly-to requests, panel flags and Public/Command layer visibility.
 // It sits beside the main store (state/store.ts), which keeps the incident, the live/historical data context
 // (`mode`), the forecast run and the timeline time; switching workspace, preset or perspective never touches those.
-// URL: ?ws=map|forensic &preset=command &persp=3d &basemap=roads|aerial &units=metric are read at start-up and kept in
-// sync (replaceState); ?view=lon,lat,zoom[,bearing,pitch] and ?sel=lat,lon are read once (deep links / screenshots)
-// and then dropped from the address bar, so shared links never carry a selected address or the user's view.
+// URL: ?ws=map|forensic &preset=command &persp=3d &basemap=dark|roads|aerial &units=metric are read at start-up and
+// kept in sync (replaceState); ?view=lon,lat,zoom[,bearing,pitch] and ?sel=lat,lon are read once (deep links /
+// screenshots) and then dropped from the address bar, so shared links never carry a selected address or the user's view.
+// Brief 2 (CONTRACT §13 shell): the fire card (fireCardId), the overview filter, and the basemap default per preset
+// (Public aerial, Command dark) unless the user picked one; the map's own fallback never counts as a pick.
 import { useEffect } from 'react'
 import { create } from 'zustand'
 import type { IncidentManifest, IncidentSummary } from '../api/types'
+import { useMapRuntime } from '../map/mapStore'
+import type { OverviewFilter } from './overview'
 import { useStore } from './store'
 
 export type Workspace = 'map' | 'forensic'
@@ -46,6 +50,10 @@ export interface GeoView {
   pitch: number
 }
 
+/** Who asked for a map flight (brief 2, decision 10): 'official' = showing an official area (an evacuation zone, an NWS
+ *  alert's zones); the map's zoom focus skips the move it causes, so showing an area never opens another fire. */
+export type MapFlySource = 'official'
+
 /** One-shot request for the map camera (geographic). The map reacts to `nonce` changes only. */
 export interface MapFlyTo {
   lon: number
@@ -54,6 +62,8 @@ export interface MapFlyTo {
   zoom?: number
   /** [west, south, east, north] to fit inside the safe area instead of a fixed zoom. */
   bounds?: [number, number, number, number]
+  /** Optional origin of the request (see MapFlySource); absent = an ordinary flight. */
+  source?: MapFlySource
   nonce: number
 }
 
@@ -98,7 +108,12 @@ export interface WorkspaceState {
   workspace: Workspace
   preset: Preset
   perspective: Perspective
+  /** The effective basemap every reader uses: basemapFallback ?? basemapPick ?? defaultBasemap(preset). */
   basemap: Basemap
+  /** The user's explicit pick (basemap menu, Layers, ?basemap=); null = follow the preset's default. */
+  basemapPick: Basemap | null
+  /** Set by the map only while the effective basemap's provider fails (e.g. 'dark' when USGS aerial tiles fail). */
+  basemapFallback: Basemap | null
   units: Units
   selection: SelectedLocation | null
   /** Last settled map view (written by the map on moveend); null = frame the incident when the map mounts. */
@@ -107,12 +122,20 @@ export interface WorkspaceState {
   panels: Record<PanelKey, boolean>
   mapLayers: Record<MapLayerKey, boolean>
   safeInsets: SafeInsets
+  /** Whose fire card is open (on the overview or inside a fire); null = none (brief 2, I3). */
+  fireCardId: string | null
+  /** The overview's list filter (brief 2, O-R3): Active / 2026 season / 2025. */
+  overviewFilter: OverviewFilter
 
   setWorkspace: (w: Workspace) => void
+  /** Switch preset; the effective basemap follows the new preset's default unless the user picked one. */
   setPreset: (p: Preset) => void
   setPerspective: (p: Perspective) => void
   togglePerspective: () => void
+  /** The user's explicit basemap pick (menu, Layers); clears a fallback. */
   setBasemap: (b: Basemap) => void
+  /** Map only: show `b` while the effective basemap's provider fails; null ends the fallback ("Try aerial again"). */
+  setBasemapFallback: (b: Basemap | null) => void
   setUnits: (u: Units) => void
   /** Select a point; `fly` also requests a map fly-to (search results, coordinates, events), clicks do not fly. */
   selectLocation: (loc: SelectedLocation, opts?: { fly?: boolean; zoom?: number }) => void
@@ -121,7 +144,8 @@ export interface WorkspaceState {
   clearSelection: () => void
   setView: (v: GeoView) => void
   requestMapFlyTo: (req: Omit<MapFlyTo, 'nonce'>) => void
-  /** Fly the map back to the selected incident (AOI bounds, else its reported coordinates). */
+  /** Fly the map back to the selected incident: the fire itself through the mounted map (its "Incident" framing), else
+   *  the AOI bounds, else its reported coordinates. */
   returnToIncident: () => void
   setPanel: (key: PanelKey, open: boolean) => void
   togglePanel: (key: PanelKey) => void
@@ -129,6 +153,19 @@ export interface WorkspaceState {
   toggleMapLayer: (key: MapLayerKey) => void
   resetMapLayers: () => void
   setSafeInsets: (insets: SafeInsets) => void
+  /** Open (id) or close (null) the fire card; never moves the camera. */
+  setFireCard: (id: string | null) => void
+  setOverviewFilter: (f: OverviewFilter) => void
+}
+
+/** Basemap of a preset when the user has not picked one (decision 5: Public opens on aerial with labels). */
+export function defaultBasemap(preset: Preset): Basemap {
+  return preset === 'public' ? 'aerial' : 'dark'
+}
+
+/** The basemap shown: the map's fallback, else the user's pick, else the preset's default. */
+export function effectiveBasemap(s: { basemapFallback?: Basemap | null; basemapPick: Basemap | null; preset: Preset }): Basemap {
+  return s.basemapFallback ?? s.basemapPick ?? defaultBasemap(s.preset)
 }
 
 // ------------------------------------------------------------------------------------------------- URL state
@@ -176,15 +213,21 @@ export function parseWorkspaceParams(search: string): WorkspaceUrlParams {
 }
 
 /** Write the workspace fields into `url` (defaults are omitted, except ws which is always explicit); drops the
- *  one-shot ?view= / ?sel= parameters. Returns the same URL object. */
-export function writeWorkspaceParams(url: URL, s: Pick<WorkspaceState, 'workspace' | 'preset' | 'perspective' | 'basemap' | 'units'>): URL {
+ *  one-shot ?view= / ?sel= parameters. `basemap` is written only when the user's pick differs from the preset's
+ *  default (a fallback is never written). Returns the same URL object. */
+export function writeWorkspaceParams(
+  url: URL,
+  s: Pick<WorkspaceState, 'workspace' | 'preset' | 'perspective' | 'units'> & { basemapPick?: Basemap | null; basemap?: Basemap },
+): URL {
   const p = url.searchParams
   p.set('ws', s.workspace)
   if (s.preset !== 'public') p.set('preset', s.preset)
   else p.delete('preset')
   if (s.perspective !== '2d') p.set('persp', s.perspective)
   else p.delete('persp')
-  if (s.basemap !== 'dark') p.set('basemap', s.basemap)
+  // callers without the pick field (older code, tests) pass the basemap they want kept
+  const pick = s.basemapPick !== undefined ? s.basemapPick : (s.basemap ?? null)
+  if (pick != null && pick !== defaultBasemap(s.preset)) p.set('basemap', pick)
   else p.delete('basemap')
   if (s.units !== 'us') p.set('units', s.units)
   else p.delete('units')
@@ -194,6 +237,9 @@ export function writeWorkspaceParams(url: URL, s: Pick<WorkspaceState, 'workspac
 }
 
 const initialUrl = typeof window !== 'undefined' ? parseWorkspaceParams(window.location.search) : parseWorkspaceParams('')
+/** The fire named by the start-up link: its first selection keeps a deep-linked ?view= (any later overview -> fire
+ *  transition drops the overview's view so the map frames the fire). */
+let linkedIncident: string | null = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('incident') || null : null
 
 // ------------------------------------------------------------------------------------------------- selectors
 /** Synthetic development fixtures ("DEMO · SIMULATED DATA" badge): fixture ids or synthetic data sources. */
@@ -215,7 +261,9 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
   workspace: initialUrl.workspace ?? 'map',
   preset: initialUrl.preset ?? 'public',
   perspective: initialUrl.perspective ?? '2d',
-  basemap: initialUrl.basemap ?? 'dark',
+  basemap: effectiveBasemap({ basemapPick: initialUrl.basemap, preset: initialUrl.preset ?? 'public' }),
+  basemapPick: initialUrl.basemap,
+  basemapFallback: null,
   units: initialUrl.units ?? 'us',
   selection: initialUrl.selection ? { ...initialUrl.selection, source: 'coords' } : null,
   view: initialUrl.view,
@@ -223,16 +271,20 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
   panels: { ...DEFAULT_PANELS },
   mapLayers: { ...DEFAULT_MAP_LAYERS },
   safeInsets: { top: 0, right: 0, bottom: 0, left: 0 },
+  fireCardId: null,
+  overviewFilter: 'season',
 
   setWorkspace: (workspace) => set({ workspace }),
-  setPreset: (preset) => set({ preset }),
+  setPreset: (preset) => set((s) => ({ preset, basemap: effectiveBasemap({ ...s, preset }) })),
   setPerspective: (perspective) => set({ perspective }),
   togglePerspective: () => set((s) => ({ perspective: s.perspective === '2d' ? '3d' : '2d' })),
-  setBasemap: (basemap) => set({ basemap }),
+  setBasemap: (basemap) => set({ basemap, basemapPick: basemap, basemapFallback: null }),
+  setBasemapFallback: (basemapFallback) => set((s) => ({ basemapFallback, basemap: effectiveBasemap({ ...s, basemapFallback }) })),
   setUnits: (units) => set({ units }),
   selectLocation: (loc, opts) => {
     if (!validLat(loc.lat) || !validLon(loc.lon)) return
-    set({ selection: { ...loc } })
+    // one card at a time: a new point's location card replaces an open fire card
+    set({ selection: { ...loc }, fireCardId: null })
     if (opts?.fly) get().requestMapFlyTo({ lon: loc.lon, lat: loc.lat, ...(opts.zoom != null ? { zoom: opts.zoom } : {}) })
   },
   moveSelection: (lat, lon) =>
@@ -241,6 +293,12 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
   setView: (view) => set({ view }),
   requestMapFlyTo: (req) => set((s) => ({ mapFlyTo: { ...req, nonce: (s.mapFlyTo?.nonce ?? 0) + 1 } })),
   returnToIncident: () => {
+    // the mounted map frames the fire itself (burned area, perimeter, P90 reach); without it, the analysis area
+    const actions = useMapRuntime.getState().actions
+    if (actions && get().workspace === 'map' && useStore.getState().incidentId != null) {
+      actions.frameFire()
+      return
+    }
     const { summary, manifest } = useStore.getState()
     const req = incidentFlyTo(summary, manifest)
     if (req) get().requestMapFlyTo(req)
@@ -255,15 +313,29 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
       const a = s.safeInsets
       return a.top === safeInsets.top && a.right === safeInsets.right && a.bottom === safeInsets.bottom && a.left === safeInsets.left ? {} : { safeInsets: { ...safeInsets } }
     }),
+  setFireCard: (fireCardId) => set((s) => (s.fireCardId === fireCardId ? {} : { fireCardId })),
+  setOverviewFilter: (overviewFilter) => set({ overviewFilter }),
 }))
 
-// Switching incidents: the view belongs to the previous incident (the map frames the new one), and selections that
-// point at the previous incident's events or reported location no longer apply. User-picked points are kept.
+// Switching incidents (also overview -> fire and fire -> overview): the view belongs to the previous incident or the
+// overview (the map frames the new one), and selections that point at the previous incident's events or reported
+// location no longer apply. User-picked points are kept. The start-up link's first selection keeps a deep-linked view,
+// and a zoom focus or zoom-out (decision 10) keeps the view and every selection: the camera did not move. A fire card
+// closes unless it belongs to the incident now shown.
 useStore.subscribe((s, p) => {
-  if (s.incidentId === p.incidentId || p.incidentId == null) return
-  const sel = useWorkspace.getState().selection
+  if (s.incidentId === p.incidentId) return
+  const ws = useWorkspace.getState()
+  const card = ws.fireCardId != null && ws.fireCardId !== s.incidentId ? { fireCardId: null } : {}
+  const firstLinked = p.incidentId == null && s.incidentId != null && s.incidentId === linkedIncident
+  linkedIncident = null
+  if (firstLinked || s.incidentSource === 'zoom') {
+    if ('fireCardId' in card) useWorkspace.setState(card)
+    return
+  }
+  const sel = ws.selection
   useWorkspace.setState({
     view: null,
+    ...card,
     ...(sel && (sel.source === 'event' || sel.source === 'incident') ? { selection: null } : {}),
   })
 })
@@ -283,7 +355,7 @@ export function useWorkspaceUrlSync(enabled: boolean): void {
       if (timer === undefined) timer = window.setTimeout(write, 300)
     }
     const unsub = useWorkspace.subscribe((s, p) => {
-      if (s.workspace !== p.workspace || s.preset !== p.preset || s.perspective !== p.perspective || s.basemap !== p.basemap || s.units !== p.units) schedule()
+      if (s.workspace !== p.workspace || s.preset !== p.preset || s.perspective !== p.perspective || s.basemapPick !== p.basemapPick || s.units !== p.units) schedule()
     })
     schedule()
     return () => {

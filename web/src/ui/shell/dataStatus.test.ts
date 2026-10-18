@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Detection, Perimeter } from '../../api/types'
-import { buildDataStatus, fmtStatusTime, weatherSourceLabel, type DataStatusInput } from './dataStatus'
+import { buildDataStatus, fmtAge, fmtStatusTime, freshnessLine, weatherSourceLabel, type DataStatusInput } from './dataStatus'
 
 const H = 3_600_000
 const T0 = Date.UTC(2025, 0, 8, 12, 0) // Jan 8 2025 04:00 PST
@@ -117,5 +117,48 @@ describe('weatherSourceLabel', () => {
     expect(weatherSourceLabel('open-meteo:historical-forecast:gfs_hrrr')).toBe('Open-Meteo historical forecast (gfs_hrrr)')
     expect(weatherSourceLabel('open-meteo')).toBe('Open-Meteo')
     expect(weatherSourceLabel('synthetic')).toBe('synthetic')
+  })
+})
+
+describe('official rows and freshness (brief 2, U-R9)', () => {
+  it("adds Cal OES, NWS and CAL FIRE rows with the issuer's time and Fire-3d's check time", () => {
+    const official = {
+      evacuation: { state: 'listed', checkedMs: T0 - 2 * 60_000, sourceUpdatedMs: T0 - 3 * H, zones: [{}, {}] },
+      fireWeather: { state: 'none', checkedMs: T0 - 60_000, alerts: [] },
+      calfire: { state: 'available', updatedMs: T0 - 5 * H, acres: 2450, percentContained: 65, isActive: true },
+    }
+    const r = byKey(buildDataStatus({ ...input('live'), official }, T0))
+    expect(r.evacuation).toMatchObject({ tMs: T0 - 3 * H, age: 'checked 2 min ago' })
+    expect(r.evacuation.value).toMatch(/^Cal OES /)
+    expect(r.evacuation.detail).toBe('2 zones listed near this fire (local officials via Cal OES)')
+    expect(r['fire-weather'].detail).toMatch(/not an all-clear/)
+    expect(r.record).toMatchObject({ tMs: T0 - 5 * H, age: '5 h ago' })
+    expect(r.record.detail).toBe('2,450 ac · 65% contained')
+    const keys = buildDataStatus({ ...input('live'), official }, T0).map((x) => x.key)
+    expect(keys.indexOf('record')).toBeLessThan(keys.indexOf('bundle'))
+  })
+
+  it("never reads silence as safety: past dates and outages say so", () => {
+    const r = byKey(buildDataStatus({ ...input('historical'), official: { evacuation: { state: 'past-date' }, fireWeather: { state: 'unavailable' } } }, T0))
+    expect(r.evacuation.detail).toBe('Official status is shown only for the current time')
+    expect(r['fire-weather'].detail).toMatch(/did not answer/)
+  })
+
+  it("dates a past fire's CAL FIRE row with the year and calls it the record's last edit", () => {
+    const edit = Date.UTC(2026, 7, 6, 17, 47) // the record was edited 19 months after the fire
+    const now = Date.UTC(2026, 9, 18)
+    const rows = buildDataStatus({ ...input('historical'), summary: { mode: 'historical', updated_ms: edit } }, now)
+    const rec = rows.find((x) => x.key === 'record')
+    expect(rec?.value).toBe('Aug 6, 2026 10:47 PDT')
+    expect(rec?.detail).toMatch(/^Last edit of CAL FIRE’s record/)
+    expect(rec?.age).toBeNull()
+  })
+
+  it('gives Public one line', () => {
+    const rows = buildDataStatus(input('live'), T0 + 16 * H)
+    expect(freshnessLine(rows, true, T0 + 16 * H, T0 + 16 * H - 120_000)).toEqual({ text: 'Sources checked 2 min ago · satellite data 16 h old', stale: true })
+    expect(freshnessLine(rows, true, T0 + 16 * H, null).text).toBe('satellite data 16 h old')
+    expect(freshnessLine(buildDataStatus(input('historical'), T0), false, T0, null).text).toBe('Archived replay to Jan 8, 2025')
+    expect([fmtAge(30_000), fmtAge(40 * 60_000), fmtAge(50 * H)]).toEqual(['1 min', '40 min', '2 d'])
   })
 })

@@ -147,7 +147,8 @@ describe('legend, credits and feed', () => {
   it('labels the map layer as a satellite image with its acquisition time', () => {
     const [e] = imageryLegend(byId(S2), IMAGERY_SAMPLE.reference_ms)
     expect(e).toMatchObject({ layer: 'recentImagery', label: 'Satellite image · Sentinel-2C', swatch: { kind: 'raster' } })
-    expect(e.detail).toBe('acquired Oct 13, 12:13 PDT · 10 m pixels')
+    expect(e.detail).toBe('acquired Oct 13, 12:13 PDT · 10 m pixels · not live')
+    expect(e.compact).toBe(`Satellite image · ${byId(S2).platform} · Oct 13, 12:13`)
   })
 
   it('credits Copernicus for Sentinel-2 and NASA GIBS for NASA imagery', () => {

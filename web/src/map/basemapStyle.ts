@@ -6,8 +6,13 @@
 //           translucent lines and its road / place / water labels in white with dark halos.
 // Every derived style also carries the Mapterhorn raster-dem source used for 3D terrain (two separate DEM sources:
 // MapLibre advises against sharing one between hillshade and terrain). Symbol layers are moved after all other basemap
-// layers (stable order), so wildfire overlays can be inserted directly below the labels (`labelLayerId`) and stay
-// above roads; in 3D this also keeps the draped layers in one render-to-texture stack.
+// layers (stable order), so wildfire overlays can be inserted directly below the labels and stay above roads.
+// 3D buildings (brief 2, O-R13, decision 2): one muted fill-extrusion of OpenStreetMap's building shapes (OpenMapTiles
+// `building` layer: render_height / render_min_height) per basemap, replacing liberty's bright one, directly below the
+// labels and hidden until the map controller shows it in 3D. Shapes only, never coloured by fire state, and today's
+// OpenStreetMap: buildings destroyed by a fire may be missing (the legend says so). Wildfire overlays are inserted
+// below the extrusion (`overlayBeforeId`), so in 3D the draped layers stay in one render-to-texture stack and the
+// buildings stand on top of them.
 import type { LayerSpecification, SourceSpecification, StyleSpecification } from 'maplibre-gl'
 import type { Basemap } from '../state/workspace'
 import {
@@ -28,6 +33,19 @@ export const HILLSHADE_SOURCE = 'fx-hillshade-dem'
 export const IMAGERY_SOURCE = 'fx-usgs-imagery'
 export const HILLSHADE_LAYER = 'fx-hillshade'
 export const IMAGERY_LAYER = 'fx-usgs-imagery'
+export const BUILDINGS_3D_LAYER = 'fx-buildings-3d'
+
+/** 3D buildings appear from this zoom (fading in over the half zoom level before it). */
+export const BUILDINGS_MINZOOM = 15
+const BUILDINGS_FADE_FROM = 14.5
+/** Muted building colours per basemap (never coloured by fire state) and their opacity. */
+export const BUILDING_COLORS: Record<Basemap, string> = { dark: '#4a5566', roads: '#a8a095', aerial: '#c3c9d1' }
+export const BUILDING_OPACITY = 0.6
+
+/** The legend caveat for today's OpenStreetMap shapes over a burned area (brief 2, decision 8). */
+export function buildingsCaveat(hasFire: boolean): string {
+  return `3D shapes: today's OpenStreetMap; buildings destroyed by ${hasFire ? 'this fire' : 'a fire'} may be missing; not a damage assessment`
+}
 
 /** Navy palette of the dark basemap (kept close to the --m-bg / --m-text tokens in styles/map-tokens.css). */
 export const DARK = {
@@ -60,8 +78,10 @@ export const DARK = {
 
 export interface DerivedStyle {
   style: StyleSpecification
-  /** First label (symbol) layer; wildfire overlays go directly below it. Null when the style has no labels. */
+  /** First label (symbol) layer. Null when the style has no labels. */
   labelLayerId: string | null
+  /** Draped wildfire overlays go directly below this layer: the 3D buildings when present, else the first label. */
+  overlayBeforeId: string | null
   /** True when OpenFreeMap's style loaded; false = fallback without roads and labels (the map says so). */
   vector: boolean
 }
@@ -109,6 +129,32 @@ export function labelsLast(layers: LayerSpecification[]): { layers: LayerSpecifi
   const other = layers.filter((l) => l.type !== 'symbol')
   const labels = layers.filter((l) => l.type === 'symbol')
   return { layers: [...other, ...labels], labelLayerId: labels[0]?.id ?? null }
+}
+
+/** The muted 3D buildings layer of a basemap (hidden until the map shows it in 3D). */
+export function buildingsLayer(basemap: Basemap): LayerSpecification {
+  return {
+    id: BUILDINGS_3D_LAYER,
+    type: 'fill-extrusion',
+    source: VECTOR_SOURCE,
+    'source-layer': 'building',
+    minzoom: BUILDINGS_FADE_FROM,
+    filter: ['!', ['to-boolean', ['get', 'hide_3d']]],
+    layout: { visibility: 'none' },
+    paint: {
+      'fill-extrusion-color': BUILDING_COLORS[basemap],
+      'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 0],
+      'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+      'fill-extrusion-opacity': ['interpolate', ['linear'], ['zoom'], BUILDINGS_FADE_FROM, 0, BUILDINGS_MINZOOM, BUILDING_OPACITY],
+      'fill-extrusion-vertical-gradient': true,
+    },
+  }
+}
+
+/** Put the 3D buildings directly below the labels (layers already in labels-last order). */
+function withBuildings(layers: LayerSpecification[], labelLayerId: string | null, basemap: Basemap): LayerSpecification[] {
+  const b = buildingsLayer(basemap)
+  return labelLayerId ? insertBefore(layers, b, (l) => l.id === labelLayerId) : [...layers, b]
 }
 
 /** Insert `layer` before the first layer matching `pred` (or at the end). */
@@ -172,8 +218,8 @@ export function deriveDark(base: StyleSpecification): DerivedStyle {
   s.sources = { ...s.sources, [HILLSHADE_SOURCE]: demSource(), [TERRAIN_SOURCE]: demSource() }
   const withShade = insertAfterLast(layers, hillshadeLayer('dark'), isLandArea)
   const { layers: ordered, labelLayerId } = labelsLast(withShade)
-  s.layers = ordered
-  return { style: s, labelLayerId, vector: true }
+  s.layers = withBuildings(ordered, labelLayerId, 'dark')
+  return { style: s, labelLayerId, overlayBeforeId: BUILDINGS_3D_LAYER, vector: true }
 }
 
 /** Fill-extrusion heights read feature properties that some buildings lack: default them to 0 (no null warnings). */
@@ -202,23 +248,32 @@ function guardFilters(layers: AnyLayer[]): void {
   for (const l of layers) if ('filter' in l && l.filter) (l as { filter: unknown }).filter = guardComparisons(l.filter)
 }
 
-/** OpenFreeMap "liberty" (road / navigation style) with terrain shading. */
+/** OpenFreeMap "liberty" (road / navigation style) with terrain shading. Its bright `building-3d` extrusion is replaced
+ *  by the muted one, and its flat footprints (z13-14 in liberty) are kept at every zoom for the 2D map. */
 export function deriveRoads(base: StyleSpecification): DerivedStyle {
   const s = clone(base)
+  s.layers = (s.layers as AnyLayer[]).filter((l) => l.type !== 'fill-extrusion')
+  for (const l of s.layers as AnyLayer[]) if (l.id === 'building' && l.type === 'fill') delete (l as { maxzoom?: number }).maxzoom
   safeExtrusions(s.layers as AnyLayer[])
   guardFilters(s.layers as AnyLayer[])
   s.sources = { ...s.sources, [HILLSHADE_SOURCE]: demSource(), [TERRAIN_SOURCE]: demSource() }
   const withShade = insertAfterLast(s.layers, hillshadeLayer('light'), isLandArea)
   const { layers, labelLayerId } = labelsLast(withShade)
-  s.layers = layers
-  return { style: s, labelLayerId, vector: true }
+  s.layers = withBuildings(layers, labelLayerId, 'roads')
+  return { style: s, labelLayerId, overlayBeforeId: BUILDINGS_3D_LAYER, vector: true }
 }
 
 /** Liberty layers dropped over imagery: area fills, the low-zoom shaded relief, waterway lines, rail hatching and
  *  road casings (the imagery shows land cover; casings would read as heavy outlines). */
 const AERIAL_DROP = /^(natural_earth|park|landuse|landcover|water$|aeroway_fill|road_area_pattern|building|waterway_(tunnel|river|other)$)|_hatching$|_casing$/
 
-/** USGS imagery, desaturated and darkened, with liberty's roads and labels on top. */
+/** Major road colour over the aerial photos: about 0.45 alpha, so they do not compete with the fire edge at z10-11
+ *  (audit-2 opening-map G14; was 0.62). */
+export const AERIAL_MAJOR_ROAD = 'rgba(255,238,205,0.45)'
+export const AERIAL_MINOR_ROAD = 'rgba(236,241,247,0.34)'
+
+/** USGS imagery, desaturated and darkened, with liberty's roads and labels on top. The photos have no 2D building
+ *  footprints of their own (roofs are in the photo); the muted 3D buildings show in 3D only. */
 export function deriveAerial(base: StyleSpecification): DerivedStyle {
   const s = clone(base)
   guardFilters(s.layers as AnyLayer[])
@@ -232,7 +287,7 @@ export function deriveAerial(base: StyleSpecification): DerivedStyle {
     if (AERIAL_DROP.test(l.id)) continue
     if (l.type === 'line' && /^(road|tunnel|bridge)_/.test(l.id)) {
       const major = /motorway|trunk|primary|secondary/.test(l.id)
-      setPaint(l, { 'line-color': major ? 'rgba(255,238,205,0.62)' : 'rgba(236,241,247,0.38)' })
+      setPaint(l, { 'line-color': major ? AERIAL_MAJOR_ROAD : AERIAL_MINOR_ROAD })
       if (l.id.startsWith('tunnel_')) setPaint(l, { 'line-opacity': 0.5 })
     } else if (l.type === 'line' && l.id.startsWith('boundary')) {
       setPaint(l, { 'line-color': 'rgba(232,237,243,0.55)' })
@@ -253,8 +308,8 @@ export function deriveAerial(base: StyleSpecification): DerivedStyle {
   }
   const withImagery = insertBefore(kept, imagery, (l) => l.id !== 'background')
   const { layers, labelLayerId } = labelsLast(withImagery)
-  s.layers = layers
-  return { style: s, labelLayerId, vector: true }
+  s.layers = withBuildings(layers, labelLayerId, 'aerial')
+  return { style: s, labelLayerId, overlayBeforeId: BUILDINGS_3D_LAYER, vector: true }
 }
 
 /** Without OpenFreeMap: navy background (+ the imagery for aerial, + terrain shading otherwise). Overlays still work. */
@@ -268,7 +323,7 @@ export function fallbackStyle(basemap: Basemap): DerivedStyle {
     sources[HILLSHADE_SOURCE] = demSource()
     layers.push(hillshadeLayer(basemap === 'dark' ? 'dark' : 'light'))
   }
-  return { style: { version: 8, glyphs: OPENFREEMAP_GLYPHS, sources, layers }, labelLayerId: null, vector: false }
+  return { style: { version: 8, glyphs: OPENFREEMAP_GLYPHS, sources, layers }, labelLayerId: null, overlayBeforeId: null, vector: false }
 }
 
 export function deriveBasemap(basemap: Basemap, base: StyleSpecification): DerivedStyle {

@@ -9,8 +9,9 @@ snake_case fields:
   (float or None), ``lat`` / ``lon`` (float, None when missing/zero), ``is_active`` / ``final`` (bool),
   ``county`` / ``location`` / ``admin_unit`` / ``url`` (str or None).
 
-Requests go through :mod:`fire3d.http` (live list cached 10 min, yearly lists 24 h). When CAL FIRE is unreachable a
-stale cached copy is served (with a warning) before giving up.
+Requests go through :mod:`fire3d.http` (live list cached 10 min, the current year's list 30 min, past years 24 h).
+When CAL FIRE is unreachable a stale cached copy is served (with a warning) before giving up. :func:`fetched_ms` says
+when the copy last returned for a list was fetched from CAL FIRE (for "checked ..." times).
 """
 
 from __future__ import annotations
@@ -18,6 +19,8 @@ from __future__ import annotations
 import logging
 import math
 import re
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -29,10 +32,13 @@ log = logging.getLogger(__name__)
 
 LIST_URL = "https://incidents.fire.ca.gov/umbraco/api/IncidentApi/List"
 LIVE_TTL_S = 600.0            # 10 min
-YEAR_TTL_S = 86400.0          # 24 h
+YEAR_TTL_S = 86400.0          # 24 h (past years)
+CURRENT_YEAR_TTL_S = 1800.0   # 30 min: the current season's list changes as fires grow and are contained
 REFRESH_TTL_S = 1e-6          # any cached copy counts as stale -> refetch, and the fresh copy is cached
 
 _WS = re.compile(r"\s+")
+_fetched_lock = threading.Lock()
+_fetched: dict[str, int] = {}   # list key ("live" | "year:2026") -> fetch time (ms) of the copy last returned
 
 
 class CalFireError(RuntimeError):
@@ -111,16 +117,31 @@ def normalize_incident(raw: dict) -> dict:
     return rec
 
 
+def list_key(params: dict) -> str:
+    """``"live"`` for the active list, ``"year:<year>"`` for a year list."""
+    return "live" if str(params.get("inactive")) == "false" else f"year:{params.get('year')}"
+
+
+def fetched_ms(key: str) -> int | None:
+    """When the copy of list ``key`` (:func:`list_key`) last returned by this module was fetched from CAL FIRE (a
+    cached copy keeps its original fetch time); None before the first call."""
+    with _fetched_lock:
+        return _fetched.get(key)
+
+
 def _get_list(params: dict, ttl_s: float | None, retries: int = fhttp.DEFAULT_RETRIES) -> list:
     """GET + parse; a 2xx answer that is not a JSON list is evicted from the cache and raised as CalFireError."""
+    resp = fhttp.request("GET", LIST_URL, params=params, ttl_s=ttl_s, timeout=45.0, retries=retries)
     try:
-        data = fhttp.get_json(LIST_URL, params, ttl_s=ttl_s, timeout=45.0, retries=retries)
+        data = resp.json()
     except ValueError as e:                       # HTML/garbage with status 200 (orjson.JSONDecodeError)
         evict_http_cache(LIST_URL, params)
         raise CalFireError(f"CAL FIRE incident list {params}: invalid JSON ({e})") from None
     if not isinstance(data, list):
         evict_http_cache(LIST_URL, params)
         raise CalFireError(f"CAL FIRE incident list {params}: unexpected response type {type(data).__name__}")
+    with _fetched_lock:
+        _fetched[list_key(params)] = int(resp.fetched_ms)
     return data
 
 
@@ -143,7 +164,12 @@ def list_live(refresh: bool = False) -> list[dict]:
     return _fetch({"inactive": "false"}, LIVE_TTL_S, refresh)
 
 
+def year_ttl_s(year: int) -> float:
+    """HTTP cache TTL of a year list: 30 min for the current (UTC) year or later, else 24 h."""
+    return CURRENT_YEAR_TTL_S if int(year) >= time.gmtime().tm_year else YEAR_TTL_S
+
+
 def list_year(year: int, refresh: bool = False) -> list[dict]:
     """All CAL FIRE incidents of ``year`` (``IncidentApi/List?inactive=true&year={year}``; includes the still-active
-    ones), cleaned (see module doc). ``refresh`` bypasses the 24-h cache."""
-    return _fetch({"inactive": "true", "year": int(year)}, YEAR_TTL_S, refresh)
+    ones), cleaned (see module doc). ``refresh`` bypasses the cache (30 min for the current year, else 24 h)."""
+    return _fetch({"inactive": "true", "year": int(year)}, year_ttl_s(year), refresh)

@@ -308,9 +308,12 @@ function SettingsBody() {
     <>
       <MenuSection label="Behaviour">
         <div className="menu-grid">
-          <span className="label">Auto-build unbuilt incidents</span>
+          {/* brief 2: off by default; only the Forensic incident picker uses it (the map's fire card asks instead) */}
+          <span className="label" data-tip="Off: picking a fire without an analysis shows its Build button. Building takes 1-3 min.">
+            Prepare analysis when I pick an unprepared fire
+          </span>
           <span>
-            <Switch checked={autoBuild} onChange={(v) => st().setAutoBuild(v)} label="Auto-build unbuilt incidents" />
+            <Switch checked={autoBuild} onChange={(v) => st().setAutoBuild(v)} label="Prepare analysis when I pick an unprepared fire" />
           </span>
         </div>
         <MenuItem icon={<RotateCcw size={14} />} label="Reset layers to defaults" onSelect={() => st().resetLayers()} />

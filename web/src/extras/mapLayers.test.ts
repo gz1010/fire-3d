@@ -2,86 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { EVAC_SAMPLE } from './__fixtures__/samples'
 import { evacuationLayerGroup, EVAC_LAYERS, EVAC_SOURCE, mountEvacuationLayer } from './evacuation'
 import { firstSymbolLayerId, LayerGroupHandle, resolveBeforeId } from './mapLayers'
-
-/** Minimal stand-in for the parts of maplibre-gl's Map the handles use. */
-class FakeMap {
-  layers: { id: string; type: string; source?: string; layout?: Record<string, unknown> }[] = [
-    { id: 'background', type: 'background' },
-    { id: 'roads', type: 'line', source: 'ofm' },
-    { id: 'place-labels', type: 'symbol', source: 'ofm' },
-  ]
-  sources = new Map<string, { type: string; data?: unknown; setData?: (d: unknown) => void }>([['ofm', { type: 'vector' }]])
-  images = new Set<string>()
-  loaded = true
-  handlers = new Map<string, Set<() => void>>()
-  setDataCalls = 0
-
-  getStyle() {
-    return this.loaded ? { version: 8, sources: {}, layers: this.layers } : undefined
-  }
-  getSource(id: string) {
-    return this.sources.get(id)
-  }
-  addSource(id: string, spec: { type: string; data?: unknown }) {
-    if (this.sources.has(id)) throw new Error(`source ${id} exists`)
-    const src = { ...spec, setData: (d: unknown) => {
-      src.data = d
-      this.setDataCalls++
-    } }
-    this.sources.set(id, src)
-  }
-  removeSource(id: string) {
-    if (this.layers.some((l) => l.source === id)) throw new Error(`source ${id} in use`)
-    this.sources.delete(id)
-  }
-  getLayer(id: string) {
-    return this.layers.find((l) => l.id === id)
-  }
-  addLayer(spec: { id: string; type: string; source?: string; layout?: Record<string, unknown> }, before?: string) {
-    if (this.getLayer(spec.id)) throw new Error(`layer ${spec.id} exists`)
-    const i = before ? this.layers.findIndex((l) => l.id === before) : -1
-    if (i >= 0) this.layers.splice(i, 0, spec)
-    else this.layers.push(spec)
-  }
-  removeLayer(id: string) {
-    this.layers = this.layers.filter((l) => l.id !== id)
-  }
-  moveLayer(id: string, before?: string) {
-    const l = this.getLayer(id)!
-    this.removeLayer(id)
-    this.addLayer(l, before)
-  }
-  setLayoutProperty(id: string, k: string, v: unknown) {
-    const l = this.getLayer(id)!
-    l.layout = { ...l.layout, [k]: v }
-  }
-  hasImage(id: string) {
-    return this.images.has(id)
-  }
-  addImage(id: string) {
-    this.images.add(id)
-  }
-  removeImage(id: string) {
-    this.images.delete(id)
-  }
-  on(t: string, f: () => void) {
-    if (!this.handlers.has(t)) this.handlers.set(t, new Set())
-    this.handlers.get(t)!.add(f)
-  }
-  off(t: string, f: () => void) {
-    this.handlers.get(t)?.delete(f)
-  }
-  fire(t: string) {
-    for (const f of [...(this.handlers.get(t) ?? [])]) f()
-  }
-  /** setStyle: everything custom disappears, then style.load. */
-  swapStyle() {
-    this.layers = this.layers.filter((l) => l.source === 'ofm' || l.type === 'background')
-    for (const id of [...this.sources.keys()]) if (id !== 'ofm') this.sources.delete(id)
-    this.images.clear()
-    this.fire('style.load')
-  }
-}
+import { FakeMap } from './__fixtures__/fakeMap'
 
 const ids = (m: FakeMap) => m.layers.map((l) => l.id)
 
@@ -161,6 +82,42 @@ describe('layer handles', () => {
     // after a basemap swap only the vector layers come back first: fall back below the labels
     map.swapStyle()
     expect(ids(map).indexOf(EVAC_LAYERS.lineOrder)).toBe(ids(map).indexOf('place-labels') - 1)
+  })
+
+  it('restores its place below the fire layers after a basemap load (styledata fires before style.load)', () => {
+    // a basemap with 3D buildings below its labels; map-core puts its draped fire layers below the buildings
+    const map = new FakeMap()
+    map.layers.splice(2, 0, { id: 'buildings', type: 'fill-extrusion', source: 'ofm' })
+    const draped = ['fx-observed-raster', 'fx-observed-edge']
+    const addFireLayers = () => {
+      map.addLayer({ id: 'fx-observed-raster', type: 'raster' }, 'buildings')
+      map.addLayer({ id: 'fx-observed-edge', type: 'line' }, 'buildings')
+    }
+    addFireLayers()
+    const h = mountEvacuationLayer(map as never, { beforeId: draped })
+    h.setData(EVAC_SAMPLE)
+    const below = () => ids(map).indexOf(EVAC_LAYERS.lineOrder) < ids(map).indexOf('fx-observed-raster')
+    expect(below()).toBe(true)
+    // MapLibre's order on setStyle: the new style replaces every custom layer, 'styledata' (the handle re-adds itself:
+    // no fire layer yet, so below the labels), map-core re-adds its fire layers on 'style.load' (registered first),
+    // then the handle's own 'style.load'
+    map.layers = map.layers.filter((l) => l.source === 'ofm' || l.type === 'background')
+    for (const id of [...map.sources.keys()]) if (id !== 'ofm') map.sources.delete(id)
+    map.images.clear()
+    map.fire('styledata')
+    expect(ids(map).indexOf(EVAC_LAYERS.lineOrder)).toBe(ids(map).indexOf('place-labels') - 1)
+    addFireLayers()
+    map.fire('style.load')
+    expect(below()).toBe(true)
+    // the group keeps its own order, and its label stays on top
+    expect(ids(map).slice(ids(map).indexOf(EVAC_LAYERS.tint), ids(map).indexOf(EVAC_LAYERS.lineOrder) + 1)).toEqual([
+      EVAC_LAYERS.tint,
+      EVAC_LAYERS.hatch,
+      EVAC_LAYERS.lineOther,
+      EVAC_LAYERS.lineWarning,
+      EVAC_LAYERS.lineOrder,
+    ])
+    expect(ids(map).indexOf(EVAC_LAYERS.label)).toBe(ids(map).length - 1)
   })
 
   it('keeps top layers below the given top layers (incident, events, selection) when present', () => {

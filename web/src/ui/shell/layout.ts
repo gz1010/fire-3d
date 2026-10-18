@@ -89,3 +89,10 @@ export function unobstructedShare(rects: readonly Rect[], W: number, H: number):
   if (W <= 0 || H <= 0) return 0
   return 1 - unionArea(rects, W, H) / (W * H)
 }
+
+/** Is a screen point (px, map container coordinates) under the chrome described by `insets`, or within `margin` of
+ *  it? Used to keep a clicked pin out from under a phone's bottom sheet (brief 2 C-R2). */
+export function pointHidden(p: { x: number; y: number }, W: number, H: number, insets: Insets, margin = 0): boolean {
+  if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return false
+  return p.y > H - insets.bottom - margin || p.y < insets.top + margin || p.x < insets.left + margin || p.x > W - insets.right - margin
+}

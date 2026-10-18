@@ -4,6 +4,9 @@
 // classes and the forecast display choice, and the optional official sources (evacuation zones, cameras, satellite
 // image) with their entries or an explicit status when they cannot be shown. Rendered in the bottom legend slot
 // (details open upward) or inline in the Layers panel (details shown in place).
+// Brief 2: the California overview's fire markers (CAL FIRE's official record), the aerial photos' date line ("June
+// 2024 or earlier: taken before this fire"; decision 8) and, while 3D buildings are drawn, their caveat ("today's
+// OpenStreetMap; buildings destroyed by this fire may be missing; not a damage assessment").
 import { ChevronDown, Info } from 'lucide-react'
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { ExtrasLegend, ExtrasNotice, LegendSwatch } from '../extras/ExtrasCommon'
@@ -13,8 +16,15 @@ import { useStore } from '../state/store'
 import { useWorkspace } from '../state/workspace'
 import { Segmented } from '../ui/controls'
 import { useDismiss, useNow } from '../ui/hooks'
+import { BUILDINGS_MINZOOM, buildingsCaveat } from './basemapStyle'
 import { useMapRuntime } from './mapStore'
 import { DETECTION_RECENT_H, DETECTION_WINDOW_H, GOES_WINDOW_H, RECENT_H, type ForecastView } from './overlayModel'
+import { LABEL_MIN_ACRES } from './overviewLayers'
+import { aerialPhotoLine, USGS_PHOTOS_DATE_TEXT } from './providers'
+
+/** 3D buildings are drawn from half a zoom level before BUILDINGS_MINZOOM (they fade in). */
+const BUILDINGS_FROM_ZOOM = BUILDINGS_MINZOOM - 0.5
+
 
 const VIEWS: { value: ForecastView; label: string; tip: string }[] = [
   { value: 'auto', label: 'Auto', tip: 'Chance by the end of the forecast before it starts; spread by the timeline time inside it' },
@@ -26,9 +36,9 @@ function Swatch({ kind }: { kind: string }) {
   return <span className={`fxm-sw fxm-sw-${kind}`} aria-hidden="true" />
 }
 
-function Row({ sw, children }: { sw: string; children: ReactNode }) {
+function Row({ sw, children, title }: { sw: string; children: ReactNode; title?: string }) {
   return (
-    <li>
+    <li title={title}>
       <Swatch kind={sw} />
       <span>{children}</span>
     </li>
@@ -39,6 +49,12 @@ export function MapLegend({ inline }: { inline?: boolean } = {}) {
   const layers = useWorkspace((s) => s.mapLayers)
   const hasSelection = useWorkspace((s) => s.selection != null)
   const basemap = useWorkspace((s) => s.basemap)
+  const overviewFilter = useWorkspace((s) => s.overviewFilter)
+  const perspective = useWorkspace((s) => s.perspective)
+  const hasIncident = useStore((s) => s.incidentId != null)
+  const startedMs = useStore((s) => s.summary?.started_ms ?? null)
+  const vectorOk = useMapRuntime((s) => s.providers.basemap.state !== 'failed')
+  const closeZoom = useMapRuntime((s) => (s.camera?.zoom ?? 0) >= BUILDINGS_FROM_ZOOM)
   const overlays = useMapRuntime((s) => s.overlays)
   const forecastView = useMapRuntime((s) => s.forecastView)
   const setForecastView = useMapRuntime((s) => s.setForecastView)
@@ -66,6 +82,11 @@ export function MapLegend({ inline }: { inline?: boolean } = {}) {
   const showDet = layers.detections && det.total > 0
   const showPer = layers.perimeters && per.count > 0
   const showSel = layers.selection && hasSelection
+  const showNearby = layers.perimeters && overlays.nearby > 0
+  const aerial = basemap === 'aerial'
+  const showBuildings = perspective === '3d' && closeZoom && vectorOk
+  const overview = !hasIncident
+  const otherFires = overviewFilter === 'past' ? '2025 fire' : overviewFilter === 'active' ? '' : 'Other 2026 fire'
 
   let fcShort = 'No forecast'
   if (fc.status === 'loading') fcShort = 'Forecast loading…'
@@ -78,10 +99,13 @@ export function MapLegend({ inline }: { inline?: boolean } = {}) {
 
   const compact = (
     <ul className="fxm-legend-row" aria-label="Legend">
+      {overview && overviewFilter !== 'past' && <Row sw="fire-active">Active fire</Row>}
+      {overview && otherFires && <Row sw="fire-past">{otherFires}</Row>}
       {showObserved && <Row sw="observed">Observed fire</Row>}
       {showForecast && <Row sw={fcOff ? 'forecast-off' : 'forecast'}>{fcShort}</Row>}
       {showDet && <Row sw="detection">Heat detections</Row>}
       {showPer && <Row sw="perimeter">Perimeter</Row>}
+      {showNearby && <Row sw="nearby">{overview ? 'Prepared fire perimeter' : 'Other fire perimeter'}</Row>}
       {showSel && <Row sw="selection">Selected location</Row>}
       {extrasCompact.map((x) => (
         <li key={x.layer} className="fxm-legend-extra">
@@ -89,12 +113,37 @@ export function MapLegend({ inline }: { inline?: boolean } = {}) {
           <span>{x.label}</span>
         </li>
       ))}
-      {!showObserved && !showForecast && !showDet && !showPer && !showSel && extrasCompact.length === 0 && <li className="fxm-legend-empty">No wildfire layers shown</li>}
+      {showBuildings && (
+        <Row sw="buildings" title={`${buildingsCaveat(hasIncident)}.`}>
+          3D shapes: today's OSM, not a damage assessment
+        </Row>
+      )}
+      {aerial && (
+        <li className="fxm-legend-photo" title={aerialPhotoLine(hasIncident ? startedMs : null)}>
+          <Swatch kind="photo" />
+          <span>Photos: {USGS_PHOTOS_DATE_TEXT}</span>
+        </li>
+      )}
+      {!overview && !showObserved && !showForecast && !showDet && !showPer && !showSel && !showNearby && extrasCompact.length === 0 && (
+        <li className="fxm-legend-empty">No wildfire layers shown</li>
+      )}
     </ul>
   )
 
   const details = (
     <div className="fxm-legend-details" id="fxm-legend-details">
+      <section>
+        <h3>
+          <Swatch kind="fire-active" /> {overview ? 'Fires (CAL FIRE, official)' : 'Other fires (CAL FIRE, official)'}
+        </h3>
+        <p>
+          One marker per fire at CAL FIRE's reported location, sized by its reported acreage. Filled orange: CAL FIRE lists the fire as active. Hollow:
+          contained or out. Names show for active fires and fires of {LABEL_MIN_ACRES.toLocaleString('en-US')} acres or more.{' '}
+          {overview ? 'Zoom in on a fire with a prepared analysis to see its spread, or click a fire for its card.' : 'Lighter while a fire is open; zoom in on one to switch to it, or click it for its card.'}
+        </p>
+        <p>"Spread not prepared yet": Fire-3d has not prepared that fire's analysis. Its card can prepare it (1-3 min); Fire-3d never does so on its own.</p>
+        <p className="fxm-legend-note">No fire listed nearby is not an all-clear. Follow local officials.</p>
+      </section>
       {showObserved && (
         <section>
           <h3>
@@ -176,6 +225,17 @@ export function MapLegend({ inline }: { inline?: boolean } = {}) {
           </p>
         </section>
       )}
+      {showNearby && (
+        <section>
+          <h3>
+            <Swatch kind="nearby" /> {overview ? 'Prepared fires' : 'Other prepared fires'}
+          </h3>
+          <p>
+            Fires with a prepared analysis (any year): their latest agency perimeter{hasIncident ? ' published by the timeline time' : ''} (dashed, lighter). Zoom
+            in on one to open its spread.
+          </p>
+        </section>
+      )}
       {ready && (
         <section>
           <h3>
@@ -184,12 +244,14 @@ export function MapLegend({ inline }: { inline?: boolean } = {}) {
           <p>The fire model covers only the area inside the dashed line. Outside it, model results are unknown, not low risk.</p>
         </section>
       )}
-      <section>
-        <h3>
-          <Swatch kind="incident" /> Reported location
-        </h3>
-        <p>The incident's reported coordinates. This is not the exact ignition point.</p>
-      </section>
+      {hasIncident && (
+        <section>
+          <h3>
+            <Swatch kind="incident" /> Reported location
+          </h3>
+          <p>The incident's reported coordinates. This is not the exact ignition point. Click it for the fire card.</p>
+        </section>
+      )}
       {showSel && (
         <section>
           <h3>
@@ -198,7 +260,15 @@ export function MapLegend({ inline }: { inline?: boolean } = {}) {
           <p>The point you picked (map click, coordinates or address). A dashed ring marks an approximate position.</p>
         </section>
       )}
-      {basemap === 'aerial' && <p className="fxm-legend-note">Aerial basemap: dated USGS orthoimagery, not live satellite imagery.</p>}
+      {showBuildings && (
+        <section>
+          <h3>
+            <Swatch kind="buildings" /> 3D buildings
+          </h3>
+          <p>{buildingsCaveat(hasIncident)}.</p>
+        </section>
+      )}
+      {aerial && <p className="fxm-legend-note">{aerialPhotoLine(hasIncident ? startedMs : null)}. Not live satellite imagery.</p>}
       {(extras.length > 0 || Object.keys(extrasStatus).length > 0) && (
         <section className="fxm-legend-extras">
           <h3>Official and optional sources</h3>

@@ -44,6 +44,19 @@ export const USGS_IMAGERY_TILE_SIZE = 256
 export const USGS_IMAGERY_MAXZOOM = envInt('VITE_USGS_IMAGERY_MAXZOOM', 16)
 /** The service's copyright text (MapServer copyrightText). */
 export const USGS_IMAGERY_CREDIT = 'USDA, USGS The National Map: Orthoimagery'
+/** When the photos were taken, at the latest. Source: the same MapServer's copyrightText, "USDA, USGS The National
+ *  Map: Orthoimagery. Data refreshed June, 2024.v1.2" (audit-2 opening-map, read 2026-10-17 and again 2026-10-18; its
+ *  description adds "NAIP Data is from 2017-2021 for CONUS"). Every fire in Fire-3d started later, so the photos show
+ *  the land before the fire: intact roofs can appear inside a burned area. */
+export const USGS_PHOTOS_LATEST_MS = Date.UTC(2024, 5, 30, 23, 59)
+export const USGS_PHOTOS_DATE_TEXT = 'June 2024 or earlier'
+
+/** The honest date line for the aerial photos (legend and basemap menu; brief 2 decision 8, O-R11). */
+export function aerialPhotoLine(fireStartedMs: number | null | undefined): string {
+  const base = `Aerial photos: USDA/USGS, ${USGS_PHOTOS_DATE_TEXT}`
+  if (fireStartedMs == null || !Number.isFinite(fireStartedMs)) return `${base}: taken before the recent fires`
+  return fireStartedMs > USGS_PHOTOS_LATEST_MS ? `${base}: taken before this fire` : `${base}: they may predate or follow this fire`
+}
 
 /** Starting OpenFreeMap style per basemap choice (map/basemapStyle.ts restyles it). */
 export const BASEMAP_STYLE: Record<Basemap, string> = {
@@ -68,7 +81,7 @@ export const BASEMAP_SHORT: Record<Basemap, string> = {
 export const BASEMAP_DESCRIPTION: Record<Basemap, string> = {
   dark: 'Subdued dark map with roads, places and terrain shading',
   roads: 'Road map (OpenFreeMap Liberty) with terrain shading',
-  aerial: 'Dated aerial imagery (USGS), desaturated, with road and place labels; not live satellite',
+  aerial: `Aerial photos (USDA/USGS, ${USGS_PHOTOS_DATE_TEXT}), desaturated, with road and place labels; not live satellite`,
 }
 
 /** Map features that bring their own credits. */

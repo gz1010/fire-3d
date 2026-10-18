@@ -1,24 +1,34 @@
 """Address lookup for the map-first UI: a caching proxy for the US Census Geocoder (docs/redesign/BRIEF.md section 8,
-docs/redesign/CONTRACT.md section 6). Owned by the redesign location agent; app.py mounts ``router``.
+docs/redesign/CONTRACT.md section 6), plus local California town and ZIP matches (brief 2, C-R5). Owned by the
+location agent; app.py mounts ``router``.
 
-``GET /api/geocode?q=<one-line US street address>``
+``GET /api/geocode?q=<one-line US street address | California city, town or CDP | ZIP code>``
 
-* Upstream: the Census Geocoder ``locations/onelineaddress`` search (no geographies lookup), ``format=json``, with
-  the current documented benchmark ``Public_AR_Current`` (id 4, "Public Address Ranges - Current Benchmark", the
-  default; checked 2026-10-17 on Geocoding_Services_API.html and /geocoder/benchmarks). No API key.
-  ``FIRE3D_GEOCODER_URL`` / ``FIRE3D_GEOCODER_BENCHMARK`` override the endpoint and benchmark.
+* Street addresses (text that starts with a house number) go upstream to the Census Geocoder
+  ``locations/onelineaddress`` search (no geographies lookup), ``format=json``, with the current documented benchmark
+  ``Public_AR_Current`` (id 4, "Public Address Ranges - Current Benchmark", the default; checked 2026-10-17 on
+  Geocoding_Services_API.html and /geocoder/benchmarks). No API key. ``FIRE3D_GEOCODER_URL`` /
+  ``FIRE3D_GEOCODER_BENCHMARK`` override the endpoint and benchmark.
 * Census positions are calculated along TIGER/Line address ranges, not rooftops: every response says so, and the
   matched range (``from_address``..``to_address``) and street side are passed on.
-* Only explicitly submitted street addresses: no autocomplete, no POI search. Coordinate-like queries are refused
-  (the browser resolves coordinates itself; they are never sent upstream).
-* Requests go through ``fire3d.http`` (identifying User-Agent, shared concurrency cap, one retry, secret-free
+* Town names and ZIP codes are matched locally in ``fire3d/data/gazetteer_ca.json`` (built by
+  ``scripts/build_gazetteer.py`` from the public-domain U.S. Census Bureau Gazetteer Files: California places and ZIP
+  Code Tabulation Areas). No upstream call is made for them. Positions are each area's Census internal point
+  (approximate: "town center", "ZIP area"); ZCTAs approximate USPS ZIP codes and PO-box-only ZIP codes are missing.
+* Only explicitly submitted queries: no autocomplete, no POI search, no Nominatim. Coordinate-like queries are
+  refused (the browser resolves coordinates itself; they are never sent upstream).
+* Census requests go through ``fire3d.http`` (identifying User-Agent, shared concurrency cap, one retry, secret-free
   errors) and are cached for 30 days, keyed by the normalised query (NFKC, trimmed, whitespace collapsed,
   case-folded): on disk by ``fire3d.http`` and in memory (bounded LRU of parsed replies). Only parseable replies are
   kept; a cached reply that fails to parse is fetched again once. Cache misses are limited to
   ``UPSTREAM_PER_MINUTE`` upstream requests per process (429 beyond that).
-* Errors (``{"detail": ...}``): 400 empty, too long or not an address; 429 own rate limit; 502 upstream error or
-  unparseable reply; 504 upstream timeout. Messages never include upstream bodies (at most Census's own short
-  error text).
+* Every reply says what it is: top-level ``kind`` (``address`` | ``place`` | ``zip``) and ``local``, and each match
+  carries ``kind``. Local matches add ``name``, ``place_type`` (``city`` | ``town`` | ``cdp``; places), ``zip``
+  (ZIP areas), ``land_km2``, ``exact`` and ``near`` / ``near_km`` (the nearest other place, to tell same-named places
+  apart and to name a ZIP area). ``benchmark`` is null for local replies, which add ``vintage``.
+* Errors (``{"detail": ...}``): 400 empty, too long, coordinates or neither an address, a town nor a ZIP code; 429 own
+  rate limit; 502 upstream error or unparseable reply; 503 town and ZIP search unavailable (index missing); 504
+  upstream timeout. Messages never include upstream bodies (at most Census's own short error text).
 """
 from __future__ import annotations
 
@@ -30,6 +40,8 @@ import threading
 import time
 import unicodedata
 from collections import OrderedDict
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import orjson
@@ -112,9 +124,229 @@ def validate_query(raw: str | None) -> str:
         raise GeocodeError(400, f"The address is too long (at most {MAX_QUERY_CHARS} characters).")
     if looks_like_coordinates(q):
         raise GeocodeError(400, "This looks like coordinates. Coordinates are located in the app and are never sent to the address service.")
-    if not re.search(r"[^\W\d_]", q):
-        raise GeocodeError(400, "Enter a street address with a street name, for example \"600 E Mariposa St, Altadena, CA\".")
     return q
+
+
+# A US street address starts with a house number followed by a street word ("600 E Mariposa St"), including grid
+# styles such as "N1234 County Rd" or "100-12 Main St" (the web client uses the same rule).
+_STREET = re.compile(r"^\s*(?:[NSEW]\s?)?\d+[A-Z]?(?:[-/]\d+[A-Z]?)?\s+[A-Z0-9]", re.IGNORECASE)
+
+
+def looks_like_street_address(q: str) -> bool:
+    return bool(_STREET.match(q)) and bool(re.search(r"[^\W\d_]{2,}", q))
+
+
+# ------------------------------------------------------------------------------------------------------------------
+# Towns, cities and ZIP areas: the local Census Gazetteer index (no upstream calls)
+# ------------------------------------------------------------------------------------------------------------------
+GAZETTEER_PATH = Path(__file__).resolve().parents[1] / "data" / "gazetteer_ca.json"
+GAZETTEER_SOURCE = "U.S. Census Bureau Gazetteer Files"
+PLACE_LIMIT = 8                      # place candidates returned (total_matches gives the full count)
+NEAR_MAX_KM = 25.0                   # "near <place>" only within this distance
+PLACE_TYPE_LABEL = {"city": "city", "town": "town", "cdp": "census-designated place", "place": "place"}
+_TYPE_RANK = {"city": 0, "town": 1, "cdp": 2, "place": 3}
+_STATE_WORDS = {"ca", "calif", "california", "usa", "us"}
+_SYNONYMS = {"mount": "mt", "saint": "st", "fort": "ft"}
+PLACE_NOTE = ("Town positions are the Census Bureau's internal point of the area (approximate), not a street address. "
+              "To check a spot, enter a street address with a house number or click the map.")
+ZIP_NOTE = ("ZIP areas are Census ZIP Code Tabulation Areas, which approximate USPS ZIP codes (PO-box-only ZIP codes "
+            "are not included). The position is the area's internal point (approximate).")
+NO_PLACE_NOTE = ("No California city, town or census-designated place matches. Landmarks, businesses and street names "
+                 "without a house number are not searched.")
+NO_ZIP_NOTE = ("This ZIP code is not a California ZIP area in the Census index (Fire-3d covers California only; "
+               "PO-box-only ZIP codes have no area).")
+
+
+def fold(s: str) -> str:
+    """Accents removed, case-folded, punctuation as spaces, whitespace collapsed ("La Cañada-Flintridge" ->
+    "la canada flintridge")."""
+    s = "".join(ch for ch in unicodedata.normalize("NFKD", s) if not unicodedata.combining(ch))
+    return re.sub(r"[^0-9a-z]+", " ", s.casefold()).strip()
+
+
+def words(s: str) -> tuple[str, ...]:
+    return tuple(_SYNONYMS.get(w, w) for w in fold(s).split())
+
+
+@dataclass(frozen=True)
+class Place:
+    name: str
+    type: str
+    lat: float
+    lon: float
+    land_km2: float
+    words: tuple[str, ...]
+    alt: tuple[str, ...] | None       # the name in parentheses ("San Buenaventura (Ventura)" -> ventura)
+    main: tuple[str, ...] | None      # the name without it ("san buenaventura")
+
+
+@dataclass(frozen=True)
+class ZipArea:
+    zip: str
+    lat: float
+    lon: float
+    land_km2: float
+
+
+class Gazetteer:
+    def __init__(self, raw: dict[str, Any]):
+        self.vintage = int(raw["vintage"])
+        self.retrieved_ms = _date_ms(raw.get("retrieved"))
+        self.places: list[Place] = []
+        for name, kind, lat, lon, area in raw["places"]:
+            m = re.match(r"^(.*?)\s*\(([^)]+)\)\s*$", name)
+            self.places.append(Place(name, kind, float(lat), float(lon), float(area), words(name),
+                                     words(m.group(2)) if m else None, words(m.group(1)) if m else None))
+        self.zips: dict[str, ZipArea] = {z: ZipArea(z, float(lat), float(lon), float(area)) for z, lat, lon, area in raw["zips"]}
+        counts: dict[tuple[str, ...], int] = {}
+        for p in self.places:
+            counts[p.words] = counts.get(p.words, 0) + 1
+        self.shared_names = {k for k, n in counts.items() if n > 1}
+
+    def nearest_place(self, lat: float, lon: float, exclude: Place | None = None, incorporated: bool = False) -> tuple[Place, float] | None:
+        best: tuple[Place, float] | None = None
+        for p in self.places:
+            if p is exclude or (incorporated and p.type not in ("city", "town")):
+                continue
+            d = _km(lat, lon, p.lat, p.lon)
+            if best is None or d < best[1]:
+                best = (p, d)
+        return best
+
+
+def _date_ms(s: Any) -> int:
+    try:
+        return int(time.mktime(time.strptime(str(s), "%Y-%m-%d")) * 1000)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance (km); plenty for labels such as "near Altadena"."""
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    a = math.sin((p2 - p1) / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(math.radians(lon2 - lon1) / 2) ** 2
+    return 2 * 6371.0088 * math.asin(min(1.0, math.sqrt(a)))
+
+
+_gazetteer: Gazetteer | None = None
+_gazetteer_error: str | None = None
+_gazetteer_lock = threading.Lock()
+
+
+def gazetteer() -> Gazetteer | None:
+    """The local index, loaded once (None, logged once, when the file is missing or unreadable)."""
+    global _gazetteer, _gazetteer_error
+    with _gazetteer_lock:
+        if _gazetteer is None and _gazetteer_error is None:
+            try:
+                _gazetteer = Gazetteer(orjson.loads(GAZETTEER_PATH.read_bytes()))
+            except (OSError, ValueError, KeyError, TypeError) as e:
+                _gazetteer_error = type(e).__name__
+                log.warning("town and ZIP search unavailable: %s (%s); run scripts/build_gazetteer.py", GAZETTEER_PATH.name, _gazetteer_error)
+        return _gazetteer
+
+
+def reset_gazetteer() -> None:
+    """Forget the loaded index (tests)."""
+    global _gazetteer, _gazetteer_error
+    with _gazetteer_lock:
+        _gazetteer, _gazetteer_error = None, None
+
+
+def split_local(q: str) -> tuple[tuple[str, ...], str | None]:
+    """(place words, ZIP) of a query that is not a street address: a trailing 5-digit ZIP (or ZIP+4) and trailing
+    state words ("CA", "California", "USA") are taken off; a name that is only a state word is kept ("California"
+    still finds California City)."""
+    t = list(words(q))
+    while len(t) > 1 and t[-1] in _STATE_WORDS:     # "91001 CA", "Altadena CA USA"
+        t.pop()
+    zip5 = None
+    if t and re.fullmatch(r"\d{5}", t[-1]):
+        zip5 = t.pop()
+    elif len(t) >= 2 and re.fullmatch(r"\d{4}", t[-1]) and re.fullmatch(r"\d{5}", t[-2]):
+        zip5 = t[-2]
+        del t[-2:]
+    while t and t[-1] in _STATE_WORDS and (len(t) > 1 or zip5):
+        t.pop()
+    if zip5 and t and all(w in _STATE_WORDS for w in t):     # "CA 91001"
+        t = []
+    return tuple(t), zip5
+
+
+def _place_score(p: Place, q: tuple[str, ...]) -> int:
+    for name, exact, prefix in ((p.words, 100, 80), (p.alt, 96, 76), (p.main, 94, 74)):
+        if not name:
+            continue
+        if name == q:
+            return exact
+        if len(q) <= len(name) and name[: len(q) - 1] == q[:-1] and name[len(q) - 1].startswith(q[-1]):
+            return prefix
+    if all(any(w.startswith(x) for w in p.words) for x in q):
+        return 60
+    return 0
+
+
+def search_places(g: Gazetteer, q: tuple[str, ...]) -> list[tuple[Place, int]]:
+    """Places whose name matches every query word (each starts a word of the name), best first: exact name (also
+    the name in parentheses), then name prefix, then all words; ties by city > town > CDP, then larger area."""
+    if not q:
+        return []
+    hits = [(p, s) for p in g.places if (s := _place_score(p, q)) > 0]
+    hits.sort(key=lambda h: (-h[1], _TYPE_RANK.get(h[0].type, 9), -h[0].land_km2, h[0].name))
+    return hits
+
+
+def _place_match(g: Gazetteer, p: Place, score: int) -> dict[str, Any]:
+    near = None
+    if p.words in g.shared_names:          # tell same-named places apart: the nearest city or town
+        near = g.nearest_place(p.lat, p.lon, exclude=p, incorporated=True) or g.nearest_place(p.lat, p.lon, exclude=p)
+    return {
+        "kind": "place", "matched_address": f"{p.name}, CA", "name": p.name, "place_type": p.type,
+        "place_type_label": PLACE_TYPE_LABEL.get(p.type, "place"), "lat": p.lat, "lon": p.lon, "land_km2": p.land_km2,
+        "exact": score >= 94, "near": near[0].name if near else None, "near_km": round(near[1], 1) if near else None,
+        "tiger_line_id": None, "side": None, "from_address": None, "to_address": None,
+    }
+
+
+def _zip_match(g: Gazetteer, z: ZipArea) -> dict[str, Any]:
+    near = g.nearest_place(z.lat, z.lon)
+    near = near if near and near[1] <= NEAR_MAX_KM else None
+    return {
+        "kind": "zip", "matched_address": f"ZIP {z.zip}, CA", "name": z.zip, "zip": z.zip, "lat": z.lat, "lon": z.lon,
+        "land_km2": z.land_km2, "exact": True, "near": near[0].name if near else None,
+        "near_km": round(near[1], 1) if near else None,
+        "tiger_line_id": None, "side": None, "from_address": None, "to_address": None,
+    }
+
+
+def local_lookup(q: str, zip_only: bool) -> dict[str, Any]:
+    """The reply for a town or ZIP query (no upstream call); raises GeocodeError 503 without the index."""
+    g = gazetteer()
+    if g is None:
+        raise GeocodeError(503, "Town and ZIP search is not available on this server. Enter a street address with a "
+                                "house number, or click the map.")
+    name, zip5 = split_local(q)
+    matches: list[dict[str, Any]] = []
+    place_total = 0
+    if name and not zip_only:
+        hits = search_places(g, name)
+        place_total = len(hits)
+        matches = [_place_match(g, p, s) for p, s in hits[:PLACE_LIMIT]]
+    z = g.zips.get(zip5) if zip5 else None
+    if z:
+        matches.append(_zip_match(g, z))          # "Altadena, CA 91001": the town first, then its ZIP area
+    total = place_total + (1 if z else 0)
+    kind = "zip" if zip_only or (z and not place_total) else "place"
+    if matches:
+        note = ZIP_NOTE if kind == "zip" else PLACE_NOTE
+    else:
+        note = NO_ZIP_NOTE if zip5 and not name else NO_PLACE_NOTE
+    return {
+        "query": q, "kind": kind, "local": True, "matches": matches, "total_matches": total, "benchmark": None,
+        "vintage": g.vintage, "source": GAZETTEER_SOURCE,
+        "attribution": f"Towns and ZIP areas: {GAZETTEER_SOURCE} ({g.vintage}, public domain)",
+        "note": note, "cached": False, "fetched_ms": g.retrieved_ms,
+    }
 
 
 # ------------------------------------------------------------------------------------------------------------------
@@ -153,6 +385,7 @@ def parse_reply(payload: Any) -> tuple[list[dict[str, Any]], str | None]:
         comps = m.get("addressComponents") if isinstance(m.get("addressComponents"), dict) else {}
         side = _text(tiger.get("side"))
         item = {
+            "kind": "address",
             "matched_address": _text(m.get("matchedAddress")) or "",
             "lat": round(lat, 7),
             "lon": round(lon, 7),
@@ -192,8 +425,17 @@ def _fetch(address: str, ttl_s: float) -> fhttp.Response:
 
 
 def lookup(raw_query: str | None) -> dict[str, Any]:
-    """The /api/geocode reply for a raw query; raises GeocodeError."""
+    """The /api/geocode reply for a raw query; raises GeocodeError. ZIP codes and text without a house number are
+    matched locally (towns and ZIP areas); street addresses go to the Census Geocoder."""
     q = validate_query(raw_query)
+    name, zip5 = split_local(q)
+    if zip5 and not name:
+        return local_lookup(q, zip_only=True)
+    if not looks_like_street_address(q):
+        if not re.search(r"[^\W\d_]", q):
+            raise GeocodeError(400, "Enter a street address with a house number, a California town or a ZIP code, for "
+                                    "example \"600 E Mariposa St, Altadena, CA\" or \"91001\".")
+        return local_lookup(q, zip_only=False)
     key = cache_key(q)
     now = time.monotonic()
     with _cache_lock:
@@ -223,6 +465,8 @@ def lookup(raw_query: str | None) -> dict[str, Any]:
         log.warning("geocode upstream reply could not be parsed")
         raise GeocodeError(502, "The Census Geocoder sent a reply that could not be read. Try again later.") from None
     reply = {
+        "kind": "address",
+        "local": False,
         "matches": matches[:MAX_MATCHES],
         "total_matches": len(matches),
         "benchmark": bench or BENCHMARK,
@@ -251,8 +495,10 @@ def _json(obj: Any, status: int, headers: dict[str, str]) -> Response:
 
 
 @router.get("/api/geocode")
-def geocode(q: str = Query("", description="One-line US street address (house number, street, city/state or ZIP)")) -> Response:
-    """Census Geocoder lookup of an explicitly submitted US street address (approximate, interpolated positions)."""
+def geocode(q: str = Query("", description="One-line US street address (house number, street, city/state or ZIP), "
+                                           "or a California city, town or ZIP code")) -> Response:
+    """Census Geocoder lookup of an explicitly submitted US street address (approximate, interpolated positions), or
+    local California town and ZIP-area matches from the Census Gazetteer (approximate internal points)."""
     try:
         return _json(lookup(q), 200, {"Cache-Control": CACHE_CONTROL_OK})
     except GeocodeError as e:

@@ -3,19 +3,22 @@
 // (activity lattice, telemetry, visual styles, smoke) that stay off in Public/Command. A non-modal drawer under the
 // header's Layers button (a bottom sheet on phones, where it also carries the map legend). Each optional source that
 // is switched on shows its panel under its toggle (status, official wording, times, limits, credits and terms).
+// Brief 2: Public opens on aerial photos and Command on the dark map unless the user picks a basemap here (a pick wins
+// in both presets); on the California overview only the basemap, legend, units and the Forensic pointer apply.
 import { Box, RotateCcw, X } from 'lucide-react'
 import { useEffect, useRef, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { CameraPanel } from '../../extras/CameraPanel'
 import { EvacuationPanel } from '../../extras/EvacuationPanel'
 import { zonesBounds } from '../../extras/evacuation'
-import { ImageryPanel } from '../../extras/ImageryPanel'
+import { ImageryLayerSummary, ImageryPanel } from '../../extras/ImageryPanel'
 import { useExtrasRuntime } from '../../extras/runtime'
 import { fmtDateTimeTz } from '../../lib/time'
 import { MapLegend } from '../../map/MapLegend'
+import { fitOfficialBounds } from '../../official/select'
 import { BASEMAP_LABEL } from '../../map/providers'
 import { useStore } from '../../state/store'
-import { DEFAULT_MAP_LAYERS, useWorkspace, type Basemap, type MapLayerKey, type Units } from '../../state/workspace'
+import { DEFAULT_MAP_LAYERS, defaultBasemap, useWorkspace, type Basemap, type MapLayerKey, type Units } from '../../state/workspace'
 import { Segmented } from '../controls'
 import { ENSEMBLE_LABEL } from '../options'
 import { switchWorkspace } from './handoff'
@@ -24,7 +27,7 @@ import { NARROW_QUERY, useDrawerFocus, useMediaQuery } from './hooks'
 const BASEMAPS: { value: Basemap; desc: string }[] = [
   { value: 'dark', desc: 'Subdued roads and places; fire layers stand out' },
   { value: 'roads', desc: 'Road map with streets, towns and landmarks' },
-  { value: 'aerial', desc: 'USGS aerial photos (dated, not live) with road and place labels' },
+  { value: 'aerial', desc: 'USGS aerial photos (dated, taken before recent fires; not live) with road and place labels' },
 ]
 
 const LAYERS: { key: MapLayerKey; label: string; desc: string }[] = [
@@ -69,6 +72,9 @@ const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.
 /** The panel of one optional source, under its toggle while the layer is on (CONTRACT §12.3 item 3). */
 function SourcePanel({ k }: { k: SourceKey }) {
   const on = useWorkspace((s) => s.mapLayers[k])
+  // wide screens: the Satellite chip's "More images" holds the image list; phones keep it here (the chip is hidden
+  // while this sheet is open)
+  const narrow = useMediaQuery(NARROW_QUERY)
   const units = useWorkspace((s) => s.units)
   const summary = useStore((s) => s.summary)
   const rt = useExtrasRuntime(
@@ -90,12 +96,14 @@ function SourcePanel({ k }: { k: SourceKey }) {
       const zone = rt.evac.data?.zones.features.find((f) => f.id === id)
       const b = zone ? zonesBounds([zone]) : null
       x.setZoneId(id)
-      if (b) useWorkspace.getState().requestMapFlyTo({ lon: (b[0] + b[2]) / 2, lat: (b[1] + b[3]) / 2, bounds: b })
+      // an official area: the map keeps the open fire (fitOfficialBounds marks the flight 'official')
+      fitOfficialBounds(b)
     }
     return <EvacuationPanel state={rt.evac} onShowZone={showZone} selectedZoneId={rt.zoneId} />
   }
   if (k === 'cameras')
     return <CameraPanel state={rt.cams} frame={rt.frame} selectedId={rt.cameraId} onSelect={x.setCameraId} centre={summary ? [summary.lon, summary.lat] : null} units={units} />
+  if (!narrow) return <ImageryLayerSummary state={rt.imgs} product={rt.product} opacity={rt.opacity} onOpacity={x.setOpacity} />
   return (
     <ImageryPanel
       state={rt.imgs}
@@ -146,12 +154,18 @@ function Section({ title, children, aside }: { title: string; children: ReactNod
 }
 
 function ForecastRunPicker() {
+  const command = useWorkspace((s) => s.preset === 'command')
   const { runs, runId, mode } = useStore(
     useShallow((s) => ({ runs: s.manifest?.status === 'ready' ? s.manifest.forecasts : [], runId: s.forecastRunId, mode: s.manifest?.mode ?? s.mode })),
   )
   const ready = runs.filter((r) => r.status === 'ready')
   if (ready.length === 0)
-    return <p className="mw-set-note">No forecast run for this incident{mode === 'historical' ? ' yet. Hindcasts can be run in the Forensic workspace.' : ' yet.'}</p>
+    return (
+      <p className="mw-set-note">
+        No forecast run for this incident
+        {mode === 'historical' ? (command ? ' yet. Hindcasts can be run in the Forensic workspace.' : ' yet. A model re-run on past weather can be started in the Forensic workspace.') : ' yet.'}
+      </p>
+    )
   return (
     <>
       <select className="mw-select" aria-label="Forecast run shown on the map" value={runId ?? ''} onChange={(e) => void useStore.getState().selectForecast(e.target.value || null)}>
@@ -167,10 +181,33 @@ function ForecastRunPicker() {
   )
 }
 
+/** Which basemap the user gets by default, what they picked, and a fallback the map is showing instead. */
+function BasemapNote() {
+  const preset = useWorkspace((s) => s.preset)
+  const pick = useWorkspace((s) => s.basemapPick)
+  const fallback = useWorkspace((s) => s.basemapFallback)
+  const wanted = pick ?? defaultBasemap(preset)
+  if (fallback && fallback !== wanted)
+    return (
+      <p className="mw-set-note is-warn" role="status">
+        {BASEMAP_LABEL[wanted]} is not loading, so the map shows {BASEMAP_LABEL[fallback]}. Pick {BASEMAP_LABEL[wanted]} again to retry.
+      </p>
+    )
+  return (
+    <p className="mw-set-note">
+      {pick
+        ? `Your pick stays in Public and Command. Without one, Public opens on ${BASEMAP_LABEL.aerial} and Command on ${BASEMAP_LABEL.dark}.`
+        : `Default for ${preset === 'public' ? 'Public' : 'Command'}: ${BASEMAP_LABEL[defaultBasemap(preset)]}. A basemap you pick here stays in both presets.`}
+    </p>
+  )
+}
+
 export function LayersPanel() {
   const open = useWorkspace((s) => s.panels.layers)
   const basemap = useWorkspace((s) => s.basemap)
   const units = useWorkspace((s) => s.units)
+  const command = useWorkspace((s) => s.preset === 'command')
+  const overview = useStore((s) => s.incidentId == null)
   const changed = useWorkspace((s) => (Object.keys(DEFAULT_MAP_LAYERS) as MapLayerKey[]).some((k) => s.mapLayers[k] !== DEFAULT_MAP_LAYERS[k]))
   const narrow = useMediaQuery(NARROW_QUERY)
   const heading = useRef<HTMLHeadingElement | null>(null)
@@ -200,6 +237,7 @@ export function LayersPanel() {
               </button>
             ))}
           </div>
+          <BasemapNote />
         </Section>
         {narrow && (
           <Section title="Legend">
@@ -208,43 +246,51 @@ export function LayersPanel() {
             </div>
           </Section>
         )}
-        <Section
-          title="Wildfire layers"
-          aside={
-            changed ? (
-              <button type="button" className="mw-link-btn" onClick={ws.resetMapLayers}>
-                <RotateCcw size={12} /> Reset
-              </button>
-            ) : null
-          }
-        >
-          <ul className="mw-check-list">
-            {LAYERS.map((l) => (
-              <LayerRow key={l.key} k={l.key} label={l.label} desc={l.desc} />
-            ))}
-          </ul>
-        </Section>
-        <Section title="Official and optional sources">
-          <ul className="mw-check-list">
-            {SOURCES.map((l) => (
-              <SourceRow key={l.key} k={l.key} label={l.label} desc={l.desc} />
-            ))}
-          </ul>
-          <p className="mw-set-note">Fire-3d's modeled spread is experimental and is not an evacuation instruction. Follow local officials.</p>
-        </Section>
-        <Section title="Forecast shown">
-          <ForecastRunPicker />
-        </Section>
+        {overview ? (
+          <Section title="Fire layers">
+            <p className="mw-set-note">Open a fire to choose its map layers, official sources and forecast run. The overview shows CAL FIRE's official records only.</p>
+          </Section>
+        ) : (
+          <>
+            <Section
+              title="Wildfire layers"
+              aside={
+                changed ? (
+                  <button type="button" className="mw-link-btn" onClick={ws.resetMapLayers}>
+                    <RotateCcw size={12} /> Reset
+                  </button>
+                ) : null
+              }
+            >
+              <ul className="mw-check-list">
+                {LAYERS.map((l) => (
+                  <LayerRow key={l.key} k={l.key} label={l.label} desc={l.desc} />
+                ))}
+              </ul>
+            </Section>
+            <Section title="Official and optional sources">
+              <ul className="mw-check-list">
+                {SOURCES.map((l) => (
+                  <SourceRow key={l.key} k={l.key} label={l.label} desc={l.desc} />
+                ))}
+              </ul>
+              <p className="mw-set-note">Fire-3d's modeled spread is experimental and is not an evacuation instruction. Follow local officials.</p>
+            </Section>
+            <Section title="Forecast shown">
+              <ForecastRunPicker />
+            </Section>
+          </>
+        )}
         <Section title="Units">
           <Segmented value={units} options={UNITS} onChange={ws.setUnits} ariaLabel="Units" size="sm" className="mw-seg-fill" />
         </Section>
         <Section title="Scientific views and visual effects">
           <p className="mw-set-note">
             The activity and slope lattice, detailed telemetry, smoke and the hybrid, realistic and parametric visual styles stay off here. They are in the Forensic
-            workspace with the charts, replay, hindcasts and forecast controls.
+            workspace with the charts, replay, {command ? 'hindcasts' : 'model re-runs on past weather'} and forecast controls.
           </p>
           <button type="button" className="mw-btn is-sm" onClick={() => switchWorkspace('forensic')}>
-            <Box size={13} /> Open Forensic workspace
+            <Box size={13} /> {overview ? 'Open Forensic (pick a fire there)' : 'Open Forensic workspace'}
           </button>
         </Section>
       </div>

@@ -51,7 +51,7 @@ export function AnalysisDrawer() {
           Detail charts in scientific units: area in acres, spread speed as rate of spread in chains per hour (1 ch/h ≈ 66 ft per hour), elevation in
           metres.
         </p>
-        <button type="button" className="mw-btn is-sm mw-hide-narrow" onClick={() => switchWorkspace('forensic')} data-tip="Charts, replay, hindcasts and forecast controls with the 3D scene">
+        <button type="button" className="mw-btn is-sm mw-hide-narrow" onClick={() => switchWorkspace('forensic')} data-tip="Charts, replay, model re-runs on past weather and forecast controls with the 3D scene">
           <Box size={13} /> Open Forensic
         </button>
         <button type="button" className="mw-icon-btn" aria-label="Close analysis" data-tip="Close (Esc)" onClick={() => setPanel('analysis', false)}>

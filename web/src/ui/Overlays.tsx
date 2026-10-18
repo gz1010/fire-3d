@@ -75,9 +75,12 @@ function BuildCard({ name, job }: { name: string; job: JobStatus | null }) {
   return (
     <div className="ov-card glass build-card" role="status" aria-live="polite">
       <CornerMarks />
-      <div className="ov-eyebrow eyebrow">Building incident bundle</div>
+      <div className="ov-eyebrow eyebrow">Preparing the analysis</div>
       <div className="ov-title">{name}</div>
-      <p className="ov-text secondary">Downloading terrain (USGS 3DEP), NAIP imagery, LANDFIRE fuels, FIRMS detections, NIFC perimeters and weather, then reconstructing the fire’s spread. This takes a few minutes.</p>
+      <p className="ov-text secondary">
+        Downloading elevation (USGS 3DEP), aerial photos (NAIP), vegetation fuels (LANDFIRE), satellite heat detections (NASA FIRMS), mapped perimeters (NIFC) and weather, then
+        reconstructing how the fire spread. This takes about 1-3 minutes.
+      </p>
       {job ? <JobProgress job={job} /> : <ProgressBar value={null} label="Build progress" />}
       {steps.length > 0 && (
         <ol className="build-steps">
@@ -100,15 +103,15 @@ function NotBuiltCard({ name, acres, started, autoBuild }: { name: string; acres
   return (
     <div className="ov-card glass">
       <CornerMarks />
-      <div className="ov-eyebrow eyebrow">Bundle not built</div>
+      <div className="ov-eyebrow eyebrow">Analysis not prepared</div>
       <div className="ov-title">{name}</div>
       <p className="ov-text secondary">
-        <span className="mono">{fmtAcres(acres)}</span> · started <span className="mono">{fmtDate(started)}</span>. Build the 3D bundle to replay the fire and run forecasts
-        {autoBuild ? '.' : ' (auto-build is off in Settings).'}
+        <span className="mono">{fmtAcres(acres)}</span> · started <span className="mono">{fmtDate(started)}</span>. Prepare the analysis (incident bundle) to replay the fire in 3D and run
+        forecasts{autoBuild ? '.' : ' (the setting “Prepare analysis when I pick an unprepared fire” is off).'}
       </p>
       <div className="ov-actions">
         <button type="button" className="btn btn-solid" onClick={() => void useStore.getState().startBuild(false)}>
-          <Hammer size={13} /> Build bundle
+          <Hammer size={13} /> Prepare analysis (1-3 min)
         </button>
       </div>
     </div>

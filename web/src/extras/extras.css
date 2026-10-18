@@ -601,3 +601,175 @@
 .xs-foot-disclaimer {
   color: var(--m-text-3, #74818f);
 }
+
+/* ---- brief 2 (official-web): outline swatch (NWS zones), satellite chip and caption ------------------------- */
+.xs-swatch-outline {
+  background: transparent;
+  border-radius: 2px;
+}
+
+/* the chip floats on the map (shell mounts it next to the map controls): opaque so it reads on aerial imagery */
+.xs-chipbox {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: min(480px, calc(100vw - 32px));
+  font-family: var(--m-font-ui, Inter, system-ui, sans-serif);
+  color: var(--m-text, #e8edf3);
+  pointer-events: none;
+}
+.xs-chipbox > * {
+  pointer-events: auto;
+}
+.xs-chip {
+  display: inline-flex;
+  align-items: stretch;
+  max-width: 100%;
+  border: 1px solid var(--m-border-strong, rgba(148, 178, 210, 0.3));
+  border-radius: 999px;
+  background: var(--m-panel-strong, rgba(14, 21, 30, 0.96));
+  box-shadow: var(--m-shadow, 0 8px 28px rgba(0, 0, 0, 0.45));
+}
+.xs-chip.is-on {
+  border-color: var(--m-info, #60a5fa);
+}
+.xs-chip-main,
+.xs-chip-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: var(--m-fs-sm, 12px);
+  cursor: pointer;
+}
+.xs-chip-main {
+  min-width: 0;
+  padding: 0 4px 0 11px;
+  border-radius: 999px 0 0 999px;
+  text-align: left;
+}
+.xs-chip-main > svg {
+  flex: none;
+  color: var(--m-info, #60a5fa);
+}
+.xs-chip-label {
+  flex: none;
+  font-weight: 700;
+}
+.xs-chip-text {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--m-text-2, #a7b3c0);
+  font-variant-numeric: tabular-nums;
+}
+/* "newest <age> · <pixel size>" always stays; then the platform, then the clock time, which gives way first (both
+   are in the tooltip and the caption) */
+.xs-chip-keep {
+  flex: none;
+}
+.xs-chip-plat,
+.xs-chip-time {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.xs-chip-plat {
+  flex: 0 1 auto;
+}
+.xs-chip-time {
+  flex: 0 1000 auto;
+}
+.xs-chip.is-on .xs-chip-text {
+  color: var(--m-text, #e8edf3);
+}
+.xs-chip-more {
+  flex: none;
+  padding: 0 9px 0 6px;
+  border-left: 1px solid var(--m-border, rgba(148, 178, 210, 0.16));
+  border-radius: 0 999px 999px 0;
+  color: var(--m-text-2, #a7b3c0);
+}
+.xs-chip-main:hover,
+.xs-chip-more:hover {
+  background: var(--m-hover, rgba(148, 178, 210, 0.09));
+}
+.xs-chip-main:focus-visible,
+.xs-chip-more:focus-visible {
+  outline: none;
+  box-shadow: var(--m-focus-ring, 0 0 0 2px #5b9dff);
+}
+.xs-caption {
+  position: fixed;
+  z-index: 25;
+  width: min(360px, calc(100vw - 32px));
+  padding: 6px 9px 7px;
+  font-family: var(--m-font-ui, Inter, system-ui, sans-serif);
+  color: var(--m-text, #e8edf3);
+  border: 1px solid var(--m-border-strong, rgba(148, 178, 210, 0.3));
+  border-radius: var(--m-radius, 10px);
+  background: var(--m-panel-strong, rgba(14, 21, 30, 0.96));
+  box-shadow: var(--m-shadow, 0 8px 28px rgba(0, 0, 0, 0.45));
+  font-size: var(--m-fs-xs, 11px);
+  line-height: 1.4;
+}
+.xs-caption-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--m-fs-sm, 12px);
+}
+.xs-caption-head strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.xs-caption-head .xs-badge-muted {
+  margin-left: 0;
+}
+.xs-caption-more {
+  margin-left: auto;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--m-accent, #5b9dff);
+  font: inherit;
+  font-size: var(--m-fs-xs, 11px);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.xs-caption-more:focus-visible {
+  outline: none;
+  box-shadow: var(--m-focus-ring, 0 0 0 2px #5b9dff);
+}
+.xs-caption-head .xs-icon-btn {
+  width: 22px;
+  height: 22px;
+}
+.xs-caption-line {
+  margin: 3px 0 0;
+  color: var(--m-text, #e8edf3);
+}
+.xs-caption-line.xs-dim {
+  color: var(--m-text-2, #a7b3c0);
+}
+.xs-chip-pop {
+  padding: 0;
+  overflow: auto;
+}
+.xs-chip-pop .xs-panel {
+  border: 0;
+  box-shadow: none;
+}
+@media (max-width: 760px) {
+  .xs-chip-label {
+    display: none;
+  }
+}

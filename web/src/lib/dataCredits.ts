@@ -36,7 +36,10 @@ function sentinelYear(detail: string, fallback: number | null): number | null {
  * Credits for a bundle's data sources, in a fixed order; synthetic development fixtures and sources that found
  * nothing (e.g. no agency perimeter) get none. `year` is the incident's year (Copernicus notice fallback).
  */
-export function bundleCredits(sources: readonly Pick<DataSource, 'name' | 'detail'>[], opts: { year?: number | null; forecastWeatherSource?: string | null } = {}): DataCredit[] {
+export function bundleCredits(
+  sources: readonly Pick<DataSource, 'name' | 'detail'>[],
+  opts: { year?: number | null; forecastWeatherSource?: string | null; forecastModel?: { engine: string; version?: string | null } | null } = {},
+): DataCredit[] {
   const out = new Map<string, DataCredit>()
   const add = (c: DataCredit) => {
     if (!out.has(c.id)) out.set(c.id, c)
@@ -55,9 +58,14 @@ export function bundleCredits(sources: readonly Pick<DataSource, 'name' | 'detai
     else if (/Sentinel-2/i.test(name)) {
       const y = sentinelYear(detail, opts.year ?? null)
       add({ id: 'sentinel2', text: `Contains modified Copernicus Sentinel data${y ? ` ${y}` : ''} (burn severity)`, href: 'https://sentinels.copernicus.eu/documents/247904/690755/Sentinel_Data_Legal_Notice' })
-    } else if (/weather/i.test(name) && isOpenMeteo(detail)) add(OPEN_METEO_CREDIT)
+    } else if (/\bCMR\b/.test(name)) add({ id: 'cmr', text: 'NASA Earthdata CMR (satellite pass times)', href: 'https://cmr.earthdata.nasa.gov/search/' })
+    else if (/weather/i.test(name) && isOpenMeteo(detail)) add(OPEN_METEO_CREDIT)
   }
   if (isOpenMeteo(opts.forecastWeatherSource)) add(OPEN_METEO_CREDIT)
+  // the fire-spread engine of the shown forecast (README "Software"); synthetic fixtures (no real credit) get none
+  const model = opts.forecastModel
+  if (out.size > 0 && model && /^pyretechnics$/i.test(model.engine))
+    add({ id: 'pyretechnics', text: `Fire-spread model: pyretechnics${model.version ? ` ${model.version}` : ''} (Spatial Informatics Group, Eclipse Public License 2.0)`, href: 'https://pypi.org/project/pyretechnics/' })
   return [...out.values()]
 }
 

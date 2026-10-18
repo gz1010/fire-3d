@@ -59,6 +59,15 @@ describe('bundleCredits', () => {
 
   it('gives synthetic development fixtures no outside credits', () => {
     expect(bundleCredits(FIXTURE, { year: 2026, forecastWeatherSource: 'fixture:synthetic' })).toEqual([])
+    expect(bundleCredits(FIXTURE, { forecastModel: { engine: 'pyretechnics', version: '2026.8.10' } })).toEqual([])
+  })
+
+  it('credits NASA CMR pass times of a live bundle and the fire-spread engine of the shown forecast', () => {
+    const live = [...COOLEY, { name: 'NASA CMR satellite passes', detail: '13 confirmed passes after the last detection' }]
+    const c = bundleCredits(live, { forecastModel: { engine: 'pyretechnics', version: '2026.8.10' } })
+    expect(c.map((x) => x.id)).toEqual(['calfire', '3dep', 'landfire', 'firms', 'open-meteo', 'cmr', 'pyretechnics'])
+    expect(c.find((x) => x.id === 'pyretechnics')?.text).toBe('Fire-spread model: pyretechnics 2026.8.10 (Spatial Informatics Group, Eclipse Public License 2.0)')
+    expect(c.every((x) => safeHref(x.href) === x.href)).toBe(true)
   })
 
   it('keeps NASA FIRMS acknowledgement text verbatim', () => {

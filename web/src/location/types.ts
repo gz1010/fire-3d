@@ -37,7 +37,8 @@ export interface AddressDetails {
   toAddress: string | null
   side: 'L' | 'R' | null
   tigerLineId: string | null
-  benchmark: string
+  /** Census benchmark (null when not reported). */
+  benchmark: string | null
   source: string
   fetchedMs: number
 }
@@ -204,6 +205,18 @@ export type TerrainContext =
       burnable: boolean | null
     }
 
+/** Addition (brief 2): air humidity and 1-h dead fuel moisture at the fire, at the wind's hour (weather.json at_fire,
+ *  model weather; fuel moisture is derived from temperature and humidity, SPEC 8.4). */
+export type DrynessContext =
+  | { state: 'none' }
+  | { state: 'ok'; tMs: number; rhPct: number | null; fm1Pct: number | null; isForecast: boolean; source: string }
+
+/** Addition (brief 2): ground elevation at the point versus at the nearest fire edge point (elevation model). Only
+ *  when the point is outside the fire area and both points are inside the modeled area. */
+export type EdgeRiseContext =
+  | { state: 'none'; reason: 'inside' | 'no_edge' | 'outside_modeled_area' | 'no_elevation' }
+  | { state: 'ok'; pointElevM: number; edgeElevM: number; riseM: number; distanceM: number }
+
 export interface ReportSource {
   name: string
   kind: 'observation' | 'estimate' | 'model' | 'official' | 'reference'
@@ -225,6 +238,12 @@ export interface LocationReport {
   forecast: ForecastCheck
   wind: WindContext
   terrain: TerrainContext
+  /** Addition (brief 2): dryness at the fire at the selected time. */
+  dryness: DrynessContext
+  /** Addition (brief 2): is the point uphill of the nearest fire edge. */
+  edgeRise: EdgeRiseContext
+  /** Addition (brief 2): the incident's latest observation (manifest.time_range.now_ms), for the stale flag. */
+  latestObservationMs: number | null
   sources: ReportSource[]
   /** Plain-language uncertainty notes (model ensemble meaning, approximations, freshness). */
   caveats: string[]
@@ -234,8 +253,16 @@ export interface LocationReport {
 }
 
 // ------------------------------------------------------------------------------------------------- geocoding
-/** GET /api/geocode?q=<one-line US street address> (CONTRACT §6). JSON mirrors the backend (snake_case). */
+/** What a geocode match is: a Census street address (interpolated), or a local Gazetteer town / ZIP area (the
+ *  area's internal point). Brief 2 addition; replies without `kind` are street addresses. */
+export type GeocodeKind = 'address' | 'place' | 'zip'
+export type PlaceType = 'city' | 'town' | 'cdp' | 'place'
+
+/** GET /api/geocode?q=<street address | California town | ZIP code> (CONTRACT §6). JSON mirrors the backend. */
 export interface GeocodeMatch {
+  /** Addition (brief 2): absent on older replies = 'address'. */
+  kind?: GeocodeKind
+  /** Street addresses: Census matchedAddress; towns "Altadena, CA"; ZIP areas "ZIP 91001, CA". */
   matched_address: string
   lat: number
   lon: number
@@ -245,17 +272,37 @@ export interface GeocodeMatch {
   /** Addition: house-number range of that edge. */
   from_address?: string | null
   to_address?: string | null
+  /** Addition (towns, ZIP areas): display name ("Altadena", "91001"). */
+  name?: string
+  place_type?: PlaceType
+  /** "city", "town", "census-designated place". */
+  place_type_label?: string
+  zip?: string
+  /** Land area of the town / ZIP area (sizes the map view). */
+  land_km2?: number
+  /** The whole name (or the name in parentheses, "Ventura") matched, not just a prefix. */
+  exact?: boolean
+  /** Nearest other place (same-named towns; the place a ZIP area lies in or near). */
+  near?: string | null
+  near_km?: number | null
 }
 
 export interface GeocodeResponse {
   query: string
+  /** Addition (brief 2). */
+  kind?: GeocodeKind
+  /** Addition (brief 2): matched locally from the Census Gazetteer index (no upstream call). */
+  local?: boolean
   matches: GeocodeMatch[]
-  /** Addition: candidates before the proxy's limit (matches holds at most 10). */
+  /** Addition: candidates before the proxy's limit (matches holds at most 10; towns 8). */
   total_matches?: number
-  benchmark: string
+  /** Census benchmark of street addresses; null for local replies. */
+  benchmark: string | null
+  /** Addition (local replies): Gazetteer vintage (year). */
+  vintage?: number
   source: string
   attribution: string
-  /** Addition: plain-language accuracy note. */
+  /** Addition: plain-language accuracy note (or why nothing matched). */
   note?: string
   cached: boolean
   fetched_ms: number

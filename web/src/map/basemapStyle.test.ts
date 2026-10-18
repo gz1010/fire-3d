@@ -1,6 +1,25 @@
 import type { LayerSpecification, StyleSpecification } from 'maplibre-gl'
 import { describe, expect, it } from 'vitest'
-import { deriveAerial, deriveDark, deriveRoads, fallbackStyle, guardComparisons, HILLSHADE_LAYER, HILLSHADE_SOURCE, IMAGERY_LAYER, IMAGERY_SOURCE, isStyle, labelsLast, TERRAIN_SOURCE } from './basemapStyle'
+import { validateStyleMin } from '@maplibre/maplibre-gl-style-spec'
+import {
+  AERIAL_MAJOR_ROAD,
+  BUILDING_COLORS,
+  BUILDINGS_3D_LAYER,
+  BUILDINGS_MINZOOM,
+  buildingsCaveat,
+  deriveAerial,
+  deriveDark,
+  deriveRoads,
+  fallbackStyle,
+  guardComparisons,
+  HILLSHADE_LAYER,
+  HILLSHADE_SOURCE,
+  IMAGERY_LAYER,
+  IMAGERY_SOURCE,
+  isStyle,
+  labelsLast,
+  TERRAIN_SOURCE,
+} from './basemapStyle'
 
 const vec = (id: string, type: 'fill' | 'line' | 'symbol', paint: Record<string, unknown> = {}): LayerSpecification =>
   ({ id, type, source: 'openmaptiles', 'source-layer': 'x', paint }) as LayerSpecification
@@ -18,8 +37,10 @@ function base(): StyleSpecification {
       vec('landuse_park', 'fill'),
       vec('waterway', 'line'),
       vec('water_name', 'symbol'),
-      vec('building', 'fill'),
+      { ...vec('building', 'fill'), minzoom: 13, maxzoom: 14 } as LayerSpecification,
+      { id: 'building-3d', type: 'fill-extrusion', source: 'openmaptiles', 'source-layer': 'building', minzoom: 14, paint: { 'fill-extrusion-color': 'hsl(35,8%,85%)', 'fill-extrusion-height': ['get', 'render_height'] } } as LayerSpecification,
       vec('road_minor_casing', 'line'),
+      vec('road_major_primary', 'line'),
       vec('road_minor', 'line'),
       vec('road_major_rail_hatching', 'line'),
       vec('highway_name_other', 'symbol'),
@@ -60,10 +81,39 @@ describe('basemap styles', () => {
     expect(ids(b)).toEqual(ids(base()))
   })
 
-  it('roads: liberty unchanged apart from shading, DEM sources and label order', () => {
+  it('roads: liberty apart from shading, DEM sources, label order and the muted 3D buildings', () => {
     const r = deriveRoads(base())
-    expect(ids(r.style).filter((i) => i !== HILLSHADE_LAYER).sort()).toEqual(ids(base()).sort())
+    expect(ids(r.style).filter((i) => i !== HILLSHADE_LAYER && i !== BUILDINGS_3D_LAYER).sort()).toEqual(ids(base()).filter((i) => i !== 'building-3d').sort())
     expect(r.style.sources[TERRAIN_SOURCE]).toBeDefined()
+    // liberty's bright extrusion is replaced; its flat footprints stay at every zoom for the 2D map
+    expect(r.style.layers.filter((l) => l.type === 'fill-extrusion').map((l) => l.id)).toEqual([BUILDINGS_3D_LAYER])
+    expect((r.style.layers.find((l) => l.id === 'building') as { maxzoom?: number }).maxzoom).toBeUndefined()
+  })
+
+  it('3D buildings: one muted, hidden extrusion per basemap directly below the labels; overlays go below it', () => {
+    for (const [name, d] of [
+      ['dark', deriveDark(base())],
+      ['roads', deriveRoads(base())],
+      ['aerial', deriveAerial(base())],
+    ] as const) {
+      const order = ids(d.style)
+      const i = order.indexOf(BUILDINGS_3D_LAYER)
+      expect(i).toBeGreaterThan(0)
+      expect(order[i + 1]).toBe(d.labelLayerId)
+      expect(d.overlayBeforeId).toBe(BUILDINGS_3D_LAYER)
+      const b = d.style.layers[i] as unknown as { minzoom: number; layout: Record<string, unknown>; paint: Record<string, unknown>; source: string }
+      expect(b.layout.visibility).toBe('none')
+      expect(b.source).toBe('openmaptiles')
+      expect(b.paint['fill-extrusion-color']).toBe(BUILDING_COLORS[name])
+      // fades in from z14.5 to full (0.6) at z15
+      expect(b.minzoom).toBe(14.5)
+      expect(b.paint['fill-extrusion-opacity']).toEqual(['interpolate', ['linear'], ['zoom'], 14.5, 0, BUILDINGS_MINZOOM, 0.6])
+      expect(b.paint['fill-extrusion-height']).toEqual(['coalesce', ['get', 'render_height'], 0])
+      expect(validateStyleMin({ ...d.style, glyphs: 'https://example.com/{fontstack}/{range}.pbf' } as never)).toEqual([])
+    }
+    expect(BUILDING_COLORS).toEqual({ dark: '#4a5566', roads: '#a8a095', aerial: '#c3c9d1' })
+    expect(buildingsCaveat(true)).toBe("3D shapes: today's OpenStreetMap; buildings destroyed by this fire may be missing; not a damage assessment")
+    expect(buildingsCaveat(false)).toContain('destroyed by a fire may be missing')
   })
 
   it('aerial: imagery right above the background, area fills / casings / hatching dropped, roads and labels kept', () => {
@@ -80,6 +130,11 @@ describe('basemap styles', () => {
     expect(img.paint['raster-brightness-max']).toBeLessThan(1)
     const label = a.style.layers.find((l) => l.id === 'place_city') as { paint: Record<string, unknown> }
     expect(label.paint['text-halo-width']).toBeGreaterThan(1)
+    // major roads at about 0.45 alpha so they do not compete with the fire edge
+    const major = a.style.layers.find((l) => l.id === 'road_major_primary') as { paint: Record<string, unknown> }
+    expect(major.paint['line-color']).toBe(AERIAL_MAJOR_ROAD)
+    expect(AERIAL_MAJOR_ROAD).toMatch(/0\.45\)$/)
+    expect(order).not.toContain('building-3d')
   })
 
   it('fallback keeps a usable map without OpenFreeMap (no labels, says so via vector: false)', () => {
@@ -87,6 +142,7 @@ describe('basemap styles', () => {
       const f = fallbackStyle(b)
       expect(f.vector).toBe(false)
       expect(f.labelLayerId).toBeNull()
+      expect(f.overlayBeforeId).toBeNull()
       expect(Object.keys(f.style.sources)).not.toContain('openmaptiles')
       expect(f.style.sources[TERRAIN_SOURCE]).toBeDefined()
       expect(ids(f.style).includes(IMAGERY_LAYER)).toBe(b === 'aerial')

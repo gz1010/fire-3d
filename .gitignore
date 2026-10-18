@@ -1,4 +1,6 @@
 data/
+# Bundled lookup data that ships with the code (Census Gazetteer index for town/ZIP search)
+!backend/fire3d/data/
 **/.venv/
 node_modules/
 dist/

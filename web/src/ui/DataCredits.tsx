@@ -29,15 +29,17 @@ export function OpenMeteoCredit({ className }: { className?: string }) {
 
 /** The current incident's data sources with their credits, and the FIRMS acknowledgement when FIRMS data are used. */
 export function DataSourcesNote({ className, inline }: { className?: string; inline?: boolean }) {
-  const { sources, year, fcWeather } = useStore(
+  const { sources, year, fcWeather, engine, version } = useStore(
     useShallow((s) => ({
       sources: s.manifest?.status === 'ready' ? s.manifest.data_sources : null,
       year: s.summary ? new Date(s.summary.started_ms).getUTCFullYear() : null,
       fcWeather: s.forecast?.weather.source ?? null,
+      engine: s.forecast?.model?.engine ?? null,
+      version: s.forecast?.model?.version ?? null,
     })),
   )
   if (!sources) return null
-  const credits = bundleCredits(sources, { year, forecastWeatherSource: fcWeather })
+  const credits = bundleCredits(sources, { year, forecastWeatherSource: fcWeather, forecastModel: engine ? { engine, version } : null })
   if (credits.length === 0) return <p className={`data-credits ${className ?? ''}`}>Data sources: synthetic development fixture (no outside data).</p>
   const list = credits.map((c, i) => (
     <span key={c.id}>

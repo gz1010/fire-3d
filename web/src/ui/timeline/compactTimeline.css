@@ -412,8 +412,9 @@
 }
 .ctl-latest {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  gap: 0 4px;
   cursor: help;
 }
 .ctl-latest-glyph line {

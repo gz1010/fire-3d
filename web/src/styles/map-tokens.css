@@ -3,15 +3,19 @@
    legibility first. All names start with --m-; Forensic keeps theme.css. While the map workspace is shown
    (<html data-workspace="map">) the generic theme.css tokens are re-pointed so reused Forensic controls (segmented
    controls, incident picker, popovers, tooltips, charts in the Analysis drawer) match the navy look.
-   MapLibre paint colours cannot read CSS variables: map-core mirrors the wildfire colours in TypeScript. */
+   MapLibre paint colours cannot read CSS variables: map-core mirrors the wildfire colours in TypeScript.
+   Brief 2 (C-R9): Public opens on aerial photos, so panels are more opaque and --m-text-3 reaches 4.5:1 over every
+   basemap (measured with the panels composited over real basemap pixels; numbers in the shell report). */
 
 :root {
   /* surfaces */
   --m-bg: #0b1119;
   --m-bg-2: #111a25;
-  --m-panel: rgba(14, 21, 30, 0.88);
-  --m-panel-strong: rgba(14, 21, 30, 0.96);
-  --m-panel-soft: rgba(14, 21, 30, 0.7);
+  --m-panel: rgba(14, 21, 30, 0.94);
+  --m-panel-strong: rgba(14, 21, 30, 0.97);
+  --m-panel-soft: rgba(14, 21, 30, 0.86);
+  /* chips that must read on any basemap (research note, credits) */
+  --m-chip-opaque: #0e151e;
   --m-panel-raised: rgba(24, 34, 47, 0.97);
   --m-panel-blur: blur(12px) saturate(140%);
   --m-border: rgba(148, 178, 210, 0.16);
@@ -25,8 +29,8 @@
 
   /* text */
   --m-text: #e8edf3;
-  --m-text-2: #a7b3c0;
-  --m-text-3: #74818f;
+  --m-text-2: #b3bfcc;
+  --m-text-3: #98a4b2;
   --m-text-inverse: #0b1119;
 
   /* UI accent: active segments, links, focus */
@@ -57,6 +61,9 @@
   --m-evac-order: #e0459b; /* official evacuation: magenta / violet, cross-hatch, official wording */
   --m-evac-warning: #a78bfa;
   --m-evac-other: #7aa2f7;
+  /* "Official" tags (CAL FIRE, Cal OES, NWS): the official-zone family, never the fire colours */
+  --m-official-ink: #f0a6cf;
+  --m-official-line: rgba(224, 69, 155, 0.55);
   --m-aoi: rgba(232, 237, 243, 0.55); /* modeled-area boundary: dashed */
   --m-event: #f0f4f8;
 
@@ -73,28 +80,35 @@
   /* type */
   --m-font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --m-font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  /* brief 2 minimums (C-R9): xs = tags and headings only (11 px); sm / --m-meta-fs = meta (12 px); md = body (13 px) */
   --m-fs-xs: 11px;
   --m-fs-sm: 12px;
   --m-fs-md: 13px;
   --m-fs-lg: 15px;
   --m-fs-xl: 18px;
-  /* preset-dependent sizes (Command raises them): coordinates and identifiers, source timestamps */
+  /* preset-dependent sizes (Command raises them): coordinates and identifiers, source timestamps (brief 2 minimums:
+     body 13 px, meta 12 px, tags and headings 11 px) */
   --m-coord-fs: 13px;
-  --m-meta-fs: 11px;
+  --m-meta-fs: 12px;
 
   /* layout */
   --m-gap: 12px;
-  --m-header-h: 44px;
-  --m-search-w: 380px;
+  --m-header-h: 40px;
+  --m-search-w: 360px;
   --m-updates-w: 304px;
-  --m-card-w: 300px;
+  /* the location and fire cards match the search column above them */
+  --m-card-w: 360px;
   --m-timeline-w: 620px;
   --m-timeline-min: 480px;
   --m-drawer-h: 300px;
   --m-layers-w: 340px;
-  /* the updates panel shows the latest items until "View all updates" (sized with the header for >= 75 % open map at
-     1440x900 on every bundle, BRIEF §6) */
-  --m-updates-compact-h: 212px;
+  /* the map legend's column in the bottom row (right; wraps there) */
+  --m-legend-w: 380px;
+  /* Command's updates panel shows "Official now", the data status and the latest items until "View all updates"; Public
+     opens on a short official summary (brief 2: >= 75 % open map at 1440x900 on every bundle, BRIEF §6) */
+  --m-updates-compact-h: 460px;
+  /* the satellite chip next to the map controls */
+  --m-chip-w: 380px;
 
   /* stacking (map workspace) */
   --m-z-map: 0;
@@ -106,8 +120,8 @@
 /* Command: denser and more operational, never the Forensic effects. Slightly more opaque panels for legibility over
    aerial imagery; larger coordinates, identifiers and timestamps. */
 :root[data-preset='command'] {
-  --m-panel: rgba(11, 17, 25, 0.92);
-  --m-panel-soft: rgba(11, 17, 25, 0.8);
+  --m-panel: rgba(11, 17, 25, 0.95);
+  --m-panel-soft: rgba(11, 17, 25, 0.88);
   --m-coord-fs: 15px;
   --m-meta-fs: 12px;
   --m-updates-w: 324px;
@@ -117,7 +131,7 @@
   :root {
     --m-search-w: 340px;
     --m-updates-w: 300px;
-    --m-card-w: 280px;
+    --m-card-w: 340px;
     --m-timeline-w: 520px;
     --m-timeline-min: 420px;
   }
@@ -139,7 +153,7 @@
   --text: var(--m-text);
   --text-2: var(--m-text-2);
   --text-3: var(--m-text-3);
-  --text-4: #56616d;
+  --text-4: #7d8997;
   --glass: var(--m-panel);
   --glass-strong: var(--m-panel-strong);
   --glass-soft: var(--m-panel-soft);

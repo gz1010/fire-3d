@@ -10,8 +10,9 @@ import { useWorkspace } from '../state/workspace'
 import { useNow } from '../ui/hooks'
 import { DEFAULT_MARGIN_KM, extrasAtMs, incidentAreaBbox, type AreaQuery } from './client'
 import { useCameraFrame, useCameras, useEvacuations, useImagery } from './hooks'
-import { pickDefaultImagery } from './imagery'
+import { imagerySummaryAtMs, pickDefaultImagery } from './imagery'
 import { sameQueryState, useExtrasRuntime, type ExtrasRuntimeState } from './runtime'
+import { officialTimeReady, useOfficialSync } from '../official/runtime'
 
 interface QueryTimes {
   evac: number | null
@@ -22,13 +23,14 @@ interface QueryTimes {
 export function ExtrasSync() {
   const on = useWorkspace(useShallow((s) => ({ evacuation: s.mapLayers.evacuation, cameras: s.mapLayers.cameras, recentImagery: s.mapLayers.recentImagery })))
   const now = useNow(60_000)
-  const { incidentId, summary, manifest, playing } = useStore(
+  const { incidentId, summary, manifest, playing, timeReady } = useStore(
     useShallow((s) => ({
       incidentId: s.incidentId,
       // the summary of the incident being shown (it can lag one render behind a switch)
       summary: s.summary && s.summary.id === s.incidentId ? s.summary : null,
       manifest: s.manifest?.status === 'ready' && s.manifest.id === s.incidentId ? s.manifest : null,
       playing: s.playing,
+      timeReady: officialTimeReady(s),
     })),
   )
   const at = useStore(
@@ -50,11 +52,18 @@ export function ExtrasSync() {
 
   const query = (k: 'evacuations' | 'cameras' | 'imagery', atMs: number | null): AreaQuery | null => {
     const bbox = incidentAreaBbox(summary, manifest, DEFAULT_MARGIN_KM[k])
-    return bbox && incidentId ? { bbox, incident: incidentId, atMs } : null
+    // wait for the fire's own timeline: right after a switch the time still belongs to the previous fire; a fire
+    // without a ready bundle has no timeline and is asked for the present
+    return bbox && incidentId && timeReady ? { bbox, incident: incidentId, atMs: timeReady === 'present' ? null : atMs } : null
   }
-  const evac = useEvacuations(query('evacuations', times.evac), on.evacuation)
+  // brief 2: official evacuation status is checked for the open fire whatever the map layer shows (the feed, "Official
+  // now" and the location card need it); the toggle only hides the zones on the map.
+  const evac = useEvacuations(query('evacuations', times.evac), true)
   const cams = useCameras(query('cameras', times.cams), on.cameras)
-  const imgs = useImagery(query('imagery', times.imgs), on.recentImagery)
+  // the satellite chip names the newest image even while the layer is off: then one list per incident (up to the end
+  // of the record), filtered by the timeline time in the chip; with the layer on, the list follows the timeline
+  const imgs = useImagery(query('imagery', on.recentImagery ? times.imgs : imagerySummaryAtMs(manifest, now)), true)
+  useOfficialSync()
   const frame = useCameraFrame()
   const productChoice = useExtrasRuntime((s) => s.productChoice)
   const product =

@@ -98,9 +98,13 @@ class FakeBuild:
         self.calls["get_summary"] += 1
         return self.summaries.get(incident_id)
 
-    def get_catalog(self, mode: str, min_acres: float | None = None, refresh: bool = False) -> list[IncidentSummary]:
+    def get_catalog(self, mode: str, min_acres: float | None = None, refresh: bool = False,
+                    year: int | None = None) -> list[IncidentSummary]:
         self.calls["get_catalog"] += 1
         rows = [s for s in self.summaries.values() if s.mode == mode and (min_acres is None or (s.acres or 0) >= min_acres)]
+        if mode == "historical" and year is not None:          # a year list: that year's fires, rows in mode "historical"
+            rows = [s.model_copy(update={"mode": "historical", "detections_24h": None}) for s in self.summaries.values()
+                    if s.year == year and (min_acres is None or (s.acres or 0) >= min_acres)]
         if mode == "historical":
             return sorted(rows, key=lambda s: -(s.acres or 0))
         return sorted(rows, key=lambda s: (-(s.detections_24h or 0), -(s.acres or 0)))

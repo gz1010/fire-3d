@@ -1,7 +1,9 @@
 """FastAPI application (SPEC 6), served as ``fire3d.api.app:app`` on port 8710. Owner: api agent.
 
-Routes: health; incident list + detail; build and forecast jobs; job status; bundle files (gzip, ETag,
-``Cache-Control: no-cache``, traversal-safe); live aircraft (10 s cache per incident); live status.
+Routes: health; incident list (``year=`` for historical lists, ``bbox_lonlat`` on rows) + detail; build and
+forecast jobs; job status; bundle files (gzip, ETag, ``Cache-Control: no-cache``, traversal-safe); live aircraft
+(10 s cache per incident); live status. Routers: geocode, extras (optional map sources), official (CAL FIRE status
+history and NWS fire weather alerts, ``api/official.py``).
 Startup (lifespan) starts the live refresh loop when FIRE3D_LIVE=1 (``config.LIVE_ENABLED``).
 
 Blocking work never runs on the event loop: route functions that touch the network or disk are plain ``def``
@@ -15,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import gzip
 import logging
+import math
 import threading
 import time
 import traceback
@@ -40,6 +43,7 @@ from . import jobs as jobs_mod
 from . import live
 from . import extras as extras_routes
 from . import geocode as geocode_routes
+from . import official as official_routes
 
 log = logging.getLogger(__name__)
 
@@ -228,19 +232,50 @@ def _manifest_view(m: dict, incident_id: str, bdir: Path) -> dict:
     return v
 
 
-def _bundle_rows(mode: str, min_acres: float | None) -> list[dict]:
-    """Fallback incident list from bundles on disk (catalog unavailable)."""
+def _ready_bbox(m: dict | None) -> list[float] | None:
+    """``manifest.grid.bbox_lonlat`` (w, s, e, n) when it is four finite numbers, else None."""
+    bb = ((m or {}).get("grid") or {}).get("bbox_lonlat") if isinstance((m or {}).get("grid"), dict) else None
+    if not isinstance(bb, (list, tuple)) or len(bb) != 4:
+        return None
+    try:
+        vals = [float(v) for v in bb]
+    except (TypeError, ValueError):
+        return None
+    return vals if all(math.isfinite(v) for v in vals) and vals[0] < vals[2] and vals[1] < vals[3] else None
+
+
+def _list_row(s: dict, m: dict | None = None) -> dict:
+    """A list row (``IncidentListRow``): the summary with this server's bundle state plus ``bbox_lonlat``, the
+    analysis area of a ready bundle (null otherwise)."""
+    try:
+        bdir = bundle.bundle_dir(s["id"])
+    except ValueError:
+        return {**s, "bbox_lonlat": None}
+    if m is None:
+        m = _manifest(bdir)
+    out = _overlay(s, m, bdir, load=False)
+    out["bbox_lonlat"] = _ready_bbox(m) if out["bundle_status"] == "ready" else None
+    return out
+
+
+def _bundle_rows(mode: str, min_acres: float | None, year: int | None = None) -> list[dict]:
+    """Fallback incident list from bundles on disk (catalog unavailable). ``year`` (historical lists asked for one
+    year): the bundles of that year in either mode, since a year list also holds that year's active fires."""
     rows = []
     for m in bundle.list_bundles():
-        if m.get("mode") != mode or not isinstance(m.get("summary"), dict):
+        if not isinstance(m.get("summary"), dict):
+            continue
+        if year is None and m.get("mode") != mode:
             continue
         try:
             s = _summary_dict(m["summary"])
         except ValidationError:
             continue
+        if year is not None and s.get("year") != year:
+            continue
         if min_acres is not None and s.get("acres") is not None and s["acres"] < min_acres:
             continue
-        rows.append(_overlay(s, m))
+        rows.append(_list_row(s, m))
     if mode == "historical":
         rows.sort(key=lambda r: -(r.get("acres") or 0.0))
     else:
@@ -378,6 +413,7 @@ app.add_middleware(
 # Map-first UI routers (docs/redesign/BRIEF.md): address lookup and optional map sources.
 app.include_router(geocode_routes.router)
 app.include_router(extras_routes.router)
+app.include_router(official_routes.router)       # BRIEF-2: CAL FIRE status history, NWS fire weather alerts
 
 
 @app.get("/api/health")
@@ -390,25 +426,32 @@ async def health() -> Response:
 def list_incidents(
     mode: Literal["live", "historical"] = "historical",
     min_acres: float | None = Query(None, ge=0),
+    year: int | None = Query(None, ge=2000, le=2100),
 ) -> Response:
-    """``{mode, updated_ms, incidents}``: catalog incidents (historical default >= 300 ac, by acres; live by
-    detections_24h then acres). Falls back to the bundles on disk when the catalog is unavailable."""
+    """``{mode, updated_ms, incidents, year?}``: catalog incidents (historical: CAL FIRE's list of ``year``, default
+    2025, >= 300 ac by default, by acres; live by detections_24h then acres; ``year`` applies to historical only).
+    Rows carry ``bbox_lonlat`` (the analysis area of a ready bundle, else null). Falls back to the bundles on disk
+    when the catalog is unavailable."""
     lo = min_acres if min_acres is not None else (DEFAULT_HISTORICAL_MIN_ACRES if mode == "historical" else None)
     from .. import catalog
 
+    yr = year if mode == "historical" else None
     try:
-        raw = catalog.get_catalog(mode, min_acres=lo)
+        raw = catalog.get_catalog(mode, min_acres=lo, **({"year": yr} if yr is not None else {}))
     except Exception as e:
         log.warning("catalog.get_catalog(%s) failed (%s); listing bundles on disk", mode, config.mask_secrets(e))
-        rows = _bundle_rows(mode, lo)
+        rows = _bundle_rows(mode, lo, yr)
     else:
         rows = []
         for s in raw:
             try:
-                rows.append(_overlay(_summary_dict(s)))
+                rows.append(_list_row(_summary_dict(s)))
             except ValidationError as e:
                 log.warning("skipping a catalog row that does not match IncidentSummary: %s", e)
-    return _json({"mode": mode, "updated_ms": now_ms(), "incidents": rows})
+    body: dict[str, Any] = {"mode": mode, "updated_ms": now_ms(), "incidents": rows}
+    if mode == "historical":
+        body["year"] = yr if yr is not None else catalog.HISTORICAL_YEAR
+    return _json(body)
 
 
 @app.get("/api/incidents/{incident_id}")

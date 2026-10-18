@@ -106,9 +106,10 @@ def test_single_match(client: TestClient, upstream: Upstream) -> None:
     body = r.json()
     assert body["query"] == "600 E Mariposa St, Altadena, CA 91001"
     assert body["matches"] == [{
-        "matched_address": "600 E MARIPOSA ST, ALTADENA, CA, 91001", "lat": 34.189637, "lon": -118.1373939,
+        "kind": "address", "matched_address": "600 E MARIPOSA ST, ALTADENA, CA, 91001", "lat": 34.189637, "lon": -118.1373939,
         "tiger_line_id": "142735412", "side": "R", "from_address": "600", "to_address": "628",
     }]
+    assert body["kind"] == "address" and body["local"] is False
     assert body["total_matches"] == 1
     assert body["benchmark"] == "Public_AR_Current"
     assert body["source"] == "U.S. Census Bureau Geocoder"
@@ -207,9 +208,11 @@ def test_street_grid_addresses_are_not_mistaken_for_coordinates(q: str) -> None:
     assert not geocode.looks_like_coordinates(geocode.normalize_query(q))
 
 
-def test_numbers_only_is_400(client: TestClient, upstream: Upstream) -> None:
-    r = client.get("/api/geocode", params={"q": "91001"})
-    assert r.status_code == 400 and upstream.calls == []
+@pytest.mark.parametrize("q", ["12345678", "123", "9100", "#!?"])
+def test_numbers_only_is_400(client: TestClient, upstream: Upstream, q: str) -> None:
+    r = client.get("/api/geocode", params={"q": q})
+    assert r.status_code == 400 and "ZIP code" in r.json()["detail"]
+    assert upstream.calls == []
 
 
 def test_upstream_rejection_is_502_with_only_the_short_census_message(client: TestClient, upstream: Upstream) -> None:
@@ -276,3 +279,163 @@ def test_configured_benchmark_is_sent(client: TestClient, upstream: Upstream, mo
     monkeypatch.setattr(geocode, "BENCHMARK", "Public_AR_ACS2026")
     client.get("/api/geocode", params={"q": "600 E Mariposa St, Altadena, CA 91001"})
     assert upstream.calls[0].url.params["benchmark"] == "Public_AR_ACS2026"
+
+
+# ------------------------------------------------------------------------------------------------------------------
+# Towns, cities and ZIP areas (local Census Gazetteer index, brief 2 C-R5): never an upstream call
+# ------------------------------------------------------------------------------------------------------------------
+def local(client: TestClient, q: str) -> dict:
+    r = client.get("/api/geocode", params={"q": q})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["local"] is True and body["benchmark"] is None
+    assert body["source"] == "U.S. Census Bureau Gazetteer Files" and "public domain" in body["attribution"]
+    return body
+
+
+def test_the_built_index_covers_california_places_and_zip_areas() -> None:
+    raw = orjson.loads(geocode.GAZETTEER_PATH.read_bytes())
+    assert raw["source"] == "U.S. Census Bureau Gazetteer Files" and raw["vintage"] >= 2026
+    assert raw["counts"] == {"places": len(raw["places"]), "zips": len(raw["zips"])}
+    kinds = {k: sum(1 for p in raw["places"] if p[1] == k) for k in ("city", "town", "cdp")}
+    assert kinds == {"city": 462, "town": 21, "cdp": 1139}        # 2026 vintage: every California place
+    assert len(raw["zips"]) == 1802
+    for _, _, lat, lon, area in raw["places"]:
+        assert 32.4 <= lat <= 42.1 and -124.6 <= lon <= -113.9 and area >= 0
+    assert all(z[0][:3] >= "900" and z[0][:3] <= "961" for z in raw["zips"])
+
+
+@pytest.mark.parametrize("q", ["91001", "CA 91001", "91001 CA", "91001-1234", "91001, California"])
+def test_zip_codes_are_matched_locally(client: TestClient, upstream: Upstream, q: str) -> None:
+    body = local(client, q)
+    assert body["kind"] == "zip" and body["total_matches"] == 1
+    (m,) = body["matches"]
+    assert m["kind"] == "zip" and m["zip"] == "91001" and m["matched_address"] == "ZIP 91001, CA" and m["exact"] is True
+    assert m["lat"] == pytest.approx(34.1945, abs=1e-3) and m["lon"] == pytest.approx(-118.1383, abs=1e-3)
+    assert m["near"] == "Altadena" and m["near_km"] < 2 and m["land_km2"] > 10
+    assert "ZIP Code Tabulation Areas" in body["note"] and "PO-box" in body["note"]
+    assert upstream.calls == []
+
+
+def test_a_zip_outside_california_is_an_explained_empty_list(client: TestClient, upstream: Upstream) -> None:
+    body = local(client, "10001")
+    assert body["kind"] == "zip" and body["matches"] == [] and "California only" in body["note"]
+    assert upstream.calls == []
+
+
+@pytest.mark.parametrize("q", ["Altadena", "altadena, ca", "ALTADENA CA USA", "Altadena, California"])
+def test_town_names_are_matched_locally(client: TestClient, upstream: Upstream, q: str) -> None:
+    body = local(client, q)
+    assert body["kind"] == "place"
+    (m,) = body["matches"]
+    assert m["kind"] == "place" and m["name"] == "Altadena" and m["place_type"] == "cdp"
+    assert m["place_type_label"] == "census-designated place" and m["matched_address"] == "Altadena, CA"
+    assert m["exact"] is True and m["near"] is None
+    assert m["lat"] == pytest.approx(34.1922, abs=1e-3) and m["lon"] == pytest.approx(-118.1356, abs=1e-3)
+    assert "internal point" in body["note"] and "house number" in body["note"]
+    assert upstream.calls == []
+
+
+def test_place_matching_folds_accents_synonyms_and_alternate_names(client: TestClient, upstream: Upstream) -> None:
+    assert [m["name"] for m in local(client, "La Canada")["matches"]] == ["La Cañada Flintridge"]
+    v = local(client, "Ventura")["matches"]
+    assert v[0]["name"] == "San Buenaventura (Ventura)" and v[0]["exact"] is True        # the name in parentheses
+    assert local(client, "Paso Robles")["matches"][0]["name"] == "El Paso de Robles (Paso Robles)"
+    assert [m["name"] for m in local(client, "Mt Shasta")["matches"]] == ["Mount Shasta"]
+    assert [m["name"] for m in local(client, "Saint Helena")["matches"]] == ["St. Helena"]
+    assert [m["name"] for m in local(client, "California City")["matches"]] == ["California City"]
+    assert upstream.calls == []
+
+
+def test_place_ranking_and_same_named_places(client: TestClient) -> None:
+    la = local(client, "Los Angeles")["matches"]
+    assert la[0]["name"] == "Los Angeles" and la[0]["place_type"] == "city" and la[0]["exact"] is True
+    assert all(not m["exact"] for m in la[1:])
+    # two places named Paradise (the Butte County town and a Mono County CDP): both exact, told apart by "near"
+    para = [m for m in local(client, "Paradise")["matches"] if m["exact"]]
+    assert [(m["place_type"], m["near"]) for m in para] == [("town", "Chico"), ("cdp", "Bishop")]
+    # prefixes are found on submit too (no autocomplete): exact first, then by type and area
+    alta = local(client, "Alta")["matches"]
+    assert alta[0]["name"] == "Alta" and alta[0]["exact"] and "Altadena" in [m["name"] for m in alta]
+
+
+def test_a_town_with_its_zip_lists_both(client: TestClient) -> None:
+    body = local(client, "Altadena, CA 91001")
+    assert body["kind"] == "place" and [m["kind"] for m in body["matches"]] == ["place", "zip"] and body["total_matches"] == 2
+
+
+@pytest.mark.parametrize("q", ["Pasadena City Hall", "Main St, Altadena", "Nowhereville"])
+def test_landmarks_and_streets_without_numbers_are_not_searched(client: TestClient, upstream: Upstream, q: str) -> None:
+    body = local(client, q)
+    assert body["matches"] == [] and body["total_matches"] == 0
+    assert "Landmarks, businesses and street names without a house number are not searched" in body["note"]
+    assert upstream.calls == []
+
+
+def test_street_addresses_still_go_to_the_census(client: TestClient, upstream: Upstream) -> None:
+    body = client.get("/api/geocode", params={"q": "600 E Mariposa St, Altadena, CA 91001"}).json()
+    assert body["kind"] == "address" and body["local"] is False and body["matches"][0]["kind"] == "address"
+    assert len(upstream.calls) == 1
+
+
+@pytest.mark.parametrize(("q", "street"), [("600 E Mariposa St", True), ("N1234 County Rd 5", True), ("100-12 Main St", True),
+                                           ("91001 CA", True), ("Altadena", False), ("29", False), ("1 A", False)])
+def test_street_address_rule(q: str, street: bool) -> None:
+    assert geocode.looks_like_street_address(q) is street    # "91001 CA" is caught as a ZIP before this rule
+
+
+def test_missing_index_is_503_for_towns_but_addresses_work(client: TestClient, upstream: Upstream, monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(geocode, "GAZETTEER_PATH", tmp_path / "missing.json")
+    geocode.reset_gazetteer()
+    try:
+        r = client.get("/api/geocode", params={"q": "Altadena"})
+        assert r.status_code == 503 and "house number" in r.json()["detail"] and r.headers["cache-control"] == "no-store"
+        assert client.get("/api/geocode", params={"q": "91001"}).status_code == 503
+        assert client.get("/api/geocode", params={"q": "600 E Mariposa St, Altadena, CA"}).status_code == 200
+    finally:
+        geocode.reset_gazetteer()
+
+
+def test_split_local() -> None:
+    assert geocode.split_local("Altadena, CA 91001-1234") == (("altadena",), "91001")
+    assert geocode.split_local("California") == (("california",), None)     # a state word alone is kept
+    assert geocode.split_local("CA 91001") == ((), "91001")
+    assert geocode.split_local("Mount Shasta, Calif.") == (("mt", "shasta"), None)
+
+
+# ------------------------------------------------------------------------------------------------------------------
+# scripts/build_gazetteer.py (offline, synthetic rows in both delimiter styles)
+# ------------------------------------------------------------------------------------------------------------------
+def _build_module():
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "scripts" / "build_gazetteer.py"
+    spec = importlib.util.spec_from_file_location("build_gazetteer", path)
+    mod = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_build_gazetteer_parses_places_and_california_zctas(tmp_path) -> None:
+    b = _build_module()
+    places = ("USPS|GEOID|GEOIDFQ|ANSICODE|NAME|LSAD|FUNCSTAT|ALAND|AWATER|ALAND_SQMI|AWATER_SQMI|INTPTLAT|INTPTLONG\n"
+              "CA|0600884|x|y|Altadena CDP|57|S|21900000|0|8.4|0|34.192212|-118.135589\n"
+              "CA|0656000|x|y|Pasadena city|25|A|59470000|0|22.9|0|34.160602|-118.137954\n"
+              "CA|0655520|x|y|Paradise town|43|A|47400000|0|18.3|0|39.754200|-121.606400\n"
+              "CA|0612345|x|y|La Cañada Flintridge city|25|A|22350000|0|8.6|0|34.211223|-118.200129\n")
+    zctas = ("GEOID\tALAND\tAWATER\tALAND_SQMI\tAWATER_SQMI\tINTPTLAT\tINTPTLONG\n"      # tab style (older vintages)
+             "91001\t21400000\t0\t8.3\t0\t34.194500\t-118.138300\n"
+             "10001\t1600000\t0\t0.6\t0\t40.750000\t-73.997000\n"                      # New York: not California
+             "96201\t1000\t0\t0\t0\t34.0\t-118.0\n")                                    # outside 900-961 (APO)
+    p, z = b.build(places, zctas)
+    assert [r[:2] for r in p] == [["Altadena", "cdp"], ["La Cañada Flintridge", "city"], ["Paradise", "town"], ["Pasadena", "city"]]
+    assert p[0][2:] == [34.1922, -118.1356, 21.9] and p[3][4] == 59.5
+    assert z == [["91001", 34.1945, -118.1383, 21.4]]
+    out = tmp_path / "g.json"
+    b.write(out, 2026, p, z)
+    raw = orjson.loads(out.read_bytes())
+    assert raw["vintage"] == 2026 and raw["counts"] == {"places": 4, "zips": 1} and raw["source"] == "U.S. Census Bureau Gazetteer Files"
+    assert geocode.Gazetteer(raw).zips["91001"].lat == 34.1945
+    assert b._decode("Pi\xf1on".encode("latin-1")) == "Piñon"                      # Latin-1 fallback

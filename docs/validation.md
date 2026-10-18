@@ -1,6 +1,7 @@
 # Fire-3d forecast validation
 
-Last updated 2026-10-17 (evening) by the backend follow-up run, which added the live forecast start (section 6). It
+Last updated 2026-10-17 (evening) by the backend follow-up run, which added the live forecast start (section 6);
+sections 5.2, 5.3 and 6.3 were re-checked against the code and the published bundles on 2026-10-18. It
 covers the spread forecast in `backend/fire3d/spread/` with the defaults in `backend/fire3d/config.py`
 (`FORECAST_*`, `DROUGHT_ADJUSTED_LFM`, `LIVE_START_LATEST_PASS`). All numbers come from the published bundles in
 `data/incidents/`.
@@ -13,10 +14,10 @@ covers the spread forecast in `backend/fire3d/spread/` with the defaults in `bac
 - **Skill is moderate.** For the operational settings, the mean *growth* Sørensen score is 0.43 (0.44 with the
   31-member ensemble; 0.42 before the burnout rule of section 6.6; scale below). This
   score compares only the area that burned after the forecast start; 0 means no overlap and 1 means a perfect
-  match. Most growth was over by +48 h, and at +48 h and +72 h the mean is about 0.47. The *total-area* score is
+  match. Most growth was over by +48 h, and at +48 h and +72 h the mean is about 0.48. The *total-area* score is
   0.82, but it looks good partly because the area already burned at the start always overlaps.
 - **Main error: too much late growth.** After the main wind-driven run ends, the model keeps spreading, because it
-  does not simulate firefighting or fires dying down. The median forecast grows twice as much as the real fire.
+  does not simulate firefighting or fires dying down. In the median, the forecast grows about 1.85 times as much as the real fire.
   The other error is that the first hours of extreme runs are under-predicted (Eaton: about 30 % of the first 12 h of
   growth from ignition + 6 h).
 - **Changes kept, because they improved the scores** (details in sections 3 and 4):
@@ -294,20 +295,21 @@ The calibration used the deterministic member. Re-running the best candidates as
 
 ### 5.2 Published hindcasts (in the bundles, shown in the app)
 
-Scores are against the observed reconstruction. The *total* score is the contract's `skill` field. *Growth* counts
+Scores are against the observed reconstruction, computed from each bundle's published p50 and observed arrival with
+`validate.skill_from_arrays` (re-checked 2026-10-18). The *total* score is the contract's `skill` field. *Growth* counts
 only the area that burned after the start; *fc* is the p50 forecast.
 
 | fire, run | start | lead | observed / fc total ac | total Sørensen | observed / fc growth ac | growth Sørensen |
 |---|---|---:|---:|---:|---:|---:|
 | Eaton `fc-20250108T0818-perturbed-00ce` | Jan 8 00:18 PST (ignition + 6 h) | 12 h | 11,749 / 7,511 | 0.754 | 6,204 / 1,966 | 0.42 |
-| | | 24 h | 12,400 / 8,590 | 0.786 | 6,855 / 3,045 | 0.55 |
-| | | 72 h | 14,115 / 11,015 | 0.801 | 8,570 / 5,469 | 0.64 |
+| | | 24 h | 12,400 / 8,583 | 0.785 | 6,854 / 3,038 | 0.54 |
+| | | 72 h | 14,115 / 11,010 | 0.800 | 8,570 / 5,465 | 0.64 |
 | Madre `fc-20250703T2007-perturbed-a95d` | Jul 3 13:07 PDT (ignition + 24 h) | 12 h | 72,276 / 87,688 | 0.835 | 10,390 / 25,802 | 0.27 |
-| | | 24 h | 77,091 / 93,552 | 0.817 | 15,205 / 31,665 | 0.33 |
-| | | 72 h | 81,938 / 107,495 | 0.791 | 20,052 / 45,609 | 0.40 |
+| | | 24 h | 77,091 / 93,481 | 0.817 | 15,205 / 31,595 | 0.33 |
+| | | 72 h | 81,938 / 107,401 | 0.791 | 20,052 / 45,515 | 0.40 |
 | Palisades `fc-20250108T0020-perturbed-7d3b` | Jan 7 16:20 PST (ignition + 6 h) | 12 h | 18,690 / 9,878 | 0.686 | 11,778 / 2,967 | 0.39 |
-| | | 24 h | 19,530 / 10,956 | 0.711 | 12,619 / 4,044 | 0.47 |
-| | | 72 h | 22,761 / 12,731 | 0.706 | 15,849 / 5,819 | 0.52 |
+| | | 24 h | 19,530 / 10,953 | 0.711 | 12,619 / 4,042 | 0.47 |
+| | | 72 h | 22,761 / 12,725 | 0.706 | 15,849 / 5,813 | 0.52 |
 
 Reading these:
 
@@ -323,6 +325,9 @@ Reading these:
 
 ### 5.3 All 32 calibration leads for the operational setting (deterministic member)
 
+Re-run on 2026-10-18 with the operational code, including the growth-only hold of section 6.6 (`validate hindcast`
+with `--adjustments 0.5`, section 9). The Madre rows changed with that rule; the Eaton and Palisades rows did not.
+
 | fire | start (h after ignition) | lead (h) | observed growth (ac) | forecast growth (ac) | growth Sørensen | total Sørensen |
 |---|---:|---:|---:|---:|---:|---:|
 | Eaton | 6 | 12 | 6,204 | 1,790 | 0.39 | 0.74 |
@@ -337,14 +342,14 @@ Reading these:
 | Eaton | 24 | 24 | 1,835 | 4,565 | 0.35 | 0.87 |
 | Eaton | 24 | 48 | 1,835 | 6,276 | 0.35 | 0.84 |
 | Eaton | 24 | 72 | 1,835 | 7,179 | 0.34 | 0.82 |
-| Madre | 24 | 12 | 10,390 | 26,594 | 0.26 | 0.83 |
-| Madre | 24 | 24 | 15,205 | 32,264 | 0.33 | 0.81 |
-| Madre | 24 | 48 | 20,052 | 40,302 | 0.38 | 0.80 |
-| Madre | 24 | 72 | 20,052 | 45,576 | 0.39 | 0.79 |
-| Madre | 48 | 12 | 4,805 | 10,873 | 0.42 | 0.95 |
-| Madre | 48 | 24 | 4,848 | 14,163 | 0.39 | 0.93 |
-| Madre | 48 | 48 | 4,848 | 18,353 | 0.33 | 0.91 |
-| Madre | 48 | 72 | 4,848 | 20,853 | 0.31 | 0.90 |
+| Madre | 24 | 12 | 10,390 | 26,038 | 0.27 | 0.83 |
+| Madre | 24 | 24 | 15,205 | 31,170 | 0.34 | 0.82 |
+| Madre | 24 | 48 | 20,052 | 38,174 | 0.40 | 0.81 |
+| Madre | 24 | 72 | 20,052 | 42,517 | 0.41 | 0.80 |
+| Madre | 48 | 12 | 4,805 | 8,623 | 0.49 | 0.96 |
+| Madre | 48 | 24 | 4,848 | 11,137 | 0.46 | 0.95 |
+| Madre | 48 | 48 | 4,848 | 14,363 | 0.40 | 0.93 |
+| Madre | 48 | 72 | 4,848 | 16,331 | 0.37 | 0.92 |
 | Palisades | 6 | 12 | 11,778 | 2,856 | 0.38 | 0.68 |
 | Palisades | 6 | 24 | 12,619 | 3,903 | 0.46 | 0.71 |
 | Palisades | 6 | 48 | 14,584 | 4,899 | 0.49 | 0.70 |
@@ -470,6 +475,7 @@ containment input. Re-running the calibration set of section 5.3 with the new co
 | 32 leads, deterministic member, multiplier 0.5, previous hold | mean growth Sørensen **0.422**, total 0.822, median growth ratio 2.01 (unchanged) |
 | per fire, previous hold | Eaton 0.432, Madre 0.353, Palisades 0.458 (unchanged) |
 | same, with the growth-only hold adopted in 6.6 | **0.432**, total 0.825, ratio 1.85; Eaton 0.432, Madre 0.392, Palisades 0.458 |
+| per lead, growth-only hold (re-run 2026-10-18) | +12 h 0.341, +24 h 0.425, +48 h 0.476, +72 h 0.485 |
 
 ### 6.4 Live fires on Oct 17 (before and after)
 

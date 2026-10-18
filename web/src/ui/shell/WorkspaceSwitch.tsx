@@ -1,27 +1,12 @@
-// Workspace (Public/Command | Forensic) and preset (Public | Command) switches (owner: shell, CONTRACT §3). Switching
-// goes through switchWorkspace(), which hands the camera over; incident, forecast, time and selection live in the
-// shared stores and are untouched.
+// One "Public · Command · Forensic" switch (owner: shell, CONTRACT §3; brief 2 C-R8): Public and Command are the two
+// presets of the map workspace, Forensic is the 3D workspace. Switching goes through switchWorkspace(), which hands
+// the camera over; incident, forecast, time and selection live in the shared stores and are untouched. Forensic keeps
+// the preset, so going back returns to the same Public or Command view.
+import { useWorkspace } from '../../state/workspace'
 import { Segmented } from '../controls'
-import { useWorkspace, type Preset, type Workspace } from '../../state/workspace'
-import { switchWorkspace } from './handoff'
+import { applyView, VIEWS, viewOf } from './views'
 
-const WORKSPACES: { value: Workspace; label: string; tip: string }[] = [
-  { value: 'map', label: 'Public / Command', tip: 'Map of the fire with roads, places, forecast and location checks' },
-  { value: 'forensic', label: 'Forensic', tip: '3D analytical scene: charts, scientific units, replay, hindcasts and forecast controls' },
-]
-
-const PRESETS: { value: Preset; label: string; tip: string }[] = [
-  { value: 'public', label: 'Public', tip: 'Plain-language view' },
-  { value: 'command', label: 'Command', tip: 'Denser view: coordinates, identifiers and source timestamps up front' },
-]
-
-export function WorkspaceSwitch({ className, size = 'md' }: { className?: string; size?: 'sm' | 'md' }) {
-  const workspace = useWorkspace((s) => s.workspace)
-  return <Segmented value={workspace} options={WORKSPACES} onChange={switchWorkspace} ariaLabel="Workspace" className={className} size={size} />
-}
-
-export function PresetSwitch({ className, size = 'md' }: { className?: string; size?: 'sm' | 'md' }) {
-  const preset = useWorkspace((s) => s.preset)
-  const setPreset = useWorkspace((s) => s.setPreset)
-  return <Segmented value={preset} options={PRESETS} onChange={setPreset} ariaLabel="Preset" className={className} size={size} />
+export function ViewSwitch({ className, size = 'md' }: { className?: string; size?: 'sm' | 'md' }) {
+  const value = useWorkspace((s) => viewOf(s.workspace, s.preset))
+  return <Segmented value={value} options={VIEWS} onChange={applyView} ariaLabel="View: Public, Command or Forensic" className={className} size={size} />
 }

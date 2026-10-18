@@ -3,6 +3,8 @@ import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, typ
 
 /** Phone layout: drawers become bottom sheets (keep in sync with the 760px media queries in styles/map-layout.css). */
 export const NARROW_QUERY = '(max-width: 760px)'
+/** Full header (the view switch in the bar, the satellite chip next to the panel toggles; map-layout.css 1023px). */
+export const WIDE_QUERY = '(min-width: 1024px)'
 
 export function useMediaQuery(query: string): boolean {
   return useSyncExternalStore(
@@ -24,10 +26,10 @@ function panelToggle(key: string): HTMLElement | null {
 
 /** Non-modal drawer focus: when `open` turns true, remember the element that had focus (usually the toggle) and move
  *  focus to `target` (a heading with tabIndex -1, inside the drawer's [data-drawer] root); when it turns false while
- *  focus was inside the drawer, give focus back to that element, or to the panel's visible toggle (`panelKey`) when
- *  the opener is gone. A drawer that is open when it mounts (e.g. after a workspace switch) or that closes on its own
- *  (layout changes) leaves focus alone. */
-export function useDrawerFocus(open: boolean, target: RefObject<HTMLElement | null>, panelKey?: string): void {
+ *  focus was inside the drawer, give focus back to that element, or to the panel's visible toggle (`panelKey`), or to
+ *  `fallback()` when the opener is gone. A drawer that is open when it mounts (e.g. after a workspace switch) or that
+ *  closes on its own (layout changes) leaves focus alone. */
+export function useDrawerFocus(open: boolean, target: RefObject<HTMLElement | null>, panelKey?: string, fallback?: () => HTMLElement | null): void {
   const opener = useRef<HTMLElement | null>(null)
   const inside = useRef(false)
   // act on changes only (also safe under StrictMode's double effect run)
@@ -43,12 +45,14 @@ export function useDrawerFocus(open: boolean, target: RefObject<HTMLElement | nu
       inside.current = target.current != null && document.activeElement === target.current
       return
     }
-    const back = opener.current?.isConnected ? opener.current : panelKey ? panelToggle(panelKey) : null
+    const back = opener.current?.isConnected ? opener.current : ((panelKey ? panelToggle(panelKey) : null) ?? fallback?.() ?? null)
     const had = inside.current
     opener.current = null
     inside.current = false
     const a = document.activeElement
     if (had && back && (!a || a === document.body)) back.focus({ preventScroll: true })
+    // fallback is read when the drawer closes; its identity does not matter
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, target, panelKey])
   // where focus is while open (a removed element fires no focusout, so the last value survives the close)
   useEffect(() => {

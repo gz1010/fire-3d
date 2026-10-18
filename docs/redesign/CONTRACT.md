@@ -94,7 +94,10 @@ interface WorkspaceState {
   workspace: Workspace                     // default 'map'
   preset: Preset                           // default 'public'
   perspective: Perspective                 // default '2d' (north-up)
-  basemap: Basemap                         // default 'dark'; independent of the preset
+  basemap: Basemap                         // effective basemap (brief 2, decision 5): basemapFallback ?? basemapPick
+                                           //   ?? (Public 'aerial', Command 'dark'); see §13 shell
+  basemapPick: Basemap | null              // brief 2: the user's explicit pick (menu, Layers, ?basemap=); null = preset default
+  basemapFallback: Basemap | null          // brief 2: set by the map only while the effective provider fails (never a pick)
   units: Units                             // default 'us' (mph, ft, mi, °F, acres)
   selection: SelectedLocation | null
   view: GeoView | null                     // last settled map view; null = frame the incident on mount
@@ -104,7 +107,8 @@ interface WorkspaceState {
   safeInsets: SafeInsets                   // published by the shell
 
   setWorkspace(w): void; setPreset(p): void; setPerspective(p): void; togglePerspective(): void
-  setBasemap(b): void; setUnits(u): void
+  setBasemap(b): void                      // explicit pick; clears a fallback (brief 2)
+  setBasemapFallback(b | null): void; setUnits(u): void
   selectLocation(loc: SelectedLocation, opts?: { fly?: boolean; zoom?: number }): void  // invalid lat/lon ignored
   moveSelection(lat: number, lon: number): void   // keeps label/source; adjusted = true, approximate = false
   clearSelection(): void
@@ -143,7 +147,9 @@ interface WorkspaceState {
 
 ### 2.3 URL
 `useWorkspaceUrlSync` keeps `ws` (always), `preset`, `persp`, `basemap`, `units` (non-defaults) in the address bar
-with `replaceState`, next to the existing `incident`/`t`/`mode`. `view=` and `sel=` are read once at start-up (deep
+with `replaceState`, next to the existing `incident`/`t`/`mode`. Brief 2: `basemap` is written only when the user's
+pick differs from the preset's default (Public aerial, Command dark), so `?basemap=dark` is valid in Public and old
+Public links now open on aerial; incident changes are history entries (§13 shell). `view=` and `sel=` are read once at start-up (deep
 links, screenshots) and then removed: shared links never carry the user's selected point or view (privacy). Old
 links without `ws` open the Public map.
 
@@ -454,8 +460,9 @@ export function burnProbabilityText(fraction: number, f: Pick<ForecastManifest, 
 lattice" name the lattice; scientific names, units and values stay in details and in Forensic.
 As built (timeline-feed, additive): `fireWeatherSeverity` shows "42 of 100" + `explanation` and no category (no
 official or peer-reviewed FFWI category scale was found; NOAA SPC's old "FFWI >= 50 appears significant" note is a
-rule of thumb). Also `growthRate`, `cardinalWord`, `forecastLead`, `forecastDescription` (title, period, issued,
-runs, probability, uncertainty, weather, caveat), `modeledArea`, `ensemblePhrase`, `weatherSourceName`,
+rule of thumb). Also `growthRate`, `cardinalWord`, `forecastLead`, `forecastDescription(f, mode, { plain? })` (title,
+period, issued, runs, probability, uncertainty, weather, caveat; `plain` = Public: a past fire's run is titled "Model
+re-run on past weather", never "Hindcast"; brief 2 integration), `modeledArea`, `ensemblePhrase`, `weatherSourceName`,
 `sourceName`, `LATTICE_NAMES` / `latticeName` (name + explanation + scientific name), `EXPLAIN` (shared one-line
 explanations), `keepUnits` (no-break space between a number and h / min / days); `burnProbabilityText` takes an
 optional member count.
@@ -642,7 +649,9 @@ Every list response carries this envelope (mirrored in `web/src/extras/types.ts`
    `beforeId` / `topBeforeId` take candidate ids bottom-first; the lowest one present is used, resolved again on every
    re-add. The handles re-add their sources, images (hatch patterns, camera icons) and layers after every `setStyle`
    (basemap swap). Stacking: imagery < zones < fire overlays < labels < official wording and camera icons < map-core's
-   top layers (incident, events, selection).
+   top layers (incident, events, selection). Since the brief 2 integration the handles also move their existing
+   layers back to this order on every `style.load` (MapLibre's `styledata` re-add came before map-core's fire layers,
+   so zones ended above the fire layers after a basemap load; CONTRACT §13 official-web I6).
    - Clicks: map-core's `onClick` selects a location on every click. It must skip camera icons:
      `if (map.queryRenderedFeatures(e.point, { layers: CAMERA_INTERACTIVE_LAYERS.filter((l) => map.getLayer(l)) }).length) return`.
      Its hover handler should also leave the pointer cursor on them.
@@ -781,3 +790,685 @@ Every list response carries this envelope (mirrored in `web/src/extras/types.ts`
 - **Freshness** (backend-followups, SPEC 8.3): `TimeRange.last_detection_ms` / `last_pass_ms` (optional). Command's
   data status says "Latest satellite pass: no new fire seen" on the Last observation row (the CMR source detail as its
   tooltip) when the newest detection or perimeter is more than 1 h older than `now_ms`.
+
+---
+
+## 13. Brief 2 interfaces
+
+Added for UI/UX brief 2 (`docs/redesign/BRIEF-2.md`, `PLAN-2.md`). The section above with the same number is brief 1's
+integration record. Each role appends its own sub-heading below and edits only that.
+
+### shell (I1 overview state and zoom focus, I3 fire card, history, basemap default, layout, as built 2026-10-18)
+
+Written early on 2026-10-18 so map, location and official-web could build against it; updated as built.
+
+**Overview = the map workspace with `useStore.incidentId === null`.** No default fire, no auto-build.
+- `useStore.getState().closeIncident(): void` (`state/store.ts`): stops job polling, drops late responses of the
+  previous selection, resets `incidentId` to `null` and every per-incident field; the catalog, `timeMs` and `mode`
+  stay; `incidentSource` becomes `null`. The workspace store then drops `view` and any `'event'` / `'incident'`
+  selection; user-picked points (`click`, `coords`, `address`) stay.
+- `useStore.missingIncidentId: string | null`: set when an explicit `selectIncident(id)` answers 404 (unknown or old
+  link, fire no longer listed). The store returns to the overview by itself (the URL entry is replaced) and the shell
+  shows a notice (`MissingFireNotice`); `setMissingIncidentId(null)` dismisses it.
+- `selectIncident(id, { autoBuild?, keepTime?, source? })`: `autoBuild: true` builds a missing bundle (only the fire
+  card's "Prepare analysis (1-3 min)" passes it; the incident picker passes the Forensic setting
+  `useStore.autoBuild`, now off by default). `source` (default `'other'`) sets `incidentSource`.
+
+**Zoom focus (decision 10).** The overview and a fire's view are one map.
+- `useStore.getState().focusIncidentFromMap(id: string | null)`, called by the map's viewport logic
+  (`map/focus.ts`). Debounced `FOCUS_DEBOUNCE_MS` = 300 ms, the last call wins; a call matching what is shown cancels
+  a pending change. `id`: only a fire with a ready analysis (`canFocus`: a catalog row with `bundle_status: 'ready'`,
+  the cache, or the fire shown); anything else is ignored. Never builds, frames or pushes history (the URL entry is
+  replaced). Time: `latestObservationMs(m)` (live `time_range.now_ms`, historical `time_range.end_ms`), kept in
+  `useStore.focusTimeMs`; the first Play from it starts at the window start (`playStartsOver` in
+  `state/runtime.ts`), so it animates the spread. `null`: back to the overview with `incidentSource: 'zoom'`.
+  Both keep every selection, the preset, perspective, basemap and the map `view`.
+- `useStore.incidentSource: IncidentSource | null`, set in the same update as `incidentId`:
+  `'zoom' | 'card' | 'search' | 'link' | 'picker' | 'history' | 'other'`. The map frames a new incident unless it is
+  `'zoom'`.
+- Cache: the last `INCIDENT_CACHE_SIZE` = 4 shown fires' bundle data stay in memory (`cachedIncidentIds()`); focusing
+  or opening one again shows it at once and revalidates it (files refetched only when `built_ms` changed).
+- `MapFlyTo.source?: MapFlySource` (`'official'`; `state/workspace.ts`): a flight that shows an official area
+  (official-web's `fitOfficialBounds` passes it). The map's zoom focus should skip the move it causes, so showing
+  Henderson's Orange County zone never focuses the Norte Fire. Wired by the integration: `fitOfficialBounds` and the
+  Layers drawer's zone fit pass it, and the map holds the focus (`FocusHold`, CONTRACT §13 map).
+- Focus candidates: all prepared fires whatever the overview filter. `catalog.live`, `.season` and `.historical` are
+  loaded at start and stay loaded (the filter never refetches; live refreshes every 5 min, also on the overview);
+  `preparedFires(catalog)` (`state/overview.ts`) = every ready row with `bbox_lonlat`, deduplicated. Limit: a past
+  fire under the 2025 list's size threshold (300 ac; 100 with the picker's switch) is not a candidate; today all 8
+  prepared real fires are listed.
+
+**Incident lists** (`useStore.catalog`, `state/catalog.ts`): `live` (`?mode=live`), `season` (new:
+`?mode=historical&year=2026&min_acres=300`; rows of another year are dropped, so a server ignoring `year=` cannot leak
+2025 rows), `historical` (`?mode=historical&year=2025&min_acres=<minAcres>`). Per list `listLoading`, `listErrors`,
+`updatedMs` (Fire-3d's check time, not CAL FIRE's); `loading` / `error` are their union. Each list applies on
+arrival; an older answer never overwrites a newer one. `loadCatalog({ lists?, modes?, minAcres? })`.
+
+**Overview filter and helpers** (`useWorkspace.overviewFilter: 'active' | 'season' | 'past'`, default `'season'`;
+`state/overview.ts`, tested): `overviewFires(catalog, filter)` (the panel list and the map's markers: `'season'` =
+live ∪ season, deduplicated, active fires first, then acres), `preparedFires`, `findFire(id, summary, catalog)`,
+`fireStatus(row)` (CAL FIRE's flags: Active / Contained / Out), `analysisState(row)`, `newestRecordMs(rows)` (CAL
+FIRE's own newest update), `fireFlyTo(row)` (`bbox_lonlat`, else 2.5x the acreage radius, at least 3 km).
+
+**Fire card (I3)**: `useWorkspace.fireCardId` + `setFireCard(id)` (never moves the camera). `ui/shell/FireCard.tsx` in
+the `.mw-firecard` slot (left column on desktop, a bottom sheet on phones; it hides the location card while open):
+CAL FIRE's official record (acres, containment, status, CAL FIRE's update time, incident page), the analysis state,
+and "Open this fire" / "Prepare analysis (1-3 min)" / Play spread / Check a location / Open in 3D through
+`openFire(id, action)` (`ui/shell/fireActions.ts`; `source: 'card'`). Closes on Escape (capture phase, before the
+drawers), a new selected point (`selectLocation` clears it), an incident change unless it is the card's fire, or a
+map click elsewhere (map). Focus returns to the opener, else the map canvas. `showFireCard(id)` (list rows, picker):
+card + `requestMapFlyTo(fireFlyTo(row))`; on a prepared fire that flight usually zoom-focuses it.
+
+**History** (`state/history.ts`, tested): explicit incident changes push (`?ws=…&incident=<id>` or none; `t` / `mode`
+dropped); zoom focus changes and the 404 fallback replace; Back / Forward apply the entry's `incident`
+(`selectIncident(id, { source: 'history' })` or `closeIncident()`), its `t` once ready and its `ws`. "← All fires"
+(`goToOverview()`) goes back when the entry was pushed from the overview, else closes (push). A named fire loads in
+parallel with the lists (`source: 'link'`). `useWorkspace.returnToIncident()` calls the mounted map's
+`actions.frameFire()` (the fire itself), else requests the AOI bounds.
+
+**Basemap default (O-R10; §2):** effective `basemap = basemapFallback ?? basemapPick ?? defaultBasemap(preset)`
+(Public aerial, Command dark); `setBasemap` = explicit pick (clears a fallback); `setBasemapFallback` = map only; a
+preset switch follows the new default unless picked; the URL writes the pick only when it differs from the default.
+
+**Header and presets (C-R8):** one "Public · Command · Forensic" switch (`ViewSwitch`, `ui/shell/views.ts`: Forensic
+keeps the preset); "California · all fires" on the overview, "← All fires" + the picker inside a fire; no Analysis
+toggle without a fire. Phones: the labelled "Updates" button with `useOfficialBadge()`'s count and colour.
+
+**Updates panel (U-R3, U-R4, U-R9):** one scroll area: official-web's `OfficialNow` at the top, then the data status
+(Command: every source, Cal OES / NWS / CAL FIRE rows from `useOfficialNow()`, a past fire's CAL FIRE row with the
+year and "Last edit of CAL FIRE's record"; Public: one line `freshnessLine()`, "Sources checked 2 min ago · satellite
+data 16 h old" / "Archived replay to Jan 10, 2025", rows on demand), then the feed. **Deviation from I5:** desktop
+Public opens on a compact "Official now" (`ui/shell/officialSummary.ts`, tested): three short lines from the same
+`useOfficialNow()` data (zone status and NWS event verbatim, issuer, distance; quiet states say "Not an
+all-clear"), the data line and the standing line; "Details" in the panel header shows `OfficialNow`, the data rows
+and the feed. Reason: OfficialNow is 380-780 px tall and the default Public view must keep >= 75 % open map. Command,
+phones (the sheet) and the expanded panel mount `OfficialNow` at the top.
+
+**Overview panel:** official-web's `OfficialNow` California variant (statewide NWS alerts, "zoom in on a fire or pick
+one") sits above the list (`.ov-official`, at most 34 % of the panel, scrolls).
+
+**Satellite chip (I5 ImageryChip):** in the header bar from 1024 px (`.mw-hdr-chip`, right above the map controls;
+the bar is chrome anyway, so the chip costs no map area), below that in the `.mw-imagery` slot next to the controls
+(phones: its own row, hidden while a card or sheet is open). Its caption hangs over the map.
+
+**Coordinate strip (decision 7):** always visible; `useCoordsVariant()` (`ui/shell/coordsVariant.ts`): `'full'`
+Command, `'compact'` Public, `'line'` phones (the slot's toggle shows the preset's form). Location's strip follows it.
+
+**Layout and tokens (C-R9, C-R2):** `--m-text-3` #98a4b2, `--m-text-2` #b3bfcc, Public `--m-panel` 0.94 (Command
+0.95); `--m-fs-xs` 11 px = tags and headings only, `--m-fs-sm` / `--m-meta-fs` 12 px = meta, `--m-fs-md` 13 px =
+body; `--m-chip-opaque` (the research note and credits chips), `--m-official-ink` / `--m-official-line` (the
+"Official" tag), `--m-header-h` 40, `--m-search-w` / `--m-card-w` 360, `--m-legend-w` 380 (the legend's bottom-row
+column), `--m-chip-w` 380 (the chip shows the platform). Phones: the note and "© Credits" (a toggle that opens the full credits above the bottom
+row) share one line; the timeline hides its current-time line (and, with a card open, the forecast-issue and
+freshness lines: `.ctl-clock`, `.ctl-fcinfo`, `.ctl-fresh`, `.ctl-replay`, CSS in `styles/overview.css`); cards and
+sheets stack above the map controls (z 6-7) and the cards stop at 42vh; a clicked pin under a sheet is panned into
+view (`usePinAboveSheet`, `layout.ts pointHidden`).
+
+**Forensic (O-R7):** no fire: "Zoom in on a fire or pick one" with the list and the card; a fire: desktop opens with a
+timeline-only dock (`.fx-dock-min`; "Charts & key events" restores it) and a labelled "Frame fire"
+(`issueCameraCommand('frame-fire')`), phones with the panel sheet collapsed ("Layers & analysis"). The shared
+selection is drawn as a cyan pin (`scene/overlays/SelectionPin.tsx`, mounted in `Scene.tsx`); a click (not a drag) on
+the terrain selects that point (`ProbeDriver`).
+
+### official-web (I5 official hooks and components, I6 official map layer, feed and imagery chip)
+
+Written early on 2026-10-18 so location, shell and map can build against it; kept up to date as built.
+
+**Data flow.** `extras/ExtrasSync.tsx` (always mounted in the map workspace) now, for the open fire:
+- fetches the Cal OES zones whatever the evacuation toggle says (the toggle only hides them on the map, legend and
+  credits);
+- fetches the satellite image list for the chip: with the imagery layer off, one list per fire (live: now; replay: up
+  to the end of the record); with it on, the list follows the timeline as before;
+- runs `useOfficialSync()` (`official/runtime.ts`): `GET /api/official/calfire?incident=` (refresh 5 min, live only)
+  and `GET /api/official/fire-weather?incident=&at_ms=`. `at_ms = fireWeatherAtMs(...)` (`official/client.ts`) is
+  omitted while a live timeline stands for the present, else the hour; it is held during playback, and current answers
+  refresh every 2 min. Demo bundles (`isDemoBundle`) fetch neither.
+
+Answers live in `useOfficialRuntime` (`calfire`, `fireWeather`, `statewide`, same shape as ExtrasQueryState;
+`seen` = live NWS alerts remembered this session, so one that leaves the live feed stays listed 48 h as expired;
+`highlight`). Dev handle: `window.__officialRuntime`. On the overview (no fire open) the sync fetches only `statewide`
+(`GET /api/official/fire-weather` without an incident: every current California alert).
+
+**Fire changes (decision 10: zooming in focuses a fire, zooming out returns to the overview).**
+- Every extras and official query goes through one per-URL cache (`extras/jsonQuery.ts`, `useCachedJsonQuery`; the
+  URL names the fire, area and time). Re-focusing a fire shows its last answers at once; they are refetched only when
+  older than the source's cadence (evacuations and NWS 2 min, CAL FIRE and cameras 5 min, imagery 30 min, at least
+  1 min). Readers of one URL share one request, and a request no reader needs any more is aborted.
+- Readers keep only the open fire's answers (`forIncident` in `official/guard.ts` compares `incident_id`), so a
+  previous fire's rows never show under the new fire, not even for one render.
+- Time-dependent queries (evacuations, cameras, imagery, NWS) wait until the timeline belongs to the new fire
+  (`officialTimeReady`: its manifest is loaded; a fire without a ready bundle is asked for the present), so a switch
+  never sends the previous fire's time (no needless archive request, no flash of "not available for past dates").
+- The hooks compare the minute-quantised timeline with a NOW marker quantised the same way (`officialPast` in
+  `official/context.ts`): a live fire shown at its latest observation (e.g. 00:42:41) is the present, never a past
+  date.
+- Official fits never change the open fire: `fitOfficialBounds` (`official/select.ts`) requests
+  `requestMapFlyTo({ ..., source: 'official' })`, and the map's zoom focus holds what is open until the user moves the
+  map again (integration; CONTRACT §13 map "Focus by zooming").
+- Overview: `OfficialNow` shows "Official now · California" (the state's current NWS alerts, or the quiet line "No
+  Red Flag Warning or Fire Weather Watch in effect in California. Not an all-clear.") and the pointer "Official
+  evacuation zones and CAL FIRE's record are shown for a fire: zoom in on a fire or pick one, or check an address".
+  `useOfficialNow()` there: evacuation `'not-checked'`, calfire `'unavailable'`, fireWeather = California's alerts;
+  `useOfficialBadge()` is `{ count: 0, level: null }`. The official map layer outlines California's alerts (U-R12).
+
+**I5 hooks** (`web/src/official/hooks.ts`; types in `official/model.ts`, re-exported):
+
+```ts
+useOfficialAtPoint(lon: number | null, lat: number | null): OfficialInfo
+useOfficialNow(): OfficialInfo                      // the open fire, no point ("Official now")
+useOfficialBadge(): { count: number; level: 'order' | 'warning' | 'fire-weather' | null }
+interface OfficialInfo { evacuation: EvacuationOfficial; fireWeather: FireWeatherOfficial; calfire: CalFireOfficial }
+interface EvacuationOfficial {
+  state: 'listed' | 'none-listed' | 'not-checked' | 'past-date' | 'unavailable' | 'loading'
+  zones: OfficialZone[]; checkedMs: number | null; sourceUpdatedMs: number | null; sourceUrl: string | null; caveat: string
+  reason?: string | null; links?: { label: string; url: string }[]; bounds?: [w, s, e, n] | null; layerOff?: boolean
+}
+interface OfficialZone {
+  id: string; status: string /* verbatim */; group: 'order' | 'warning' | 'other'; issuer: string
+  issuedMs?: number; updatedMs?: number; listedMs?: number; distanceKm: number | null; outsideAnalysisArea: boolean
+  name: string | null; message: string | null /* verbatim */
+}
+interface FireWeatherOfficial {
+  state: 'active' | 'none' | 'past-date' | 'unavailable' | 'loading'; alerts: OfficialAlert[]; checkedMs: number | null
+  archived: boolean; credit: string; sourceUrl: string; reasonCode?: string | null; reason?: string | null; caveat: string
+}
+interface OfficialAlert {
+  id: string; event: string /* verbatim */; senderName: string; onsetMs?: number; endsMs?: number; expiresMs?: number
+  headline: string /* verbatim, '' if none */; url: string | null; archived: boolean
+  phase: 'active' | 'upcoming' | 'expired' | 'cancelled'; timeText: string /* "until Oct 20, 18:00 PDT" */; sentMs?: number
+  coversReportedLocation: boolean | null; nearestKm: number | null; ugcs: string[]; bounds: [w, s, e, n] | null
+}
+type CalFireOfficial = { state: 'available' | 'unavailable' | 'loading'; acres?; percentContained?; isActive?; updatedMs?;
+  url?; final?; agencies?; checkedMs?; recordingSinceMs?: number | null; containedMs?; reason? }
+```
+
+Rules the states follow (pure, tested in `official/model.test.ts`):
+- **Evacuation at a point.**
+  - `'listed'` / `'none-listed'` only where Cal OES was really checked: inside the open fire's query box (its analysis
+    area + 15 km; `evacuationAtPoint` in `extras/evacuation.ts` respects the response `bbox`).
+  - For a point outside that box, or on the overview, the hook checks a small box around the point itself (±0.005°,
+    current time only).
+  - `'past-date'`: historical replay, or a live time before the NOW marker − 6 h ("Official status is shown only for
+    the current time").
+  - `'not-checked'`: no point, or outside California. `'unavailable'` + `reason` on outages or counties missing from
+    the statewide layer (+ the counties' own maps in `links`).
+  - Normal / Training zones are never listed.
+- **Zone times.** `issuedMs` is always absent (Cal OES gives none). Show `updatedMs` as "Updated by the issuer …",
+  else `listedMs` as "Issuer time not given; listed by Cal OES …". `checkedMs` is only "checked …", never an issue
+  time. `outsideAnalysisArea` → show "Cal OES does not say which fire this is for." (`NOT_FIRE_SPECIFIC`).
+- **Fire weather at a point.** Alerts whose NWS zones contain the point and that are in effect (or upcoming) at the
+  reference time (now, or the replay time). Inside the open fire's checked area (`area_bbox`: its analysis area + 15
+  km) its answer decides, archived for past times. Elsewhere at the current time, and on the overview, the statewide
+  answer decides, so `'none'` holds anywhere in California. A past time outside the fire's area is `'past-date'`;
+  outside California `'unavailable'` with `reasonCode: 'not_checked'`; demo fires `reasonCode: 'demo'`. Always show
+  `caveat`: a Red Flag Warning is a weather warning, not an evacuation order. Card line:
+  `` `Fire weather alert here: ${a.event} (${a.senderName}) ${a.timeText}` ``. `phase` `'cancelled'` covers NWS
+  CAN and UPG (UPG reads "Replaced by a newer NWS alert").
+- **Near the fire (`useOfficialNow`).** Evacuation = every shown zone in the fire's query box with its distance
+  (orders, warnings, other; then nearest first). Fire weather = the fire's alerts, kept 48 h after they end
+  (`phase`); `'active'` while one is in effect or upcoming.
+- **Badge.** `count` = (status, issuer) groups of order / shelter / warning zones + NWS alerts in effect or upcoming;
+  `level` = order > warning > fire-weather > null.
+- **`calfire`.** The endpoint's `current`, else the incident summary (also CAL FIRE's list); `'unavailable'` for demo
+  fires and when no record exists.
+
+**I5 components** (no props; both render nothing on the overview):
+- `web/src/ui/feed/OfficialNow.tsx` `OfficialNow()`. Mount it at the top of `UpdatesPanel`, above the scrolling feed,
+  in the desktop panel and the phone sheet. Classes `on-*` (`ui/feed/updatesFeed.css`). About 150-240 px tall:
+  three rows (evacuations, CAL FIRE, fire weather) + the "not an evacuation order" line.
+- `web/src/extras/ImageryChip.tsx` `ImageryChip()`. A one-line chip ("Satellite · newest 20 h ago · 375 m · VIIRS
+  NOAA-21 · Oct 17, 14:30 PDT"; the clock time, then the platform, give way first when the slot is narrow) and a
+  popover with `ImageryPanel`. While an image is shown, a compact caption (title, "not live", one line of time, age,
+  pixel size and cloud cover; limits and credit behind "More") is portaled to `document.body` and placed next to the
+  chip where it covers no `[data-chrome]` element (`extras/placement.ts`), so the slot needs no room for it. Wrap the
+  chip in a `[data-chrome="imagery"]` element with `--chrome-side`, like the other floating chrome. Classes
+  `xs-chip*`, `xs-caption*` (`extras/extras.css`). The image list (`ImageryPanel`) is one list: images since the fire
+  started (newest first; true color before false color at the same time), then context before it, GOES last.
+  One list per screen (integration): on wide screens the chip's "More images" popover holds the image list and the
+  Layers drawer shows `ImageryLayerSummary` under the recent-imagery toggle (the image shown, "not live", time, age,
+  pixel size, cloud cover, opacity, credit, and where to pick another); phones keep the full `ImageryPanel` in the
+  drawer (the chip is hidden while a sheet is open). Each `ImageryPanel` has its own radio group (`useId`), so two open
+  lists never uncheck each other.
+
+**Selection read by the official map layer (U-R5).** `useOfficialRuntime.highlight: OfficialHighlight | null`:
+
+```ts
+type OfficialHighlight =
+  | { kind: 'evacuation'; id: string; zoneIds: string[] }                    // Cal OES zone ids
+  | { kind: 'fire-weather'; id: string; ugcs: string[]; alertIds: string[] } // NWS zones / alert ids
+```
+
+- Set by `selectFeedItem(item)` (from `item.highlight`) and by "Show on map" in Official now
+  (`showOfficialArea(h, bounds, { toggle })` in `official/select.ts`).
+- Cleared when another update is selected, the selection closes (`selectedEventId` changes) or the fire changes.
+- Official items with `bounds` are fitted with `useWorkspace.requestMapFlyTo({ lon, lat, bounds })` in the map
+  workspace (`fitOfficialBounds`); others fly as before.
+- extras' `zoneId` (map click in a zone) keeps its meaning.
+
+**I6 map layer** (`web/src/official/mapLayer.ts`):
+
+```ts
+mountOfficialLayers(map, { beforeId?: string | string[]; topBeforeId?: string | string[] })
+  => { update(state?: unknown): void; remove(): void; layerIds(): string[] }
+```
+
+- Mount once per map, after `bindExtrasLayers(map)`:
+  `mountOfficialLayers(map, { beforeId: [EVAC_LAYERS.tint, ...drapedLayers().map((l) => l.id)], topBeforeId: topLayers().map((l) => l.id) })`.
+  Call `remove()` before `map.remove()`. It re-adds itself after basemap swaps.
+- Stacking: imagery < NWS outlines, their labels and a selected NWS alert's outline < evacuation zones < fire layers <
+  basemap labels < a selected evacuation zone's outline < map-core's top layers (integration: the NWS labels moved
+  below the fire layers, so where an outline crosses the fire, the fire covers its label).
+- `LayerGroupHandle` (`extras/mapLayers.ts`, also used for the evacuation zones and imagery) restores this stacking after
+  every style load (integration fix): MapLibre fires `styledata` (the group re-adds itself, before map-core's fire
+  layers exist, so it falls back below the basemap labels) before `style.load` (map-core re-adds its fire layers below
+  it); the forced sync on `style.load` now moves existing layers back below the first present `beforeId` candidate.
+  Before the fix, evacuation zones and NWS outlines were drawn above the fire layers.
+- Style (integration, the coordinator's clarity note: NWS zones are large and their outlines crossed the whole map):
+  unselected outlines are thin and quiet (`FW_LINE` warning 1.4 px dashed, watch 1.2 px dotted; `FW_OPACITY` 0.85 at
+  z6 fading to 0.4 by z14; a light 3 px casing at 0.5), labels sparse (`symbol-spacing` 600, from z7). A selected NWS
+  alert (`highlight.kind 'fire-weather'`) is drawn in its own colour, solid 1.8 px with a light casing and a faint 7 %
+  fill, below the fire layers (`hlFwCasing` / `hlFwLine`); a selected evacuation zone keeps the white outline on top
+  (`hlCasing` / `hlLine`, filtered by the highlight feature's `kind`). The outline labels sit below the fire layers.
+  The fire layers stay the most prominent element; the legend entry and credit are unchanged.
+- It subscribes to its stores itself. `update()` is optional: `update()` re-syncs, `update({ visible: false | true })`
+  hides or shows every official layer.
+- Ids are in `OFFICIAL_LAYERS` / `OFFICIAL_SOURCES` (`fx-official-*`). The layers are non-interactive: the map's
+  click handling needs no change.
+
+**Legend and credits** (no change needed in MapLegend or MapAttribution):
+- `useExtrasLegend()` also returns the NWS entries (layer key `'fireWeather'`, swatch `{ kind: 'outline', color, line }`,
+  drawn by `LegendSwatch`). `EXTRAS_LAYER_KEYS` includes `'fireWeather'`.
+- `compactExtrasLegend()` labels them "Fire weather alert (NWS)" and uses an entry's new optional `compact` label: the
+  satellite image now reads "Satellite image · VIIRS NOAA-21 · Oct 17, 14:30".
+- `useExtrasStatus()` adds a `fireWeather` line when alerts cannot be shown.
+- `useExtrasCredits()` adds "Fire weather alerts: National Weather Service" (or "… via Iowa Environmental Mesonet
+  archive") while outlines are drawn.
+
+**Feed (U-R2, R5, R8, R10).**
+- `FeedItem` gains optional `url, issuer, issuedMs, updatedMs, expiresMs, checkedMs, bounds, status ('active' |
+  'upcoming' | 'expired' | 'cancelled'), distanceKm, highlight, links, sections, archived, notes, timeNotGiven,
+  children`. `FeedTopic` adds `'calfire' | 'fire-weather' | 'quiet'`. `FeedFilter = 'official' | 'all' | 'key'`.
+  `FeedInput` adds `preset`, `groupPasses`, `wallMs`.
+- `useExtrasFeedItems()` (unchanged call in App.tsx) now also returns the evacuation rows whatever the toggle says, CAL
+  FIRE change / final-record rows and NWS rows.
+- Official rows are timed by the issuer, else by the source's own time, never by Fire-3d's fetch (`timeNotGiven`). They
+  are seekable only inside the observed record (`time_range.start_ms` … `now_ms`); not seekable means never "later".
+
+**Forensic Key Events (U-R11).** Each row shows its kind as a glyph (the feed's kind icons: observation, estimate,
+model output, official update, your note); automated items get a corner dot on the glyph, spelled out in its label and
+tooltip. The empty list says "No key events detected for this fire. No update does not mean no danger; follow local
+officials."
+
+### official-backend (I2 list data, I7 official endpoints; as built 2026-10-18)
+
+Backend: `backend/fire3d/api/official.py` (router), `sources/nws.py`, `sources/calfire_history.py`, `catalog.py`,
+`sources/calfire.py`, `contracts.py` (`IncidentListRow`, `CalFireOfficialResponse`, `FireWeatherResponse`); TS shapes
+in SPEC §6. Tests: `backend/tests/test_official_*.py` (recorded samples in `backend/tests/data/official/`).
+
+**I2 lists (`GET /api/incidents`).**
+- `year=YYYY` (2000-2100) applies to `mode=historical` only; the default stays 2025. Historical answers gain `year`.
+- Every row (both modes) is `IncidentListRow` = `IncidentSummary` + `bbox_lonlat: [w, s, e, n] | null`: the analysis
+  area (`manifest.grid.bbox_lonlat`) when `bundle_status` is `"ready"`, else null. The detail endpoint's `summary`
+  is unchanged (no `bbox_lonlat`).
+- Rows of a year list keep `mode: "historical"`, as the 2025 list always did, and `detections_24h: null`.
+  `is_active` is CAL FIRE's status. `/api/incidents/{id}` resolves a fire in CAL FIRE's live list as `mode: "live"`,
+  and the store takes the mode from there.
+- The current year's list is refreshed every 30 min (HTTP cache; in memory 10 min); past years every 24 h. It is
+  overlaid with CAL FIRE's live list:
+  - a fire's live record replaces the year copy when it is at least as new;
+  - live fires of that year that the copy lacks are added.
+  So a 2026 `season` row of an active fire has the same CAL FIRE values as its `live` row.
+- CAL FIRE down: with `year`, the fallback lists that year's bundles on disk in either mode. Without `year`, the
+  fallback is unchanged.
+
+**I7 envelope (both endpoints).**
+`{ kind: 'calfire' | 'fire_weather', status: 'available' | 'unavailable' | 'not_available_for_past_dates',
+reason_code: 'past_date' | 'upstream_error' | 'not_covered' | null, reason: string | null,
+source: { name, url, credit, license?, terms_url? }, retrieved_ms, source_updated_ms, requested_at_ms, now_ms,
+incident_id: string | null, caveats: string[] }`.
+- `retrieved_ms` is when Fire-3d fetched the source, never an issue time. `source_updated_ms` is the source's own time.
+- An upstream failure answers 200 with a status, so an empty list never stands in for "none".
+- HTTP errors: 400 invalid id, 404 unknown incident, 422 bad query, 429 Fire-3d's own request limit (NWS and IEM
+  30 requests/min each).
+- `Cache-Control: no-store`. Show every `caveats` string, or at least the not-an-all-clear and not-an-evacuation-order
+  ones.
+
+**`GET /api/official/calfire?incident=<id>`**: `{ ...envelope, incident_url, agencies, current, changes,
+recording_since_ms }`.
+- `current`: `{ acres, percent_contained, is_active, final, updated_ms, extinguished_ms }`, CAL FIRE's own numbers.
+  `updated_ms` is CAL FIRE's `Updated` and `extinguished_ms` its `ExtinguishedDate` (the extinguished field is
+  additive).
+- `changes`: oldest first, `{ updated_ms, seen_ms, acres?: [old, new], percent_contained?: [old, new],
+  is_active?: [old, new], final?: [old, new] }`.
+  - Only the fields that changed are present.
+  - `updated_ms` is CAL FIRE's time for the new record (use it as the row time); `seen_ms` is when Fire-3d first saw it.
+  - A new `Updated` time without new values is recorded but is not a change.
+- `agencies` is CAL FIRE's `AgencyNames` verbatim: free text, sometimes starting with ", ", or null when empty.
+- `incident_url` is CAL FIRE's incident page (https only), also in `source.url`.
+- `recording_since_ms` is the baseline's `seen_ms`, or null when nothing has been recorded.
+- `retrieved_ms` is the fetch time of the CAL FIRE list copy used (null when CAL FIRE was unreachable).
+  `source_updated_ms` = `current.updated_ms`.
+- States:
+  - `available`.
+  - `unavailable` + `not_covered`: a demo or fixture bundle (no network call), or CAL FIRE no longer lists the fire.
+  - `unavailable` + `upstream_error`: CAL FIRE unreachable. `current` / `changes` then hold the last record Fire-3d
+    recorded, or `null` / `[]` when there is none.
+- Caveats:
+  - "These are CAL FIRE's own numbers and update time, …"
+  - "Fire-3d records CAL FIRE's changes only since it first checked this incident (recording_since_ms); …"
+  - For an inactive fire with no recorded change: "CAL FIRE's list keeps only the latest record, so the
+    update-by-update history of a past fire is not available. This is CAL FIRE's final record." (or "latest record").
+  - When CAL FIRE edited the record more than 7 days after containment (Eaton: Aug 2026): "CAL FIRE edited this
+    record well after the fire was contained; its update time is that edit, not news from the fire."
+- History storage: `data/official/calfire/<UniqueId>.jsonl`, one JSON line per distinct (`Updated`, values), outside
+  the bundles; atomic rewrite + fcntl lock; never goes backwards (an older cached copy is ignored).
+  - Recorded whenever the backend checks CAL FIRE: every live-list fetch (the list endpoints, the live loop's cycle,
+    `/api/live/status` counts) and every year-list fetch (the 2026 season list, the summary sync's lookups,
+    `get_summary`) records active fires and fires already tracked. Each `/api/official/calfire` call records its fire.
+  - A tracked fire that leaves the live list gets its next record from its year's list.
+  - History started on 2026-10-18; nothing earlier exists.
+
+**`GET /api/official/fire-weather?incident=<id>&at_ms=<ms>&margin_km=15`**: `{ ...envelope, alerts, zones,
+area_bbox, reported_location }`.
+- Area: the bundle's analysis area (or the reported location ± 10 km without a bundle) + `margin_km` (default 15,
+  0-60). `area_bbox` is that box; `reported_location` is `[lon, lat]` (both additive).
+- Which source:
+  - No `at_ms`, `at_ms` within 6 h of now, or later (forecast times): the live NWS list (`archived: false`, source
+    "National Weather Service"). One statewide request for every fire, cached 2 min; zone polygons are cached 30 days.
+  - `at_ms` older than now − 6 h, or any `at_ms` of a historical incident: the IEM archive (`archived: true`, source
+    name "NWS products, archived copy: Iowa Environmental Mesonet").
+  - A historical incident without `at_ms`: `not_available_for_past_dates` + `past_date`. Pass the replay time.
+  - Archive failure: `not_available_for_past_dates` + `upstream_error` ("… that does not mean there were none").
+  - NWS failure (live): `unavailable` + `upstream_error`. NWS itself is never asked about a past date.
+- Without `incident`: every current California alert and all its zones (outlines simplified to about 400 m),
+  `covers_reported_location` / `nearest_km` null (for the overview, U-R12). A past `at_ms` there:
+  `not_available_for_past_dates`.
+- `alerts[]` (I7 fields + additive `phase`, `office_url`, `nws_headline`).
+  - Wording is verbatim (`event`, `headline`, `nws_headline`, `description`, `instruction`, `area_desc`).
+  - Sorted: in effect, then upcoming, then ended; the alert covering the reported location first, then nearest.
+  - `id`: live = the NWS CAP id. NWS sends one message per zone group, so one VTEC event can come as several alerts:
+    group by `vtec.office + phenomena + significance + etn`. Archived = `"<year>-<office>-FW-<W|A>-<etn:04d>"`.
+  - `url`: live = the NWS API record (JSON); archived = IEM's page of the event. `office_url` is the issuing office's
+    page (`https://www.weather.gov/lox`), the human-readable link.
+  - `headline`: live = NWS's CAP headline ("Red Flag Warning issued … until … by NWS …"); `nws_headline` = NWS's own
+    headline text. Archived: `headline` = the headline of the statement segment that names this event (one segment
+    can head a warning and a watch: "...A... ...B..."); `nws_headline` = the whole headline paragraph.
+    `message_type` is null for archived alerts.
+  - `sender_name`: live "NWS Los Angeles/Oxnard CA"; archived "National Weather Service Los Angeles/Oxnard CA" (the
+    product's own line).
+  - Times: live = the CAP times. Archived = as the latest statement issued by `at_ms` gave them for the zone covering
+    the reported location (else the zone that best describes the event at `at_ms`), so they match the quoted text and
+    never reveal later extensions:
+    - `onset_ms` = the statement's start for that zone (the archive's per-zone start when it says "in effect");
+    - `ends_ms` = the statement's end; for an ended alert, the archive's per-zone end (when it actually ended);
+    - `expires_ms` = null (a CAP message expiry; archived products have none);
+    - `sent_ms` = `effective_ms` = the statement's time; its segment for that zone gives the text.
+    `phase` uses the archive's per-zone times (some watches were upgraded or cancelled before they began).
+  - `phase` at the reference time (now, or `at_ms`):
+    - `upcoming` (before onset);
+    - `in_effect`;
+    - `ended`: past the end, or `vtec.action` CAN / UPG / EXP. Archived alerts stay listed 48 h after they end; live
+      ones only while NWS lists them.
+    Suggested UI mapping: `ended` + action CAN or UPG → "cancelled" / "replaced", other `ended` → "expired".
+  - `covers_reported_location` (bool | null) and `nearest_km` (0 inside; null when a zone outline could not be loaded
+    or there is no point). Distances use the full NWS polygons.
+- `zones`: a FeatureCollection of the alert zones meeting the area. Feature `id` = UGC; `properties { ugc, name,
+  alert_ids }` (`alert_ids` = the alerts above covering it). Outlines are simplified to about 100 m for display, so
+  a point within about 100 m of a zone edge can test differently than in `covers_reported_location`.
+- Archive search: IEM bypoint at the reported location and the four corners of the analysis area. The window is the
+  whole record of a historical fire (start − 14 d … max(end, start + 3 d) + 2 d), else the UTC day of `at_ms` − 14 d
+  … + 2 d. Polygons are fetched only for events issued by `at_ms`. Caveats say what was searched and what failed.
+- Caveats always include `STANDING_NWS`: "A Red Flag Warning or Fire Weather Watch is a weather alert about fire
+  danger, not an evacuation order. Follow local officials."
+- When nothing is in effect or upcoming: "No Red Flag Warning or Fire Weather Watch … right now. That is not an
+  all-clear: follow local officials." (live), or "… is in the archive for this area at the selected time. That is
+  not an all-clear." (archive).
+- NWS User-Agent: "Fire-3d/0.1 (research prototype)". The optional env `FIRE3D_NWS_CONTACT` (a website or email,
+  sanitized) is appended inside the parentheses, for NWS requests only. No personal data by default.
+- Credits:
+  - live: "National Weather Service" (public domain, open data, https://www.weather.gov/disclaimer);
+  - archive: "National Weather Service, archived copy via the Iowa Environmental Mesonet (Iowa State University)",
+    public domain, not an official NWS source (https://mesonet.agron.iastate.edu/disclaimer.php);
+  - CAL FIRE: "CAL FIRE".
+
+### map (I3 hit-test, I4 fire bounds, I6 mount, opening camera, overview markers, aerial, 3D buildings, orbit)
+
+As built 2026-10-18 (`web/src/map/**`, `web/src/lib/fireBounds.ts`).
+
+**I4 fire bounds** (`web/src/lib/fireBounds.ts`, pure, tested):
+```ts
+type LonLatBox = [w, s, e, n]
+fireBounds({ grid?, burned?, p90?, perimeter?, point?, acres? }): LonLatBox | null
+aoiBounds(grid): LonLatBox                // the AOI's true UTM square, as a lon/lat box
+hasMappedFire(input): boolean             // burned area, perimeter or P90 reach present
+```
+- `grid` = `manifest.grid` (ready or building); `burned` = observed_arrival and `p90` = the selected forecast's
+  arrival_p90 (`{ data, width, height }`, e.g. data/rasters.ts `LoadedLayer`; finite arrival = fire); `perimeter` = the
+  newest perimeter (local metres); `point` = CAL FIRE's reported location; `acres` = CAL FIRE's acreage.
+- Mapped data: union of burned area, perimeter, P90 reach and point, grown by 40 % of its span (20 % each side), at
+  least 3 km on each axis, never larger than the AOI (shifted inside it, not shrunk). Nothing mapped: 2.5 acreage-circle
+  radii around the point (at least 3 km across), inside the AOI when there is a grid. Nothing at all: null.
+- The open fire's box, once its rasters are in: `useMapRuntime.getState().fireBounds` (null otherwise).
+
+**Opening camera (O-R4)** (`web/src/map/framing.ts`, pure `goalFor()` + `Framing` state machine, tested):
+- One flight per target, issued when its goal is ready: a ready bundle once its fire rasters are in (bounded wait 6 s,
+  then the vector data), a building bundle's grid, or CAL FIRE's point and acreage for a fire without a bundle. The
+  overview's goal is California `[-124.48, 32.53, -114.13, 42.01]` in the safe area (z5.2 at 1440x900, z4.5 phones), or
+  the overview view the user last left (Back / "← All fires").
+- `null -> id` keeps a view restored at mount (`?view=`, Forensic hand-off) when the link names that incident.
+- Done only when the fit completes; a fit stopped off target by a non-user call (compass, 2D/3D switch, padding) is
+  issued again once the camera is free (at most 4 times); a gesture on the map (drag, wheel, keys, touch) or an
+  explicit request (`requestMapFlyTo`, `useStore.flyTo`, the overview list) ends the opening framing. A provisional goal
+  (point / building) is replaced by a better one only while the user has not moved. The padding is set before every fit;
+  when MapLibre cannot fit, the camera eases to the box centre (padding included).
+- Views are written to `useWorkspace.view` only once settled (never mid-flight or while waiting for data).
+- Runtime (`useMapRuntime`): `framing: 'idle' | 'waiting' | 'flying' | 'done' | 'user'` (screenshot scripts can wait for
+  `'done'`), `framedKind: 'overview' | 'fire' | 'area' | null`, `actions: MapActions | null`:
+  `frameFire()`, `frameArea()`, `frameOverview()`, `rotateBy(deg)`, `tiltBy(deg)`, `topDown()`, `northUp()`,
+  `zoomBy(delta)` (relative to the opening fit while it flies), `retryAerial()`.
+- `useWorkspace.returnToIncident()` (shell; used by the search box's "Showing the Eaton Fire") frames the fire itself
+  through the mounted map's `actions.frameFire()` (the AOI box only when no map is mounted). The map's "Incident" button
+  toggles fire / modeled area (O-R5); MapNotices' "Return to incident" frames the fire. On the overview the button
+  reads "California".
+
+**Fire markers (O-R2, decision 10)** (`web/src/map/overviewLayers.ts`, source `fx-overview-fires`, layers `OVR.*`):
+- Exactly the shell's set `overviewFires({ live, season, historical }, useWorkspace.overviewFilter)`, at every zoom;
+  rebuilt when a list, the filter or the units change (never per frame).
+- Circle radius by sqrt(acres), 4-13 px; active fires (`isActiveFire`) filled orange with a white ring, other fires
+  hollow amber, a dark casing (light on Roads); labels "Name · 1,234 ac" (ha in metric) for active fires and fires of
+  20,000 ac or more, placed around the marker and dropped on collision (active and larger fires first); an invisible
+  hit circle of at least 11 px radius; the open card's fire gets a ring (`fireCardId`).
+- While a fire is open (focused by zoom or opened): markers at `DIM_OPACITY` 0.55, drawn below the open fire's own
+  markers; the open fire's marker is left out (its reported-location ring shows it); while a past fire is open
+  (`mode: 'historical'`), fires that started after the timeline time are left out too (honest replay). Filters change
+  only when that set changes.
+- Hover: CAL FIRE's official record (acres, containment, status, update time) as text.
+
+**Focus by zooming (decision 10)** (`web/src/map/focus.ts`, pure, tested; evaluated by `MapController` 300 ms after the
+camera settles, never during a gesture, a flight or the opening framing):
+- Candidates: every prepared fire (`bundle_status 'ready'` with a list row `bbox_lonlat`) of all three lists
+  (`catalog.live`, `catalog.season`, `catalog.historical`: `allFocusCandidates`), whatever the overview filter, which
+  only decides the markers, their chips and the panel list. E.g. with the 2026 season shown, zooming in over Altadena
+  focuses the 2025 Eaton Fire.
+- Enter at `FOCUS_IN_ZOOM` 8.5: the candidate whose area meets the central part of the visible map (the middle
+  `CENTRAL_FRACTION` 0.5 of the safe area's width and height, unprojected, so it works in 3D) and lies nearest the
+  camera centre. Stay while zoom >= `FOCUS_OUT_ZOOM` 7 and the open fire's area (manifest grid or row `bbox_lonlat`;
+  without one, its reported point) is in view, unless it left the central part and another candidate qualifies to
+  enter, or (integration) the view is centred inside another candidate's area and outside the open fire's own area
+  (neighbouring analysis areas overlap: dragging from Henderson onto Norte switches; a centre inside both keeps the open
+  one). Leave below 7, or when the open fire left the view and nothing qualifies: `focusIncidentFromMap(null)`.
+- Official areas (integration): a `MapFlyTo` with `source: 'official'` (an evacuation zone, an NWS alert's zones; from
+  `fitOfficialBounds` and the Layers drawer) starts `FocusHold`: the focus rule keeps what is open (`focusUnlessHeld`;
+  a change pending in the store's debounce is cancelled) until the user moves the map again (a gesture: drag, wheel,
+  keys, touch, the zoom buttons), another explicit flight or framing, or the open fire changes. Orbit buttons keep the
+  hold. MapLibre starts a wheel zoom without an `originalEvent` (only its `moveend` carries the wheel event), so the
+  hold also ends when a move ends by the user or right after input on the map.
+- The map calls `useStore.getState().focusIncidentFromMap(id | null)` (shell) only when the answer differs from what
+  is shown, or to cancel a request of its own still pending in the store's debounce.
+- Camera: a new incident whose `useStore.incidentSource === 'zoom'` (set in the same update) is never framed
+  (`Framing.setTarget(id, { keepCamera: true })`); every other source frames it as before. The overview view that
+  Back / "← All fires" returns to is only one below zoom 7, so it never refocuses a fire.
+- Other prepared fires in view (`web/src/map/nearbyPerimeters.ts`), from all three lists like the focus: from zoom
+  `NEARBY_MIN_ZOOM` 7, up to `NEARBY_MAX` 8 nearest the centre (never the open one): their bundle `manifest.json` (grid) and `perimeters.json` are fetched
+  once per `bundle_built_ms` (`/api/bundles/<id>/…?v=`), and their latest perimeter is drawn as a lighter dashed
+  outline (`LYR.nearbyLine`, label from z9.5 "Palisades Fire · perimeter Jan 12, 2025"), following the perimeter
+  toggle; in a past fire's replay, the newest perimeter published by the timeline time, and none for fires not
+  started then. `useMapRuntime.overlays.nearby` counts them (legend "Prepared fire perimeter" on the overview, "Other fire
+  perimeter" while a fire is open).
+- Unprepared fires: zoomed in near one (zoom >= `CHIP_ZOOM` 9, reported point in the central part, at most
+  `CHIP_MAX` 2 nearest the centre: `chipTargets`), a chip under its marker: "Spread not prepared yet · Prepare
+  analysis (1-3 min)" ("Spread being prepared (1-3 min)…" while building). Its click opens the fire card; nothing
+  builds on zoom or click.
+
+**I3 clicks** (`MapController.onClick`): camera icons first; then a chip or another fire's perimeter outline ->
+`setFireCard(id)` (no camera move); then event markers (`selectFeedItem`); then a fire marker or label at any zoom
+(nearest marker centre wins) -> `setFireCard(id)` + `requestMapFlyTo(fireFlyTo(row))`, no location select; inside a
+fire, the fire's own marker, label or hit circle (`LYR.incidentHit`, 24 px) -> `setFireCard(incidentId)`, no select;
+any other click closes an open card (`setFireCard(null)`) and selects the point as before.
+
+**Basemap (O-R10, O-R12)**: the map renders `useWorkspace.basemap` (effective). When the USGS photos fail (4 tile
+errors and no tile, or no tile within 8 s while the tab is visible) it calls `setBasemapFallback('dark')`: the aerial
+style and every USGS request go away. MapNotices shows "Aerial photos are not loading (USGS); showing the street map."
+with "Try aerial again" (`actions.retryAerial()` = `setBasemapFallback(null)`); picking aerial in the menu does the same
+through `setBasemap`. Past z16.5 on aerial: "Photo detail ends here …" (USGS stops at level 16).
+
+**Aerial legibility (O-R11)**: theme `'aerial'` in `layers.ts`: 3.6 px dark casings under the AOI and perimeter lines,
+12 px area / perimeter labels with 1.6 px halos, the observed fill fading to 0.55 between z12.5 and z13.5 (its edge
+stays), detection footprints outline-only and fainter; aerial major roads at 0.45 alpha (`basemapStyle.ts`). Photo date:
+`aerialPhotoLine(startedMs)` in `providers.ts` ("Aerial photos: USDA/USGS, June 2024 or earlier: taken before this
+fire"; source: the MapServer's copyrightText "Data refreshed June, 2024"), in the legend and the basemap menu.
+
+**3D buildings (O-R13)**: `BUILDINGS_3D_LAYER` (`fx-buildings-3d`), one muted fill-extrusion per basemap (dark
+`#4a5566`, roads `#a8a095`, aerial `#c3c9d1`, opacity 0.6, fading in z14.5 -> 15), directly below the labels, visible
+in 3D only, never coloured by fire state; liberty's own extrusion is dropped. Draped overlays go below it
+(`DerivedStyle.overlayBeforeId`), so the 3D draped layers stay one render-to-texture stack. Legend caveat:
+`buildingsCaveat()` ("3D shapes: today's OpenStreetMap; buildings destroyed by this fire may be missing; not a damage
+assessment").
+
+**Orbit group (O-R14)**: in 3D a second controls row: rotate ±15°, tilt ±10°, "Top-down" (pitch 0, terrain kept),
+"North up"; a one-time gesture hint (`localStorage['fire3d.orbitHintSeen']`); the canvas label lists Shift + arrows.
+
+**I6 mount**: `mountOfficialLayers(map, { beforeId: [EVAC_LAYERS.tint, ...drapedLayers ids], topBeforeId: topLayers ids })`
+right after `bindExtrasLayers(map)`; `remove()` before `map.remove()`.
+
+### location (search, towns and ZIP codes, overview search, card summary, official line, coordinate strip; as built 2026-10-18)
+
+**`GET /api/geocode` (CONTRACT §6, additive).** One endpoint, three kinds, said in every reply: top-level `kind`
+(`'address' | 'place' | 'zip'`) and `local` (true = matched locally, no upstream call), and `kind` on each match.
+- Classification (`backend/fire3d/api/geocode.py`): a 5-digit ZIP (also ZIP+4, "CA 91001", "91001 CA") → local ZIP
+  areas; text starting with a house number → the Census Geocoder (unchanged); other text with letters → local towns;
+  anything else → 400. Coordinates stay 400 (the browser parses them).
+- Local index `backend/fire3d/data/gazetteer_ca.json` (131 KB, 46 KB gzipped), built by
+  `backend/scripts/build_gazetteer.py` from the **2026 U.S. Census Bureau Gazetteer Files** (public domain): 1,622
+  California places (462 cities, 21 towns, 1,139 CDPs) and 1,802 ZCTAs (ZIP prefixes 900-961). Positions are each
+  area's internal point (approximate). Credit: "U.S. Census Bureau Gazetteer Files".
+- Local matches add `name`, `place_type` (`city | town | cdp`) + `place_type_label`, `zip`, `land_km2`, `exact` (the
+  whole name, or the name in parentheses: "Ventura"), `near` / `near_km` (same-named places: the nearest city or town;
+  ZIP areas: the nearest place within 25 km). Town matching folds accents and punctuation, `mount/saint/fort` =
+  `mt/st/ft`, every word must start a name word; exact > prefix > all words, then city > town > CDP, larger first; at
+  most 8. Local replies: `benchmark: null`, `vintage`, `source: "U.S. Census Bureau Gazetteer Files"`, a `note` (or,
+  with no match, why: "Landmarks, businesses and street names without a house number are not searched", "not a
+  California ZIP area"). 503 when the index is missing (addresses still work).
+- **Git:** the root `.gitignore` line `data/` also ignores `backend/fire3d/data/`. It must be followed by
+  `!backend/fire3d/data/` or the index is never committed (integrator; verified in a scratch repo).
+
+**Search box (`location/SearchBox.tsx`, logic in `search.ts`, tested).**
+- Labelled "Check an address" (sub-label "street, town, ZIP code or coordinates"), placeholder "e.g. 600 E Mariposa St,
+  Altadena". `#mw-search input` is still the input (the shell's `focusSearch()` works).
+- Plan: coordinates → select; one **exact** incident name (full name, id, or name + its year) → open it; a bare name
+  ("Eaton") opens the fire only when the town lookup finds no exact town of that name; everything else → `/api/geocode`.
+  Other incident matches are only listed: "Analysis ready", "Being prepared", "Data not prepared" ("opens its card").
+- Opening a prepared fire from search (and from the overview card) is explicit: `openFromSearch(id)`
+  (`location/openFromSearch.ts`) = `setFireCard(null)` + `selectIncident(id, { source: 'search' })`, never
+  `autoBuild`. An unprepared fire: `requestMapFlyTo(fireFlyTo(row))` + `setFireCard(id)`: its card asks. The
+  current fire: `returnToIncident()` + "Showing the Eaton Fire".
+- A town or ZIP pick clears the previous point, flies to a box sized by the area's land area (3-50 km) and says "Showing
+  Altadena (town center, approximate). To check a spot, enter a street address with a house number, or click the map."
+  with the Gazetteer credit; other matches stay listed.
+- State machine (`searchReducer`, `cancelledLookup`): every lookup has a sequence number; Escape, an edit, Clear, an
+  outside pointer-down (the map included), a new selection and a pick close the one popover and abort the request;
+  a reply with an old number is dropped. **A change of `incidentId` (zoom focus, decision 10) closes nothing.**
+  Phones: focusing the box closes open sheets (`setPanel(k, false)` for updates / layers / analysis); a pick blurs.
+- Errors in plain words (`plainSearchError` in `geocodeClient.ts`): no status codes.
+- `location/searchUi.ts`: `useSearchUi.popover` = the popover's viewport box while open. The card yields to it
+  (`cardYield`): pushed down on desktop, a shorter or hidden sheet on phones. Nothing else needs to read it.
+
+**Location card (`LocationCard.tsx`, `CardParts.tsx`, `OverviewCard.tsx`; wording in `describe.ts` / `official.ts`).**
+- Inside a fire, four blocks (`describeLocation(r, opts).summary`): `near` (inside / distance + direction to the
+  mapped edge or estimated area, Mapped / Estimate tag, basis time and age, `stale`); the official block; `model` (the
+  dated sentence in Public: "In the experimental model, N of M simulated fires reached here by <end> (<h> h). Not a
+  safety guarantee."; Command adds `figure` and `run` = run id, issue time, members, period + arrival quantiles) and up
+  to three `reasons` (`wind` relative to the point: toward / away / across, Model; `dryness`: humidity and 1-h fuel
+  moisture as numbers, Model, citing an NWS Red Flag Warning in effect as Official; `terrain`: uphill of the nearest
+  edge when ≥ 30 m and ≥ 5 % average grade, Terrain data); `reliability` (latest fire observation + Stale by the
+  timeline's 6 h rule, model issue time, "Research prototype, not an evacuation order"). Details stay one tap away.
+- `LocationReport` additions: `dryness`, `edgeRise`, `latestObservationMs`.
+- While a fire just focused or opened is loading (`incidentLoading` and no ready manifest of that id), the card keeps
+  the point and says "Loading the Eaton Fire’s data for this spot…" instead of "no data".
+- The official block uses `useOfficialAtPoint(sel.lon, sel.lat)` (I5) and is always present (phones, replay, layer
+  off): zones verbatim with issuer and own times (and "Cal OES does not say which fire this is for" with the
+  distance), "No evacuation order or warning listed here · Cal OES, checked … · not an all-clear" only where checked,
+  "not checked here", "not shown for past dates", "unavailable"; an NWS line only while an alert is in effect or
+  upcoming at the point ("Fire weather alert here: Red Flag Warning until …", sender, archived copy, and the caveat "a
+  weather warning, not an evacuation order", kept on phones); then "Follow local officials." with CAL FIRE and Cal OES
+  links (https only, + county maps). Phones (compact card, integration) keep a listed zone's issuer, its own time and,
+  for a zone away from the fire, the distance and "Cal OES does not say which fire this is for"
+  (`OfficialLine.subCompact`, e.g. "Orange County · listed by Cal OES Oct 17, 18:01 PDT"), "Cal OES · not an
+  all-clear" under "No evacuation order or warning listed here", and an NWS line's sender, "archived copy", caveat and
+  "Read it" link (`CardParts.tsx` shows the link in the compact card too).
+- On the overview (`incidentId === null`) the card shows the nearest fires (`incidents.ts overviewNearby`: CAL FIRE's
+  reported points, three nearest + the nearest active fire, "Distance from here to where CAL FIRE reported each fire,
+  not to its edge. Distance alone does not tell you the risk."), the official block, and, when a prepared fire's
+  `bbox_lonlat` contains the point, "Zoom to the Eaton Fire" (an explicit open, framed). Rows: prepared → explicit
+  open; unprepared → its card.
+
+**Coordinate strip (`CoordinateStrip.tsx`, reads `useCoordsVariant()`).** `'full'` as before; `'compact'` decimal
+only (the overview shows "California overview · No fire open" and the selected point); `'line'` one 32 px line
+(`.loc-strip.is-line`): the selected point ("Selected" / "Address"), else "<Fire> reported", else "Search or click
+the map to get coordinates", one copy and one centre button.
+
+### integration (b2-integration, as built 2026-10-18)
+
+The pieces above as one app; each change is also written into the owning sub-heading.
+- **Official fits keep the open fire** (map "Focus by zooming", shell `MapFlyTo.source`, official-web): `FocusHold` and
+  `focusUnlessHeld` in `map/focus.ts`, tested with the real Henderson / Norte / Orange County zone boxes
+  (`map/focus.test.ts`, `official/select.test.ts`).
+- **Neighbouring fires**: centring the view inside another prepared fire's area (outside the open fire's) switches the
+  focus (map "Focus by zooming").
+- **NWS outlines** are quiet; their labels and a selected NWS alert are drawn below the fire layers (official-web I6).
+- **Layer stacking after a style load** (`extras/mapLayers.ts`): evacuation zones, imagery and NWS outlines return
+  below the fire layers after every basemap load (they were drawn above the fire before; official-web I6).
+- **One image list per screen** (official-web I5 components): `ImageryLayerSummary` in the wide Layers drawer.
+- **Public words**: `forecastDescription(..., { plain })`; the Layers drawer notes, the view-switch and Analysis-drawer
+  tips say "model re-runs on past weather"; the Analysis drawer's charts in Public name the model "Model forecast" /
+  "Model re-run" without run ids (Command and Forensic keep "Forecast <run id>", P50, P10–P90; `ui/Charts.tsx`
+  `useModelNames`); the replay's forecast-start stop drops "(a hindcast …)".
+- **Phone card official lines** keep the issuer, the source's own time, the "which fire" caveat, "not an all-clear"
+  and the NWS sender, archive label and link (location).
+- **Timeline freshness line** (`.ctl-latest`) wraps in reading order on phones instead of four squeezed columns.
+- **Forensic setting** "Auto-build unbuilt incidents" is now labelled "Prepare analysis when I pick an unprepared fire"
+  (off by default; only the Forensic incident picker uses it).
+
+### final verification (as built 2026-10-18)
+
+Small changes after the live end-to-end check; no HTTP contract changed (SPEC §5-6, `contracts.py` and
+`web/src/api/types.ts` are unchanged).
+- **CAL FIRE outage vs no record** (official-web I5): `CalFireStatus.unreachable?: boolean` (`official/calfire.ts`) is
+  set when the endpoint answers `reason_code: 'upstream_error'` without a record or the request fails. The compact
+  "Official now" line (`ui/shell/officialSummary.ts`) then says "Unavailable right now." instead of "No record for this
+  fire." (which stays for demo data and fires with no CAL FIRE record).
+- **CAL FIRE change rows** keep CAL FIRE's precision (up to one decimal): "1,037 acres (was 1,036.8)" instead of
+  "1,037 acres (was 1,037)" (`changeTitleParts`; a real 0.2-acre edit of the Cooley record on Oct 18, 2026).
+- **Aircraft polling** (`state/runtime.ts`): `useLivePolling({ aircraft })`; App passes `workspace === 'forensic'`, so
+  `/api/incidents/{id}/aircraft` is polled every 10 s only while Forensic, the only workspace that shows aircraft, is
+  open (adsb.fi, the fallback provider, is for light non-commercial use). Entering Forensic polls at once.
+- **Data credits** (`lib/dataCredits.ts` `bundleCredits(sources, { …, forecastModel })`, `ui/DataCredits.tsx`): the
+  "Data sources" note (Analysis drawer, Forensic Evidence tab) adds "NASA Earthdata CMR (satellite pass times)" when
+  the bundle lists `NASA CMR satellite passes`, and "Fire-spread model: pyretechnics <version> (Spatial Informatics
+  Group, Eclipse Public License 2.0)" when a forecast is shown (never for synthetic fixtures).
+- **Legend** (`map/MapLegend.tsx`): the compact 3D row reads "3D shapes: today's OSM, not a damage assessment" (was
+  "… not damage") and carries the full decision-8 caveat as its tooltip.
+- **Build progress card** (`ui/Overlays.tsx`): "Preparing the analysis" with plain source names (was "Building incident
+  bundle"); Forensic's not-prepared card says "Analysis not prepared" with a "Prepare analysis (1-3 min)" button.
+- **Forecast warning text** (`backend/fire3d/spread/ensemble.py` `adjustment_note`): the decay-from-activity case now
+  states the engine's formula, "0.5 x (0.1 + 0.9 x e^(-lead/12 h))" (it read "0.5 x (floor 0.1 + e^(-lead/12 h))").

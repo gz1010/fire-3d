@@ -401,10 +401,17 @@ class HealthResponse(ContractModel):
     version: str
 
 
+class IncidentListRow(IncidentSummary):
+    """A row of ``GET /api/incidents`` (BRIEF-2 O-R8): the summary plus the analysis area of a ready bundle."""
+
+    bbox_lonlat: tuple[float, float, float, float] | None    # w, s, e, n of manifest.grid; null unless ready
+
+
 class IncidentListResponse(ContractModel):
     mode: Mode
     updated_ms: int
-    incidents: list[IncidentSummary]
+    incidents: list[IncidentListRow]
+    year: int | None = Optional_()      # historical lists: the CAL FIRE year listed
 
 
 class IncidentDetailResponse(ContractModel):
@@ -434,6 +441,105 @@ class LiveStatus(ContractModel):
     active_incidents: int
     detections_24h_ca: int | None
     auto_build: bool
+
+
+# ----------------------------------------------------------------------------------------------------------------
+# BRIEF-2 official endpoints (api/official.py; docs/redesign/CONTRACT.md section 13, official-backend)
+# ----------------------------------------------------------------------------------------------------------------
+OfficialStatus = Literal["available", "unavailable", "not_available_for_past_dates"]
+OfficialReasonCode = Literal["past_date", "upstream_error", "not_covered"]
+AlertPhase = Literal["upcoming", "in_effect", "ended"]
+
+
+class OfficialSource(ContractModel):
+    name: str
+    url: str
+    credit: str
+    license: str | None = Optional_()
+    terms_url: str | None = Optional_()
+
+
+class OfficialEnvelope(ContractModel):
+    """The extras-style envelope shared by the official endpoints."""
+
+    kind: Literal["calfire", "fire_weather"]
+    status: OfficialStatus
+    reason_code: OfficialReasonCode | None
+    reason: str | None
+    source: OfficialSource
+    retrieved_ms: int | None            # when Fire-3d fetched it from the source
+    source_updated_ms: int | None       # the source's own update time
+    requested_at_ms: int | None
+    now_ms: int
+    incident_id: str | None
+    caveats: list[str]
+
+
+class CalFireCurrent(ContractModel):
+    acres: float | None
+    percent_contained: float | None
+    is_active: bool
+    final: bool
+    updated_ms: int | None              # CAL FIRE's own "Updated"
+    extinguished_ms: int | None         # CAL FIRE's "ExtinguishedDate"
+
+
+class CalFireChange(ContractModel):
+    updated_ms: int | None              # CAL FIRE's "Updated" of the new record
+    seen_ms: int                        # when Fire-3d first saw it
+    acres: tuple[float | None, float | None] | None = Optional_()                  # [old, new]
+    percent_contained: tuple[float | None, float | None] | None = Optional_()
+    is_active: tuple[bool, bool] | None = Optional_()
+    final: tuple[bool, bool] | None = Optional_()
+
+
+class CalFireOfficialResponse(OfficialEnvelope):
+    incident_url: str | None
+    agencies: str | None                # CAL FIRE's AgencyNames, verbatim
+    current: CalFireCurrent | None
+    changes: list[CalFireChange]        # oldest first
+    recording_since_ms: int | None      # the baseline's seen_ms
+
+
+class AlertVtec(ContractModel):
+    office: str                         # e.g. "KLOX"
+    phenomena: str                      # "FW"
+    significance: str                   # "W" warning | "A" watch
+    etn: int
+    action: str                         # NEW CON EXT EXA EXB CAN UPG EXP COR ROU
+
+
+class FireWeatherAlert(ContractModel):
+    id: str
+    url: str | None
+    office_url: str | None
+    event: str                          # "Red Flag Warning" | "Fire Weather Watch"
+    vtec: AlertVtec | None
+    sender_name: str | None
+    sent_ms: int | None
+    effective_ms: int | None
+    onset_ms: int | None
+    expires_ms: int | None
+    ends_ms: int | None
+    headline: str | None
+    nws_headline: str | None
+    description: str | None
+    instruction: str | None
+    area_desc: str | None
+    ugcs: list[str]
+    message_type: str | None            # CAP Alert | Update | Cancel; null for archived copies
+    status: str
+    covers_reported_location: bool | None
+    nearest_km: float | None
+    archived: bool
+    phase: AlertPhase
+
+
+class FireWeatherResponse(OfficialEnvelope):
+    alerts: list[FireWeatherAlert]
+    zones: dict[str, Any]               # GeoJSON FeatureCollection; properties ugc, name, alert_ids
+    area_bbox: tuple[float, float, float, float] | None
+    reported_location: tuple[float, float] | None    # lon, lat
 
 
 # ----------------------------------------------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { activeCredits, BASEMAP_STYLE, USGS_IMAGERY_MAXZOOM, USGS_IMAGERY_TILE_SIZE, USGS_IMAGERY_TILES } from './providers'
+import { activeCredits, aerialPhotoLine, BASEMAP_DESCRIPTION, BASEMAP_STYLE, USGS_IMAGERY_MAXZOOM, USGS_IMAGERY_TILE_SIZE, USGS_IMAGERY_TILES, USGS_PHOTOS_LATEST_MS } from './providers'
 
 const ids = (...a: Parameters<typeof activeCredits>) => activeCredits(...a).map((c) => c.id)
 
@@ -32,5 +32,17 @@ describe('activeCredits', () => {
     expect(all.find((c) => c.id === 'mapterhorn')?.text).toMatch(/Mapterhorn.*USGS 3DEP.*Copernicus/)
     expect(all.find((c) => c.id === 'usgs')?.text).toMatch(/USDA, USGS/)
     for (const c of all) if (c.href) expect(c.href).toMatch(/^https:\/\//)
+  })
+})
+
+describe('aerial photo date', () => {
+  it('says the photos are June 2024 or earlier and, for a later fire, taken before it', () => {
+    expect(aerialPhotoLine(Date.UTC(2025, 0, 7))).toBe('Aerial photos: USDA/USGS, June 2024 or earlier: taken before this fire')
+    expect(aerialPhotoLine(null)).toBe('Aerial photos: USDA/USGS, June 2024 or earlier: taken before the recent fires')
+    // a fire before the refresh: the photos may show it either way
+    expect(aerialPhotoLine(Date.UTC(2023, 7, 1))).toMatch(/may predate or follow this fire$/)
+    expect(new Date(USGS_PHOTOS_LATEST_MS).toISOString().slice(0, 7)).toBe('2024-06')
+    expect(BASEMAP_DESCRIPTION.aerial).toContain('June 2024 or earlier')
+    expect(BASEMAP_DESCRIPTION.aerial).toContain('not live satellite')
   })
 })

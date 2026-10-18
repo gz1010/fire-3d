@@ -1,31 +1,45 @@
-// Incident picker (SPEC 9.4): Live / 2025 segmented control, search, >= 100 ac toggle (2025), and rows with name,
-// acres, containment, start date, status chip and bundle status. Keyboard: arrows + Enter, Esc closes.
+// Incident picker (SPEC 9.4; brief 2): Active / 2026 season / 2025 lists (the overview's filters, state/overview.ts),
+// search, >= 100 ac toggle (2025), and rows with name, acres, containment, start date, CAL FIRE status and whether
+// Fire-3d's analysis is prepared. Picking a fire never starts a build by itself: in the map workspace an unprepared fire
+// opens its fire card ("Prepare analysis (1-3 min)"); in Forensic it opens with the Build button (or builds when the
+// Forensic setting "Prepare analysis when I pick an unprepared fire" is on). Keyboard: arrows + Enter, Esc closes.
 import { ChevronDown, RefreshCw, Search } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { IncidentSummary, Mode } from '../api/types'
+import type { IncidentSummary } from '../api/types'
 import { fmtAcresShort, fmtNumber } from '../lib/format'
 import { fmtDate, fmtRelative } from '../lib/time'
+import { analysisState, fireStatus, isActiveFire, OVERVIEW_FILTERS, overviewFires, PAST_YEAR, SEASON_MIN_ACRES, SEASON_YEAR, type OverviewFilter } from '../state/overview'
 import { useStore } from '../state/store'
+import { useWorkspace } from '../state/workspace'
 import { Popover, Segmented, Spinner, Switch } from './controls'
 import { useNow } from './hooks'
+import { showFireCard } from './shell/fireActions'
+
+const STATUS_CLS = { active: 'chip-live', contained: 'chip-ok', out: 'chip-muted' } as const
 
 function statusChip(s: IncidentSummary): { label: string; cls: string } {
-  if (s.mode === 'live' && s.is_active) return { label: 'Active', cls: 'chip-live' }
-  if ((s.percent_contained ?? 0) >= 100 || s.contained_ms != null) return { label: 'Contained', cls: 'chip-ok' }
-  return { label: s.is_active ? 'Active' : 'Out', cls: 'chip-muted' }
+  const st = fireStatus(s)
+  return { label: st.label, cls: s.mode === 'live' || st.key !== 'active' ? STATUS_CLS[st.key] : 'chip-muted' }
 }
 
 function bundleChip(s: IncidentSummary): { label: string; cls: string; tip: string } {
-  switch (s.bundle_status) {
+  switch (analysisState(s)) {
     case 'ready':
-      return { label: 'Ready', cls: 'chip-ok', tip: s.bundle_built_ms ? `Bundle built ${fmtRelative(s.bundle_built_ms)}` : 'Bundle ready' }
+      return { label: 'Ready', cls: 'chip-ok', tip: s.bundle_built_ms ? `Analysis prepared ${fmtRelative(s.bundle_built_ms)}` : 'Analysis ready' }
     case 'building':
-      return { label: 'Building', cls: 'chip-gold', tip: 'Bundle is being built' }
+      return { label: 'Preparing', cls: 'chip-gold', tip: 'The analysis is being prepared' }
     case 'error':
-      return { label: 'Error', cls: 'chip-danger', tip: 'The last build failed; select to retry' }
+      return { label: 'Failed', cls: 'chip-danger', tip: 'The last preparation failed; pick the fire to prepare it again' }
     default:
-      return { label: 'Build needed', cls: 'chip-muted', tip: 'Not built yet; selecting it starts a build (a few minutes)' }
+      return { label: 'Not prepared', cls: 'chip-muted', tip: 'No analysis yet: pick the fire to see its CAL FIRE record and prepare the analysis (1-3 min)' }
   }
+}
+
+/** The picker's first list: where the open fire is listed. */
+function initialFilter(s: IncidentSummary | null): OverviewFilter {
+  if (!s) return 'season'
+  if (isActiveFire(s)) return 'active'
+  return s.year === PAST_YEAR ? 'past' : 'season'
 }
 
 export function ContainmentBar({ pct }: { pct: number | null }) {
@@ -73,17 +87,17 @@ export function IncidentPicker() {
         <ChevronDown size={14} className="picker-caret" />
       </button>
       <Popover anchor={anchor} open={open} onClose={() => setOpen(false)} placement="bottom-start" width={600} className="picker-pop" label="Incident picker">
-        <PickerBody initialMode={summary?.mode ?? mode} onPicked={() => setOpen(false)} />
+        <PickerBody initial={initialFilter(summary)} onPicked={() => setOpen(false)} />
       </Popover>
     </>
   )
 }
 
-function PickerBody({ initialMode, onPicked }: { initialMode: Mode; onPicked: () => void }) {
+function PickerBody({ initial, onPicked }: { initial: OverviewFilter; onPicked: () => void }) {
   const catalog = useStore((s) => s.catalog)
   const currentId = useStore((s) => s.incidentId)
   const liveStatus = useStore((s) => s.liveStatus)
-  const [tab, setTab] = useState<Mode>(initialMode)
+  const [tab, setTab] = useState<OverviewFilter>(initial)
   const [query, setQuery] = useState('')
   const [cursor, setCursor] = useState(0)
   const searchRef = useRef<HTMLInputElement | null>(null)
@@ -95,11 +109,11 @@ function PickerBody({ initialMode, onPicked }: { initialMode: Mode; onPicked: ()
   }, [])
 
   const rows = useMemo(() => {
-    const list = tab === 'live' ? catalog.live : catalog.historical
+    const list = overviewFires(catalog, tab)
     const q = query.trim().toLowerCase()
     if (!q) return list
     return list.filter((s) => [s.name, s.county, s.location, s.admin_unit, s.id].some((v) => v?.toLowerCase().includes(q)))
-  }, [catalog.live, catalog.historical, tab, query])
+  }, [catalog, tab, query])
 
   useEffect(() => {
     listRef.current?.querySelector<HTMLElement>(`[data-row="${cursor}"]`)?.scrollIntoView({ block: 'nearest' })
@@ -107,7 +121,10 @@ function PickerBody({ initialMode, onPicked }: { initialMode: Mode; onPicked: ()
 
   const pick = (s: IncidentSummary) => {
     onPicked()
-    if (s.id !== currentId) void useStore.getState().selectIncident(s.id, { autoBuild: true })
+    if (s.id === currentId) return
+    // never a build because a fire was picked: an unprepared fire shows its card (map) or the Build button (Forensic)
+    if (analysisState(s) !== 'ready' && useWorkspace.getState().workspace === 'map') showFireCard(s.id)
+    else void useStore.getState().selectIncident(s.id, { autoBuild: useStore.getState().autoBuild, source: 'picker' })
   }
 
   const onKey = (e: React.KeyboardEvent) => {
@@ -123,8 +140,9 @@ function PickerBody({ initialMode, onPicked }: { initialMode: Mode; onPicked: ()
     }
   }
 
-  const updated = catalog.updatedMs[tab]
+  const checked = tab === 'active' ? catalog.updatedMs.live : tab === 'season' ? catalog.updatedMs.season : catalog.updatedMs.historical
   const minAcres = catalog.minAcres
+  const counts: Record<OverviewFilter, number> = { active: catalog.live.length, season: overviewFires(catalog, 'season').length, past: catalog.historical.length }
   return (
     <div className="picker" onKeyDown={onKey}>
       <div className="picker-top">
@@ -135,24 +153,22 @@ function PickerBody({ initialMode, onPicked }: { initialMode: Mode; onPicked: ()
             setCursor(0)
           }}
           ariaLabel="Incident list"
-          options={[
-            {
-              value: 'live',
-              label: (
-                <>
-                  <i className="live-dot" /> Live <span className="seg-count mono">{catalog.live.length}</span>
-                </>
-              ),
-            },
-            { value: 'historical', label: <>2025 <span className="seg-count mono">{catalog.historical.length}</span></> },
-          ]}
+          options={OVERVIEW_FILTERS.map((o) => ({
+            value: o.value,
+            tip: o.tip,
+            label: (
+              <>
+                {o.value === 'active' && <i className="live-dot" />} {o.label} <span className="seg-count mono">{counts[o.value]}</span>
+              </>
+            ),
+          }))}
         />
         <label className="search">
           <Search size={13} />
           <input
             ref={searchRef}
             type="search"
-            placeholder={tab === 'live' ? 'Search active incidents' : 'Search 2025 incidents'}
+            placeholder={tab === 'active' ? 'Search active fires' : tab === 'season' ? `Search ${SEASON_YEAR} fires` : `Search ${PAST_YEAR} fires`}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value)
@@ -161,8 +177,8 @@ function PickerBody({ initialMode, onPicked }: { initialMode: Mode; onPicked: ()
             aria-label="Search incidents"
           />
         </label>
-        {tab === 'historical' && (
-          <span className="picker-acres" data-tip="Include 2025 fires of 100–300 acres">
+        {tab === 'past' && (
+          <span className="picker-acres" data-tip={`Include ${PAST_YEAR} fires of 100–300 acres`}>
             <span className="label">≥ 100 ac</span>
             <Switch checked={minAcres <= 100} onChange={(v) => void useStore.getState().loadCatalog({ minAcres: v ? 100 : 300, modes: ['historical'] })} label="Include fires of at least 100 acres" />
           </span>
@@ -174,34 +190,36 @@ function PickerBody({ initialMode, onPicked }: { initialMode: Mode; onPicked: ()
         <span>Contained</span>
         <span>Started</span>
         <span>Status</span>
-        <span>Bundle</span>
+        <span>Analysis</span>
       </div>
       <div className="picker-list" ref={listRef} role="listbox" aria-label="Incidents">
         {catalog.loading && rows.length === 0 && (
           <div className="picker-empty">
-            <Spinner /> Loading CAL FIRE incidents…
+            <Spinner /> Loading CAL FIRE's list…
           </div>
         )}
         {!catalog.loading && rows.length === 0 && (
           <div className="picker-empty">
             {query ? (
               <>No incidents match “{query}”.</>
-            ) : tab === 'live' ? (
+            ) : tab === 'active' ? (
               <>
-                <strong>No active CAL FIRE incidents right now.</strong>
+                <strong>CAL FIRE lists no active fires right now. That is not an all-clear: follow local officials.</strong>
                 <button
                   type="button"
                   className="btn btn-sm btn-gold"
                   onClick={() => {
-                    setTab('historical')
+                    setTab('season')
                     setCursor(0)
                   }}
                 >
-                  Browse 2025 fires
+                  Browse {SEASON_YEAR} fires
                 </button>
               </>
+            ) : tab === 'season' ? (
+              <>No {SEASON_YEAR} fires of {SEASON_MIN_ACRES} acres or more in CAL FIRE's list.</>
             ) : (
-              <>No 2025 incidents ≥ {minAcres} acres in the catalog.</>
+              <>No {PAST_YEAR} fires ≥ {minAcres} acres in CAL FIRE's list.</>
             )}
           </div>
         )}
@@ -244,9 +262,9 @@ function PickerBody({ initialMode, onPicked }: { initialMode: Mode; onPicked: ()
       </div>
       <div className="picker-foot">
         <span className="muted">
-          {tab === 'live' ? 'CAL FIRE active wildfires' : `CAL FIRE 2025 incidents ≥ ${minAcres} ac, by size`}
-          {updated ? <span className="mono"> · updated {fmtRelative(updated, now)}</span> : null}
-          {tab === 'live' && liveStatus?.next_refresh_ms ? <span className="mono"> · next refresh {fmtRelative(liveStatus.next_refresh_ms, now)}</span> : null}
+          {tab === 'active' ? 'CAL FIRE active fires' : tab === 'season' ? `Active and ${SEASON_YEAR} fires ≥ ${SEASON_MIN_ACRES} ac (CAL FIRE)` : `CAL FIRE ${PAST_YEAR} fires ≥ ${minAcres} ac, by size`}
+          {checked ? <span className="mono"> · list checked {fmtRelative(checked, now)}</span> : null}
+          {tab === 'active' && liveStatus?.next_refresh_ms ? <span className="mono"> · next refresh {fmtRelative(liveStatus.next_refresh_ms, now)}</span> : null}
         </span>
         {catalog.error && <span className="danger ellipsis" data-tip={catalog.error}>{catalog.error}</span>}
         <button

@@ -1,6 +1,7 @@
-// Feed vocabulary (owner: timeline-feed): icon + colour per topic (events reuse eventMeta) and the label, glyph and
-// one-line meaning of each kind of information. Kinds are told apart by text and glyph, never by colour alone.
-import { Camera, CircleDashed, Cpu, Eye, Hexagon, ImageIcon, Landmark, PenLine, Satellite, Sigma, TriangleAlert, Wind, type LucideIcon } from 'lucide-react'
+// Feed vocabulary (owner: official-web since brief 2, earlier timeline-feed): icon + colour per topic (events reuse
+// eventMeta) and the label, glyph and one-line meaning of each kind of information. Kinds are told apart by text and
+// glyph, never by colour alone.
+import { Camera, CircleDashed, Cpu, Eye, EyeOff, Flag, Hexagon, ImageIcon, Landmark, PenLine, Satellite, ShieldAlert, Sigma, TriangleAlert, Wind, type LucideIcon } from 'lucide-react'
 import { EVENT_STYLE, type EventKind } from '../eventMeta'
 import type { FeedKind, FeedTopic } from './types'
 
@@ -18,6 +19,9 @@ const FEED_TOPICS: Record<Exclude<FeedTopic, EventKind>, TopicStyle> = {
   weather: { Icon: Wind, color: 'var(--ev-wind)', label: 'Weather' },
   imagery: { Icon: ImageIcon, color: 'var(--m-info)', label: 'Satellite image' },
   camera: { Icon: Camera, color: 'var(--m-info)', label: 'Camera' },
+  calfire: { Icon: ShieldAlert, color: 'var(--m-official, #e8edf3)', label: 'CAL FIRE record' },
+  'fire-weather': { Icon: Flag, color: 'var(--m-nws, #f472b6)', label: 'Fire weather alert' },
+  quiet: { Icon: EyeOff, color: 'var(--m-text-2)', label: 'No new heat seen' },
 }
 
 export function topicStyle(topic: FeedTopic): TopicStyle {
@@ -43,8 +47,20 @@ export const KIND_META: Record<FeedKind, KindMeta> = {
   },
   estimate: { label: 'Estimate', Icon: Sigma, meaning: 'Inferred by Fire-3d from observations (for example the reconstructed spread); it can be wrong.' },
   model: { label: 'Model output', Icon: Cpu, meaning: 'Computed by a weather or fire-spread model, not observed.' },
-  official: { label: 'Official update', Icon: Landmark, meaning: 'A status published by a fire agency, quoted from its data.' },
+  official: {
+    label: 'Official update',
+    Icon: Landmark,
+    meaning: "Published by an agency (fire, emergency-management or weather service) and quoted from its data; Fire-3d does not change the wording.",
+  },
   annotation: { label: 'Your note', Icon: PenLine, meaning: 'A note you added; it is saved only in this browser.' },
 }
 
 export const AUTOMATED_NOTE = 'Generated automatically by Fire-3d from the listed data; not reported by a person.'
+
+/** The standing line next to official information (BRIEF-2: model output is never an evacuation order). */
+export const NOT_AN_ORDER = "Fire-3d's modeled spread is experimental and is not an evacuation order. Follow local officials."
+
+/** Empty feed (live, or nothing loaded): silence is never presented as safety. */
+export const EMPTY_FEED = "No updates from Fire-3d's sources yet. No update does not mean no danger; follow local officials."
+/** Replay before the first item. */
+export const EMPTY_REPLAY = 'No updates in the record before this time.'

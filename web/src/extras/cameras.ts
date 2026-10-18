@@ -223,14 +223,16 @@ export function cameraFeedItems(data: CamerasResponse | null): FeedItem[] {
   const w = data.counts.wildfire ?? 0
   const t = data.counts.traffic ?? 0
   const parts = [w ? `${w} wildfire camera${w === 1 ? '' : 's'} (ALERTCalifornia)` : null, t ? `${t} traffic camera${t === 1 ? '' : 's'} (Caltrans)` : null].filter(Boolean)
+  // timed by Cal OES's own update of the camera list, never by Fire-3d's fetch (brief 2 U-R1)
+  const own = data.source_updated_ms != null && Number.isFinite(data.source_updated_ms) && data.source_updated_ms > 0 ? data.source_updated_ms : null
   return [
     {
       id: `camera:summary:${data.bbox.join(',')}`,
       topic: 'camera',
       kind: 'observation',
-      tMs: data.retrieved_ms ?? data.now_ms,
+      tMs: own ?? data.retrieved_ms ?? data.now_ms,
       title: 'Public cameras near the fire',
-      detail: `${parts.join(' and ')} in this area. Live images open only when you ask for one.`,
+      detail: `${parts.join(' and ')} in this area${own != null ? ` (Cal OES list updated ${fmtWhen(own)})` : ''}. Images open only when you ask for one.`,
       source: 'Cal OES California Webcams',
       automated: true,
       key: false,
@@ -238,6 +240,8 @@ export function cameraFeedItems(data: CamerasResponse | null): FeedItem[] {
       location: null,
       seekable: false,
       eventId: null,
+      checkedMs: data.retrieved_ms,
+      timeNotGiven: own == null,
     },
   ]
 }

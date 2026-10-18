@@ -378,7 +378,8 @@ describe('point, sources and caveats', () => {
     const address = { query: '600 E Mariposa St', matchedAddress: p.label, lat: p.lat, lon: p.lon, fromAddress: '600', toAddress: '628', side: 'R' as const, tigerLineId: '142735412', benchmark: 'Public_AR_Current', source: 'U.S. Census Bureau Geocoder', fetchedMs: ORIGIN }
     const r = checkLocation(input(m, p, { address }))
     expect(r.point).toMatchObject({ label: p.label, source: 'address', approximate: true, adjusted: false, address })
-    expect(r.point.locationType).toBe('Street address · interpolated along house numbers 600–628, not a rooftop position')
+    expect(r.point.locationType).toBe('Street address, interpolated (not a rooftop)')
+    expect(r.caveats.join(' ')).toMatch(/interpolated along house numbers 600–628 of the street/)
     expect(r.caveats.join(' ')).toMatch(/approximate, not a rooftop location/)
     expect(r.sources.find((s) => s.name.includes('Census'))).toMatchObject({ name: 'U.S. Census Bureau Geocoder (Public_AR_Current)', kind: 'reference' })
     const moved = checkLocation(input(m, { ...p, adjusted: true, approximate: false }, { address }))
@@ -410,5 +411,38 @@ describe('point, sources and caveats', () => {
     const r = checkLocation(input(null, { lat: 36.6, lon: -121.9, source: 'coords' }))
     expect(r).toMatchObject({ modeledArea: 'no_bundle', local: null, edgeDistanceM: null, forecast: { state: 'gap', gap: 'no_bundle' }, terrain: { state: 'gap', gap: 'no_bundle' } })
     expect(r.caveats).toEqual([])
+  })
+})
+
+describe('brief 2 facts for the main reasons: dryness, ground versus the fire edge, latest observation', () => {
+  const m = makeManifest(ZONE11)
+  const rn = m.grid.render.width
+  const res = m.grid.extent_m / rn
+  const elev = makeLayer('elevation', rn, (_r, c) => 500 + 0.3 * (c + 0.5) * res, { grid: 'render' }) // rises eastward
+  const p = perimeter(ORIGIN + 20 * HOUR, [square(0, 0, 1000)])
+  const at = (x: number, z: number, over = {}) => checkLocation(input(m, click(localLatLon(m, x, z)), { perimeters: [p], timeMs: ORIGIN + 30 * HOUR, rasters: makeRasters({ elevation: ready(elev) }), ...over }))
+  it('dryness: humidity and 1-h fuel moisture at the wind hour (model weather), none without a reading', () => {
+    const r = at(3000, 0, { weather: makeWeather(m, { forecastFromMs: ORIGIN + 29 * HOUR }) })
+    expect(r.dryness).toEqual({ state: 'ok', tMs: ORIGIN + 30 * HOUR, rhPct: 15, fm1Pct: 4, isForecast: true, source: 'open-meteo:historical-forecast:gfs_hrrr' })
+    expect(at(3000, 0).dryness).toEqual({ state: 'none' })
+    expect(at(3000, 0, { weather: makeWeather(m, { hours: 10 }) }).dryness).toEqual({ state: 'none' }) // more than 90 min away
+  })
+  it('edge rise: elevation here versus at the nearest edge point, only outside the fire and inside the modeled area', () => {
+    const up = at(3000, 0).edgeRise
+    expect(up.state).toBe('ok')
+    if (up.state === 'ok') {
+      expect(up.riseM).toBeCloseTo(0.3 * 2000, -1) // 2 km east of the edge on a 30 % slope
+      expect(up.distanceM).toBeCloseTo(2000, -1)
+    }
+    const down = at(-3000, 0).edgeRise
+    expect(down.state === 'ok' && down.riseM < -500).toBe(true)
+    expect(at(0, 0).edgeRise).toEqual({ state: 'none', reason: 'inside' })
+    expect(at(9000, 0).edgeRise).toEqual({ state: 'none', reason: 'outside_modeled_area' })
+    expect(at(3000, 0, { rasters: makeRasters() }).edgeRise).toEqual({ state: 'none', reason: 'no_elevation' })
+    expect(at(3000, 0, { perimeters: [] }).edgeRise).toEqual({ state: 'none', reason: 'no_edge' })
+  })
+  it('latest observation from the manifest (the timeline freshness rule), null without a bundle', () => {
+    expect(at(3000, 0).latestObservationMs).toBe(m.time_range.now_ms)
+    expect(checkLocation(input(null, click({ lat: 34.2, lon: -118.1 }))).latestObservationMs).toBeNull()
   })
 })

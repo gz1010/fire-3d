@@ -651,7 +651,7 @@ def adjustment_note(settings: SpreadSettings, start_ms: int | None = None) -> st
         if origin is not None and start_ms is not None and int(origin) < int(start_ms):
             lead = (int(start_ms) - int(origin)) / config.MS_PER_H
             now_a = a * (floor + (1.0 - floor) * math.exp(-lead / tau))
-            return (f"spread-rate multiplier {a:g} x (floor {floor:g} + e^(-lead/{tau:g} h)) with the lead counted from the last "
+            return (f"spread-rate multiplier {a:g} x ({floor:g} + {1.0 - floor:g} x e^(-lead/{tau:g} h)) with the lead counted from the last "
                     f"sign of activity ({ms_to_iso(int(origin))[:16]}Z, {lead:.0f} h before the start), so {now_a:.2g} at the "
                     f"start, relaxing toward {a * floor:.2g} (calibrated on 2025 hindcasts; it stands in for suppression and "
                     "the end of wind events, which the model does not simulate; see docs/validation.md)")

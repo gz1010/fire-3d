@@ -1,8 +1,9 @@
-// Key Events (SPEC 9.4), Forensic's list: one row per event (type icon + colour, title, Pacific time). Click -> the
-// shared selectFeedItem (pause, set time, select, fly the camera there). The tooltip names the kind of information
-// (observation / estimate / model output / official update / your note) and flags automated detections, using the
-// same feed model as the Public/Command updates feed. "+ Add" pins an annotation (localStorage, per incident) at the
-// current time and the camera's orbit target; annotations show here and on the timeline.
+// Key Events (SPEC 9.4), Forensic's list (owner: official-web since brief 2): one row per event (type icon + colour,
+// title, a visible kind glyph whose corner dot marks automated detections, Pacific time). Click -> the shared
+// selectFeedItem (pause, set time, select, fly the camera there). The kind (observation / estimate / model output /
+// official update / your note) comes from the same feed model as the Public/Command updates feed; the tooltip spells
+// it out. "+ Add" pins an annotation (localStorage, per incident) at the current time and the camera's orbit target;
+// annotations show here and on the timeline.
 import { Plus, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
@@ -14,7 +15,8 @@ import { useStore } from '../state/store'
 import { Popover } from './controls'
 import { CONFIDENCE_LABEL, EVENT_STYLE } from './eventMeta'
 import { buildFeedItems, selectFeedItem } from './feed/feedModel'
-import { KIND_META } from './feed/feedMeta'
+import { AUTOMATED_NOTE, KIND_META } from './feed/feedMeta'
+import './feed/keyEvents.css'
 import { goToItem, mergeEvents, type TimelineItem } from './timelineModel'
 
 export function KeyEvents() {
@@ -45,13 +47,17 @@ export function KeyEvents() {
         <AddAnnotation incidentId={incidentId} disabled={!ready} />
       </div>
       <div className="ke-list" ref={listRef}>
-        {items.length === 0 && <div className="ke-empty muted">{ready ? 'No key events detected for this fire.' : 'Events appear once the bundle is built.'}</div>}
+        {items.length === 0 && (
+          <div className="ke-empty muted">{ready ? 'No key events detected for this fire. No update does not mean no danger; follow local officials.' : 'Events appear once the bundle is built.'}</div>
+        )}
         {items.map((it, i) => {
           const style = EVENT_STYLE[it.kind]
           const Icon = style.Icon
           const ev = byId.get(it.id)
           const fi = feed.get(it.id)
-          const kind = fi ? `${KIND_META[fi.kind].label}${fi.automated ? ' (automated)' : ''}` : null
+          const meta = fi ? KIND_META[fi.kind] : null
+          const KindIcon = meta?.Icon
+          const kind = fi && meta ? `${meta.label}${fi.automated ? ' (automated)' : ''}` : null
           const tip = [it.detail, ev ? [kind, CONFIDENCE_LABEL[ev.confidence] ?? ev.confidence, ev.source].filter(Boolean).join(' · ') : 'Your annotation'].filter(Boolean).join(' — ')
           return (
             <div key={it.id} data-id={it.id} className={`ke-row ${selected === it.id ? 'is-selected' : ''} ${i === current ? 'is-current' : ''} ${i > current ? 'is-future' : ''}`}>
@@ -60,7 +66,19 @@ export function KeyEvents() {
                   <Icon size={12} strokeWidth={2.2} />
                 </span>
                 <span className="ke-title ellipsis">{it.title}</span>
-                <span className="ke-time mono">{fmtDateTime(it.t)}</span>
+                <span className="ke-end">
+                  {KindIcon && meta && (
+                    <span
+                      className={`ke-kind is-${fi?.kind}${fi?.automated ? ' is-auto' : ''}`}
+                      aria-label={fi?.automated ? `${meta.label}, automated` : meta.label}
+                      role="img"
+                      data-tip={`${meta.label}${fi?.automated ? ` · automated: ${AUTOMATED_NOTE}` : ''}`}
+                    >
+                      <KindIcon size={11} aria-hidden="true" />
+                    </span>
+                  )}
+                  <span className="ke-time mono">{fmtDateTime(it.t)}</span>
+                </span>
               </button>
               {it.kind === 'annotation' && incidentId && (
                 <button type="button" className="icon-btn ke-del" aria-label="Delete annotation" data-tip="Delete annotation" onClick={() => useAnnotations.getState().remove(incidentId, it.id)}>

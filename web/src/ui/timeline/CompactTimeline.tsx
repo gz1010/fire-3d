@@ -1,9 +1,10 @@
-// Compact floating timeline (owner: timeline-feed; CONTRACT §7, BRIEF §7) for Public/Command: play/pause, a scrubber
+// Compact floating timeline (owner: official-web since brief 2, earlier timeline-feed; CONTRACT §7, BRIEF §7) for Public/Command: play/pause, a scrubber
 // over past observations (solid line) and the selected forecast (dashed), the Past / NOW / +24h / +48h / +72h stops
 // (disabled with a reason when the forecast does not cover them), key-event markers, the valid time with the forecast
 // issue time, and live freshness: the latest observation and the actual current time, with a stale flag.
 // Keyboard: the track is a slider (←/→ 1 h, Shift 6 h, PgUp/PgDn 24 h, Home/End, Space play/pause); stops and the
 // forecast details are buttons. Playback runs in state/runtime.ts (usePlayback); the time lives in the main store.
+// Public uses plain words ("model re-run on past weather", no run id); Command keeps "hindcast" and the run id.
 import { Info, Pause, Play, TriangleAlert } from 'lucide-react'
 import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent as RKeyboardEvent, type PointerEvent as RPointerEvent, type RefObject } from 'react'
 import { useShallow } from 'zustand/react/shallow'
@@ -24,6 +25,7 @@ import {
   buildCompactTimeline,
   clampToData,
   describeTime,
+  forecastWord,
   labelsCoverPoints,
   spreadLabels,
   trackScale,
@@ -93,7 +95,7 @@ function TimelineBody({ model, markers, command, forecast }: { model: CompactTim
       {w > 60 && (
         <>
           {command && <ZoneLabels model={model} scale={scale} w={w} />}
-          <Track model={model} scale={scale} w={w} markers={markers} />
+          <Track model={model} scale={scale} w={w} markers={markers} command={command} />
           <Stops model={model} scale={scale} w={w} />
         </>
       )}
@@ -130,18 +132,19 @@ interface TrackProps {
   scale: TrackScale
   w: number
   markers: FeedItem[]
+  command: boolean
 }
 
-function valueText(model: CompactTimelineModel, t: number): string {
+function valueText(model: CompactTimelineModel, t: number, command: boolean): string {
   const d = describeTime(model, t)
   const when = `${fmtDateTime(t)} ${tzLabel(t)}`
-  const fcWord = model.mode === 'live' ? 'forecast' : 'hindcast'
+  const fcWord = forecastWord(model.mode, command)
   if (d.currentKind === 'forecast') return `${when}, ${fcWord} +${Math.round(d.leadH ?? 0)} h`
   if (d.currentKind === 'observation') return `${when}, observed${d.inForecastPeriod ? `, ${fcWord} +${Math.round(d.leadH ?? 0)} h` : ''}`
   return `${when}, no data`
 }
 
-function Track({ model, scale, w, markers }: TrackProps) {
+function Track({ model, scale, w, markers, command }: TrackProps) {
   const ref = useRef<HTMLDivElement | null>(null)
   const dragging = useRef<{ wasPlaying: boolean } | null>(null)
   const [hoverX, setHoverX] = useState<number | null>(null)
@@ -222,7 +225,7 @@ function Track({ model, scale, w, markers }: TrackProps) {
       <div className="ctl-lanes is-dim">
         <Lanes model={model} scale={scale} w={w} />
       </div>
-      <Played model={model} scale={scale} w={w} trackRef={ref} />
+      <Played model={model} scale={scale} w={w} trackRef={ref} command={command} />
       <Decor model={model} scale={scale} w={w} />
       <Markers markers={markers} scale={scale} w={w} model={model} />
       <Thumb model={model} scale={scale} w={w} />
@@ -253,7 +256,7 @@ const Lanes = memo(function Lanes({ model, scale, w }: { model: CompactTimelineM
 })
 
 /** Bright copy of the lanes up to the timeline time (a clipped box; the lanes themselves are memoised). */
-function Played({ model, scale, w, trackRef }: { model: CompactTimelineModel; scale: TrackScale; w: number; trackRef: RefObject<HTMLDivElement | null> }) {
+function Played({ model, scale, w, trackRef, command }: { model: CompactTimelineModel; scale: TrackScale; w: number; trackRef: RefObject<HTMLDivElement | null>; command: boolean }) {
   const t = useStore((s) => s.timeMs)
   const x = xAt(scale, w, t)
   // keep the slider's ARIA value current without re-rendering the track
@@ -261,8 +264,8 @@ function Played({ model, scale, w, trackRef }: { model: CompactTimelineModel; sc
     const el = trackRef.current
     if (!el) return
     el.setAttribute('aria-valuenow', String(Math.round(t)))
-    el.setAttribute('aria-valuetext', valueText(model, t))
-  }, [t, model, trackRef])
+    el.setAttribute('aria-valuetext', valueText(model, t, command))
+  }, [t, model, trackRef, command])
   return (
     <div className="ctl-lanes is-played" style={{ width: Math.max(0, x) }}>
       <Lanes model={model} scale={scale} w={w} />
@@ -430,11 +433,12 @@ function Status({ model, forecast, command }: { model: CompactTimelineModel; for
   const t = minute * 60_000
   const d = describeTime(model, t)
   const live = model.mode === 'live'
-  const fcWord = live ? 'Forecast' : 'Hindcast'
+  const word = forecastWord(model.mode, command)
+  const fcWord = word[0].toUpperCase() + word.slice(1)
   const lead = d.leadH != null ? `+${Math.round(d.leadH)} h` : ''
   let kindText: string
   if (d.currentKind === 'forecast') kindText = `${fcWord} ${lead}${live ? '' : ' (after the record)'}`
-  else if (d.currentKind === 'observation') kindText = d.inForecastPeriod && !live ? `Observed · hindcast ${lead}` : 'Observed'
+  else if (d.currentKind === 'observation') kindText = d.inForecastPeriod && !live ? `Observed · ${word} ${lead}` : 'Observed'
   else kindText = 'No data for this time'
   const fc = model.forecast
   return (
@@ -455,7 +459,7 @@ function Status({ model, forecast, command }: { model: CompactTimelineModel; for
       {fc && forecast ? (
         <ForecastInfo model={model} forecast={forecast} t={t} command={command} />
       ) : (
-        <span className="ctl-fcinfo is-missing">{model.forecastStatus === 'none' && !live ? 'No hindcast run for this fire' : (FORECAST_STATE[model.forecastStatus] ?? '')}</span>
+        <span className="ctl-fcinfo is-missing">{model.forecastStatus === 'none' && !live ? (command ? 'No hindcast run for this fire' : 'No model re-run for this fire') : (FORECAST_STATE[model.forecastStatus] ?? '')}</span>
       )}
       {live ? <Freshness model={model} /> : <span className="ctl-replay">Historical replay · {fmtDate(model.startMs)} – {fmtDate(model.latestObservationMs)}</span>}
     </div>
@@ -469,13 +473,14 @@ function ForecastInfo({ model, forecast, t, command }: { model: CompactTimelineM
   const live = model.mode === 'live'
   const fc = model.forecast
   if (!fc) return null
-  const issued = live ? `Issued ${fmtDateTime(fc.issuedMs)} ${tzLabel(fc.issuedMs)}` : `Hindcast run ${fmtDate(fc.issuedMs)}`
-  const desc = forecastDescription(forecast, model.mode)
+  const issued = live ? `Issued ${fmtDateTime(fc.issuedMs)} ${tzLabel(fc.issuedMs)}` : command ? `Hindcast run ${fmtDate(fc.issuedMs)}` : `Model re-run on past weather · ${fmtDate(fc.issuedMs)}`
+  const desc = forecastDescription(forecast, model.mode, { plain: !command })
+  const title = desc.title
   const areaNow = modeledArea(forecast, t, units)
   const warn = model.forecastNotes.length > 0
   // the valid time: the timeline time the map shows, placed relative to the forecast period
   const lead = describeTime(model, t).leadH
-  const validWhere = lead != null ? `${live ? 'forecast' : 'hindcast'} +${Math.round(lead)} h` : t < fc.startMs ? 'before the forecast period' : 'after the forecast period'
+  const validWhere = lead != null ? `${forecastWord(model.mode, command)} +${Math.round(lead)} h` : t < fc.startMs ? 'before the forecast period' : 'after the forecast period'
   return (
     <span className="ctl-fcinfo">
       <button
@@ -492,7 +497,7 @@ function ForecastInfo({ model, forecast, t, command }: { model: CompactTimelineM
       </button>
       <Popover anchor={anchor} open={open} onClose={() => setOpen(false)} placement="top-start" width={340} label="About this forecast" className="ctl-pop">
         <div className="ctl-pop-body">
-          <h3>{desc.title}</h3>
+          <h3>{title}</h3>
           <dl>
             <dt>Map shows</dt>
             <dd>
@@ -504,8 +509,12 @@ function ForecastInfo({ model, forecast, t, command }: { model: CompactTimelineM
             <dd>{live ? `${fmtDateTime(fc.issuedMs)} ${tzLabel(fc.issuedMs)}` : `${fmtDateTimeYear(fc.issuedMs)} ${tzLabel(fc.issuedMs)}, after the fire`}</dd>
             <dt>Model runs</dt>
             <dd>{desc.runs}</dd>
-            <dt>Run ID</dt>
-            <dd className="ctl-run">{fc.runId}</dd>
+            {command && (
+              <>
+                <dt>Run ID</dt>
+                <dd className="ctl-run">{fc.runId}</dd>
+              </>
+            )}
             <dt>Weather</dt>
             <dd>{desc.weather}</dd>
             {areaNow && (

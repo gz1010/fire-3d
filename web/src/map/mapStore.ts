@@ -1,8 +1,13 @@
 // Runtime state of the Public/Command map shared by MapView and the separately mounted MapControls, MapLegend and
 // MapAttribution (owner: map-core): the live MapLibre instance (null while unmounted), the camera for the compass and
 // scale, provider health, the forecast display choice and what the overlays currently show (for the legend).
+// Brief 2 adds the camera actions of the controls (orbit group, "Incident" toggle, "Try aerial again"), the framing
+// state (dev handle / tests: wait for `framing === 'done'`) and the fire bounds (I4). The aerial fallback itself lives in
+// the workspace store (basemapFallback, set by the controller).
 import type { Map as MapLibreMap } from 'maplibre-gl'
 import { create } from 'zustand'
+import type { LonLatBox } from '../lib/fireBounds'
+import type { FrameGoal, FramingPhase } from './framing'
 import type { ForecastFrame, ForecastView } from './overlayModel'
 
 export type ProviderId = 'basemap' | 'vector' | 'imagery' | 'terrain'
@@ -39,6 +44,8 @@ export interface OverlayInfo {
   detections: { counts: [number, number, number]; total: number }
   perimeter: { latestMs: number | null; count: number }
   events: number
+  /** Other prepared fires whose latest perimeter is outlined (decision 10). */
+  nearby: number
 }
 
 export const EMPTY_OVERLAYS: OverlayInfo = {
@@ -47,10 +54,29 @@ export const EMPTY_OVERLAYS: OverlayInfo = {
   detections: { counts: [0, 0, 0], total: 0 },
   perimeter: { latestMs: null, count: 0 },
   events: 0,
+  nearby: 0,
 }
 
 const OK: ProviderStatus = { state: 'idle', detail: null }
 
+/** Camera actions of the map controls, implemented by MapController (null while the map is unmounted). */
+export interface MapActions {
+  /** Frame the open fire (fire bounds, I4). */
+  frameFire(): void
+  /** Frame the open fire's modeled area (AOI). */
+  frameArea(): void
+  /** Frame California (the overview). */
+  frameOverview(): void
+  /** Rotate by `deg` (clockwise), tilt by `deg` (3D), straight down (3D, terrain kept), north up. */
+  rotateBy(deg: number): void
+  tiltBy(deg: number): void
+  topDown(): void
+  northUp(): void
+  /** Zoom in / out by `delta` levels (relative to the opening fit while it is still flying). */
+  zoomBy(delta: number): void
+  /** End the aerial fallback and load the USGS photos again. */
+  retryAerial(): void
+}
 export interface MapRuntimeState {
   map: MapLibreMap | null
   camera: CameraState | null
@@ -63,6 +89,13 @@ export interface MapRuntimeState {
   /** Is any part of the modeled area on screen? null = no modeled area (no ready bundle). */
   aoiInView: boolean | null
   setForecastView: (v: ForecastView) => void
+  actions: MapActions | null
+  /** Opening-camera state (map/framing.ts). */
+  framing: FramingPhase
+  /** What the camera was last framed on and still shows (fire / modeled area / overview), else null. */
+  framedKind: FrameGoal['kind'] | null
+  /** The open fire's bounds (I4), once its data is in. */
+  fireBounds: LonLatBox | null
 }
 
 export const useMapRuntime = create<MapRuntimeState>()((set) => ({
@@ -74,6 +107,10 @@ export const useMapRuntime = create<MapRuntimeState>()((set) => ({
   overlays: EMPTY_OVERLAYS,
   aoiInView: null,
   setForecastView: (forecastView) => set({ forecastView }),
+  actions: null,
+  framing: 'idle',
+  framedKind: null,
+  fireBounds: null,
 }))
 
 /** Set one provider's status (no-op when unchanged). */

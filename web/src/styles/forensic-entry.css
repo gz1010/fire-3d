@@ -1,0 +1,67 @@
+/* Forensic map-first entry (owner: shell; brief 2 O-R7). Loaded with the lazy Forensic chunk. Layout only, the same
+   controls as before:
+     - desktop: the dock opens with the timeline only (.fx-dock-min); "Charts & key events" brings back the fire area,
+       spread and profile charts and the Key Events list;
+     - phones: the panel sheet (Layers / Analysis / Evidence / Notes) opens collapsed (.fx-sheet-closed) and the
+       timeline drops to the bottom edge; "Layers & analysis" opens the sheet;
+     - a labelled "Frame fire" sits with the view switch (the scene's own icon button stays too). */
+
+@media (min-width: 761px) {
+  .app.fx-dock-min .dock {
+    height: auto;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app.fx-dock-min .dock .charts,
+  .app.fx-dock-min .dock .ke {
+    display: none;
+  }
+  .app.fx-dock-min .dock .tl {
+    border-bottom: 0;
+    padding-bottom: 6px;
+  }
+}
+
+@media (max-width: 760px) {
+  .app.fx-sheet-closed .rcol {
+    display: none;
+  }
+  .app.fx-sheet-closed .dock {
+    bottom: 8px;
+  }
+}
+
+.fx-entry {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 4px;
+}
+.fx-entry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: var(--fs-sm, 12px);
+  font-weight: 500;
+  white-space: nowrap;
+  text-align: left;
+}
+.fx-entry-btn:hover {
+  background: var(--hairline-soft);
+}
+.fx-entry-btn[aria-expanded='true'] {
+  color: var(--gold-bright);
+}
+@media (max-width: 760px) {
+  .fx-entry {
+    flex-direction: row;
+  }
+  .fx-entry-btn {
+    height: 28px;
+    padding: 0 8px;
+  }
+}
