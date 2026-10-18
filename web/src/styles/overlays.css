@@ -1,0 +1,206 @@
+/* Overlays (SPEC 9.4): status cards, banners, forecast pill, toasts. */
+
+.ov-card {
+  position: relative;
+  width: min(440px, 100%);
+  padding: 18px 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(9, 14, 11, 0.82);
+  animation: ov-in 0.25s var(--ease);
+}
+@keyframes ov-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.ov-card.is-compact {
+  width: auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  font-size: var(--fs-sm);
+}
+.ov-card.is-error {
+  border-color: rgba(229, 72, 58, 0.35);
+}
+.ov-eyebrow {
+  color: var(--gold);
+}
+.ov-title {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  margin-top: -4px;
+}
+.ov-text {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+.ov-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+.build-card {
+  width: min(460px, 100%);
+}
+.build-steps {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.build-steps li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 10px;
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  border: 1px solid var(--hairline);
+  color: var(--text-2);
+}
+.build-steps li.is-done svg {
+  color: var(--ok);
+}
+.build-steps li.is-current {
+  border-color: rgba(226, 190, 114, 0.5);
+  color: var(--gold-bright);
+  background: var(--gold-ghost);
+}
+.scene-error {
+  max-width: 420px;
+}
+
+/* banners (top centre) */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: min(720px, 100%);
+  padding: 6px 6px 6px 12px;
+  border-radius: 9px;
+  font-size: var(--fs-sm);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--shadow);
+  animation: ov-in 0.2s var(--ease);
+}
+.banner-text {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.4;
+}
+.banner-error {
+  background: rgba(40, 12, 10, 0.86);
+  border: 1px solid rgba(229, 72, 58, 0.45);
+  color: #f6c3bc;
+}
+.banner-error > svg {
+  color: var(--danger);
+  flex: none;
+}
+.banner-info {
+  background: var(--glass-strong);
+  border: 1px solid var(--hairline);
+  color: var(--text-2);
+}
+.banner-info > svg {
+  color: var(--gold);
+  flex: none;
+}
+
+/* forecast pill */
+.fc-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  height: 32px;
+  max-width: 420px;
+  padding: 0 14px;
+  border-radius: 16px;
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  border-color: rgba(255, 106, 43, 0.35);
+}
+.fc-pill-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: rgba(255, 106, 43, 0.12);
+}
+.fc-pill-bar i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, var(--ember), var(--fire), var(--fire-mid));
+  box-shadow: 0 0 8px rgba(255, 106, 43, 0.7);
+  transition: width 0.6s var(--ease);
+}
+
+/* toasts (above the dock, centred in the canvas area) */
+.toasts {
+  position: absolute;
+  left: var(--safe-left);
+  right: var(--safe-right);
+  bottom: var(--safe-bottom);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 5px 5px 12px;
+  border-radius: 9px;
+  font-size: var(--fs-sm);
+  pointer-events: auto;
+  animation: ov-in 0.2s var(--ease);
+}
+.toast > svg {
+  flex: none;
+}
+.toast-ok > svg {
+  color: var(--ok);
+}
+.toast-info > svg {
+  color: var(--gold);
+}
+.toast-warn > svg {
+  color: var(--warn);
+}
+.toast-error {
+  border-color: rgba(229, 72, 58, 0.45);
+}
+.toast-error > svg {
+  color: var(--danger);
+}
+.toast .icon-btn {
+  width: 22px;
+  height: 22px;
+}
+.fc-pill.is-build,
+.fc-pill.is-refresh {
+  border-color: rgba(226, 190, 114, 0.35);
+}
+.fc-pill.is-build .fc-pill-bar i,
+.fc-pill.is-refresh .fc-pill-bar i {
+  background: linear-gradient(90deg, var(--lattice-falloff), var(--gold-bright));
+  box-shadow: 0 0 8px rgba(226, 190, 114, 0.7);
+}

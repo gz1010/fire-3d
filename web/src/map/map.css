@@ -1,0 +1,502 @@
+/* Public/Command map internals (owner: map-core). Positions of the slots (.mw-controls, .mw-legend-slot, footer) belong
+   to the shell (styles/map-layout.css); these rules style what map-core renders inside them and on the map itself.
+   Colours come from the --m-* tokens (styles/map-tokens.css); swatches pair colour with line style / pattern. */
+
+/* ------------------------------------------------------------------------------------------ selection pin */
+.fxm-pin {
+  position: relative;
+  width: 26px;
+  height: 34px;
+  cursor: default;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55));
+}
+.fxm-pin.is-draggable {
+  cursor: grab;
+}
+.fxm-pin.is-draggable:active {
+  cursor: grabbing;
+}
+.fxm-pin svg {
+  display: block;
+}
+.fxm-pin-body {
+  fill: var(--m-select);
+  stroke: #ffffff;
+  stroke-width: 1.4;
+}
+.fxm-pin-dot {
+  fill: var(--m-text-inverse);
+}
+.fxm-pin-ring {
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  width: 22px;
+  height: 10px;
+  margin-left: -11px;
+  border-radius: 50%;
+  border: 1.5px solid var(--m-select);
+  background: var(--m-select-soft);
+  opacity: 0.85;
+}
+.fxm-pin.is-approx .fxm-pin-ring {
+  width: 40px;
+  height: 16px;
+  margin-left: -20px;
+  bottom: -10px;
+  border-style: dashed;
+}
+.fxm-pin-chip {
+  position: absolute;
+  left: 30px;
+  top: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-width: 240px;
+  padding: 3px 8px;
+  border-radius: var(--m-radius-sm);
+  border: 1px solid rgba(34, 211, 238, 0.55);
+  background: rgba(8, 20, 28, 0.9);
+  color: var(--m-select-strong);
+  font-family: var(--m-font-ui);
+  font-size: var(--m-fs-sm);
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.fxm-pin-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fxm-pin-note {
+  color: var(--m-text-2);
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
+/* ------------------------------------------------------------------------------------------ hover popup */
+.fxm-popup .maplibregl-popup-content {
+  padding: 8px 10px;
+  border-radius: var(--m-radius-sm);
+  border: 1px solid var(--m-border-strong);
+  background: var(--m-panel-raised);
+  color: var(--m-text);
+  box-shadow: var(--m-shadow);
+  font-family: var(--m-font-ui);
+  font-size: var(--m-fs-sm);
+  line-height: 1.4;
+  pointer-events: none;
+}
+.fxm-popup .maplibregl-popup-tip {
+  display: none;
+}
+.fxm-tip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fxm-tip-title {
+  font-weight: 600;
+}
+.fxm-tip-hint {
+  color: var(--m-text-2);
+  font-size: var(--m-fs-xs);
+}
+.fxm-tip-mono {
+  font-family: var(--m-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------------------------------ notices */
+.fxm-notices {
+  position: absolute;
+  top: calc(var(--safe-top, 64px) + 8px);
+  left: calc(var(--safe-left, 0px) + 12px);
+  right: calc(var(--safe-right, 0px) + 12px);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+.fxm-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(560px, 100%);
+  padding: 7px 8px 7px 12px;
+  border-radius: var(--m-radius);
+  border: 1px solid var(--m-border-strong);
+  background: var(--m-panel-strong);
+  color: var(--m-text);
+  box-shadow: var(--m-shadow);
+  font-family: var(--m-font-ui);
+  font-size: var(--m-fs-sm);
+  line-height: 1.4;
+  pointer-events: auto;
+}
+.fxm-notice.is-warn {
+  border-color: rgba(251, 191, 36, 0.5);
+  box-shadow: inset 3px 0 0 var(--m-warn), var(--m-shadow);
+}
+.fxm-notice.is-info {
+  box-shadow: inset 3px 0 0 var(--m-aoi), var(--m-shadow);
+}
+.fxm-notice-action,
+.fxm-notice-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--m-border);
+  border-radius: var(--m-radius-sm);
+  background: var(--m-panel-soft);
+  color: var(--m-text);
+  font: inherit;
+  cursor: pointer;
+}
+.fxm-notice-action {
+  height: 26px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+.fxm-notice-close {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+}
+.fxm-notice-action:hover,
+.fxm-notice-close:hover {
+  background: var(--m-hover);
+}
+
+/* ------------------------------------------------------------------------------------------ controls */
+.fxm-ctl {
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.fxm-ctl-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--m-border);
+}
+.fxm-icon-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--m-border);
+  border-radius: var(--m-radius-sm);
+  background: var(--m-panel-soft);
+  color: var(--m-text);
+  cursor: pointer;
+}
+.fxm-icon-btn:hover:not(:disabled) {
+  background: var(--m-hover);
+}
+.fxm-icon-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.fxm-icon-btn:focus-visible,
+.fxm-return:focus-visible,
+.fxm-legend-toggle:focus-visible,
+.fxm-notice-action:focus-visible,
+.fxm-notice-close:focus-visible {
+  outline: none;
+  box-shadow: var(--m-focus-ring);
+}
+.fxm-compass svg {
+  transition: transform 80ms linear;
+}
+.fxm-compass-n {
+  fill: var(--m-danger);
+}
+.fxm-compass-s {
+  fill: var(--m-text-2);
+}
+.fxm-compass.is-rotated {
+  border-color: var(--m-accent);
+}
+.fxm-pitch {
+  position: absolute;
+  right: -2px;
+  bottom: -7px;
+  padding: 0 2px;
+  border-radius: 3px;
+  background: var(--m-bg);
+  color: var(--m-text-2);
+  font-size: 9px;
+  line-height: 12px;
+}
+.fxm-return {
+  height: 30px;
+}
+.fxm-basemap-btn {
+  min-width: 118px;
+}
+.fxm-bm-short {
+  display: none;
+}
+/* phones: one row of controls (short basemap name; "Return to incident" keeps its icon and accessible name) */
+@media (max-width: 520px) {
+  .fxm-basemap-btn {
+    min-width: 0;
+  }
+  .fxm-bm-long,
+  .fxm-ctl-sep,
+  .fxm-return > span {
+    display: none;
+  }
+  .fxm-bm-short {
+    display: inline;
+  }
+  .fxm-return {
+    width: 30px;
+    padding: 0;
+    justify-content: center;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fxm-compass svg {
+    transition: none;
+  }
+}
+
+/* ------------------------------------------------------------------------------------------ legend */
+.fxm-legend {
+  font-size: var(--m-fs-xs);
+  color: var(--m-text);
+}
+.fxm-legend-anchor {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.fxm-legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fxm-legend-row li,
+.fxm-legend-details li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.fxm-legend-empty {
+  color: var(--m-text-2);
+}
+.fxm-legend-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--m-border);
+  border-radius: var(--m-radius-sm);
+  background: none;
+  color: var(--m-text-2);
+  font: inherit;
+  cursor: pointer;
+}
+.fxm-legend-toggle:hover {
+  color: var(--m-text);
+  background: var(--m-hover);
+}
+.fxm-legend-toggle .is-open {
+  transform: rotate(180deg);
+}
+.fxm-legend-pop {
+  position: absolute;
+  right: -12px;
+  bottom: calc(100% + 16px);
+  width: min(380px, calc(100vw - 32px));
+  max-height: min(64vh, 560px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 12px 14px;
+  border-radius: var(--m-radius);
+  border: 1px solid var(--m-border-strong);
+  background: var(--m-panel-raised);
+  box-shadow: var(--m-shadow);
+  z-index: 5;
+}
+.fxm-legend-details {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: var(--m-fs-sm);
+  line-height: 1.45;
+}
+.fxm-legend.is-inline .fxm-legend-details {
+  margin-top: 10px;
+}
+.fxm-legend-details h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 3px;
+  font-size: var(--m-fs-sm);
+  font-weight: 600;
+}
+.fxm-legend-details p {
+  margin: 0;
+  color: var(--m-text-2);
+}
+.fxm-legend-details ul {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 5px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--m-text);
+}
+.fxm-legend-note {
+  color: var(--m-text-2);
+  font-size: var(--m-fs-xs);
+}
+.fxm-legend-views {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 7px;
+  color: var(--m-text-2);
+  font-size: var(--m-fs-xs);
+}
+
+/* swatches: colour + line style / pattern */
+.fxm-sw {
+  flex: none;
+  display: inline-block;
+  width: 18px;
+  height: 11px;
+  border-radius: 2px;
+}
+.fxm-sw-observed {
+  background: rgba(150, 36, 16, 0.75);
+  border: 2px solid var(--m-fire-observed);
+  box-shadow: 0 0 5px var(--m-fire-observed-glow);
+}
+.fxm-sw-recent {
+  background: rgba(255, 90, 31, 0.85);
+  border: 2px solid var(--m-fire-observed);
+}
+.fxm-sw-forecast,
+.fxm-sw-fc50 {
+  background: repeating-linear-gradient(135deg, var(--m-forecast-hatch) 0 1.5px, rgba(245, 165, 36, 0.22) 1.5px 5px);
+  border: 2px dashed var(--m-forecast);
+}
+.fxm-sw-fc90 {
+  background: repeating-linear-gradient(135deg, var(--m-forecast-hatch) 0 1.5px, rgba(240, 130, 30, 0.55) 1.5px 5px);
+  border: 1px solid rgba(240, 130, 30, 0.9);
+}
+.fxm-sw-fc10 {
+  background: rgba(245, 165, 36, 0.2);
+  border: 2px dotted var(--m-forecast);
+}
+.fxm-sw-forecast-off {
+  background: none;
+  border: 2px dashed var(--m-text-3);
+}
+.fxm-sw-detection,
+.fxm-sw-detection-old,
+.fxm-sw-detection-goes {
+  width: 10px;
+  height: 10px;
+  margin: 0 4px;
+  border-radius: 0;
+  border: 1.5px solid var(--m-detection);
+  background: rgba(255, 216, 74, 0.38);
+}
+.fxm-sw-detection-old {
+  border-color: rgba(194, 122, 58, 0.7);
+  background: rgba(194, 122, 58, 0.22);
+}
+.fxm-sw-detection-goes {
+  border: 1.5px dashed rgba(255, 216, 74, 0.7);
+  background: none;
+}
+.fxm-sw-perimeter {
+  height: 0;
+  border-radius: 0;
+  border-top: 2px solid var(--m-perimeter);
+}
+.fxm-sw-aoi {
+  height: 0;
+  border-radius: 0;
+  border-top: 2px dashed var(--m-aoi);
+}
+.fxm-sw-selection {
+  width: 11px;
+  height: 11px;
+  margin: 0 3px;
+  border-radius: 50%;
+  background: var(--m-select);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
+}
+.fxm-sw-incident {
+  width: 12px;
+  height: 12px;
+  margin: 0 3px;
+  border-radius: 50%;
+  border: 2.5px solid var(--m-text);
+}
+
+/* ------------------------------------------------------------------------------------------ scale + credits */
+.fxm-attrib {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(11, 17, 25, 0.62);
+  color: var(--m-text-2);
+}
+.fxm-scale {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(11, 17, 25, 0.62);
+  color: var(--m-text);
+}
+.fxm-scale-bar {
+  height: 5px;
+  border: 1.5px solid var(--m-text);
+  border-top: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+.fxm-scale-label {
+  font-size: 10px;
+}
+.fxm-credits a {
+  color: inherit;
+  text-decoration: none;
+}
+.fxm-credits a:hover,
+.fxm-credits a:focus-visible {
+  text-decoration: underline;
+}
+/* short credits never break inside (e.g. "Open-Meteo.com" at its hyphen); long ones may wrap on phones */
+.fxm-credits a[href='https://open-meteo.com/'] {
+  white-space: nowrap;
+}

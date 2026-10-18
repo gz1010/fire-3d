@@ -1,0 +1,108 @@
+/* Reused Forensic controls inside the Public/Command workspace (owner: shell). Most of them follow the generic tokens
+   that map-tokens.css re-points under <html data-workspace="map">; these rules replace the few hard-coded gold
+   gradients and glows with the map's blue accent. Popovers and tooltips render in body portals, hence the :root
+   scope rather than .mw. */
+
+:root[data-workspace='map'] .seg {
+  background: rgba(5, 9, 14, 0.55);
+  border-color: var(--m-border);
+}
+:root[data-workspace='map'] .seg-btn {
+  color: var(--m-text-2);
+}
+:root[data-workspace='map'] .seg-btn[aria-checked='true'] {
+  color: #fff;
+  background: var(--m-accent-bg);
+  box-shadow: inset 0 0 0 1px rgba(91, 157, 255, 0.55);
+}
+:root[data-workspace='map'] .seg-btn[aria-checked='true'] .muted,
+:root[data-workspace='map'] .seg-btn[aria-checked='true'] .seg-count {
+  color: rgba(255, 255, 255, 0.72);
+}
+:root[data-workspace='map'] .seg-btn:hover:not(:disabled):not([aria-checked='true']) {
+  background: var(--m-hover);
+}
+
+:root[data-workspace='map'] .picker-btn {
+  background: rgba(5, 9, 14, 0.45);
+  border-color: var(--m-border);
+}
+:root[data-workspace='map'] .picker-btn:hover,
+:root[data-workspace='map'] .picker-btn.is-open {
+  background: var(--m-hover);
+  border-color: var(--m-border-strong);
+}
+:root[data-workspace='map'] .picker-row.is-current::before {
+  box-shadow: 0 0 6px rgba(91, 157, 255, 0.6);
+}
+:root[data-workspace='map'] .search:focus-within,
+:root[data-workspace='map'] .text-input:focus {
+  border-color: rgba(91, 157, 255, 0.6);
+}
+
+:root[data-workspace='map'] .switch[aria-checked='true'] {
+  background: rgba(91, 157, 255, 0.32);
+  border-color: rgba(91, 157, 255, 0.6);
+}
+:root[data-workspace='map'] .switch[aria-checked='true'] .switch-knob {
+  box-shadow: 0 0 8px rgba(91, 157, 255, 0.6);
+}
+
+:root[data-workspace='map'] .btn-solid {
+  background: var(--m-accent-bg);
+  border: 1px solid rgba(91, 157, 255, 0.6);
+  color: #fff;
+}
+:root[data-workspace='map'] .btn-solid:hover:not(:disabled) {
+  background: var(--m-accent-bg-hover);
+  border-color: var(--m-accent);
+}
+:root[data-workspace='map'] .btn-gold {
+  border-color: rgba(91, 157, 255, 0.5);
+}
+
+:root[data-workspace='map'] .spinner {
+  border-color: rgba(91, 157, 255, 0.22);
+  border-top-color: var(--m-accent);
+}
+:root[data-workspace='map'] .progress-fill {
+  background: linear-gradient(90deg, var(--m-accent-bg), var(--m-accent));
+  box-shadow: none;
+}
+:root[data-workspace='map'] .corner-marks i {
+  border-color: rgba(148, 178, 210, 0.35);
+}
+:root[data-workspace='map'] .chart-tool.is-active {
+  border-color: rgba(91, 157, 255, 0.55);
+}
+:root[data-workspace='map'] .fc-pill.is-build,
+:root[data-workspace='map'] .fc-pill.is-refresh {
+  border-color: rgba(91, 157, 255, 0.4);
+}
+:root[data-workspace='map'] .fc-pill.is-build .fc-pill-bar i,
+:root[data-workspace='map'] .fc-pill.is-refresh .fc-pill-bar i {
+  background: linear-gradient(90deg, var(--m-accent-bg), var(--m-accent));
+  box-shadow: none;
+}
+:root[data-workspace='map'] .build-steps li.is-current {
+  border-color: rgba(91, 157, 255, 0.5);
+}
+
+/* the incident picker popover on phones: full width, fewer columns */
+@media (max-width: 760px) {
+  :root[data-workspace='map'] .picker-pop {
+    width: calc(100vw - 16px) !important;
+  }
+  :root[data-workspace='map'] .picker-top {
+    flex-wrap: wrap;
+  }
+  :root[data-workspace='map'] .picker-head,
+  :root[data-workspace='map'] .picker-row {
+    grid-template-columns: minmax(0, 1fr) 60px 76px;
+  }
+  /* keep Incident, Acres and Status; hide Contained, Started and Bundle */
+  :root[data-workspace='map'] .picker-head > :is(:nth-child(3), :nth-child(4), :nth-child(6)),
+  :root[data-workspace='map'] .picker-row > :is(:nth-child(3), :nth-child(4), :nth-child(6)) {
+    display: none;
+  }
+}

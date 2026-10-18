@@ -1,0 +1,1357 @@
+/* Public/Command layout (owner: shell, CONTRACT §3; BRIEF §2, §5, §6). The map fills the window; chrome floats above
+   it in a few layout containers that never catch map clicks themselves (pointer-events pass through):
+     .mw-header   top bar: brand, incident, workspace, demo badge, preset, panel toggles
+     .mw-top      grid between the header and the bottom row: search + location card (left), map controls +
+                  updates panel (right); its bottom follows the bottom row and an open Analysis drawer
+     .mw-bottom   bottom row: coordinates (left), compact timeline (centre), legend (right), footer line below
+     .mw-layers-slot / .mw-drawer-slot   Layers & settings drawer (top right) and Analysis drawer (bottom)
+   Every floating region carries [data-chrome]; --chrome-side tells useMapSafeArea which map edge it docks to (map
+   padding / framing). JS publishes --mw-bottom-stack (height of the bottom row) and --mw-drawer-space (open drawer).
+   Phones (<= 760px): the updates panel, location card, layers and analysis become bottom sheets above the timeline
+   and coordinates, one at a time. Shared primitives (.mw-btn, .mw-icon-btn, .mw-panel, .mw-chip, .mw-mono, ...) may be
+   used by every map-workspace component. Base looks for map-core's shared classes (map-fallbacks.css) are wrapped
+   in :where() (zero specificity), so each owner's own CSS wins whatever the import order. */
+
+/* ------------------------------------------------------------------------------------------------ root */
+.mw {
+  --mw-bottom-stack: 0px;
+  --mw-drawer-space: 0px;
+  /* coordinate column of the bottom row. Public: the strip's own width up to about one coordinate line, so a second
+     point stacks under the first without an empty band beside it; Command widens it (below). */
+  --mw-coords-col: fit-content(280px);
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: var(--m-bg);
+  color: var(--m-text);
+  font: 400 var(--m-fs-md) / 1.45 var(--m-font-ui);
+}
+.mw h2,
+.mw h3 {
+  margin: 0;
+  font-size: var(--m-fs-md);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+.mw p {
+  margin: 0;
+}
+.mw ::selection {
+  background: rgba(91, 157, 255, 0.35);
+}
+.mw :focus-visible {
+  outline: none;
+  box-shadow: var(--m-focus-ring);
+}
+.mw * {
+  scrollbar-color: rgba(148, 178, 210, 0.22) transparent;
+}
+.mw *::-webkit-scrollbar-thumb {
+  background: rgba(148, 178, 210, 0.2);
+}
+
+/* ------------------------------------------------------------------------------------------------ primitives */
+.mw-mono {
+  font-family: var(--m-font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.mw-muted {
+  color: var(--m-text-2);
+}
+.mw-eyebrow {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--m-text-3);
+}
+.mw-flex {
+  flex: 1;
+}
+.mw-panel,
+.mw-updates-panel,
+.mw-layers,
+.mw-drawer,
+.mw-updates-open {
+  background: var(--m-panel);
+  -webkit-backdrop-filter: var(--m-panel-blur);
+  backdrop-filter: var(--m-panel-blur);
+  border: 1px solid var(--m-border);
+  border-radius: var(--m-radius);
+  box-shadow: var(--m-shadow);
+}
+.mw-btn,
+.mw-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--m-border);
+  border-radius: var(--m-radius-sm);
+  background: var(--m-panel-soft);
+  color: var(--m-text);
+  font: 500 var(--m-fs-sm) / 1 var(--m-font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.mw-icon-btn {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  color: var(--m-text-2);
+  background: transparent;
+  border-color: transparent;
+}
+.mw-icon-btn.is-sm {
+  width: 22px;
+  height: 22px;
+}
+.mw-btn.is-sm {
+  height: 26px;
+  padding: 0 9px;
+  font-size: var(--m-fs-xs);
+}
+.mw-btn:hover:not(:disabled),
+.mw-icon-btn:hover:not(:disabled) {
+  background: var(--m-hover);
+  border-color: var(--m-border-strong);
+  color: var(--m-text);
+}
+.mw-btn.is-active,
+.mw-btn[aria-pressed='true'] {
+  background: var(--m-accent-bg);
+  border-color: rgba(91, 157, 255, 0.6);
+  color: #fff;
+}
+.mw-btn.is-primary {
+  background: var(--m-accent-bg);
+  border-color: rgba(91, 157, 255, 0.6);
+  color: #fff;
+}
+.mw-btn.is-primary:hover:not(:disabled) {
+  background: var(--m-accent-bg-hover);
+}
+.mw-btn:disabled,
+.mw-icon-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.mw-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--m-accent-text);
+  font: 500 var(--m-fs-sm) / 1.3 var(--m-font-ui);
+  cursor: pointer;
+}
+.mw-link-btn:hover {
+  text-decoration: underline;
+}
+.mw-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: var(--m-radius-pill);
+  border: 1px solid var(--m-border);
+  color: var(--m-text-2);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.mw-chip-stale {
+  color: var(--m-stale);
+  border-color: rgba(251, 191, 36, 0.5);
+}
+.mw-chip-live {
+  color: var(--m-fire-observed);
+  border-color: rgba(255, 90, 31, 0.5);
+}
+.mw kbd {
+  height: 16px;
+  min-width: 16px;
+  font-size: 10px;
+  border-color: var(--m-border-strong);
+  background: var(--m-hover);
+  color: var(--m-text-2);
+}
+.mw-sheet-handle {
+  display: none;
+}
+/* responsive visibility (the menu holds what the header drops) */
+.mw-narrow-only,
+.mw-compact-only {
+  display: none !important;
+}
+
+/* panel heading / footer shared by the updates panel and the drawers */
+.mw-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 6px 6px 6px 14px;
+  border-bottom: 1px solid var(--m-border);
+  flex: none;
+}
+.mw-panel-head h2 {
+  font-size: var(--m-fs-lg);
+  flex: 0 1 auto;
+}
+.mw-panel-head h2:focus-visible {
+  /* programmatic focus target when a drawer opens: a quiet marker instead of a ring */
+  box-shadow: none;
+  text-decoration: underline 2px var(--m-accent);
+  text-underline-offset: 5px;
+}
+.mw-panel-head > .mw-icon-btn:last-child {
+  margin-left: auto;
+}
+.mw-panel-foot {
+  display: flex;
+  align-items: center;
+  padding: 5px 14px 6px;
+  border-top: 1px solid var(--m-border);
+  flex: none;
+}
+
+/* ------------------------------------------------------------------------------------------------ skip links */
+.mw-skip {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  z-index: calc(var(--m-z-header) + 1);
+  display: flex;
+  gap: 6px;
+  transform: translate(-50%, -200%);
+  pointer-events: none;
+}
+.mw-skip:focus-within {
+  transform: translate(-50%, 0);
+}
+.mw-skip a {
+  padding: 8px 12px;
+  border-radius: var(--m-radius-sm);
+  border: 1px solid var(--m-accent);
+  background: var(--m-panel-raised);
+  color: var(--m-text);
+  font-weight: 600;
+  pointer-events: auto;
+}
+
+/* ------------------------------------------------------------------------------------------------ map */
+.mw-map {
+  position: absolute;
+  inset: 0;
+  z-index: var(--m-z-map);
+  background: var(--m-bg);
+}
+/* MapView's root is sized, not positioned: maplibre-gl.css sets .maplibregl-map { position: relative } */
+:where(.mw-map-canvas) {
+  width: 100%;
+  height: 100%;
+}
+.mw-map-host {
+  position: absolute;
+  inset: 0;
+}
+.mw-map-loading,
+.mw-map-error {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  grid-auto-flow: column;
+  gap: 8px;
+  color: var(--m-text-2);
+  font-size: var(--m-fs-sm);
+}
+.mw-map-error-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 420px;
+  padding: 16px 18px;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  border-radius: var(--m-radius);
+  background: var(--m-panel-raised);
+  box-shadow: var(--m-shadow);
+  color: var(--m-text);
+}
+.mw-map-error-card .mw-eyebrow {
+  color: var(--m-danger);
+}
+.mw-map-error-msg {
+  font-family: var(--m-font-mono);
+  font-size: var(--m-fs-xs);
+  color: var(--m-text-2);
+  word-break: break-word;
+}
+
+/* ------------------------------------------------------------------------------------------------ header */
+.mw-header {
+  --chrome-side: top;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--m-z-header);
+}
+.mw-hdr {
+  position: relative;
+  height: var(--m-header-h);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--m-gap);
+  padding: 0 var(--m-gap) 0 16px;
+  background: var(--m-panel-strong);
+  -webkit-backdrop-filter: var(--m-panel-blur);
+  backdrop-filter: var(--m-panel-blur);
+  border-bottom: 1px solid var(--m-border);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
+.mw-hdr-start,
+.mw-hdr-end {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.mw-hdr-end {
+  justify-content: flex-end;
+  gap: 8px;
+}
+.mw-hdr-mid {
+  justify-self: center;
+}
+.mw-hdr-sep {
+  width: 1px;
+  height: 22px;
+  background: var(--m-border);
+  flex: none;
+}
+.mw-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.mw-brand .logo {
+  filter: none;
+}
+.mw-brand-name {
+  font-size: var(--m-fs-xl);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.mw-hdr .picker-btn {
+  height: 34px;
+  min-width: 0;
+  max-width: 300px;
+  flex: 0 1 auto;
+}
+.mw-hdr-toggle {
+  height: 32px;
+}
+.mw-hdr-toggle.is-icon {
+  width: 34px;
+  padding: 0;
+}
+.mw-hdr-toggle.is-icon .mw-btn-label,
+.mw-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.mw-hdr-toggle kbd {
+  margin-left: 2px;
+}
+.mw-hdr-loading {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+.mw-hdr-loading.is-on {
+  opacity: 1;
+}
+.mw-hdr-loading::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 30%;
+  background: linear-gradient(90deg, transparent, var(--m-accent), transparent);
+  animation: mw-loading 1.3s ease-in-out infinite;
+}
+@keyframes mw-loading {
+  from {
+    left: -30%;
+  }
+  to {
+    left: 100%;
+  }
+}
+
+/* demo badge: fixture incidents only */
+.mw-demo-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--m-radius-sm);
+  border: 1px solid var(--m-demo-border);
+  background: var(--m-demo-bg);
+  color: var(--m-demo);
+  font-size: var(--m-fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex: none;
+}
+.mw-demo-short {
+  display: none;
+}
+
+/* Command: incident identifier */
+.mw-id-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 4px 0 9px;
+  border: 1px solid var(--m-border);
+  border-radius: var(--m-radius-sm);
+  background: rgba(5, 9, 14, 0.45);
+}
+.mw-id-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--m-text-3);
+}
+.mw-id-value {
+  font-size: var(--m-meta-fs);
+  color: var(--m-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* compact-screen menu */
+.mw-menu-pop {
+  padding: 0;
+}
+.mw-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+.mw-menu-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mw-menu-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--m-text-3);
+}
+.mw-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: var(--m-radius-sm);
+  color: var(--m-text);
+  text-align: left;
+}
+.mw-menu-item:hover {
+  background: var(--m-hover);
+}
+.mw-menu-item.is-active {
+  background: var(--m-select-soft);
+}
+.mw-menu-check {
+  margin-left: auto;
+  color: var(--m-accent-text);
+}
+.mw-seg-fill {
+  display: flex;
+  width: 100%;
+}
+.mw-seg-fill .seg-btn {
+  flex: 1 1 0;
+}
+
+/* ------------------------------------------------------------------------------------------------ top region */
+.mw-top {
+  position: absolute;
+  top: calc(var(--m-header-h) + var(--m-gap));
+  left: var(--m-gap);
+  right: var(--m-gap);
+  bottom: calc(var(--mw-bottom-stack) + var(--mw-drawer-space) + var(--m-gap));
+  z-index: var(--m-z-chrome);
+  display: grid;
+  grid-template-columns: minmax(0, var(--m-search-w)) minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    'search . controls'
+    'card   . updates';
+  gap: var(--m-gap);
+  align-items: start;
+  pointer-events: none;
+}
+.mw-top > * {
+  pointer-events: auto;
+  min-width: 0;
+}
+.mw-search {
+  --chrome-side: top;
+  grid-area: search;
+}
+.mw-controls {
+  --chrome-side: top;
+  grid-area: controls;
+  justify-self: end;
+}
+.mw-card {
+  --chrome-side: left;
+  grid-area: card;
+  width: min(var(--m-card-w), 100%);
+  max-height: 100%;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-radius: var(--m-radius);
+}
+.mw-card:empty {
+  display: none;
+}
+.mw-updates {
+  --chrome-side: none;
+  grid-area: updates;
+  justify-self: end;
+  max-height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.mw.has-updates .mw-updates {
+  --chrome-side: right;
+  width: var(--m-updates-w);
+}
+
+/* updates panel */
+.mw-updates-open {
+  height: 34px;
+  padding: 0 12px;
+}
+.mw-updates-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+.mw-updates-body {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: var(--m-updates-compact-h);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.mw-updates-panel.is-expanded .mw-updates-body {
+  max-height: none;
+}
+
+/* Command data status */
+.mw-status {
+  border-bottom: 1px solid var(--m-border);
+  flex: none;
+}
+.mw-status-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 14px;
+  color: var(--m-text-2);
+  text-align: left;
+}
+.mw-status-head:hover {
+  background: var(--m-hover);
+}
+.mw-status-mode {
+  margin-left: auto;
+  font-size: var(--m-fs-xs);
+}
+.mw-status-rows {
+  margin: 0;
+  padding: 0 14px 10px;
+  display: grid;
+  gap: 4px;
+}
+.mw-status-row {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+}
+.mw-status-row dt {
+  color: var(--m-text-3);
+  font-size: var(--m-fs-xs);
+  white-space: nowrap;
+}
+.mw-status-row dd {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+  min-width: 0;
+}
+.mw-status-time {
+  font-size: var(--m-meta-fs);
+  color: var(--m-text);
+}
+.mw-status-row.is-missing .mw-status-time {
+  font-family: var(--m-font-ui);
+  color: var(--m-text-3);
+}
+.mw-status-age {
+  font-size: var(--m-fs-xs);
+  color: var(--m-text-2);
+}
+.mw-status-row.is-stale .mw-status-time,
+.mw-status-row.is-stale .mw-status-age {
+  color: var(--m-stale);
+}
+.mw-status-detail {
+  flex-basis: 100%;
+  font-size: var(--m-fs-xs);
+  color: var(--m-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------------------------------------ bottom row */
+.mw-bottom {
+  position: absolute;
+  left: var(--m-gap);
+  right: var(--m-gap);
+  bottom: 4px;
+  z-index: var(--m-z-chrome);
+  display: grid;
+  /* the timeline keeps at least --m-timeline-min; coordinates and legend share the rest and wrap when short.
+     --mw-coords-col (.mw root): Public fits the strip (two points stack); Command lets it widen so identifiers and
+     source times run in long lines. */
+  grid-template-columns: var(--mw-coords-col) minmax(min(var(--m-timeline-min), 100%), 1fr) minmax(0, max-content);
+  grid-template-rows: auto auto auto;
+  grid-template-areas:
+    'note   timeline legend'
+    'coords timeline legend'
+    'foot   foot     foot';
+  column-gap: var(--m-gap);
+  row-gap: 4px;
+  align-items: end;
+  pointer-events: none;
+}
+.mw-bottom > * {
+  pointer-events: auto;
+  min-width: 0;
+}
+.mw-coords {
+  --chrome-side: bottom;
+  position: relative;
+  grid-area: coords;
+  justify-self: start;
+  max-width: 100%;
+}
+/* phones + Command (CoordsSlot.tsx): clamped to the reported location; a fade and the toggle say there is more */
+.mw-coords.is-clamped {
+  overflow: hidden;
+  border-radius: var(--m-radius);
+}
+.mw-coords.is-clamped::after {
+  content: '';
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: 0;
+  height: 12px;
+  border-bottom: 1px solid var(--m-border);
+  border-radius: 0 0 var(--m-radius) var(--m-radius);
+  background: linear-gradient(to bottom, transparent, var(--m-panel-strong));
+  pointer-events: none;
+}
+.mw-coords-more {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  z-index: 1;
+  background: var(--m-panel-raised);
+  border-color: var(--m-border);
+}
+.mw-timeline {
+  --chrome-side: bottom;
+  grid-area: timeline;
+  justify-self: center;
+  width: min(var(--m-timeline-w), 100%);
+}
+.mw-legend-slot {
+  --chrome-side: bottom;
+  grid-area: legend;
+  justify-self: end;
+  max-width: 100%;
+}
+.mw-legend-slot:empty {
+  display: none;
+}
+/* MapLegend / MapAttribution render inside shell slots: their roots must not position themselves */
+.mw-legend-slot > .mw-legend,
+.mw-footer .mw-attrib,
+.mw-legend-inline > .mw-legend {
+  position: static;
+  inset: auto;
+  margin: 0;
+}
+.mw-footer {
+  grid-area: foot;
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  min-height: 14px;
+  pointer-events: none;
+}
+.mw-footer > * {
+  --chrome-side: bottom;
+  pointer-events: auto;
+}
+/* the research-prototype note sits above the coordinate strip, so the credits get the full width; its dark glass
+   chip keeps it readable on the light Roads basemap and bright aerial imagery */
+.mw-note {
+  --chrome-side: bottom;
+  grid-area: note;
+  justify-self: start;
+  margin: 0 0 2px 0 !important;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--m-panel-soft);
+  -webkit-backdrop-filter: var(--m-panel-blur);
+  backdrop-filter: var(--m-panel-blur);
+  font-size: 10.5px;
+  line-height: 14px;
+  color: var(--m-text-2);
+  white-space: nowrap;
+}
+.mw-footer-attrib {
+  min-width: 0;
+  text-align: right;
+}
+/* the scale bar floats in the bottom-right corner of the unobstructed map (the safe area: left of the updates panel,
+   above the bottom row and any open drawer), like a map's own scale control; out of the credits line, so the
+   required credits keep one line at 1440 px */
+.mw-scale-slot {
+  --chrome-side: none;
+  position: absolute;
+  right: calc(var(--safe-right, 12px) + 8px);
+  bottom: calc(var(--safe-bottom, 140px) + 6px);
+  z-index: var(--m-z-chrome);
+  pointer-events: none;
+}
+/* the Layers drawer floats over the right column without changing the safe area: keep the scale left of it */
+.mw.has-layers:not(.has-sheet) .mw-scale-slot {
+  right: calc(max(var(--safe-right, 12px), var(--m-layers-w) + var(--m-gap)) + 8px);
+}
+
+/* ------------------------------------------------------------------------------------------------ drawers */
+.mw-layers-slot {
+  --chrome-side: none;
+  /* below the top-docked row (search, map controls): zoom, compass and "Return to incident" stay usable */
+  --mw-layers-top: var(--safe-top, calc(var(--m-header-h) + var(--m-gap)));
+  position: absolute;
+  top: var(--mw-layers-top);
+  right: var(--m-gap);
+  max-height: calc(100% - var(--mw-layers-top) - var(--mw-bottom-stack) - var(--m-gap));
+  width: min(var(--m-layers-w), calc(100% - 2 * var(--m-gap)));
+  z-index: var(--m-z-drawer);
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+.mw-layers-slot > * {
+  pointer-events: auto;
+}
+.mw-layers {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+  background: var(--m-panel-strong);
+}
+.mw-layers-body {
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 4px 14px 14px;
+  min-height: 0;
+}
+.mw-set {
+  padding: 12px 0;
+}
+.mw-set + .mw-set {
+  border-top: 1px solid var(--m-border);
+}
+.mw-set-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.mw-set-head h3 {
+  font-size: var(--m-fs-sm);
+  color: var(--m-text-2);
+  font-weight: 600;
+}
+.mw-set-note {
+  margin-top: 6px !important;
+  font-size: var(--m-fs-xs);
+  line-height: 1.45;
+  color: var(--m-text-2);
+}
+.mw-set .mw-btn {
+  margin-top: 8px;
+}
+.mw-basemaps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.mw-basemap {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--m-border);
+  border-radius: 8px;
+  background: rgba(5, 9, 14, 0.35);
+  text-align: left;
+  color: var(--m-text);
+}
+.mw-basemap:hover {
+  border-color: var(--m-border-strong);
+}
+.mw-basemap[aria-checked='true'] {
+  border-color: var(--m-accent);
+  box-shadow: inset 0 0 0 1px var(--m-accent);
+  background: rgba(39, 71, 107, 0.35);
+}
+.mw-basemap-swatch {
+  height: 38px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.mw-basemap-dark .mw-basemap-swatch {
+  background:
+    linear-gradient(115deg, transparent 0 46%, #3a4656 46% 50%, transparent 50%),
+    linear-gradient(25deg, transparent 0 60%, #2c3644 60% 63%, transparent 63%),
+    #121820;
+}
+.mw-basemap-roads .mw-basemap-swatch {
+  background:
+    linear-gradient(115deg, transparent 0 45%, #f6c15a 45% 51%, transparent 51%),
+    linear-gradient(25deg, transparent 0 60%, #ffffff 60% 64%, transparent 64%),
+    linear-gradient(160deg, #dfe8d3, #eef0e6);
+}
+.mw-basemap-aerial .mw-basemap-swatch {
+  background:
+    linear-gradient(115deg, transparent 0 46%, rgba(255, 255, 255, 0.55) 46% 49%, transparent 49%),
+    radial-gradient(circle at 30% 40%, #5b6b3f 0 18%, transparent 30%),
+    radial-gradient(circle at 70% 70%, #6f5a3c 0 20%, transparent 32%),
+    linear-gradient(140deg, #3d4a2c, #4f4a36 55%, #2f3a26);
+}
+.mw-basemap-label {
+  font-size: var(--m-fs-sm);
+  font-weight: 600;
+}
+.mw-basemap-desc {
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--m-text-2);
+}
+.mw-check-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mw-check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 6px;
+  border-radius: var(--m-radius-sm);
+  cursor: pointer;
+}
+.mw-check-row:hover {
+  background: var(--m-hover);
+}
+.mw-check-row input {
+  margin: 2px 0 0;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--m-accent);
+  flex: none;
+}
+.mw-check-row input:focus-visible {
+  box-shadow: var(--m-focus-ring);
+  border-radius: 3px;
+}
+.mw-check-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.mw-check-label {
+  font-size: var(--m-fs-md);
+}
+.mw-check-desc {
+  font-size: var(--m-fs-xs);
+  line-height: 1.4;
+  color: var(--m-text-2);
+}
+/* optional sources: the source's panel (extras/*Panel.tsx) sits under its toggle, flat inside the drawer */
+.mw-source-panel:empty {
+  display: none;
+}
+.mw-source-panel {
+  margin: 2px 0 8px 31px;
+}
+.mw-source-panel .xs-panel {
+  padding: 10px 10px 8px;
+  background: rgba(5, 9, 14, 0.4);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+  border-color: var(--m-border);
+  font-size: var(--m-fs-sm);
+}
+.mw-source-panel .xs-head h3 {
+  font-size: var(--m-fs-md);
+}
+.mw-select {
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--m-border);
+  border-radius: var(--m-radius-sm);
+  background: rgba(5, 9, 14, 0.55);
+  color: var(--m-text);
+  font: 400 var(--m-fs-sm) var(--m-font-ui);
+}
+.mw-select:focus-visible {
+  box-shadow: var(--m-focus-ring);
+  outline: none;
+}
+
+/* analysis drawer */
+.mw-drawer-slot {
+  --chrome-side: bottom;
+  position: absolute;
+  left: var(--m-gap);
+  right: var(--m-gap);
+  bottom: calc(var(--mw-bottom-stack) + var(--m-gap));
+  z-index: var(--m-z-drawer);
+  pointer-events: none;
+}
+.mw-drawer-slot > * {
+  pointer-events: auto;
+}
+.mw-drawer {
+  height: var(--m-drawer-h);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--m-panel-strong);
+}
+.mw-drawer-sub {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--m-fs-xs);
+  color: var(--m-text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mw-drawer-charts {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.mw-drawer .charts {
+  border-top: 0;
+}
+.mw-drawer-loading {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  grid-auto-flow: column;
+  gap: 8px;
+  color: var(--m-text-2);
+}
+.mw-drawer-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--m-border);
+  background: rgba(39, 71, 107, 0.3);
+  font-size: var(--m-fs-sm);
+}
+.mw-drawer-notice > span {
+  flex: 1;
+}
+
+/* ------------------------------------------------------------------------------------------------ overlays */
+/* status cards, banners and toasts reuse the Forensic overlays positioned with --safe-* */
+.mw .center-overlay,
+.mw .top-center {
+  z-index: var(--m-z-drawer);
+}
+
+/* ------------------------------------------------------------------------------------------------ collapsed (H) */
+/* "H" hides the secondary panels; the header, search, map controls, coordinates, timeline and credits stay */
+.mw.is-collapsed .mw-updates,
+.mw.is-collapsed .mw-card,
+.mw.is-collapsed .mw-legend-slot,
+.mw.is-collapsed .mw-layers-slot,
+.mw.is-collapsed .mw-drawer-slot {
+  display: none;
+}
+
+/* ------------------------------------------------------------------------------------------------ Command */
+/* denser, operational: tighter panel rhythm and larger identifiers / timestamps (tokens in map-tokens.css) */
+:root[data-preset='command'] .mw {
+  --mw-coords-col: minmax(0, max-content);
+}
+:root[data-preset='command'] .mw-panel-head {
+  min-height: 40px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+:root[data-preset='command'] .mw-panel-head h2 {
+  font-size: var(--m-fs-md);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+:root[data-preset='command'] .mw-brand-name {
+  font-size: var(--m-fs-lg);
+}
+
+/* ------------------------------------------------------------------------------------------------ medium widths */
+@media (max-width: 1279px) {
+  /* Analysis / Layers: icon only (the label stays the accessible name; the tooltip names them) */
+  .mw-hdr-toggle[data-panel-toggle] {
+    width: 34px;
+    padding: 0;
+  }
+  .mw-hdr-toggle[data-panel-toggle] .mw-btn-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .mw-demo-long {
+    display: none;
+  }
+  .mw-demo-short {
+    display: inline;
+  }
+  .mw-hdr .picker-btn {
+    max-width: 220px;
+  }
+  /* the incident name keeps the room; Command still shows the identifier in the coordinate strip */
+  .mw-id-chip {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------------------------------------ compact header */
+@media (max-width: 1023px) {
+  .mw-hdr {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .mw-wide-only {
+    display: none !important;
+  }
+  .mw-compact-only {
+    display: inline-flex !important;
+  }
+}
+
+/* ------------------------------------------------------------------------------------------------ phones */
+@media (max-width: 760px) {
+  .mw-narrow-only {
+    display: inline-flex !important;
+  }
+  .mw-hide-narrow {
+    display: none !important;
+  }
+  .mw-hdr {
+    padding: 0 var(--m-gap);
+    gap: 8px;
+  }
+  .mw-brand-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .mw-hdr-sep {
+    display: none;
+  }
+  .mw-hdr .picker-btn {
+    max-width: none;
+    flex: 1 1 auto;
+  }
+  .mw-demo-badge {
+    height: 24px;
+    padding: 0 7px;
+  }
+  .mw-top {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      'search search'
+      '.      controls';
+    align-content: start;
+    gap: var(--m-gap);
+  }
+  /* bottom sheets: the card, the updates panel and the two drawers sit above the timeline and coordinates */
+  .mw-card,
+  .mw-updates {
+    --chrome-side: bottom;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    max-height: calc(100% - 56px);
+    z-index: 2;
+  }
+  .mw.has-updates .mw-updates {
+    width: auto;
+    height: min(560px, calc(100% - 56px));
+    --chrome-side: bottom;
+  }
+  .mw-updates-panel,
+  .mw-updates-panel .mw-updates-body {
+    flex: 1 1 auto;
+  }
+  .mw-layers-slot,
+  .mw-drawer-slot {
+    --chrome-side: bottom;
+    top: auto;
+    left: var(--m-gap);
+    right: var(--m-gap);
+    width: auto;
+    bottom: calc(var(--mw-bottom-stack) + var(--m-gap));
+    max-height: calc(100% - var(--m-header-h) - var(--mw-bottom-stack) - 56px - 2 * var(--m-gap));
+  }
+  .mw-drawer-slot {
+    display: flex;
+    flex-direction: column;
+  }
+  .mw-drawer {
+    height: auto;
+    max-height: 100%;
+    min-height: 0;
+  }
+  .mw-drawer-sub {
+    display: none;
+  }
+  .mw-drawer-charts {
+    overflow: auto;
+  }
+  .mw-drawer .charts {
+    display: flex;
+    flex-direction: column;
+  }
+  .mw-drawer .chart {
+    flex: none;
+    height: 210px;
+  }
+  .mw-drawer .chart + .chart {
+    border-left: 0;
+    border-top: 1px solid var(--m-border);
+  }
+  .mw-drawer-notice {
+    flex-wrap: wrap;
+  }
+  .mw-updates-panel,
+  .mw-layers,
+  .mw-drawer {
+    background: var(--m-panel-strong);
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.55);
+  }
+  .mw-updates-body {
+    max-height: none;
+  }
+  .mw.has-sheet .mw-card {
+    display: none;
+  }
+  .mw-sheet-handle {
+    display: block;
+    width: 36px;
+    height: 4px;
+    margin: 6px auto -2px;
+    border-radius: 2px;
+    background: var(--m-border-strong);
+    flex: none;
+  }
+  .mw-bottom {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto;
+    grid-template-areas:
+      'timeline'
+      'coords'
+      'note'
+      'foot';
+    row-gap: 4px;
+    bottom: 2px;
+  }
+  .mw-coords,
+  .mw-timeline {
+    justify-self: stretch;
+    width: auto;
+    max-width: none;
+  }
+  .mw-legend-slot {
+    display: none;
+  }
+  .mw-footer {
+    justify-content: flex-start;
+  }
+  .mw-note {
+    margin: 0 !important;
+    white-space: normal;
+  }
+  .mw-footer-attrib {
+    text-align: left;
+  }
+  .mw-basemaps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* ------------------------------------------------------------------------------------------------ motion */
+@media (prefers-reduced-motion: no-preference) {
+  .mw-layers,
+  .mw-drawer,
+  .mw-updates-panel {
+    animation: mw-in 0.16s ease-out;
+  }
+  @keyframes mw-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mw-hdr-loading::after {
+    animation: none;
+    left: 0;
+    width: 100%;
+    opacity: 0.6;
+  }
+}
+
+/* ------------------------------------------------------------------------------------------------ Forensic */
+/* the way back to the map: a small labelled switch under the scene compass */
+.fx-ws {
+  position: absolute;
+  top: calc(var(--safe-top) + 120px);
+  left: var(--safe-left);
+  z-index: var(--z-scene-ui);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.fx-ws-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 10px;
+}
+.fx-demo-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(245, 184, 61, 0.5);
+  background: rgba(30, 22, 6, 0.82);
+  color: #f5b83d;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.fx-ws-label {
+  font-size: 9.5px;
+}
+
+/* phones: the location card and the bottom sheets sit right above the bottom row, where the scale bar floats; the
+   optional-source panels use the sheet's full width */
+@media (max-width: 760px) {
+  .mw.has-selection .mw-scale-slot,
+  .mw.has-sheet .mw-scale-slot {
+    display: none;
+  }
+  .mw-source-panel {
+    margin-left: 0;
+  }
+}

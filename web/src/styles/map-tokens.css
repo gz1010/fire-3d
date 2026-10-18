@@ -1,0 +1,174 @@
+/* Public/Command design tokens (owner: shell; agreed in docs/redesign/CONTRACT.md §9). Dark navy chrome after the
+   redesign references: subdued geographic context, orange/red wildfire information, cyan selection, blue UI accents,
+   legibility first. All names start with --m-; Forensic keeps theme.css. While the map workspace is shown
+   (<html data-workspace="map">) the generic theme.css tokens are re-pointed so reused Forensic controls (segmented
+   controls, incident picker, popovers, tooltips, charts in the Analysis drawer) match the navy look.
+   MapLibre paint colours cannot read CSS variables: map-core mirrors the wildfire colours in TypeScript. */
+
+:root {
+  /* surfaces */
+  --m-bg: #0b1119;
+  --m-bg-2: #111a25;
+  --m-panel: rgba(14, 21, 30, 0.88);
+  --m-panel-strong: rgba(14, 21, 30, 0.96);
+  --m-panel-soft: rgba(14, 21, 30, 0.7);
+  --m-panel-raised: rgba(24, 34, 47, 0.97);
+  --m-panel-blur: blur(12px) saturate(140%);
+  --m-border: rgba(148, 178, 210, 0.16);
+  --m-border-strong: rgba(148, 178, 210, 0.3);
+  --m-hover: rgba(148, 178, 210, 0.09);
+  --m-active: rgba(148, 178, 210, 0.14);
+  --m-radius: 10px;
+  --m-radius-sm: 6px;
+  --m-radius-pill: 999px;
+  --m-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+
+  /* text */
+  --m-text: #e8edf3;
+  --m-text-2: #a7b3c0;
+  --m-text-3: #74818f;
+  --m-text-inverse: #0b1119;
+
+  /* UI accent: active segments, links, focus */
+  --m-accent: #5b9dff;
+  --m-accent-text: #8fbcff;
+  --m-accent-bg: #27476b;
+  --m-accent-bg-hover: #30577f;
+  --m-focus-ring: 0 0 0 2px rgba(91, 157, 255, 0.75);
+
+  /* selection (cyan): selected point, selected site, selected feed item */
+  --m-select: #22d3ee;
+  --m-select-strong: #67e8f9;
+  --m-select-soft: rgba(34, 211, 238, 0.18);
+
+  /* wildfire layers: distinguishable by colour AND line style / fill pattern (BRIEF §5, §9) */
+  --m-fire-observed: #ff5a1f; /* observed burned area outline: solid */
+  --m-fire-observed-fill: rgba(150, 36, 16, 0.45);
+  --m-fire-observed-glow: rgba(255, 106, 43, 0.55);
+  --m-fire-front: #ffb066; /* active front at the timeline time */
+  --m-perimeter: #ff7849; /* agency perimeter: solid thin */
+  --m-perimeter-old: rgba(255, 120, 73, 0.45);
+  --m-forecast: #f5a524; /* modeled spread: dashed outline + diagonal hatch */
+  --m-forecast-fill: rgba(245, 165, 36, 0.24);
+  --m-forecast-hatch: rgba(245, 165, 36, 0.6);
+  --m-detection: #ffd84a; /* satellite detection: point / footprint square with dark stroke */
+  --m-detection-stroke: #6b1f00;
+  --m-detection-old: #c27a3a;
+  --m-evac-order: #e0459b; /* official evacuation: magenta / violet, cross-hatch, official wording */
+  --m-evac-warning: #a78bfa;
+  --m-evac-other: #7aa2f7;
+  --m-aoi: rgba(232, 237, 243, 0.55); /* modeled-area boundary: dashed */
+  --m-event: #f0f4f8;
+
+  /* status */
+  --m-ok: #4ade80;
+  --m-warn: #fbbf24;
+  --m-danger: #f87171;
+  --m-info: #60a5fa;
+  --m-stale: #fbbf24;
+  --m-demo: #f5b83d;
+  --m-demo-bg: rgba(245, 184, 61, 0.14);
+  --m-demo-border: rgba(245, 184, 61, 0.45);
+
+  /* type */
+  --m-font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --m-font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --m-fs-xs: 11px;
+  --m-fs-sm: 12px;
+  --m-fs-md: 13px;
+  --m-fs-lg: 15px;
+  --m-fs-xl: 18px;
+  /* preset-dependent sizes (Command raises them): coordinates and identifiers, source timestamps */
+  --m-coord-fs: 13px;
+  --m-meta-fs: 11px;
+
+  /* layout */
+  --m-gap: 12px;
+  --m-header-h: 44px;
+  --m-search-w: 380px;
+  --m-updates-w: 304px;
+  --m-card-w: 300px;
+  --m-timeline-w: 620px;
+  --m-timeline-min: 480px;
+  --m-drawer-h: 300px;
+  --m-layers-w: 340px;
+  /* the updates panel shows the latest items until "View all updates" (sized with the header for >= 75 % open map at
+     1440x900 on every bundle, BRIEF §6) */
+  --m-updates-compact-h: 212px;
+
+  /* stacking (map workspace) */
+  --m-z-map: 0;
+  --m-z-chrome: 10;
+  --m-z-drawer: 15;
+  --m-z-header: 20;
+}
+
+/* Command: denser and more operational, never the Forensic effects. Slightly more opaque panels for legibility over
+   aerial imagery; larger coordinates, identifiers and timestamps. */
+:root[data-preset='command'] {
+  --m-panel: rgba(11, 17, 25, 0.92);
+  --m-panel-soft: rgba(11, 17, 25, 0.8);
+  --m-coord-fs: 15px;
+  --m-meta-fs: 12px;
+  --m-updates-w: 324px;
+}
+
+@media (max-width: 1279px) {
+  :root {
+    --m-search-w: 340px;
+    --m-updates-w: 300px;
+    --m-card-w: 280px;
+    --m-timeline-w: 520px;
+    --m-timeline-min: 420px;
+  }
+  :root[data-preset='command'] {
+    --m-updates-w: 310px;
+  }
+}
+
+@media (max-width: 760px) {
+  :root {
+    --m-gap: 8px;
+    --m-header-h: 48px;
+    --m-search-w: 100%;
+  }
+}
+
+/* Reused generic tokens inside the map workspace (theme.css defines the Forensic values). */
+:root[data-workspace='map'] {
+  --text: var(--m-text);
+  --text-2: var(--m-text-2);
+  --text-3: var(--m-text-3);
+  --text-4: #56616d;
+  --glass: var(--m-panel);
+  --glass-strong: var(--m-panel-strong);
+  --glass-soft: var(--m-panel-soft);
+  --glass-raised: var(--m-panel-raised);
+  --glass-blur: var(--m-panel-blur);
+  --hairline: var(--m-border);
+  --hairline-soft: var(--m-hover);
+  --hairline-strong: var(--m-border-strong);
+  --focus-ring: var(--m-focus-ring);
+  --bg-0: var(--m-bg);
+  --bg-1: var(--m-bg-2);
+  --bg-gradient: var(--m-bg);
+  --font-ui: var(--m-font-ui);
+  --font-mono: var(--m-font-mono);
+  /* the Forensic gold accent becomes the map's blue UI accent */
+  --gold: var(--m-accent);
+  --gold-bright: var(--m-accent-text);
+  --gold-dim: rgba(91, 157, 255, 0.55);
+  --gold-soft: rgba(91, 157, 255, 0.28);
+  --gold-faint: rgba(91, 157, 255, 0.14);
+  --gold-ghost: rgba(91, 157, 255, 0.07);
+  /* Analysis drawer charts use the map's wildfire colours: observed orange-red, modeled amber */
+  --chart-observed: var(--m-fire-observed);
+  --chart-forecast: var(--m-forecast);
+  --chart-band: rgba(245, 165, 36, 0.2);
+  --chart-cursor: var(--m-accent-text);
+  --chart-axis: rgba(232, 237, 243, 0.5);
+  --chart-grid: rgba(148, 178, 210, 0.1);
+  --ok: var(--m-ok);
+  --warn: var(--m-warn);
+  --danger: var(--m-danger);
+}

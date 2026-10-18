@@ -1,0 +1,536 @@
+/* Compact floating timeline (owner: timeline-feed). Rendered inside the shell's .mw-timeline slot; --m-* tokens.
+   Observations: solid fire-orange lane. Forecast: dashed amber lane. Unavailable hours: dotted grey lane. The
+   difference never relies on colour alone (line style + labels). */
+
+.ctl {
+  container-type: inline-size;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 12px 8px 10px;
+  background: var(--m-panel);
+  -webkit-backdrop-filter: var(--m-panel-blur);
+  backdrop-filter: var(--m-panel-blur);
+  border: 1px solid var(--m-border);
+  border-radius: var(--m-radius);
+  box-shadow: var(--m-shadow);
+  color: var(--m-text);
+  font-family: var(--m-font-ui);
+  font-size: var(--m-fs-xs);
+}
+.ctl.is-empty {
+  min-height: 44px;
+  justify-content: center;
+}
+.ctl-empty {
+  color: var(--m-text-2);
+}
+.ctl :is(button, [role='slider']):focus-visible {
+  outline: none;
+  box-shadow: var(--m-focus-ring);
+}
+.ctl-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* play */
+.ctl-play {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0 0 0 2px;
+  border: 1px solid var(--m-border-strong);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--m-text);
+  cursor: pointer;
+}
+.ctl-play.is-playing {
+  padding-left: 0;
+  background: var(--m-accent-bg);
+  border-color: transparent;
+}
+.ctl-play:hover {
+  background: var(--m-hover);
+  border-color: var(--m-text-3);
+}
+
+.ctl-body {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* zone labels (Command) */
+.ctl-zones {
+  position: relative;
+  height: 13px;
+  margin-bottom: 1px;
+}
+.ctl-zone {
+  position: absolute;
+  top: 0;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.ctl-zone.is-obs {
+  color: color-mix(in srgb, var(--m-fire-observed) 80%, var(--m-text));
+}
+.ctl-zone.is-fc {
+  color: var(--m-forecast);
+}
+.ctl-zone.is-off {
+  color: var(--m-text-3);
+}
+
+/* track */
+.ctl-track {
+  position: relative;
+  height: 26px;
+  cursor: pointer;
+  touch-action: none;
+  border-radius: 6px;
+}
+.ctl-lanes {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 26px;
+  pointer-events: none;
+}
+.ctl-lanes.is-dim {
+  opacity: 0.42;
+}
+.ctl-lanes.is-played {
+  overflow: hidden;
+}
+.ctl-lanes svg,
+.ctl-decor {
+  display: block;
+  overflow: visible;
+}
+.ctl-decor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+.ctl-lane-obs {
+  stroke: var(--m-fire-observed);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.ctl-lane-fc {
+  stroke: var(--m-forecast);
+  stroke-width: 3;
+  stroke-dasharray: 6 4;
+}
+.ctl-lane-fc.is-overlap {
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+}
+.ctl-lane-off {
+  stroke: var(--m-text-3);
+  stroke-width: 2;
+  stroke-dasharray: 1 5;
+  stroke-linecap: round;
+}
+.ctl-day {
+  stroke: var(--m-text-3);
+  stroke-width: 1;
+}
+.ctl-stop-tick {
+  stroke: var(--m-forecast);
+  stroke-width: 1.5;
+}
+.ctl-stop-tick.is-off {
+  stroke: var(--m-text-3);
+}
+.ctl-now {
+  stroke: var(--m-text);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.ctl-wall line {
+  stroke: var(--m-info);
+  stroke-width: 1.5;
+  stroke-dasharray: 2 2;
+}
+.ctl-wall circle {
+  fill: var(--m-info);
+}
+
+.ctl-thumb {
+  position: absolute;
+  width: 13px;
+  height: 13px;
+  margin: -6.5px 0 0 -6.5px;
+  border-radius: 50%;
+  background: var(--m-text);
+  box-shadow:
+    0 0 0 2px var(--m-fire-observed),
+    0 1px 4px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+.ctl-thumb.is-forecast {
+  box-shadow:
+    0 0 0 2px var(--m-forecast),
+    0 1px 4px rgba(0, 0, 0, 0.6);
+}
+.ctl-thumb.is-beyond,
+.ctl-thumb.is-out {
+  background: var(--m-text-3);
+  box-shadow: 0 0 0 2px var(--m-text-3);
+}
+.ctl-track:focus-visible .ctl-thumb {
+  outline: 2px solid var(--m-accent);
+  outline-offset: 2px;
+}
+
+.ctl-markers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.ctl-marker {
+  position: absolute;
+  top: 1px;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  padding: 0;
+  border: 1px solid rgba(0, 0, 0, 0.55);
+  border-radius: 50%;
+  background: currentColor;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.ctl-marker:hover {
+  transform: scale(1.35);
+}
+.ctl-marker.is-selected {
+  box-shadow:
+    0 0 0 2px var(--m-bg),
+    0 0 0 3.5px var(--m-select);
+}
+
+.ctl-ghost {
+  position: absolute;
+  bottom: calc(100% + 2px);
+  transform: translateX(-50%);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--m-panel-raised);
+  border: 1px solid var(--m-border);
+  color: var(--m-text);
+  font-family: var(--m-font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 10.5px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.ctl-ghost.is-left {
+  transform: none;
+}
+.ctl-ghost.is-right {
+  transform: translateX(-100%);
+}
+
+/* stops */
+.ctl-stops {
+  position: relative;
+  height: 21px;
+}
+.ctl-stop {
+  position: absolute;
+  top: 1px;
+  transform: translateX(-50%);
+  height: 19px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--m-text-2);
+  font: inherit;
+  font-size: var(--m-fs-xs);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ctl-stop:hover {
+  color: var(--m-text);
+  background: var(--m-hover);
+}
+.ctl-stop.is-now {
+  color: var(--m-text);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.ctl-stop.is-forecast:not(.is-off) {
+  color: color-mix(in srgb, var(--m-forecast) 70%, var(--m-text));
+}
+.ctl-stop.is-active {
+  background: var(--m-accent-bg);
+  color: var(--m-text);
+}
+.ctl-stop.is-off {
+  color: var(--m-text-3);
+  cursor: not-allowed;
+  text-decoration: line-through dotted;
+  text-decoration-color: var(--m-text-3);
+}
+.ctl-stop.is-off:hover {
+  background: none;
+}
+.ctl-stop-group {
+  position: absolute;
+  right: 0;
+  top: 0;
+  display: flex;
+  gap: 2px;
+}
+.ctl-stop-group .ctl-stop {
+  position: static;
+  transform: none;
+}
+
+/* status line */
+.ctl-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 12px;
+  margin-top: 1px;
+  color: var(--m-text-2);
+  line-height: 1.35;
+}
+.ctl-valid {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.ctl-time,
+.ctl-fresh time,
+.ctl-run {
+  font-family: var(--m-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.ctl-time {
+  color: var(--m-text);
+  font-weight: 600;
+}
+.ctl-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.ctl-kind.is-observation {
+  color: color-mix(in srgb, var(--m-fire-observed) 70%, var(--m-text));
+}
+.ctl-kind.is-forecast {
+  color: var(--m-forecast);
+}
+.ctl-kind.is-beyond {
+  color: var(--m-text-3);
+}
+.ctl-glyph line {
+  stroke-width: 2.5;
+}
+.ctl-glyph.is-observation line {
+  stroke: var(--m-fire-observed);
+  stroke-linecap: round;
+}
+.ctl-glyph.is-forecast line {
+  stroke: var(--m-forecast);
+  stroke-dasharray: 4 2;
+}
+.ctl-glyph.is-beyond line {
+  stroke: var(--m-text-3);
+  stroke-dasharray: 1 3;
+  stroke-linecap: round;
+}
+.ctl-fcinfo {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+.ctl-fcinfo.is-missing {
+  color: var(--m-text-3);
+}
+.ctl-fcinfo.is-missing:empty {
+  display: none;
+}
+.ctl-fcbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 1px 5px;
+  margin-left: -5px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--m-text-2);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ctl-fcbtn:hover {
+  background: var(--m-hover);
+  color: var(--m-text);
+}
+.ctl-fcbtn > svg {
+  flex: none;
+  color: var(--m-forecast);
+}
+.ctl-fcbtn.is-warn > svg {
+  color: var(--m-warn);
+}
+.ctl-run {
+  overflow-wrap: anywhere;
+}
+.ctl-fresh {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+}
+.ctl-latest {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: help;
+}
+.ctl-latest-glyph line {
+  stroke: var(--m-text);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.ctl-latest.is-stale {
+  color: var(--m-stale);
+}
+.ctl-stale {
+  padding: 0 5px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--m-stale) 60%, transparent);
+  background: color-mix(in srgb, var(--m-stale) 14%, transparent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.ctl-clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--m-text-2);
+}
+.ctl-clock-glyph line {
+  stroke: var(--m-info);
+  stroke-width: 1.5;
+  stroke-dasharray: 2 2;
+}
+.ctl-clock-glyph circle {
+  fill: var(--m-info);
+}
+.ctl-clock time {
+  color: var(--m-text);
+}
+.ctl-replay {
+  color: var(--m-text-3);
+}
+
+/* Command: timestamps more prominent */
+.ctl.is-command .ctl-time {
+  font-size: var(--m-fs-md);
+}
+.ctl.is-command .ctl-status {
+  font-size: var(--m-meta-fs, var(--m-fs-xs));
+}
+
+/* forecast details popover */
+.ctl-pop-body {
+  padding: 12px 14px;
+  font-size: var(--m-fs-sm);
+  line-height: 1.45;
+  color: var(--m-text-2);
+}
+.ctl-pop-body h3 {
+  margin: 0 0 8px;
+  font-size: var(--m-fs-md);
+  color: var(--m-text);
+}
+.ctl-pop-body dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+  margin: 0 0 8px;
+}
+.ctl-pop-body dt {
+  color: var(--m-text-3);
+}
+.ctl-pop-body dd {
+  margin: 0;
+  color: var(--m-text);
+}
+.ctl-pop-body p {
+  margin: 0 0 6px;
+}
+.ctl-pop-warn {
+  color: var(--m-warn);
+}
+.ctl-pop-caveat {
+  color: var(--m-text-3);
+  font-style: italic;
+}
+/* the run's own warnings (model settings, data gaps), technical: collapsed */
+.ctl-pop-notes {
+  margin: 0 0 6px;
+}
+.ctl-pop-notes summary {
+  cursor: pointer;
+  color: var(--m-text-2);
+}
+.ctl-pop-notes summary:focus-visible {
+  outline: none;
+  box-shadow: var(--m-focus-ring);
+  border-radius: 3px;
+}
+.ctl-pop-notes ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  max-height: 180px;
+  overflow: auto;
+  font-size: var(--m-fs-xs);
+  color: var(--m-text-2);
+}
+.ctl-pop-notes li {
+  margin-bottom: 3px;
+  overflow-wrap: anywhere;
+}
+
+/* narrow panels: tighter play button and status */
+@container (max-width: 460px) {
+  .ctl-play {
+    width: 34px;
+    height: 34px;
+  }
+  .ctl-status {
+    column-gap: 8px;
+  }
+}

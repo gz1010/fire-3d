@@ -1,0 +1,16 @@
+data/
+**/.venv/
+node_modules/
+dist/
+__pycache__/
+*.pyc
+.DS_Store
+.pytest_cache/
+.env
+.env.*
+*.log
+*.tsbuildinfo
+.vite/
+.ruff_cache/
+.mypy_cache/
+.claude/settings.local.json

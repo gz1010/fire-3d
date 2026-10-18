@@ -1,0 +1,122 @@
+/* Forensic workspace on phones (owner: shell). Desktop and tablet keep the SPEC 9.4 layout untouched; below 761 px the
+   floating panels would cover the whole scene, so they are rearranged (layout only, same controls):
+     - header: logo, incident picker and icon-only tool menus;
+     - right column (Layers / Analysis / Evidence / Notes, overview, weather): a scrollable bottom sheet;
+     - bottom dock: the timeline only, above that sheet (the three charts and Key Events need a wider screen; on phones
+       they are in the Public/Command Analysis drawer and updates panel);
+     - the workspace switch sits top right under the header.
+   --chrome-side tells the Forensic safe-area measurement (ForensicWorkspace.tsx) which edge each panel docks to, so the
+   camera framing and scene overlays use the scene area above the sheet. Loaded with the lazy Forensic chunk. */
+
+.app .app-header {
+  --chrome-side: top;
+}
+.app .rcol {
+  --chrome-side: right;
+}
+.app .dock {
+  --chrome-side: bottom;
+}
+
+@media (max-width: 760px) {
+  .app {
+    --fx-sheet-h: min(42vh, 360px);
+  }
+  .app .app-header {
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    height: 48px;
+  }
+  .app .hdr {
+    gap: 6px;
+    padding: 0 4px 0 10px;
+  }
+  .app .brand-name,
+  .app .brand-sep,
+  .app .brand-tag,
+  .app .hdr > .hdr-divider,
+  .app .hdr-actions > .hdr-divider,
+  .app .hdr-meta,
+  .app .hdr-tabs {
+    display: none;
+  }
+  .app .hdr .picker-btn {
+    min-width: 0;
+    max-width: none;
+    flex: 1 1 auto;
+  }
+  /* View / Analysis / Share: icon and caret only (the text stays the accessible name) */
+  .app .hdr-menu-btn {
+    font-size: 0;
+    gap: 2px;
+    padding: 0 6px;
+  }
+  .app .hdr-spacer {
+    display: none;
+  }
+  .app .minibar {
+    max-width: calc(100vw - 16px);
+    overflow: hidden;
+  }
+
+  .app .rcol {
+    --chrome-side: bottom;
+    top: auto;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    width: auto;
+    height: var(--fx-sheet-h);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: var(--radius);
+  }
+  .app .rcol > .rp {
+    flex: none;
+    height: calc(var(--fx-sheet-h) - 8px);
+  }
+  .app .rcol > * {
+    flex: none;
+  }
+
+  .app .dock {
+    left: 8px;
+    right: 8px;
+    bottom: calc(var(--fx-sheet-h) + 16px);
+    height: auto;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app .dock .charts,
+  .app .dock .ke {
+    display: none;
+  }
+  .app .tl {
+    padding: 6px 10px 0;
+  }
+  .app .tl-top {
+    gap: 8px;
+  }
+  .app .tl-speed,
+  .app .tl-range,
+  .app .tl-fc-chip,
+  .app .tl .dock-title {
+    display: none;
+  }
+  .app .tl-track {
+    height: 54px;
+  }
+
+  .app .fx-ws {
+    top: calc(var(--safe-top) + 2px);
+    left: auto;
+    right: 8px;
+    align-items: flex-end;
+  }
+  .app .fx-ws-switch {
+    padding: 3px;
+  }
+  .app .fx-ws-label {
+    display: none;
+  }
+}

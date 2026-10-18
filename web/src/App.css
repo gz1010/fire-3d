@@ -1,0 +1,44 @@
+/* App shell layout (SPEC 9.4): full-bleed canvas with floating dark-glass chrome. */
+.app {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+.app-canvas {
+  position: absolute;
+  inset: 0;
+}
+.scene-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--bg-gradient);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+.app-header {
+  position: absolute;
+  top: var(--gap);
+  left: var(--gap);
+  right: var(--gap);
+  height: var(--header-h);
+  z-index: 20;
+}
+.app-right {
+  position: absolute;
+  top: calc(var(--gap) * 2 + var(--header-h));
+  right: var(--gap);
+  bottom: var(--gap);
+  width: var(--panel-w);
+  z-index: 10;
+}
+.app-dock {
+  position: absolute;
+  left: var(--gap);
+  right: calc(var(--panel-w) + var(--gap) * 2);
+  bottom: var(--gap);
+  height: var(--dock-h);
+  z-index: 10;
+}

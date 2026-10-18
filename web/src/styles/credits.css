@@ -1,0 +1,69 @@
+/* Data credits (ui/DataCredits.tsx): small secondary text with plain links; uses the generic tokens, which the map
+   workspace re-points at its --m-* palette, so it reads in both workspaces. */
+.data-credits {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--text-3, #74818f);
+}
+.data-credits p {
+  margin: 0;
+}
+.data-credits p + p {
+  margin-top: 3px;
+}
+.data-credits-label {
+  color: var(--text-2, #a7b3c0);
+}
+.data-credits a,
+.data-credit-om a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: rgba(167, 179, 192, 0.45);
+  text-underline-offset: 2px;
+}
+.data-credits a:hover,
+.data-credit-om a:hover {
+  color: var(--text, #e8edf3);
+}
+.data-credits a:focus-visible,
+.data-credit-om a:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring, 0 0 0 2px rgba(91, 157, 255, 0.75));
+  border-radius: 2px;
+}
+.data-credits-ack {
+  font-style: italic;
+}
+.data-credit-om {
+  font-size: 10.5px;
+  color: var(--text-3, #74818f);
+  white-space: nowrap;
+}
+/* chart footers (Forensic dock and the Analysis drawer) */
+.chart-credit {
+  flex: none;
+  margin: 2px 0 0;
+  text-align: right;
+  line-height: 13px;
+}
+/* Forensic weather card footer */
+.wx-credit {
+  display: block;
+  margin-top: 6px;
+  text-align: right;
+}
+/* Analysis drawer (map workspace): one paragraph under the charts; the drawer grows by its height */
+.mw-drawer-credits {
+  flex: none;
+  padding: 2px 14px 7px;
+}
+@media (min-width: 761px) {
+  .mw-drawer:has(.mw-drawer-credits) {
+    height: calc(var(--m-drawer-h) + 30px);
+  }
+}
+/* Forensic Evidence tab */
+.evidence-credits {
+  margin-top: 10px;
+}

@@ -1,0 +1,166 @@
+/* App shell layout (SPEC 9.4): full-bleed canvas, floating glass header / right column / bottom dock. */
+
+.app {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: var(--bg-0) var(--bg-gradient);
+}
+
+.app-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.scene-host {
+  position: absolute;
+  inset: 0;
+}
+
+.scene-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 1px 1px, rgba(226, 190, 114, 0.09) 1px, transparent 1.4px) 0 0 / 22px 22px,
+    var(--bg-gradient);
+  color: var(--text-3);
+  font-size: var(--fs-sm);
+}
+
+.app-header {
+  position: absolute;
+  top: var(--gap);
+  left: var(--gap);
+  right: var(--gap);
+  height: var(--header-h);
+  z-index: var(--z-header);
+  pointer-events: none;
+}
+.app-header > * {
+  pointer-events: auto;
+}
+.app.is-collapsed .app-header {
+  right: auto;
+  height: auto;
+}
+
+.rcol {
+  position: absolute;
+  top: calc(var(--gap) * 2 + var(--header-h));
+  right: var(--gap);
+  bottom: var(--gap);
+  width: var(--panel-w);
+  z-index: var(--z-panels);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.dock {
+  position: absolute;
+  left: var(--gap);
+  right: calc(var(--panel-w) + var(--gap) * 2);
+  bottom: var(--gap);
+  height: var(--dock-h);
+  z-index: var(--z-panels);
+}
+
+/* centred inside the uncovered canvas area (vars maintained by App) */
+.center-overlay {
+  position: absolute;
+  top: var(--safe-top);
+  right: var(--safe-right);
+  bottom: var(--safe-bottom);
+  left: var(--safe-left);
+  z-index: var(--z-overlay);
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.center-overlay > * {
+  pointer-events: auto;
+}
+
+.top-center {
+  position: absolute;
+  top: var(--safe-top);
+  left: var(--safe-left);
+  right: var(--safe-right);
+  z-index: var(--z-overlay);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.top-center > * {
+  pointer-events: auto;
+}
+
+.flex-1 {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.small {
+  font-size: var(--fs-xs);
+}
+
+.gold-strong {
+  color: var(--gold-bright);
+}
+
+.r {
+  text-align: right;
+  justify-self: end;
+}
+
+/* status dots */
+.dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
+  flex: none;
+}
+.dot-ok {
+  background: var(--ok);
+  box-shadow: 0 0 6px rgba(143, 191, 122, 0.55);
+}
+.dot-danger {
+  background: var(--danger);
+}
+
+.live-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--fire);
+  box-shadow: 0 0 0 0 rgba(255, 106, 43, 0.6);
+  animation: live-pulse 1.8s ease-out infinite;
+  flex: none;
+}
+@keyframes live-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 106, 43, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(255, 106, 43, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 106, 43, 0);
+  }
+}
+
+@media (max-width: 1280px) {
+  :root {
+    --panel-w: 316px;
+    --keyevents-w: 228px;
+  }
+}

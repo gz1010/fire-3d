@@ -1,0 +1,54 @@
+/* Base looks for map-core's controls, legend and credits, which keep the shared class names .mw-ctl, .mw-legend and
+   .mw-attrib next to their own .fxm-* classes (owner of this file: shell). Every selector is wrapped in :where(),
+   i.e. zero specificity: any rule map-core writes for the same element wins regardless of stylesheet order. The
+   fallbacks for the other owners' skeleton markup (search, card, coordinate strip, timeline, feed) were removed once
+   their real components landed. */
+
+/* glass surface of the floating boxes */
+:where(.mw-ctl, .mw-legend) {
+  background: var(--m-panel);
+  -webkit-backdrop-filter: var(--m-panel-blur);
+  backdrop-filter: var(--m-panel-blur);
+  border: 1px solid var(--m-border);
+  border-radius: var(--m-radius);
+  box-shadow: var(--m-shadow);
+}
+
+/* map controls */
+:where(.mw-ctl) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+}
+
+/* legend */
+:where(.mw-legend) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 8px 12px;
+  list-style: none;
+  font-size: var(--m-fs-xs);
+}
+:where(.mw-legend li) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* credits */
+:where(.mw-attrib) {
+  color: var(--m-text-2);
+  font-size: 10.5px;
+  line-height: 14px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+:where(.mw-attrib a) {
+  color: inherit;
+  text-decoration: none;
+}
+:where(.mw-attrib a:hover) {
+  text-decoration: underline;
+}

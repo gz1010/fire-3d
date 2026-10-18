@@ -1,0 +1,494 @@
+"""Pydantic v2 mirrors of the JSON contracts (SPEC 5.1 bundle files and SPEC 6 HTTP API).
+
+Field names, Literal values and optionality match the TypeScript shapes exactly
+(``web/src/api/types.ts`` mirrors the same shapes):
+
+  * ``x: T | null`` in TS  -> required field typed ``T | None`` (always serialized, possibly as ``null``).
+  * ``x?: T`` in TS        -> ``T | None = None`` that is **omitted** from dumps when ``None``.
+
+Models allow unknown fields (lossless round trips); :func:`contract_problems` / :func:`validate_strict` flag them
+plus any type error, so producers can check their output exactly. Dump with :func:`dump` (JSON-safe dict).
+"""
+
+from __future__ import annotations
+
+from typing import Any, Iterator, Literal, TypeVar
+
+import orjson
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+
+# ----------------------------------------------------------------------------------------------------------------
+# Literal types
+# ----------------------------------------------------------------------------------------------------------------
+Mode = Literal["live", "historical"]
+BundleStatus = Literal["none", "building", "ready", "error"]
+ManifestStatus = Literal["building", "ready", "error"]
+RunStatus = Literal["running", "ready", "error"]
+EnsembleKind = Literal["gfs025", "ecmwf_ifs025", "perturbed", "none"]
+EnsembleRequest = Literal["auto", "gfs025", "ecmwf_ifs025", "perturbed", "none"]
+LayerGrid = Literal["render", "fire", "image", "points"]
+LayerDtype = Literal["float32", "uint8", "uint16", "int16", "jpeg"]
+Instrument = Literal["VIIRS", "MODIS", "GOES", "LANDSAT"]
+DayNight = Literal["D", "N"]
+EventType = Literal[
+    "ignition", "rapid_growth", "spot_fire", "ridge_crossing", "containment", "peak_wind", "wind_shift", "perimeter_update"
+]
+EventConfidence = Literal["observed", "estimated", "probable"]
+JobKind = Literal["build", "forecast", "refresh"]
+JobState = Literal["queued", "running", "done", "error"]
+AircraftCategory = Literal["airtanker", "helicopter", "air_attack", "lead_plane", "other_fire", "unknown"]
+
+SCHEMA_VERSION = 1
+
+
+def _is_none(v: Any) -> bool:
+    return v is None
+
+
+def Optional_(**kw: Any) -> Any:
+    """A TS ``x?: T`` field: defaults to None and is left out of dumps when None."""
+    return Field(default=None, exclude_if=_is_none, **kw)
+
+
+class ContractModel(BaseModel):
+    """Base for all contract models: unknown keys are kept (and reported by :func:`contract_problems`)."""
+
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+
+# ----------------------------------------------------------------------------------------------------------------
+# SPEC 5.1 - bundle
+# ----------------------------------------------------------------------------------------------------------------
+class IncidentSummary(ContractModel):
+    id: str
+    name: str
+    mode: Mode
+    year: int
+    calfire_uid: str
+    started_ms: int
+    updated_ms: int | None
+    contained_ms: int | None
+    acres: float | None
+    percent_contained: float | None
+    is_active: bool
+    county: str | None
+    location: str | None
+    admin_unit: str | None
+    url: str | None
+    lat: float
+    lon: float
+    detections_24h: int | None          # live only
+    bundle_status: BundleStatus
+    bundle_built_ms: int | None
+
+
+class LayerInfo(ContractModel):
+    file: str                           # path relative to the bundle dir
+    grid: LayerGrid
+    dtype: LayerDtype
+    width: int | None = Optional_()
+    height: int | None = Optional_()
+    count: int | None = Optional_()     # points layers
+    units: str | None = Optional_()
+    nodata: float | None = Optional_()
+    min: float | None = Optional_()
+    max: float | None = Optional_()
+    description: str
+
+
+class ForecastSummary(ContractModel):
+    run_id: str
+    status: RunStatus
+    issued_ms: int
+    start_ms: int
+    horizon_h: int
+    ensemble: EnsembleKind
+    members: int
+    file: str                           # "forecasts/{run_id}/forecast.json"
+
+
+class TimeRange(ContractModel):
+    start_ms: int
+    end_ms: int
+    # live: latest observation of the fire = the newest of its detections / mapped perimeters and the confirmed
+    # satellite passes over it that saw no new fire (SPEC 8.3); historical: end_ms
+    now_ms: int
+    last_detection_ms: int | None = Optional_()   # live: newest detection or mapped perimeter (burned area known to here)
+    last_pass_ms: int | None = Optional_()        # live: newest confirmed VIIRS/MODIS pass over the fire (any outcome)
+
+
+class GridSize(ContractModel):
+    width: int
+    height: int
+    res_m: float
+
+
+class ManifestGrid(ContractModel):
+    crs: str
+    utm_zone: int
+    center_e: float
+    center_n: float
+    extent_m: float
+    bbox_lonlat: tuple[float, float, float, float]   # w, s, e, n
+    render: GridSize
+    fire: GridSize
+    elev_min_m: float
+    elev_max_m: float
+
+
+class Ignition(ContractModel):
+    x: float
+    z: float
+    lat: float
+    lon: float
+    t_ms: int
+    source: str
+
+
+class DataSource(ContractModel):
+    name: str
+    detail: str
+    fetched_ms: int
+
+
+class ManifestStats(ContractModel):
+    final_acres_observed: float
+    detections: int
+    perimeters: int
+
+
+class IncidentManifest(ContractModel):
+    schema_version: Literal[1]
+    id: str
+    name: str
+    mode: Mode
+    status: ManifestStatus
+    summary: IncidentSummary
+    time_origin_ms: int
+    time_range: TimeRange
+    grid: ManifestGrid
+    layers: dict[str, LayerInfo]        # elevation fuel canopy_cover canopy_height burn_severity? observed_arrival naip sky_view water? trees
+    ignition: Ignition | None
+    default_profile_path: list[tuple[float, float]]   # local [x, z] polyline
+    fuels_edition: str
+    data_sources: list[DataSource]
+    stats: ManifestStats
+    forecasts: list[ForecastSummary]    # newest first
+    warnings: list[str]
+    built_ms: int                       # also the cache-buster (?v=built_ms)
+
+
+class Detection(ContractModel):
+    t_ms: int
+    lat: float
+    lon: float
+    x: float
+    z: float
+    frp: float | None
+    satellite: str
+    instrument: Instrument
+    confidence: str
+    daynight: DayNight
+    footprint_m: float
+
+
+class DetectionsFile(ContractModel):
+    detections: list[Detection]
+
+
+class Perimeter(ContractModel):
+    t_ms: int
+    acres: float
+    source: str
+    rings: list[list[tuple[float, float]]]   # local x, z; <= 1500 vertices per perimeter; cumulative
+
+
+class PerimetersFile(ContractModel):
+    perimeters: list[Perimeter]
+
+
+class TimeseriesFile(ContractModel):
+    step_h: Literal[1]
+    t_ms: list[int]                     # hourly, time_range.start_ms .. now_ms
+    area_acres: list[float]
+    growth_acres_per_h: list[float]
+    ros_ch_per_h: list[float]
+    detections_per_h: list[int]
+    frp_mw_per_h: list[float] | None = Optional_()
+
+    @model_validator(mode="after")
+    def _lengths(self) -> "TimeseriesFile":
+        n = len(self.t_ms)
+        for name in ("area_acres", "growth_acres_per_h", "ros_ch_per_h", "detections_per_h", "frp_mw_per_h"):
+            v = getattr(self, name)
+            if v is not None and len(v) != n:
+                raise ValueError(f"{name} has {len(v)} values, t_ms has {n}")
+        return self
+
+
+class Event(ContractModel):
+    id: str
+    type: EventType
+    t_ms: int
+    title: str
+    detail: str
+    x: float | None = Optional_()
+    z: float | None = Optional_()
+    confidence: EventConfidence
+    source: str
+
+
+class EventsFile(ContractModel):
+    events: list[Event]
+
+
+class AtFire(ContractModel):
+    temp_c: list[float]
+    rh_pct: list[float]
+    dewpoint_c: list[float]
+    wind_speed_ms: list[float]
+    wind_dir_deg: list[float]           # FROM direction, degrees clockwise from north
+    wind_gust_ms: list[float]
+    precip_mm: list[float]
+    fm1_pct: list[float]
+    fm10_pct: list[float]
+    fm100_pct: list[float]
+    ffwi: list[float]                   # Fosberg Fire Weather Index
+    flame_length_ft: list[float] | None = Optional_()          # added by spread/behavior.py
+    ros_ch_per_h_potential: list[float] | None = Optional_()   # added by spread/behavior.py
+
+
+class WeatherGrid(ContractModel):
+    """4 x 4 weather grid. ``x``: the 4 column-centre x (west->east); ``z``: the 4 row-centre z (north->south);
+    ``u_ms``/``v_ms`` flattened ``[t][j][i]`` (j row north->south, i column west->east), u east+, v north+."""
+
+    nx: Literal[4]
+    ny: Literal[4]
+    x: list[float]
+    z: list[float]
+    u_ms: list[float]
+    v_ms: list[float]
+
+
+class WeatherFile(ContractModel):
+    source: str                         # e.g. "open-meteo:gfs_hrrr"
+    t_ms: list[int]                     # hourly
+    at_fire: AtFire
+    grid: WeatherGrid
+    forecast_from_ms: int | None        # first hour that is forecast rather than (re)analysis
+
+    @model_validator(mode="after")
+    def _lengths(self) -> "WeatherFile":
+        n = len(self.t_ms)
+        for name in AtFire.model_fields:
+            v = getattr(self.at_fire, name)
+            if v is not None and len(v) != n:
+                raise ValueError(f"at_fire.{name} has {len(v)} values, t_ms has {n}")
+        g = self.grid
+        if len(g.x) != g.nx or len(g.z) != g.ny:
+            raise ValueError("grid.x / grid.z must have nx / ny entries")
+        cells = g.nx * g.ny
+        if len(g.u_ms) != n * cells or len(g.v_ms) != n * cells:
+            raise ValueError(f"grid.u_ms / v_ms must have len(t_ms) * {cells} = {n * cells} values")
+        return self
+
+
+class ForecastModelInfo(ContractModel):
+    engine: Literal["pyretechnics"]
+    version: str
+    surface_lw_ratio_model: str
+    crown: bool
+    spotting: bool
+    spread_adjustment: float
+    grid_res_m: float
+
+
+class ForecastWeather(ContractModel):
+    source: str
+    ensemble: EnsembleKind
+    members: int
+
+
+class ForecastLayers(ContractModel):
+    arrival_p10: LayerInfo
+    arrival_p50: LayerInfo
+    arrival_p90: LayerInfo
+    burn_probability: LayerInfo
+    flame_length_p50: LayerInfo
+
+
+class ForecastSeries(ContractModel):
+    t_ms: list[int]
+    area_acres_p10: list[float]
+    area_acres_p50: list[float]
+    area_acres_p90: list[float]
+    ros_ch_per_h_p50: list[float]
+
+    @model_validator(mode="after")
+    def _lengths(self) -> "ForecastSeries":
+        n = len(self.t_ms)
+        for name in ("area_acres_p10", "area_acres_p50", "area_acres_p90", "ros_ch_per_h_p50"):
+            if len(getattr(self, name)) != n:
+                raise ValueError(f"series.{name} length differs from t_ms")
+        return self
+
+
+class SkillEntry(ContractModel):
+    lead_h: float
+    sorensen: float
+    observed_acres: float
+    forecast_acres_p50: float
+
+
+class ForecastManifest(ContractModel):
+    run_id: str
+    incident_id: str
+    status: RunStatus
+    error: str | None = Optional_()
+    issued_ms: int
+    start_ms: int
+    horizon_h: int
+    time_origin_ms: int
+    model: ForecastModelInfo
+    weather: ForecastWeather
+    layers: ForecastLayers
+    series: ForecastSeries
+    skill: list[SkillEntry] | None = Optional_()   # historical runs only
+    runtime_s: float
+    warnings: list[str]
+
+
+# ----------------------------------------------------------------------------------------------------------------
+# SPEC 6 - HTTP API
+# ----------------------------------------------------------------------------------------------------------------
+class JobStatus(ContractModel):
+    id: str
+    kind: JobKind
+    incident_id: str
+    status: JobState
+    progress: float                     # 0..1
+    step: str
+    message: str
+    created_ms: int
+    started_ms: int | None
+    finished_ms: int | None
+    error: str | None
+    result: Any = None
+
+
+class Aircraft(ContractModel):
+    hex: str
+    callsign: str | None
+    registration: str | None
+    type: str | None
+    category: AircraftCategory
+    is_fire_aircraft: bool
+    reason: str
+    lat: float
+    lon: float
+    x: float
+    z: float
+    alt_m: float | None
+    agl_m: float | None
+    gs_kt: float | None
+    track_deg: float | None
+    seen_s: float
+    on_ground: bool
+
+
+class HealthResponse(ContractModel):
+    ok: bool
+    version: str
+
+
+class IncidentListResponse(ContractModel):
+    mode: Mode
+    updated_ms: int
+    incidents: list[IncidentSummary]
+
+
+class IncidentDetailResponse(ContractModel):
+    summary: IncidentSummary
+    manifest: IncidentManifest | None
+    job: JobStatus | None
+
+
+class ForecastRequest(ContractModel):
+    start_ms: int | None = None
+    horizon_h: int = 72
+    ensemble: EnsembleRequest = "auto"
+    members: int | None = None
+
+
+class AircraftResponse(ContractModel):
+    updated_ms: int
+    source: str                         # "adsb.lol", or "adsb.fi" (fallback while adsb.lol is unreachable)
+    radius_nm: float
+    aircraft: list[Aircraft]
+    note: str | None = Optional_()      # e.g. why the list is empty (historical incident)
+
+
+class LiveStatus(ContractModel):
+    last_refresh_ms: int | None
+    next_refresh_ms: int | None
+    active_incidents: int
+    detections_24h_ca: int | None
+    auto_build: bool
+
+
+# ----------------------------------------------------------------------------------------------------------------
+# Helpers
+# ----------------------------------------------------------------------------------------------------------------
+M = TypeVar("M", bound=BaseModel)
+
+
+class ContractError(ValueError):
+    """Raised by :func:`validate_strict` with the list of problems."""
+
+    def __init__(self, model: str, problems: list[str]):
+        self.model = model
+        self.problems = problems
+        more = f" (+{len(problems) - 12} more)" if len(problems) > 12 else ""
+        super().__init__(f"{model}: " + "; ".join(problems[:12]) + more)
+
+
+def _extra_paths(obj: Any, path: str) -> Iterator[str]:
+    if isinstance(obj, BaseModel):
+        for k in (obj.model_extra or {}):
+            yield f"{path}.{k}" if path else k
+        for name in type(obj).model_fields:
+            yield from _extra_paths(getattr(obj, name), f"{path}.{name}" if path else name)
+    elif isinstance(obj, (list, tuple)):
+        for i, v in enumerate(obj):
+            if isinstance(v, (BaseModel, list, tuple, dict)):
+                yield from _extra_paths(v, f"{path}[{i}]")
+    elif isinstance(obj, dict):
+        for k, v in obj.items():
+            if isinstance(v, (BaseModel, list, tuple, dict)):
+                yield from _extra_paths(v, f"{path}.{k}")
+
+
+def contract_problems(model_cls: type[BaseModel], data: Any) -> list[str]:
+    """Strictly check ``data`` (a dict, JSON bytes/str or model) against ``model_cls``: JSON-strict types (no
+    numeric strings, no fractional ints) plus unknown keys anywhere. Returns problems; empty means valid."""
+    if isinstance(data, BaseModel):
+        data = dump(data)
+    raw = data if isinstance(data, (bytes, str)) else orjson.dumps(data, option=orjson.OPT_SERIALIZE_NUMPY)
+    try:
+        obj = model_cls.model_validate_json(raw, strict=True)
+    except ValidationError as e:
+        return [f"{'.'.join(str(p) for p in err['loc']) or '<root>'}: {err['msg']}" for err in e.errors()]
+    return [f"{p}: unexpected field" for p in _extra_paths(obj, "")]
+
+
+def validate_strict(model_cls: type[M], data: Any) -> M:
+    """Validate like :func:`contract_problems` and return the model, or raise :class:`ContractError`."""
+    problems = contract_problems(model_cls, data)
+    if problems:
+        raise ContractError(model_cls.__name__, problems)
+    return model_cls.model_validate_json(data if isinstance(data, (bytes, str)) else orjson.dumps(dump(data) if isinstance(data, BaseModel) else data, option=orjson.OPT_SERIALIZE_NUMPY))
+
+
+def dump(model: BaseModel) -> dict:
+    """JSON-safe dict of a contract model (``x?`` fields omitted when None)."""
+    return model.model_dump(mode="json")

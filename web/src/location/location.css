@@ -1,0 +1,718 @@
+/* Location search, location card and coordinate strip (owner: location). Map-workspace tokens (--m-*) only; the
+   shell's slots (.mw-search, .mw-card, .mw-coords) size and place these roots. Kinds of statement (Mapped, Estimate,
+   Observed, Model, Unknown, Approximate) are always written out as tags, never shown by colour alone. */
+
+.loc-nowrap {
+  white-space: nowrap;
+}
+.loc-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------------------------------------ search */
+.loc-search {
+  position: relative;
+  width: min(var(--m-search-w), 100%);
+}
+.loc-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 5px 0 11px;
+}
+.loc-search-bar:focus-within {
+  border-color: rgba(91, 157, 255, 0.55);
+}
+.loc-search-icon {
+  flex: none;
+  color: var(--m-text-3);
+}
+.loc-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--m-text);
+  font: 400 var(--m-fs-md) / 1 var(--m-font-ui);
+}
+.mw .loc-search-input:focus-visible {
+  box-shadow: none;
+}
+.loc-search-input::placeholder {
+  color: var(--m-text-3);
+}
+.loc-search-go {
+  flex: none;
+}
+.loc-spin {
+  flex: none;
+  color: var(--m-accent-text);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .loc-spin {
+    animation: loc-spin 0.9s linear infinite;
+  }
+}
+@keyframes loc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.loc-search-below {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 3;
+}
+.loc-search-below:empty {
+  display: none;
+}
+.loc-search-hint,
+.loc-search-status {
+  padding: 8px 11px;
+  font-size: var(--m-fs-sm);
+  line-height: 1.45;
+  color: var(--m-text-2);
+}
+.loc-search-hint .mw-mono {
+  color: var(--m-text);
+  white-space: nowrap;
+}
+.loc-search-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+}
+.loc-search-status.is-ok {
+  color: var(--m-text);
+  border-color: rgba(34, 211, 238, 0.35);
+}
+.loc-search-status.is-warn {
+  color: var(--m-warn);
+  border-color: rgba(251, 191, 36, 0.4);
+}
+.loc-search-status.is-error {
+  color: var(--m-danger);
+  border-color: rgba(248, 113, 113, 0.45);
+}
+.loc-results {
+  max-height: min(60vh, 420px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 6px 0;
+}
+.loc-results ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.loc-results-head {
+  padding: 6px 12px 4px;
+}
+.loc-results-status {
+  padding: 4px 12px 6px;
+  font-size: var(--m-fs-sm);
+  color: var(--m-text-2);
+}
+.loc-results-status.is-error {
+  color: var(--m-danger);
+}
+.loc-results-status.is-warn {
+  color: var(--m-warn);
+}
+.loc-result {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 7px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--m-text);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.loc-result:hover,
+.loc-result:focus-visible {
+  background: var(--m-hover);
+}
+.mw .loc-result:focus-visible {
+  box-shadow: inset 0 0 0 2px rgba(91, 157, 255, 0.7);
+}
+.loc-result-icon {
+  flex: none;
+  margin-top: 2px;
+}
+.loc-result-icon.is-fire {
+  color: var(--m-fire-observed);
+}
+.loc-result-icon.is-select {
+  color: var(--m-select);
+}
+.loc-result-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.loc-result-title {
+  font-size: var(--m-fs-md);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.loc-result-sub {
+  font-size: var(--m-fs-xs);
+  color: var(--m-text-2);
+}
+.loc-results-note {
+  margin: 4px 12px 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--m-border);
+  font-size: var(--m-fs-xs);
+  color: var(--m-text-3);
+}
+
+/* ------------------------------------------------------------------------------------------------ card */
+.loc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 8px 13px;
+  border-top: 3px solid var(--m-select);
+  font-size: var(--m-fs-sm);
+}
+.loc-card-head {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.loc-card-pin {
+  flex: none;
+  margin-top: 2px;
+  color: var(--m-select);
+}
+.loc-card-titles {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mw .loc-card-title {
+  font-size: var(--m-fs-md);
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.loc-card-type {
+  font-size: var(--m-fs-xs);
+  line-height: 1.4;
+  color: var(--m-text-2);
+}
+.loc-card-coords {
+  font-size: var(--m-fs-xs);
+  color: var(--m-text-2);
+}
+.loc-card-wgs {
+  margin-left: 4px;
+  color: var(--m-text-3);
+  font-family: var(--m-font-ui);
+}
+.loc-card-hint {
+  font-size: var(--m-fs-xs);
+  color: var(--m-select-strong);
+}
+.loc-card-actions {
+  display: flex;
+  gap: 2px;
+  flex: none;
+}
+.loc-headline {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 9px;
+  border-radius: var(--m-radius-sm);
+  border: 1px solid var(--m-border);
+  border-left-width: 3px;
+  background: rgba(255, 255, 255, 0.025);
+}
+.loc-headline-text {
+  font-size: var(--m-fs-md);
+  font-weight: 600;
+  line-height: 1.3;
+}
+.loc-headline-text .loc-kind {
+  margin-left: 4px;
+  vertical-align: 1px;
+}
+.loc-headline-sub {
+  font-size: var(--m-fs-xs);
+  line-height: 1.4;
+  color: var(--m-text-2);
+}
+.loc-headline-sub .loc-kind {
+  margin-right: 2px;
+  vertical-align: 1px;
+}
+.loc-headline.is-fire {
+  border-left-color: var(--m-fire-observed);
+  background: rgba(150, 36, 16, 0.22);
+}
+.loc-headline.is-select {
+  border-left-color: var(--m-select);
+}
+.loc-headline.is-warn,
+.loc-headline.is-unknown {
+  border-left-color: var(--m-warn);
+}
+.loc-headline.is-muted {
+  border-left-color: var(--m-border-strong);
+}
+.loc-headline.is-muted .loc-headline-text {
+  color: var(--m-text-2);
+  font-weight: 500;
+}
+.loc-forecast {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 7px;
+  border-top: 1px solid var(--m-border);
+}
+.loc-forecast h3 {
+  margin: 0;
+}
+.loc-burn-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.loc-burn-figure {
+  flex: none;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--m-forecast);
+  letter-spacing: -0.02em;
+}
+.loc-burn-text {
+  line-height: 1.35;
+  color: var(--m-text);
+}
+/* summary forecast lines (arrival quantiles, gaps): text only; their explanations are in the details */
+.loc-fline {
+  line-height: 1.4;
+  color: var(--m-text);
+}
+.loc-fline-label {
+  color: var(--m-text-3);
+}
+.loc-fline.is-unknown,
+.loc-fline.is-warn {
+  color: var(--m-warn);
+}
+.loc-fline.is-muted {
+  color: var(--m-text-2);
+}
+.loc-fline .loc-kind {
+  vertical-align: 1px;
+}
+.loc-conditions {
+  padding-top: 7px;
+  border-top: 1px solid var(--m-border);
+  font-size: var(--m-fs-xs);
+  line-height: 1.45;
+  color: var(--m-text-2);
+}
+.loc-area-note {
+  padding: 7px 10px;
+  border-radius: var(--m-radius-sm);
+  border: 1px dashed rgba(251, 191, 36, 0.55);
+  color: var(--m-warn);
+  font-size: var(--m-fs-sm);
+  line-height: 1.4;
+}
+.loc-section h3 {
+  margin: 0 0 4px;
+}
+.loc-section ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.loc-line {
+  padding-left: 9px;
+  border-left: 2px solid var(--m-border);
+}
+.loc-line.is-fire {
+  border-left-color: var(--m-fire-observed);
+}
+.loc-line.is-forecast {
+  border-left-color: var(--m-forecast);
+  border-left-style: dashed;
+}
+.loc-line.is-detection {
+  border-left-color: var(--m-detection);
+  border-left-style: dotted;
+}
+.loc-line.is-select {
+  border-left-color: var(--m-select);
+}
+.loc-line.is-unknown,
+.loc-line.is-warn {
+  border-left-color: var(--m-warn);
+}
+.loc-line-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.loc-line-label {
+  font-size: var(--m-fs-xs);
+  color: var(--m-text-3);
+}
+.loc-line-text {
+  color: var(--m-text);
+  line-height: 1.4;
+}
+.loc-line.is-muted .loc-line-text {
+  color: var(--m-text-2);
+}
+.loc-line.is-unknown .loc-line-text {
+  color: var(--m-warn);
+}
+.loc-line-detail {
+  margin-top: 1px;
+  font-size: var(--m-fs-xs);
+  line-height: 1.4;
+  color: var(--m-text-3);
+}
+.loc-line-tech {
+  margin-top: 2px;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--m-text-3);
+  overflow-wrap: anywhere;
+}
+.loc-kind {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 6px;
+  border-radius: var(--m-radius-pill);
+  border: 1px solid var(--m-border-strong);
+  color: var(--m-text-2);
+  font: 600 9.5px / 1 var(--m-font-ui);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.loc-kind.is-mapped {
+  color: var(--m-perimeter);
+  border-color: rgba(255, 120, 73, 0.55);
+}
+.loc-kind.is-estimate {
+  color: var(--m-fire-front);
+  border-color: rgba(255, 176, 102, 0.5);
+  border-style: dashed;
+}
+.loc-kind.is-observed {
+  color: var(--m-detection);
+  border-color: rgba(255, 216, 74, 0.5);
+}
+.loc-kind.is-model {
+  color: var(--m-forecast);
+  border-color: rgba(245, 165, 36, 0.5);
+  border-style: dashed;
+}
+.loc-kind.is-unknown {
+  color: var(--m-warn);
+  border-color: rgba(251, 191, 36, 0.5);
+}
+.loc-kind.is-approximate {
+  color: var(--m-select-strong);
+  border-color: rgba(34, 211, 238, 0.5);
+  border-style: dashed;
+  vertical-align: 1px;
+}
+.loc-kind.is-official {
+  color: #f0a6cf;
+  border-color: rgba(224, 69, 155, 0.6);
+  vertical-align: 1px;
+}
+
+/* official evacuation zones at the point (extras; current status only) */
+.loc-evac {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 7px;
+  border-top: 1px solid var(--m-border);
+  font-size: var(--m-fs-sm);
+}
+.loc-evac h3 {
+  margin: 0;
+}
+.loc-evac ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.loc-evac-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: var(--m-fs-md);
+}
+.loc-evac-meta,
+.loc-evac-note,
+.loc-evac-none {
+  margin: 0;
+  font-size: var(--m-fs-xs);
+  line-height: 1.45;
+  color: var(--m-text-2);
+}
+.loc-evac-note {
+  color: var(--m-text-3);
+}
+.loc-more {
+  border-top: 1px solid var(--m-border);
+  padding-top: 7px;
+  font-size: var(--m-fs-xs);
+  color: var(--m-text-2);
+}
+.loc-more[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.loc-more .loc-section ul {
+  gap: 6px;
+}
+.loc-more summary {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  list-style: none;
+  cursor: pointer;
+  color: var(--m-text-2);
+  font-weight: 500;
+}
+.loc-more summary::-webkit-details-marker {
+  display: none;
+}
+.loc-more summary:hover {
+  color: var(--m-text);
+}
+.loc-more-chev {
+  transform: rotate(-90deg);
+}
+.loc-more[open] .loc-more-chev {
+  transform: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .loc-more-chev {
+    transition: transform 0.15s ease;
+  }
+}
+.loc-caveats,
+.loc-sources,
+.loc-tech {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  line-height: 1.4;
+}
+.loc-sources {
+  color: var(--m-text-3);
+}
+.loc-tech {
+  list-style: none;
+  padding-left: 0;
+  font-size: 10.5px;
+  color: var(--m-text-3);
+  overflow-wrap: anywhere;
+}
+.loc-tech:empty {
+  display: none;
+}
+.loc-card.is-command .loc-line-text {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------------------------------------ coordinate strip */
+.loc-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 2px 14px;
+  padding: 6px 8px 6px 11px;
+}
+.loc-coord {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.loc-coord-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+  color: var(--m-text-3);
+  white-space: nowrap;
+}
+.loc-coord-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.loc-coord-dot.is-incident {
+  border: 2px solid var(--m-fire-observed);
+  background: transparent;
+}
+.loc-coord-dot.is-selected {
+  background: var(--m-select);
+  box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.25);
+}
+.loc-coord-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.loc-coord-row > .mw-icon-btn {
+  flex: none;
+}
+.loc-coord-value {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-right: 4px;
+  font-size: var(--m-coord-fs, 13px);
+  line-height: 1.35;
+  color: var(--m-text);
+}
+.loc-coord-value,
+.loc-coord-extra {
+  white-space: nowrap;
+}
+.loc-coord-extra {
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--m-text-3);
+}
+/* squeezed strip (CoordinateStrip's fitStrip): wrap between whole units, never under the buttons */
+.loc-strip.is-tight .loc-coord-label {
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+.loc-strip.is-tight .loc-coord-value,
+.loc-strip.is-tight .loc-coord-extra {
+  white-space: normal;
+}
+.loc-strip.is-tight .loc-coord-value > span,
+.loc-strip.is-tight .loc-coord-extra > span {
+  white-space: nowrap;
+}
+.loc-coord.is-empty .loc-coord-value {
+  font-size: var(--m-fs-sm);
+  color: var(--m-text-2);
+}
+.loc-copy.is-done {
+  color: var(--m-ok);
+}
+.loc-strip-meta {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px 14px;
+  margin: 3px 0 0;
+  padding-top: 5px;
+  border-top: 1px solid var(--m-border);
+  font-size: var(--m-meta-fs, 11px);
+}
+.loc-strip-meta div {
+  display: flex;
+  gap: 5px;
+  align-items: baseline;
+}
+.loc-strip-meta dt {
+  color: var(--m-text-3);
+}
+.loc-strip-meta dd {
+  margin: 0;
+  color: var(--m-text);
+}
+.loc-strip.is-command {
+  padding: 8px 10px 8px 12px;
+}
+.loc-strip.is-command .loc-coord-label {
+  color: var(--m-text-2);
+}
+
+@media (max-width: 760px) {
+  .loc-strip {
+    gap: 4px 10px;
+    padding: 5px 6px 5px 9px;
+  }
+  .loc-coord {
+    flex: 1 1 100%;
+  }
+  .loc-coord + .loc-coord {
+    padding-top: 4px;
+    border-top: 1px solid var(--m-border);
+  }
+  .loc-coord-value {
+    font-size: 12px;
+  }
+  .loc-card {
+    max-height: 100%;
+    overflow: auto;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+}
+
+/* caveats and sources keep their bullets inside the details sections */
+.loc-section ul.loc-caveats,
+.loc-section ul.loc-sources {
+  list-style: disc;
+  padding-left: 15px;
+  gap: 4px;
+}
+.loc-section ul.loc-caveats li::marker {
+  color: var(--m-warn);
+}
+.loc-section ul.loc-sources li::marker {
+  color: var(--m-text-3);
+}
+
+.loc-expand {
+  align-self: flex-start;
+}

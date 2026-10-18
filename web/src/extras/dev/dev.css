@@ -1,0 +1,221 @@
+/* Layout of the dev-only optional-sources page (extras-dev.html). */
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: var(--m-bg, #0b1119);
+  color: var(--m-text, #e8edf3);
+  font-family: var(--m-font-ui, Inter, system-ui, sans-serif);
+}
+
+.xd-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* maplibre-gl.css forces position: relative on the container, so size it (inset alone gives it no height) */
+.xd-map {
+  width: 100%;
+  height: 100%;
+}
+
+.xd-map .maplibregl-ctrl-top-left {
+  top: 122px;
+}
+
+.xd-top {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.xd-top > * {
+  pointer-events: auto;
+}
+
+.xd-bar {
+  align-self: stretch;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: var(--m-panel-strong, rgba(14, 21, 30, 0.96));
+  border: 1px solid var(--m-border, rgba(148, 178, 210, 0.16));
+  border-radius: var(--m-radius, 10px);
+  z-index: 2;
+  font-size: 12px;
+}
+
+.xd-title {
+  font-size: 13px;
+  margin-right: 6px;
+}
+
+.xd-group {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.xd-group button {
+  font: inherit;
+  color: var(--m-text-2, #a7b3c0);
+  background: transparent;
+  border: 1px solid var(--m-border, rgba(148, 178, 210, 0.16));
+  border-radius: 6px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.xd-group button[aria-pressed='true'] {
+  color: var(--m-text, #e8edf3);
+  background: var(--m-accent-bg, #27476b);
+  border-color: var(--m-accent, #5b9dff);
+}
+
+.xd-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--m-text-2, #a7b3c0);
+  margin-right: 6px;
+}
+
+.xd-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 440px);
+  font-size: 12px;
+}
+
+.xd-sub .xd-group {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--m-panel, rgba(14, 21, 30, 0.88));
+  border: 1px solid var(--m-border, rgba(148, 178, 210, 0.16));
+}
+
+.xd-when {
+  padding: 4px 9px;
+  border-radius: 6px;
+  background: var(--m-panel, rgba(14, 21, 30, 0.88));
+  border: 1px solid var(--m-border, rgba(148, 178, 210, 0.16));
+  font-family: var(--m-font-mono, monospace);
+  font-size: 11px;
+  color: var(--m-text-2, #a7b3c0);
+}
+
+.xd-side {
+  position: absolute;
+  top: 58px;
+  right: 8px;
+  bottom: 30px;
+  width: 400px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.xd-bottom {
+  position: absolute;
+  left: 8px;
+  bottom: 30px;
+  z-index: 2;
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  max-width: calc(100% - 430px);
+}
+
+.xd-card {
+  padding: 8px 10px;
+  background: var(--m-panel, rgba(14, 21, 30, 0.88));
+  border: 1px solid var(--m-border, rgba(148, 178, 210, 0.16));
+  border-radius: var(--m-radius, 10px);
+  max-width: 340px;
+}
+
+.xd-card-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--m-text-3, #74818f);
+  margin-bottom: 6px;
+}
+
+.xd-feed ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.xd-feed li {
+  display: flex;
+  flex-direction: column;
+}
+
+.xd-feed-title {
+  font-size: 12px;
+}
+
+.xd-feed-meta {
+  font-size: 11px;
+  color: var(--m-text-3, #74818f);
+}
+
+.xd-attrib {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  z-index: 2;
+  max-width: calc(100% - 16px);
+  font-size: 10.5px;
+  color: var(--m-text-2, #a7b3c0);
+  background: rgba(11, 17, 25, 0.75);
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.xd-map .maplibregl-ctrl-bottom-left {
+  bottom: 24px;
+}
+
+@media (max-width: 900px) {
+  .xd-side {
+    top: auto;
+    left: 8px;
+    width: auto;
+    height: 45%;
+  }
+  .xd-bottom {
+    display: none;
+  }
+  .xd-sub {
+    max-width: 100%;
+  }
+  .xd-map .maplibregl-ctrl-top-left {
+    top: 222px;
+  }
+}
