@@ -1472,3 +1472,756 @@ Small changes after the live end-to-end check; no HTTP contract changed (SPEC §
   bundle"); Forensic's not-prepared card says "Analysis not prepared" with a "Prepare analysis (1-3 min)" button.
 - **Forecast warning text** (`backend/fire3d/spread/ensemble.py` `adjustment_note`): the decay-from-activity case now
   states the engine's formula, "0.5 x (0.1 + 0.9 x e^(-lead/12 h))" (it read "0.5 x (floor 0.1 + e^(-lead/12 h))").
+
+---
+
+## 14. Brief 3 (US) interfaces
+
+Written by the planner on 2026-10-22, before wave 1, from `docs/redesign/BRIEF-3.md` (decisions 1-4, rounds 2 and
+3), the four audits in `docs/redesign/audit-3/` and `docs/redesign/PLAN-3.md`. Audit references: B-R* =
+`backend.md`, W* = `web.md`, EV-* = `evacuations.md`, V-* = `validation.md`. Every interface below is **fixed**:
+implement it or consume it exactly. A role that has to deviate records it in its report (`contract_deviations`)
+and in its as-built note (14.15). Round 3 removed Washington completely: there is no Washington adapter, flag or
+certificate anywhere.
+
+### 14.0 Rules for wave 1
+
+**Roles and ports** (`docs/redesign/plan3-roles.json` lists every owned path):
+
+| Role | Owns (short) | API | Vite | Start |
+|---|---|---|---|---|
+| `us-catalog` | backend list, contracts (`contracts.py`, `SPEC.md`, `web/src/api/**`), regions, UTM, FIRMS feed, live loop list, records endpoint, accuracy file seed, gazetteer, fixtures | 8711 | 5181 | first batch |
+| `us-web` | `web/src/lib/**` (incl. `lib/time.ts`), `state/**`, `map/**`, `scene/**`, `styles/**`, `ui/` (except feed and 4 official shell files), `location/` (except `official.*`), `data/**`, `App.tsx`, `index.html`, `web/scripts/**` | 8712 | 5182 | first batch |
+| `us-official` | backend `api/extras.py` + new `sources/evacuations.py`; web `official/**`, `extras/**`, `ui/feed/**`, `ui/shell/{officialSummary,dataStatus}*`, `ui/shell/{UpdatesPanel,LayersPanel}.tsx`, `location/official*` | 8713 | 5183 | first batch |
+| `us-pipeline` | backend `build/**`, `spread/**`, build sources, `nws.py`, new `openfema.py`, `api/official.py`, `api/jobs.py`, `cli.py`, `config.py`, `http.py`, `bundle.py`, `types.py`, `timeutil.py` | 8714 | 5184 | 4th, when a first-batch role finishes |
+| `validation` (wave 2) | GSI live fuel moisture, `spread/validate.py` regional tooling, `regional_accuracy.json`, `docs/validation.md` | 8716 | - | after wave 1 lands |
+
+- **One owner per file.** The contract files `backend/fire3d/contracts.py`, `SPEC.md` and `web/src/api/**` belong to
+  `us-catalog` alone; it transcribes every pydantic model and every `web/src/api/types.ts` shape of this section.
+  Official response TS types stay where brief 2 put them (`web/src/official/types.ts`, `web/src/extras/types.ts`,
+  owned by `us-official`); geocode TS types stay in `web/src/location/types.ts` (`us-web`).
+- **CONTRACT.md is not edited in wave 1.** Each role writes its as-built note in its own file
+  `docs/redesign/contract3/<label>.md` (this replaces the runbook's "append to §14"); the integration folds them in.
+  `README.md` is updated by final verification from 14.13; `docs/validation.md` by the validation role.
+- **Shared working tree.** All agents work in one checkout. Commit only your own paths (`git add -- <paths>`); a file
+  of another role that shows as modified is theirs, never stage it. Expect your own test fixtures to need the new
+  required fields of 14.1 as soon as `us-catalog` lands them: update your fixtures, never the contract.
+- **Day-one deliverables** (others code against this section until they land; each is committed on its own):
+  - `us-catalog` M1 (first 60 min): every pydantic model of 14.1-14.5 and 14.12 in `contracts.py` (with the
+    before-validator of 14.1), the TS of 14.1-14.4 in `web/src/api/types.ts`, the fetchers of 14.3/14.4 in
+    `web/src/api/client.ts`, `web/src/api/fixtures.testutil.ts` (`summaryFixture()`), and SPEC §5.1/§6 rows.
+  - `us-web` M1 (first 60 min): the new API of `web/src/lib/time.ts`, `web/src/state/timeZone.ts` and
+    `web/scripts/check-time-api.mjs` (14.9).
+  - `us-official` M1 (within 60 min of `us-web` M1): the optional `tf?` shims of 14.9.6 and the
+    `EvacuationOfficial.state 'not-available'` value (14.8.5).
+  - `us-catalog` M2 (by about 2 h): `fire3d/regions.py` + its data files + `GET /api/geo/lookup` (14.3), the UTM rule
+    (14.12.4) and `make_fixture.py --only east` (14.12.9).
+- **Never change the signature of an export that another role's file imports.** Add a new export (or a new optional
+  parameter) and mark the old one `@deprecated`; the integration removes deprecated exports once nothing imports them.
+- **Switches** are one module constant each (14.2). There is no Washington switch (round 3).
+- **No new dependencies** in any role (shapely, scipy, pyarrow, httpx, MapLibre clustering are already present).
+- **Builds**: only `us-pipeline` (at most 3 smoke fires outside California, after a successful weather probe) and
+  `validation`. Nobody presses "Prepare analysis" in a browser.
+
+### 14.1 Incident summary, list rows and live status (`us-catalog`)
+
+**`IncidentSummary` additions** (Python `contracts.py` and TS `web/src/api/types.ts`; every existing field keeps its
+meaning unless noted):
+
+```ts
+export type RecordSource = 'calfire' | 'wfigs'
+export type AccuracyRegionId = 'NWCC' | 'NRCC' | 'GBCC' | 'SWCC' | 'SACC-SP' | 'SACC-SE' | 'RMCC' | 'EACC' | 'ONCC' | 'OSCC'
+
+export interface OtherRecord {          // another agency's record of the same fire (California rows matched to WFIGS)
+  source: RecordSource
+  id: string                            // CAL FIRE UniqueId or IRWIN id
+  issuer: string                        // same rule as record_issuer
+  agency: string | null                 // plain protecting-agency name, null if unknown
+  agency_code: string | null            // verbatim code ("USFS"), null for CAL FIRE
+  acres: number | null
+  percent_contained: number | null
+  is_active: boolean                    // that agency's own active status
+  updated_ms: number | null             // that record's own update time
+  url: string | null                    // that record's human-readable page (https)
+}
+
+export interface IncidentSummary {
+  // ... existing fields ...
+  uid?: string                          // (R) CAL FIRE UniqueId, or IRWIN id (upper case, no braces)
+  calfire_uid: string                   // DEPRECATED: the CAL FIRE UniqueId, or '' when the row is not CAL FIRE's record
+  record_source?: RecordSource          // (R) whose record this row is; absent = 'calfire' (old fixtures)
+  record_issuer?: string                // (R) "CAL FIRE" | "USFS via NIFC WFIGS" | "NIFC WFIGS (IRWIN)" (14.2)
+  state?: string | null                 // (R) USPS code of the point of origin (48 states + "DC"); null only off-US fixtures
+  time_zone?: string                    // (R) IANA zone of the reported location (regions.time_zone_at), never assumed
+  record_agency?: string | null         // plain name: "USDA Forest Service"; "CAL FIRE" for CAL FIRE rows; null if unknown
+  record_agency_code?: string | null    // verbatim protecting-agency code ("USFS", "C&L"); null for CAL FIRE rows
+  irwin_id?: string | null              // WFIGS rows; CAL FIRE rows matched to a WFIGS record
+  unique_fire_id?: string | null        // NWCG UniqueFireIdentifier, e.g. "2026-TXTXS-000006"
+  source_name?: string                  // the record's name verbatim (WFIGS names are often ALL CAPS)
+  gacc?: string | null                  // WFIGS GACC code verbatim ("NWCC", "OSCC", ...)
+  accuracy_region?: AccuracyRegionId | null   // null: "Accuracy not yet tested here" (14.4)
+  active_sources?: RecordSource[]       // which records call the fire active (California may list both)
+  other_records?: OtherRecord[]         // [] unless a California row matched a WFIGS record
+  complex_name?: string | null          // a member fire outside California: "Part of the X Complex"
+  complex_members?: string[]            // a CAL FIRE complex row: its WFIGS member names, verbatim; [] otherwise
+}
+```
+
+- **(R)** = required after the integration. In wave 1 every new TS field is optional, so no role's test fixtures break
+  while the roles work in parallel; the backend always sends every field. The integration makes the five (R) fields
+  required once the fixtures carry them (`summaryFixture()` in `web/src/api/fixtures.testutil.ts` helps). Readers
+  never fall back to Pacific time: a missing `time_zone` means the viewer's zone, labelled (14.9).
+- Python: every new field exists on `IncidentSummary` with a default, and responses always carry all of them. A
+  `model_validator(mode="before")` fills old manifests and fixtures: `uid ← calfire_uid`, `record_source ← "calfire"`,
+  `record_issuer ← "CAL FIRE"`, `record_agency ← "CAL FIRE"`, `source_name ← name`, `state` / `time_zone` from
+  `regions.state_at` / `regions.time_zone_at(lon, lat)` (fallback: the state's main zone, then `"UTC"`; never
+  America/Los_Angeles by default), `active_sources ← ["calfire"] if is_active else []`, lists `[]`, others `null`.
+  So every existing bundle and both fixtures keep loading unchanged, and their `time_zone` comes from their location.
+- **WFIGS rows** (`record_source: "wfigs"`): `name` = display name (title-cased when the source is ALL CAPS, names with
+  digits kept as they are, e.g. "Fd140011"), `source_name` = verbatim; `acres` = `IncidentSize`; `percent_contained` =
+  `PercentContained` (null = not reported); `started_ms` = `FireDiscoveryDateTime`; `updated_ms` =
+  `ModifiedOnDateTime_dt`; `contained_ms` = Containment, else Control, else FireOut (never inferred); `county` =
+  `POOCounty` verbatim; `admin_unit` = `POOProtectingUnit`; `location` = null; `url` = the record page
+  (`.../WFIGS_Incident_Locations/FeatureServer/0/query?where=IrwinID%3D%27%7B<IRWIN>%7D%27&outFields=*&f=html`);
+  `year` = the `UniqueFireIdentifier` year.
+- `is_active`: WFIGS rows: in the Current layer with `PercentContained` null or < 100 (a year-to-date row is never
+  active on its own). California rows: per `CA_ACTIVE_RULE` (14.2; default "either agency").
+- Not listed anywhere: prescribed burns (RX), complex parents (CX) outside California, Alaska, Hawaii, territories and
+  foreign `POOState` values (`supported` rule 14.2).
+
+**List endpoint** `GET /api/incidents?mode=live|historical&year=&min_acres=&state=`:
+- `year` default = the current UTC year (2026); `min_acres` default 300 (historical only). `state` (optional USPS code)
+  filters rows. The `live` list holds **every active wildfire in the lower 48, whatever its size** (round 2 item 1),
+  sorted by `detections_24h` then acres, as today.
+- The JSON is gzip-compressed when the request accepts it (`Accept-Encoding: gzip`, `Vary: Accept-Encoding`), in the
+  handler (B-R17).
+- `IncidentListResponse` gains `sources`:
+
+```ts
+export interface ListSource {
+  id: 'calfire' | 'wfigs'
+  name: string                          // "CAL FIRE" | "NIFC WFIGS (IRWIN)"
+  status: 'available' | 'unavailable'
+  retrieved_ms: number | null           // when Fire-3d fetched that list (never an issue time)
+  reason: string | null                 // plain words when unavailable
+}
+export interface IncidentListResponse { mode: Mode; updated_ms: number; incidents: IncidentListRow[]; year?: number; sources?: ListSource[] }   // sources: (R)
+```
+
+  WFIGS down: California fires are still listed from CAL FIRE (plus bundles on disk), `sources` says WFIGS is
+  unavailable, and the web shows "The national fire list (NIFC) is unavailable right now; only California fires (CAL
+  FIRE) are listed." (14.14). CAL FIRE down: California's WFIGS rows still list, with the same kind of notice.
+- **`LiveStatus`** gains `detections_24h?: number | null` (FIRMS feed rows of the last 24 h inside the lower-48 state
+  polygons); `detections_24h_ca` stays for one release. `active_incidents` = the live list length.
+
+### 14.2 Ids, resolution, the California merge and switches (`us-catalog`; `us-pipeline` consumes)
+
+- **Ids** (SPEC §4.4): CAL FIRE rows unchanged (`{year}-{slug}-{UniqueId[:6]}`), so every California link and bundle
+  keeps resolving. WFIGS rows: `{UFI year}-{slug(name)}-{IRWIN hex[:6].lower()}`, e.g. `2025-emigrant-241e2b`
+  (the validation audit's ids follow this rule).
+- **Python API** (`fire3d/catalog.py`):
+  - `get_summary(incident_id) -> IncidentSummary | None`: any id (CAL FIRE lists, WFIGS Current / year lists, then one
+    cached `IrwinID LIKE '{ABCDEF%'` query on the all-years layer), with the id's slug and year checked.
+  - `find_by_irwin(irwin_id) -> IncidentSummary | None`; `is_supported(summary) -> bool` (state in 48 + DC);
+    `record_issuer(summary) -> str`.
+- **`record_issuer` text** (also used by bundle text, 14.12.5): CAL FIRE rows `"CAL FIRE"`; WFIGS rows with a
+  protecting-agency code `"<CODE verbatim> via NIFC WFIGS"` ("USFS via NIFC WFIGS", "C&L via NIFC WFIGS"); without a
+  code `"NIFC WFIGS (IRWIN)"`. Cards add the plain name when known: "USFS (USDA Forest Service) via NIFC WFIGS".
+- **California merge** (round 2 item 2, rounds 3.2-3.3; B-R1): CAL FIRE is the record. A WFIGS-CA row is dropped when
+  (1) its `CpxName` equals a CAL FIRE complex name (the CAL FIRE complex row stays; its `complex_members` lists the
+  WFIGS member names), or (2) it is the same fire as a CAL FIRE fire of that year or the year before: name tokens equal,
+  <= 30 km, discovery -7/+20 days from CAL FIRE's start; or any name, <= 3 km, ±3 days. A dropped row's IRWIN id, GACC
+  and record attach to the CAL FIRE row (`irwin_id`, `gacc`, `other_records`, `active_sources`). (3) Otherwise it is
+  listed as a WFIGS row (64 such active fires on Oct 22). Regression cases (B §5): Orleans/Butler/Big Cliff,
+  TCU/2-2 ×2/2-7/2-8/6-2/6-5, Swift/Peak, Log (-6 d), Gianelli, Bradford Branch/Dale, McCovey vs Marshall (separate),
+  Alpaugh (added), Timber (one row, active by NIFC).
+- **Outside California**: complex members are listed on their own with `complex_name`; CX parents are never listed.
+  WFIGS duplicates (same name tokens and state, size within 1 %, <= 10 km, discovery <= 30 days apart): keep the most
+  recently modified, log the dropped id.
+- **`POOState` decides listing**; the state polygons only fill a missing `POOState` (nearest state within 5 km);
+  mismatches over 5 km are logged, never dropped (Paradise OR, Zamora Bend TX, Sharpe CO stay listed).
+- **Switches** (one constant each, in `catalog.py`):
+  - `CA_ACTIVE_RULE = "either"`: a California fire is active when CAL FIRE's or NIFC's record says so (round 3 item 2).
+    Alternatives `"calfire"`, `"wfigs"`.
+  - `CA_COMPLEX_ROWS = "calfire"`: CAL FIRE's one complex row in California (round 3 item 3). Alternative `"members"`.
+- **Build gate** (`us-pipeline`, `pipeline.py`; text in `api/app.py` by `us-catalog`): an id is buildable when
+  `get_summary` resolves it and `is_supported(summary)`. Otherwise HTTP 404 "unknown incident" or HTTP 422 "Fire-3d
+  does not support Alaska, Hawaii or US territories yet." The CLI resolves the same way.
+
+### 14.3 Regions: state, county, time zone and coverage (`us-catalog`)
+
+`backend/fire3d/regions.py` (offline, shapely STRtree, lazy-loaded, no network):
+
+```python
+L48: tuple[str, ...]                     # the 48 states + "DC" (USPS)
+STATE_NAMES: dict[str, str]              # "OR" -> "Oregon"
+@dataclass(frozen=True)
+class County: fips: str; name: str; state: str          # "41029", "Jackson County", "OR"
+def state_at(lon: float, lat: float, *, max_km: float = 5.0) -> str | None
+def states_in_bbox(bbox: tuple[float, float, float, float], margin_km: float = 0.0) -> list[str]
+def county_at(lon: float, lat: float) -> County | None
+def counties_in_bbox(bbox, margin_km: float = 0.0) -> list[County]
+def same_codes(counties: list[County]) -> list[str]     # IPAWS SAME: "0" + 5-digit FIPS
+def time_zone_at(lon: float, lat: float) -> str | None  # IANA; nearest zone <= 5 km, else the state's main zone; None off L48
+def main_zone(state: str) -> str
+def zone_name(tz: str) -> str                            # "Pacific Time", "Mountain Time", "Central Time", "Eastern Time"
+def coverage_at(lon: float, lat: float) -> Literal["lower48", "alaska", "hawaii", "territory", "outside_us"]
+def lookup(lon: float, lat: float) -> dict               # the /api/geo/lookup body
+```
+
+- Data (public domain, built by `backend/scripts/build_us_regions.py`, sources and dates in a `meta` property):
+  `backend/fire3d/data/us_states.geojson` (Census TIGERweb `State_County/MapServer/0`, 0.005°),
+  `us_timezones.geojson` (USDOT BTS NTAD Time Zones + Census TIGERweb AIANNH Navajo Nation and Hopi Reservation),
+  `us_counties.geojson` (TIGERweb counties, lower 48 + DC, simplified). IANA mapping: Pacific → America/Los_Angeles,
+  Mountain → America/Denver, Central → America/Chicago, Eastern → America/New_York; Arizona → America/Phoenix
+  except the Navajo Nation (America/Denver) and the Hopi Reservation inside it (America/Phoenix).
+- `coverage_at`: lower 48 + DC by the polygons (5 km tolerance); Alaska, Hawaii and the territories by documented
+  coarse boxes; anything else `outside_us`.
+- Required test points: El Paso TX → America/Denver; Pensacola FL → America/Chicago; Ontario OR (Malheur) →
+  America/Denver; Island Creek ID (46.036, -115.438) → America/Los_Angeles; Phoenix → America/Phoenix; Window Rock AZ
+  → America/Denver; Kykotsmovi AZ (Hopi) → America/Phoenix; Greer AZ → America/Phoenix; Bozeman MT → America/Denver;
+  Black Cove NC (35.286, -82.298) → America/New_York; Paradise OR (20 m outside its polygon) → OR; Anchorage →
+  `alaska`; Honolulu → `hawaii`; San Juan → `territory`; Tijuana → `outside_us`.
+
+**`GET /api/geo/lookup?lon=&lat=`** (400 on bad numbers; `Cache-Control: public, max-age=86400`):
+
+```ts
+export type Coverage = 'lower48' | 'alaska' | 'hawaii' | 'territory' | 'outside_us'
+export interface GeoLookup {
+  lon: number; lat: number
+  coverage: Coverage
+  supported: boolean                    // coverage === 'lower48'
+  state: string | null                  // USPS (lower 48 + DC only)
+  state_name: string | null
+  county: { fips: string; name: string } | null
+  time_zone: string | null              // IANA; null when not supported
+  time_zone_name: string | null         // "Mountain Time"
+  note: string | null                   // the 14.14 coverage sentence when not supported, else null
+}
+// web/src/api/client.ts
+export function getGeoLookup(lon: number, lat: number, opts?: FetchOptions): Promise<GeoLookup>
+```
+
+### 14.4 Accuracy regions (`us-catalog` serves and seeds; `validation` writes; `us-web` shows)
+
+- **Regions** (V §5): the WFIGS GACC of the fire's record; the Southern Area is split by state: `SACC-SP` = SACC in
+  TX or OK, `SACC-SE` = the rest of SACC. Names: NWCC "Northwest", NRCC "Northern Rockies", GBCC "Great Basin", SWCC
+  "Southwest", SACC-SP "Southern Plains", SACC-SE "Southeast", RMCC "Rocky Mountain", EACC "Eastern", ONCC "Northern
+  California", OSCC "Southern California".
+- **`accuracy_region` assignment** (`us-catalog`): WFIGS rows → their GACC (split as above); California rows → the
+  matched WFIGS record's GACC, else `backend/fire3d/data/ca_county_gacc.json` (counties whose WFIGS fires are >= 80 %
+  one GACC, built by `backend/scripts/build_ca_county_gacc.py`; Stanislaus, San Joaquin, Alpine, Imperial, Mono and
+  Sierra are ambiguous → null); otherwise null. No GACC polygons (their terms are unverified) and no borrowing from a
+  neighbour. A searched place with no modeled fire gets no label.
+- **Data file** `backend/fire3d/data/regional_accuracy.json`, schema version 1 (V §5), written only by the validation
+  tooling in wave 2. `us-catalog` commits a **seed**: OSCC `tested`, `in_sample: true`, 3 fires (Eaton 0.438, Madre
+  0.395, Palisades 0.467), `growth_sorensen` 0.43 (mean of fire means), `range` [0.395, 0.467], `pooled_leads` 0.438,
+  `n_leads` 32, `growth_ratio_median` 1.85, `lfm_method` "ca_month_table_drought", `seed: true`; every other region
+  `untested`, `n_fires` 0.
+
+```ts
+export type AccuracyStatus = 'tested' | 'limited' | 'untested'
+export interface AccuracyFire { id: string; name: string; state: string; n_leads: number; growth_sorensen: number; fuels_edition: string; lfm_method: string; era5_hours: number }
+export interface AccuracyRegion {
+  id: AccuracyRegionId; name: string; status: AccuracyStatus; in_sample?: boolean; seed?: boolean
+  n_fires: number; n_leads?: number
+  growth_sorensen?: number | null       // mean over fires of each fire's mean growth Sørensen (31-member p50)
+  range?: [number, number] | null       // min-max of the per-fire values
+  pooled_leads?: number | null; ignition_relative?: number | null
+  by_lead?: Record<string, number>; growth_ratio_median?: number | null
+  years?: number[]; lfm_method?: string; fuels_editions?: string[]; fuel_groups_tested?: string[]
+  caveats?: string[]; fires?: AccuracyFire[]
+}
+export interface AccuracyRegionsResponse {
+  schema_version: 1; generated_ms: number; served_ms: number
+  model: { engine: string; settings: string }
+  method: { metric: 'growth_sorensen'; forecast: string; leads_h: number[]; aggregate: 'mean_of_fire_means'; min_fires: number; min_leads: number; weather: string; starts: string; secondary: string }
+  assignment: { by: string; split: Record<string, string[]>; fallback: string }
+  regions: AccuracyRegion[]             // all ten ids, always
+}
+// web/src/api/client.ts
+export const getAccuracyRegions: (opts?: FetchOptions) => Promise<AccuracyRegionsResponse>
+```
+
+- **`GET /api/accuracy-regions`** returns the file plus `served_ms` (`Cache-Control: no-cache`). A region missing from
+  the file is served as `untested`. Status rule: `tested` needs >= 2 fires and >= 16 scored leads; 1 fire `limited`;
+  0 `untested`.
+- **Wording** (`us-web`, templates in `web/src/lib/plainLanguage.ts`; V §5 verbatim, placeholders in braces):
+  - Public line (tested): "Tested on {2} past fires in this region ({2024-2025}; {grass} fires)." The score is one tap
+    away ("How was it tested?"): "When re-run on these fires, the predicted new spread matched the real new spread with
+    a score of about {0.4} out of 1 (1 = perfect, 0 = none; the fires ranged {0.3-0.5}). It usually predicted about
+    {2}× too much growth" (ratio below 1: "about {half} of the real growth"). "These re-runs started during the fires'
+    main growth and used archived weather, so live forecasts usually do worse. Experimental: follow local officials."
+    Public rounds to one decimal and always shows the range.
+  - Command line (tested): "Hindcast growth score {0.41} (fires {0.33-0.48}; {2} fires, {24} leads, +12-72 h; growth
+    ×{2.1}; starts during main growth; live fuel moisture {GSI}; fuels {LF2023, LF2024})." Two decimals.
+  - Fuel caveat (when `fuel_groups_tested` is narrower than the region): "Tested on {timber} fires only; other fuels
+    here are untested."
+  - Limited: "Tested on only 1 past fire in this region: too few for a score." Command adds "[that fire {0.38}, {12}
+    leads; not a regional score]".
+  - Untested or null region: "Accuracy not yet tested here." Command adds "No past fires in the {region name} region
+    have been re-run."
+  - OSCC (in-sample): Public "Tested on 3 past fires in Southern California (2025; chaparral and grass). The model's
+    settings were tuned on these same fires, so this is a best case." Command "Hindcast growth score 0.43 (fires
+    0.40-0.47; 3 fires, 32 leads; growth ×1.85; in-sample: settings fitted on these fires)."
+  - Always under the label: "Outside the modeled area is unknown, not low."
+  - Never "accurate", "reliable", "safe" or "low risk".
+- **Where it shows** (`us-web`): the fire card (Public: the line + "How was it tested?" disclosure; Command: the score
+  line), the location card's model block inside a fire (one line), the Analysis drawer and the Forensic Analysis tab
+  (the Command line). Only for a fire, never for a searched place without one.
+- **Per-run skill table** (V-R13, `us-web`): show `growth_sorensen` first when present, label the total "total-area
+  overlap (includes the area already burned at the start)", and drop the green/amber/red tone. `SkillEntry` gains
+  `growth_sorensen?: number | null` (Python default None; written by `us-pipeline`, 14.12.7).
+
+### 14.5 Official fire records (`us-catalog` new endpoint; `us-pipeline` CAL FIRE endpoint; `us-official` web; `us-web` fire card)
+
+**`GET /api/official/incident-record?incident=<id>`** (new router `backend/fire3d/api/records.py`, included by
+`api/app.py`; Python model `IncidentRecordResponse` in `contracts.py`; TS in `web/src/official/types.ts`). The I7
+envelope (CONTRACT §13 official-backend) with `kind` extended:
+
+```ts
+type OfficialKind = 'calfire' | 'fire_weather' | 'incident_record' | 'local_alerts'
+type OfficialReasonCode = 'past_date' | 'upstream_error' | 'not_covered' | 'state_not_available' | null
+interface IncidentRecordResponse extends OfficialEnvelope {           // kind 'incident_record'
+  record_source: 'wfigs'
+  irwin_id: string | null; unique_fire_id: string | null
+  publisher: 'NIFC WFIGS (IRWIN)'
+  protecting_agency_code: string | null   // verbatim
+  protecting_agency: string | null        // plain name from nwcg_agency_codes.json; null when the code is unknown
+  protecting_unit: string | null; state: string | null; county: string | null; time_zone: string
+  incident_url: string | null             // the all-years layer's f=html query by IrwinID (https)
+  dataset_url: string                     // the NIFC Open Data item page ("about this source")
+  current: {
+    name: string                          // verbatim
+    acres: number | null; percent_contained: number | null; is_active: boolean
+    discovered_ms: number | null; contained_ms: number | null; controlled_ms: number | null; out_ms: number | null
+    updated_ms: number | null             // ModifiedOnDateTime_dt: the record's own update time
+    ics209_report_ms: number | null
+  } | null
+  complex: { name: string; id: string | null } | null
+  changes: []                             // history outside California is deferred (PLAN-3); always [] in brief 3
+  recording_since_ms: null
+}
+```
+
+- Works for any listed id with an IRWIN id: WFIGS rows and California rows matched to a WFIGS record. A California row
+  without one: `unavailable` + `not_covered`, reason "NIFC WFIGS has no record matched to this fire."
+- `source_updated_ms` = `current.updated_ms`; `retrieved_ms` = Fire-3d's fetch; WFIGS down: `unavailable` +
+  `upstream_error`, `current: null`. Caveats always include: "These are the protecting agency's numbers as published
+  by NIFC WFIGS (IRWIN), with the record's own update time. Fire-3d does not record changes to this record yet." and
+  "No record or no change is not an all-clear: follow local officials."
+- Agency names: `backend/fire3d/data/nwcg_agency_codes.json` `{ "meta": {source, checked}, "codes": {"USFS": "USDA
+  Forest Service", ...} }` for the codes in use (B 2.1); an unknown code is shown verbatim. `us-catalog` checks the
+  wording and the terms against NWCG's official Unit Identifier page and records the result in `meta`.
+- **`GET /api/official/calfire`** (`us-pipeline`, `api/official.py`): for a fire whose `record_source` is `wfigs`:
+  `unavailable` + `not_covered`, reason "CAL FIRE does not list this fire; its official record is published by NIFC
+  WFIGS." California answers are unchanged. `incident_ref` / `find_record` / `fill_from_calfire` become
+  `fill_from_catalog`, which resolves any listed id through `catalog.get_summary` (no 404 for a listed fire without a
+  bundle).
+- **Web (`us-official`)**: `official/client.ts` `recordUrl(summary)` → `/api/official/calfire` for `record_source
+  'calfire'`, `/api/official/incident-record` for `'wfigs'`; for a California fire with `irwin_id` and
+  `active_sources.length === 1`, both are fetched (round 3 item 2). `useRecord()` replaces `useCalfire()` (keep the
+  old export as a deprecated alias). `calfireStatus` takes the summary fallback only when `record_source ===
+  'calfire'` (fixes the `calfire.ts:89` mislabel). Feed kind `'calfire'` becomes `'record'`, labelled from the issuer.
+- **Fire card (`us-web`, `ui/shell/FireCard.tsx`)**, from the summary only (no official fetch):
+  - heading `"<record_issuer> incident record"` ("CAL FIRE incident record", "USFS (USDA Forest Service) via NIFC WFIGS
+    incident record"), acres and containment verbatim, "Updated by <issuer> <time in the fire's zone>", the record link;
+  - California fires with `other_records` whose `is_active` differs from the CAL FIRE record: each record as its own
+    block with its own issuer, status and time (Timber: "Active (NIFC WFIGS, updated …)" and "Not listed as active
+    (CAL FIRE, updated …)");
+  - `complex_name` → "Part of the {X} Complex"; `complex_members` → "Includes: {names}" (NIFC names, verbatim);
+  - the id line "Incident ID (CAL FIRE)" or "Incident ID (NIFC WFIGS)" (also `MapHeader.tsx`, `IncidentOverview.tsx`).
+
+### 14.6 NWS fire weather nationally (`us-pipeline` backend; `us-official` web)
+
+- `sources/nws.py`: one cached request per cycle (2 min) to `/alerts/active` with `area=` the 48 states + DC, and the
+  events RFW, FWW plus the local-officials' events of 14.7 in the same call, split in code. `NWS_LIMITER` stays 30/min.
+- **Per fire**: before any zone outline is loaded, keep only alerts with a UGC whose two-letter state prefix is in
+  `regions.states_in_bbox(area_bbox)`; then the area test as today. A Montana alert never reaches a Florida fire, and
+  no zone is loaded for it.
+- **Without `incident`** (overview): every current lower-48 alert; zones load within the 30/min budget; alerts whose
+  outlines could not load keep today's verbatim caveat ("{n} fire weather alert(s) could not be placed on the map…").
+  The bundled fire-zone file (B-R18) is deferred.
+- **Response additions** (Python `FireWeatherResponse`, TS `official/types.ts`): `states: string[]` (overview: the
+  states with an alert; per fire: the states searched); each alert `time_zone: string | null` (from its first zone's
+  outline centroid, else the state's main zone).
+- Wording: "in California" becomes "in the lower 48 states" in the backend caveats; the per-fire caveat keeps
+  `STANDING_NWS`. The IEM archive is unchanged (point based, national).
+- **Web** (W 3.4, `us-official`): header "Official now · lower 48 states"; quiet line "No Red Flag Warning or Fire
+  Weather Watch in effect in the lower 48 states. Not an all-clear."; "{N} alerts in effect in {M} states; the 3 most
+  recent:"; each alert keeps its office, its own times in its own zone, its headline verbatim and a link; footer
+  "Official evacuation information and each fire's agency record are shown for a fire: zoom in on a fire or pick one,
+  or check an address." The location card always states the NWS status at a point in the lower 48: "Fire weather
+  alerts (NWS): checked, none in effect here · Not an all-clear", the alert line, or "not checked". The code
+  identifier `statewide` may stay (renaming it is deferred); its user-visible text changes.
+
+### 14.7 Local officials' messages relayed by NWS, and the FEMA archive (`us-pipeline` backend; `us-official` web)
+
+Round 2 item 5: no IPAWS registration. Live: the NWS-relayed messages. Past days: OpenFEMA, labelled archived.
+
+**`GET /api/official/local-alerts?incident=<id>&at_ms=&margin_km=15`** or **`?bbox=w,s,e,n`** (in `api/official.py`;
+Python `LocalAlertsResponse` in `contracts.py`; TS in `web/src/official/types.ts`):
+
+```ts
+type LocalChannel = 'nws_api' | 'openfema_archive'
+interface LocalAlert {
+  id: string; channel: LocalChannel; archived: boolean
+  event: string                         // verbatim ("Fire Warning", "Evacuation Immediate")
+  event_code: string                    // FRW | EVI | SPW | CDW | CEM | LAE
+  msg_type: 'Alert' | 'Update' | 'Cancel' | null; references: string[]
+  sender_name: string | null            // verbatim; never the operator's `sender` address
+  sender_is_platform: boolean           // e.g. "Public Alert System": then the card says "issuer not named"
+  sent_ms: number | null; effective_ms: number | null; onset_ms: number | null; expires_ms: number | null
+  headline: string | null; description: string | null; instruction: string | null
+  wea_text: string | null; wea_long_text: string | null       // all verbatim
+  web: string | null                    // https only
+  area_desc: string | null; same_codes: string[]; ugcs: string[]
+  polygon: GeoJsonPolygon | null
+  match: 'polygon' | 'county'           // how it was tied to this area
+  covers_reported_location: boolean | null; nearest_km: number | null
+  time_zone: string | null              // IANA of its area (regions)
+  phase: 'upcoming' | 'in_effect' | 'ended'
+}
+interface LocalAlertsResponse extends OfficialEnvelope {          // kind 'local_alerts'
+  alerts: LocalAlert[]
+  channels: { id: LocalChannel; status: 'available' | 'unavailable' | 'pending' | 'not_checked'; retrieved_ms: number | null; source_updated_ms: number | null; reason: string | null }[]
+  area_bbox: [number, number, number, number] | null; reported_location: [number, number] | null
+  counties: { fips: string; name: string; state: string }[]   // the counties searched (SAME matching)
+}
+```
+
+- **Channels**: `nws_api` for the present and the last 7 days (the shared national request of 14.6); `openfema_archive`
+  (`sources/openfema.py`, `https://www.fema.gov/api/open/v1/IpawsArchivedAlerts`, `status eq 'Actual'`) for times
+  older than 24 h. The archive is never fetched on the request path for longer than 5 s: a cache miss starts one
+  background fetch per incident (deduplicated, cached on disk under `DATA_DIR/official/openfema/`) and answers that
+  channel `pending`; a successful build also starts it. The `?bbox=` form is live only (`not_checked` for the archive).
+- **Scope**: FRW, EVI, SPW and CDW always; CEM and LAE only when their text mentions fire, smoke or evacuation. Text is
+  verbatim and never classified ("TEST" texts and burn bans sent as FRW are shown as sent).
+- **Matching**: by polygon when present; else by SAME county codes against `regions.counties_in_bbox(area_bbox)`.
+- **Times**: an instant is converted, never shown with the raw offset; the web shows them in the fire's zone.
+- **Credits**: live "National Weather Service (relayed local officials' messages)"; archive "FEMA IPAWS archive via
+  OpenFEMA" plus the required notice "This product uses the Federal Emergency Management Agency's OpenFEMA API, but is
+  not endorsed by FEMA" (terms: https://www.fema.gov/about/openfema/terms-conditions; no FEMA or DHS logos).
+- **Caveats** (always): "Fire-3d lists only the local alerts the National Weather Service relays; most are not relayed
+  (about 1 in 20 fire and evacuation alerts in 2024-26). No alert here is not an all-clear: follow local officials."
+  Archive: "Archived copy from FEMA (OpenFEMA, published about a day later); FEMA does not validate message content.
+  Replays can list more than was visible live."
+- **Web card line** (`us-official`): "Alert from <issuer>: "<verbatim text>" · sent <time in the fire's zone> · relayed
+  by the National Weather Service · <link>"; archived: "Archived alert from <issuer> … (FEMA archive)". Shown in Official
+  now, the feed (kind `'local-alert'`), the location card's official block (live, at the point via `?bbox=`), and for
+  every state, including Washington and Florida.
+
+### 14.8 Evacuations and cameras (`us-official`, both ends)
+
+**14.8.1 State registry** (`backend/fire3d/sources/evacuations.py`, new; `api/extras.py` keeps the route and calls
+it). One adapter shape (EV §4) without the Washington fields:
+
+```python
+@dataclass(frozen=True)
+class EvacAdapter:
+    id: str                       # 'caloes_evacuations' | 'or_oem_evacuations'
+    home_state: str               # 'CA' | 'OR'
+    availability: Literal['available']
+    query_url: str
+    out_fields: tuple[str, ...]   # explicit whitelist, never '*'
+    where: str
+    ttl_s: float                  # 120 for both
+    limiter: fhttp.RateLimiter    # services.arcgis.com shared by CA and OR
+    confirm_drop: bool            # CA only (the 5-minute rebuild)
+    source: dict                  # SOURCES entry + 'credit'
+    issuing_authority: str        # replaces the literal at extras.py:625-626
+    aggregator: str               # 'Cal OES' | 'Oregon OEM'
+    standing_caveats: tuple[str, ...]
+    normalize: Callable[[dict], dict | None]   # -> EvacZoneProps or None (drop)
+    status_key: Callable[[dict], str]
+    zone_state: Callable[[dict], str | None]
+STATE_AVAILABILITY: dict[str, dict]   # 48 + DC: {state, name, availability: 'available' | 'not_available', adapter_ids, note, audited: '2026-10-22', links}
+```
+
+Only CA (Cal OES) and OR (Oregon OEM "Evacuation Areas Public") are `available`. Every other state, **Washington and
+Florida included** (round 3 item 1), is `not_available`. Arizona's note: "Arizona's statewide zones are planning zones
+whose status was not kept up to date in 2026; not shown."
+
+**14.8.2 Response additions** to `GET /api/extras/evacuations` (all additive; California answers keep today's values):
+- `states: { state, name, availability: 'available' | 'not_available', checked: boolean, source_ids: string[], note: string | null, links: {label, url}[] }[]`: every state the bbox touches.
+- `sources[]` entries gain `retrieved_ms`, `updated_ms`, `status: 'available' | 'unavailable'`, `reason`,
+  `home_state`, `credit`. The envelope `retrieved_ms` / `source_updated_ms` stay when one zone source answered (every
+  California answer) and are `null` when several did; the UI then reads `sources[]`.
+- `reason_code` gains `'state_not_available'` (also used by cameras, 14.8.6).
+- Zone props gain `state`, `source_id`, `status_verbatim: boolean`, `status_raw`, `status_label`,
+  `status_label_source`, `incident_name`, `hazard_type`, `listed_ms`, `time_basis: 'issuer' | 'state_layer_added' |
+  'state_layer_edit' | 'date_only' | 'none'`.
+
+**14.8.3 Rules**
+- A bbox that touches no `available` state: `status: 'unavailable'`, `reason_code: 'state_not_available'`, reason
+  "Official evacuation zones are not available in this state ({Montana}). Follow local officials." No upstream request.
+  Outside the lower 48: "Fire-3d does not support Alaska, Hawaii or US territories yet." / "Outside the United States:
+  Fire-3d has no data here."
+- Mixed states (OR/CA, CA/NV, OR/WA): fetch each available adapter the bbox touches; every other state adds the caveat
+  "{Nevada}: official evacuation zones are not available in this state". A failed source is `unavailable` in
+  `sources[]`, never "none".
+- Dedup at borders: a zone takes its state from `zone_state` (Oregon's `County` domain includes "Del Norte", CA); when
+  that state's own adapter answered, its copy wins.
+- No zones in a checked state: the per-source "not an all-clear" caveat; never the source's own "If there are no
+  records in this dataset, there are no evacuations currently in place."
+- Hazards: every hazard type is kept; a non-fire hazard shows "Evacuation for: Other, as recorded by Oregon OEM".
+- Past dates: unchanged (`not_available_for_past_dates`); Oregon's history layer is not used (round 3 item 4).
+- **Status mapping (EV-R6, before any new source)**: negations ("No …", "Not …") never map to order, warning or
+  advisory; placeholder rows ("No Evacuation Order", "Not Reporting", null level) are dropped; regression tests for
+  "No Evacuation Order", "Not Reporting", "Level 1 - Ready", "Level 2 - Be Set", "Level 3 - Go", "Level 3", "Planning
+  Zone", null.
+- **Privacy (EV-R4)**: explicit `outFields` per adapter; a test asserts that no response key matches
+  `email|phone|user|editor|creator|submit` (Oregon's `Editor_*`, `created_user`, `last_edited_user` are never requested).
+
+**14.8.4 Oregon mapping** (EV §4): `zone_id` ← `GlobalID`; `zone_name` ← `Evac_Area_Name`; `status` ← "Level " +
+`Fire_Evacuation_Level`, `status_verbatim: false`, `status_raw` the integer; `status_label` = OEM's definition ("Level
+1: BE READY to evacuate", "Level 2: BE SET to evacuate", "Level 3: GO NOW – Leave Immediately!") with
+`status_label_source` the OEM press-release URL; levels 1/2/3 → advisory / warning / order; `county` ← `County` +
+" County"; `incident_name` ← `Fire_Name` ("as recorded by Oregon OEM; a name match is not proof it is this fire");
+`hazard_type` ← `HazardType`; `status_updated_ms` null (OEM gives no issue time); `listed_ms` ← `created_date` ("added
+to the Oregon state layer"); `last_edited_date` is "state layer recalculated", never an issue time. Credit: "Oregon
+Department of Emergency Management". Fixture: the recorded 2026-08-15 12:00Z history snapshot (EV §6), committed under
+`backend/tests/data/evacuations/` with a `PROVENANCE.md`.
+
+**14.8.5 Web** (`official/model.ts`, `location/official.ts`, `extras/*`): `EvacuationOfficial.state` gains
+`'not-available'` with `reason` ("Not available in this state (Nevada)") and `links`. The California rectangle
+(`insideCalifornia`) leaves every evacuation and NWS path: for a point at the current time the hook always asks the
+backend, which answers from the registry without an upstream request. Issuer, aggregator, credit and the
+"<aggregator> does not say which fire this is for" text come from `sources[]`; times from the per-source fields, in the
+fire's zone (or the point's zone). Card line for a covered state with nothing listed: "No evacuation order or warning
+listed here · {Oregon OEM}, checked {time} · not an all-clear".
+
+**14.8.6 Cameras** (B-R16, W12): outside California `/api/extras/cameras` answers `unavailable` +
+`state_not_available`, reason "Public cameras: California only (ALERTCalifornia, Caltrans). Not available in this
+state." The panel shows that sentence instead of "No public cameras are listed in this area." GOES-East imagery
+(B-R15) is deferred; image labels come from each product's `platform` (W13).
+
+### 14.9 Time zones and the mixed clock (`us-web` owns `lib/time.ts` and `state/timeZone.ts`; backend `timeutil.py` is `us-pipeline`'s)
+
+**14.9.1 Rules** (round 2 item 8; brief rule "never assume Pacific time"):
+- Clock: `'12h'` in the map workspace's Public preset ("3:40 PM MDT"); `'24h'` in Command and Forensic ("15:40 MDT").
+- Zone: a fire's own times (timeline, feed, charts, cards, its official items, scene labels, notes) use the fire's
+  `summary.time_zone`. Overview rows and hovers use each row's `time_zone`. Times about many fires are relative
+  ("records updated 5 min ago"). A point without a fire uses `/api/geo/lookup`'s `time_zone`. Fallback: the viewer's
+  zone with its abbreviation, labelled; **never** Pacific.
+- Panel line: "Times: Mountain Time (MDT), the fire's local time" / "…, local time at this place" / "Times: your
+  device's time (CDT)". A source time without a zone is shown as given with "time zone not stated".
+- Years and days are computed in the zone (`extras/format.ts:13` and `ui/DataCredits.tsx:35` used UTC).
+
+**14.9.2 `web/src/lib/time.ts` new API** (`us-web` M1; the zone-free helpers keep their names: `MINUTE_MS`, `HOUR_MS`,
+`DAY_MS`, `MONTHS`, `WEEKDAYS`, `fmtTPlus`, `fmtDuration`, `fmtRelative`, `tickStepHours`, `floorToHour`,
+`hoursSince`, `msFromHours`, `TimeTick`):
+
+```ts
+export type Clock = '12h' | '24h'
+export interface TimeFmt { readonly tz: string; readonly clock: Clock }   // tz: IANA
+export function timeFmt(tz: string | null | undefined, clock: Clock): TimeFmt   // null/invalid tz → viewerZone()
+export function viewerZone(): string                                   // Intl resolvedOptions().timeZone, else 'UTC'
+export function isValidZone(tz: string): boolean
+export function zoneAbbr(ms: number, tz: string): string               // "PDT", "MST" (Intl short, en-US); fallback "UTC−7"
+export function zoneName(tz: string, ms?: number): string              // "Mountain Time" (Intl longGeneric)
+export function zoneLine(tf: TimeFmt, ms: number, whose: 'fire' | 'place' | 'viewer'): string   // 14.9.1 panel line
+export interface WallParts { year: number; month: number; day: number; hour: number; minute: number; weekday: number }
+export function wallParts(ms: number, tz: string): WallParts
+export function zoneOffsetMinutes(ms: number, tz: string): number
+export function startOfLocalDay(ms: number, tz: string): number
+export function wallTimeToMs(tz: string, y: number, mo: number, d: number, h?: number, mi?: number): number  // two-pass offset; DST gaps resolve forward
+export function localYear(ms: number, tz: string): number
+export function localHourTicks(startMs: number, endMs: number, tz: string, stepHours?: number): number[]
+export function localDayTicks(startMs: number, endMs: number, tz: string, stepDays?: number): number[]
+export function localWallTicks(startMs: number, endMs: number, stepHours: number, tf: TimeFmt): TimeTick[]   // timeLabel "06:00" | "6 AM"
+export function fmtClock(ms: number, tf: TimeFmt, o?: { zone?: boolean }): string
+export function fmtAt(ms: number, tf: TimeFmt, o?: { year?: 'auto' | 'always' | 'never'; zone?: boolean; weekday?: boolean; refMs?: number }): string
+export function fmtDayDate(ms: number, tz: string, o?: { year?: 'auto' | 'always' | 'never'; weekday?: boolean; refMs?: number }): string
+export function fmtDayRange(startMs: number, endMs: number, tz: string): string
+```
+
+Exact strings (tests in `lib/time.test.ts`, new):
+
+| Call | `'24h'` | `'12h'` |
+|---|---|---|
+| `fmtClock(ms, tf)` | `15:40` (`07:05`) | `3:40 PM` (`7:05 AM`, `12:05 AM`, `12:00 PM`) |
+| `fmtClock(ms, tf, { zone: true })` | `15:40 MDT` | `3:40 PM MDT` |
+| `fmtAt(ms, tf)` | `Oct 22, 15:40` | `Oct 22, 3:40 PM` |
+| `fmtAt(ms, tf, { zone: true })` | `Oct 22, 15:40 MDT` | `Oct 22, 3:40 PM MDT` |
+| `fmtAt(ms, tf, { year: 'always', zone: true })` | `Oct 22, 2026 15:40 MDT` | `Oct 22, 2026 3:40 PM MDT` |
+| `fmtAt(ms, tf, { weekday: true })` | `Thu Oct 22, 15:40` | `Thu Oct 22, 3:40 PM` |
+| `fmtDayDate(ms, tz)` / `{ year: 'always' }` / `{ weekday: true }` | `Oct 22` / `Oct 22, 2026` / `Thu Oct 22` | same |
+| `localWallTicks` labels | `06:00`, day label `Oct 22` | `6 AM`, `Oct 22` |
+
+`year: 'auto'` adds the year when the local year differs from `refMs`'s (default now). California Command and
+Forensic strings stay identical to today's; Public strings change by the user's decision ("13:19 PDT" → "1:19 PM
+PDT"). Zones checked in Node 22 ICU: PDT/PST, MDT/MST (Boise, Denver), MST all year (Phoenix), CDT/CST (Chicago,
+Indiana/Knox, North_Dakota/Center), EDT/EST (Detroit, New_York).
+
+**14.9.3 Deprecated** (kept until the integration deletes them; Pacific-bound): `TZ`, `tzLabel`, `laParts`,
+`laOffsetMinutes`, `startOfLaDay`, `laTicks`, `laDayTicks`, `laWallToMs`, `laWallTicks`, `fmtDateTime`, `fmtDate`,
+`fmtDateTimeYear`, `fmtTime`, `fmtDay`, `fmtDateRange`, `fmtDateTimeTz`, `fmtDateTimeYearTz`, `fmtWeekdayDay`,
+`LaParts`. `web/scripts/check-time-api.mjs <paths…>` (`us-web`) prints every import or use of these names per file and
+exits 1 when any is found; each web role runs it on its own files (acceptance: 0), and the integration runs it on
+`web/src`.
+
+**14.9.4 `web/src/state/timeZone.ts`** (`us-web` M1):
+
+```ts
+export function clockFor(workspace: Workspace, preset: Preset): Clock       // map + public → '12h', else '24h'
+export function useClock(): Clock
+export function useTimeFormat(): TimeFmt            // the open fire's summary.time_zone (store), else viewerZone()
+export function useTimeFormatFor(tz: string | null | undefined): TimeFmt     // same clock, another zone
+export function useZoneSource(): 'fire' | 'viewer'
+export function getTimeFormat(): TimeFmt            // non-hook read for imperative code (map controller)
+```
+
+**14.9.5 Who migrates what.** Each role migrates the call sites in the files it owns (W 1.2 table). `us-official`:
+`official/**`, `extras/**`, `ui/feed/**`, `ui/shell/{dataStatus,officialSummary,UpdatesPanel,LayersPanel}`,
+`location/official.ts`. `us-web`: every other file, including `scene/**`, the dev pages and their tests. Pure model
+functions take a `tf: TimeFmt` argument (or a field in their input object); components use the hooks.
+
+**14.9.6 Cross-role shims** (`us-official` M1; optional now, required after the integration): `FeedInput.tf?:
+TimeFmt` (`buildFeedItems`, called by `ui/KeyEvents.tsx`, `ui/timeline/CompactTimeline.tsx`, `map/mapController.ts`);
+`officialBlock(official, { …, tf?: TimeFmt })` and `officialFireWeatherNote(fw, tf?)` (`location/LocationCard.tsx`,
+`location/OverviewCard.tsx`); `zoneDetail(zone, nowMs, tf?)` and `cameraViewText(cam, tf?)` (`map/mapController.ts`).
+Without `tf` they use `getTimeFormat()`. `us-web` passes `tf` at those call sites once the shims exist. `FireCard.tsx`
+stops importing `fmtStatusTime` (it uses `fmtAt`); `us-official` keeps `fmtStatusTime(ms, nowMs)` and adds
+`fmtStatusTimeAt(ms, nowMs, tf)`.
+
+**14.9.7 Backend** (`us-pipeline`, `fire3d/timeutil.py`): `fmt_local(ms, tz, *, year=False) -> "Jan 07, 18:18 MST"`
+(24-hour with the zone abbreviation; backend text never re-parsed by the web) and `local_month(ms, tz) -> int`.
+`BuildContext.time_zone` = `summary.time_zone`. Every `ZoneInfo("America/Los_Angeles")` in `build/`, `spread/` and
+`sources/overpass.py` goes; the live fuel moisture month uses the fire's zone.
+
+### 14.10 Search (`us-catalog` backend; `us-web` web)
+
+- **Gazetteer** (B-R12): `backend/fire3d/data/gazetteer_us.json`, built by `backend/scripts/build_gazetteer.py` from
+  the 2026 Census Gazetteer Files (places of every LSAD, ZCTAs, counties; public domain), replaces `gazetteer_ca.json`
+  (removed by `us-catalog`). Alaska and Hawaii rows are kept and flagged.
+- **`GET /api/geocode` additions** (TS in `web/src/location/types.ts`, `us-web`): each local match gains `state`
+  (USPS), `state_name`, `county` (name or null), `supported` (false in Alaska, Hawaii, territories); `name` and
+  `matched_address` read "<Name>, <ST>" ("Boise, ID", "ZIP 83702, ID"); `place_type` is the Census LSAD in plain
+  words (`city | town | village | borough | cdp | county | …`) with `place_type_label`. Parsing: "Springfield, IL",
+  "Springfield IL", "83702 ID", "ID 83702"; a bare "Springfield" lists the largest matches across states (state
+  shown). Messages: no match → "No US city, town, county or ZIP code matches '<q>'."; an Alaska or Hawaii match keeps
+  its row and adds the note "Fire-3d does not support Alaska, Hawaii or US territories yet."; national examples in
+  errors ("e.g. 600 E Mariposa St, Altadena; Boise, ID; 83702").
+- **Web** (`us-web`): `location/search.ts` state words are the 48 + DC codes and names (`lib/usStates.ts`, new),
+  "Town, ST" is parsed, incident search matches the state; wording says "US" (no "California"). Lat/lon order (W8,
+  `lib/geodesy.ts`): a bare pair with no letters and both values within ±90 tries both orders and picks the one inside
+  the lower-48 box `[-124.85, 24.40, -66.89, 49.38]`; if neither is inside, it reads lat, lon and warns "This point is
+  outside the area Fire-3d covers (the lower 48 states)." The box is a parsing heuristic, never a coverage claim
+  (coverage comes from `/api/geo/lookup`). Tests: Atlanta "-84.39, 33.75", Miami, Boston, Houston, Los Angeles,
+  Seattle.
+
+### 14.11 Overview map and list (`us-web`; others only read)
+
+- Frame `LOWER48_BOUNDS = [-124.85, 24.40, -66.89, 49.38]`, start [-98.6, 39.8] about z3, header "United States · all
+  fires" (tooltip "Lower 48 states; Alaska and Hawaii are not supported yet"), button "All states", phones open on the
+  whole lower 48 (round 2 default).
+- Three MapLibre sources (W 3.2): `fx-overview-pinned` (never clustered: active fires >= 5,000 ac plus the fire whose
+  card is open; selection ring, chip and label layers read it), `fx-overview-active` (`clusterRadius` 28, 44 under 500
+  px; `clusterMaxZoom` 6; `clusterMinPoints` 3; `clusterProperties` `max_acres`, `small`), `fx-overview-other` (radius
+  40, `clusterMaxZoom` 7). Active and other fires never share a group; active marks draw above. Bubbles sized by
+  log(`max_acres`), the count as the label; small active fires (< 10 ac or no size) are 4 px dots. Labels by acres
+  with zoom thresholds (W 3.2). A cluster click zooms to min(expansion zoom, 8). Hidden fires are removed from the data,
+  keyed on the hidden set, never per frame.
+- Legend: "Group of active fires (number = how many)", "Group of other 2026 fires", "Small active fire (under 10 acres
+  or size not reported)", "Fires (CAL FIRE in California, NIFC WFIGS elsewhere; official records)".
+- Panel list: "{312} fires in this view · Show all {1,334}" (round 2 default); rows "Garfield Co., CO"; counts
+  memoised; the phone peek "{244} active fires · records updated {5 min} ago". Windowing the list (W11) is P1 (cut
+  line). The "Include 2025 fires of 100-300 acres" switch stays in every state.
+- Coverage at a point (W9): `/api/geo/lookup` `supported: false` → the 14.14 sentences; no client boxes.
+
+### 14.12 Pipeline interfaces (`us-pipeline` unless noted)
+
+1. **FIRMS feed** (`us-catalog`, `sources/firms.py`): `load_live_us(days: int = 7) -> pd.DataFrame` and
+   `load_year_us(year: int, bbox: tuple | None = None) -> pd.DataFrame` keep a lower-48 box with a 0.5° margin
+   (`L48_FIRMS_BOX = (-125.4, 23.9, -66.4, 49.9)`), read the yearly parquet `firms_us_{year}.parquet` with pyarrow
+   `filters=`; same columns as today. `load_live_ca` / `load_year_ca` stay as deprecated wrappers. `catalog.assign_detections`
+   uses a scipy KD-tree. `us-pipeline` switches `refresh_live` (`pipeline.py:655`) and the keyless path to them.
+2. **Weather quota** (V-R7, B-R13; `sources/weather.py`, `http.py`, `cli.py`):
+   - `class WeatherQuotaExceeded(SourceError)`: raised on Open-Meteo's daily-limit answer (HTTP 429 with "Daily API
+     request limit exceeded", or the minute/hour variants), with **no retries**; `fire3d.http` never caches a non-2xx
+     body or an unparsable / error JSON body (`{"error": true}`, "Unexpected error while streaming data") and evicts
+     such entries.
+   - `probe_open_meteo() -> Literal['ok', 'daily_limit', 'unreachable']`: one uncached tiny request each to the
+     forecast, historical-forecast and archive hosts; CLI `uv run python -m fire3d.cli weather-probe` prints one line per
+     host and exits 0 only when all three are `ok`.
+   - A historical build whose HRRR request is refused **fails** ("Open-Meteo daily request limit reached; retry after
+     the reset (00:00 UTC)") instead of filling with ERA5. `build --require-hrrr` (CLI) / `require_hrrr=True` (API of
+     `build_incident`) also fails on any ERA5-filled hour. The water-year request failing is a bundle warning, never
+     silent.
+   - Weighted counter: `open_meteo_usage() -> {"date": "YYYY-MM-DD", "weighted_calls": float}` with cost ≈ locations ×
+     max(1, series / 10) × max(1, days / 14), persisted in `DATA_DIR/cache/open_meteo_usage.json`. Live deterministic
+     weather refetch at most hourly per bundle; above `OPEN_METEO_DAILY_SOFT_CAP = 6000` the live refresh keeps the last
+     weather with the warning "Weather not refreshed: daily request budget reached."
+3. **LANDFIRE** (V-R4, B-R8; `sources/landfire.py`, `build/aoi.py`): `EDITIONS` adds LF2023; `edition_for(mode,
+   started_ms)` = historical LF{federal FY of ignition − 1} (FY2024 → LF2023, FY2025 → LF2024, FY2026 → LF2025), live
+   LF2025. Never fall forward for a historical fire: on failure or NoData use the next older edition with a warning; a
+   fire before Oct 2023 is refused unless forced. "Land" = cells inside the state polygons with valid DEM; more than 2 %
+   NoData land cells in LF2025 → LF2024 for the whole bundle with the warning "LANDFIRE 2025 is not released here yet;
+   LANDFIRE 2024 used". Cells outside the US keep 99 but are counted and labelled "outside fuel data coverage: not
+   modeled (unknown, not low)". Eaton, Palisades and Madre stay on LF2024; Palisades-like coasts and the San Diego
+   border stay LF2025 for live builds.
+4. **UTM** (`us-catalog`, `grid.py`, `scripts/check_bundle.py`, SPEC §4.1): `utm_epsg_for(lon) = 32600 +
+   floor((lon + 180) / 6) + 1`; California unchanged (10 below −120°, else 11). Tests for zones 10-19 (B and W 3.8).
+5. **Issuer text in bundles** (B-R22): every "CAL FIRE" in observed, ignition, forecast and veto text comes from
+   `summary.record_issuer`: "Reported by {record_issuer} {fmt_local(t, tz)}", "{record_issuer} start", "{record_issuer}
+   incident point", "{record_issuer} reports {N}% containment", "{record_issuer} reported {N} ac". California strings
+   are unchanged. A test asserts a WFIGS summary yields no "CAL FIRE" anywhere in a built bundle's text.
+6. **`data_sources` names** (read by `web/src/lib/dataCredits.ts`, `us-web`): CAL FIRE fires keep "CAL FIRE incident
+   record"; WFIGS fires use "NIFC WFIGS incident record (IRWIN)"; perimeters keep "NIFC WFIGS perimeters"; LANDFIRE
+   detail names the edition. `dataCredits.ts` credits "NIFC WFIGS (IRWIN)" for the new name.
+7. **Skill** (V-R13): `SkillEntry.growth_sorensen: float | None = None` written by `spread/ensemble.py` for historical
+   runs (`spread/validate.py` already computes growth Sørensen).
+8. **Perimeters** (B-R6, V-R2): by `attr_IrwinID` / `poly_IRWINID` when `summary.irwin_id` is set; else name + state
+   from `summary.state` (no `_calfire_hint` outside California); the size check stays.
+9. **Fixtures** (`us-catalog`, `scripts/make_fixture.py`): `--only east` writes `fixture-east`, a synthetic historical
+   fire near Black Cove, NC (35.29, −82.30; UTM 17; America/New_York; `state` "NC", `record_source` "wfigs",
+   `record_issuer` "NIFC WFIGS (IRWIN)"). The default run (demo + live) is unchanged.
+10. **Live fuel moisture outside California**: until the validation role lands GSI (wave 2), a non-California bundle
+    carries the warning "Live fuel moisture outside California uses California's seasonal values until a regional
+    method is tested; experimental." The validation role pre-registers and implements GSI (V-R5) and records the method
+    as `lfm_method` in `regional_accuracy.json`.
+11. **Smoke builds** (`us-pipeline`, at most 3, each after `weather-probe` says ok): `2024-horse-gulch-889237` (MT,
+    UTM 12, LF2023, MDT), `2025-black-cove-95c3c8` (NC, UTM 17, LF2024, EDT) and one currently active non-California
+    wildfire of 1,000 ac or more in the Southern or Eastern area (live path, LF2025 NoData → LF2024 switch, Central or
+    Eastern time). Validation rebuilds Horse Gulch and Black Cove with `--force` after wave 1.
+12. **Live loop** (`us-catalog`, `api/live.py`; round 2 item 4): `AUTO_BUILD_MAX = 4`, 100 ac and 48 h detections
+    unchanged, candidates from the whole lower-48 live list with today's scoring and the national feed.
+
+### 14.13 Sources and credits (exact lines; SPEC §2 rows by `us-catalog`, README by final verification)
+
+| Source | Use | Terms (checked) | Credit line | Owner |
+|---|---|---|---|---|
+| NIFC WFIGS Incident Locations (Current, YearToDate, all years), `services3.arcgis.com/T4QMspbfLg3qTGWY` | national fire list and records | item licence is a disclaimer only, no use restriction (B 2.1, 2026-10-22) | "NIFC WFIGS (IRWIN)" | us-catalog |
+| NWCG Unit Identifier codes | plain agency names | to verify on NWCG's official page (us-catalog) | "Agency names: NWCG unit identifiers" | us-catalog |
+| USDOT BTS NTAD Time Zones | time zone at a point | "available for unrestricted public use" (2023-01-05 edition) | "Time zones: USDOT BTS NTAD" | us-catalog |
+| Census TIGERweb states, counties, AIANNH | state, county, Navajo/Hopi | public domain, "Source: U.S. Census Bureau" | "Boundaries: U.S. Census Bureau TIGERweb" | us-catalog |
+| Census 2026 Gazetteer Files (national) | towns, ZIP areas, counties | public domain | "U.S. Census Bureau Gazetteer Files" | us-catalog |
+| NWS API alerts, national (incl. relayed local officials' messages) | fire weather, local alerts live | public domain (weather.gov/disclaimer) | "National Weather Service" | us-pipeline |
+| OpenFEMA IPAWS Archived Alerts v1 | local alerts, past days | OpenFEMA terms (2025-01-22): notice required, no logos | "FEMA IPAWS archive via OpenFEMA" + the notice of 14.7 | us-pipeline |
+| Oregon OEM "Evacuation Areas Public" | evacuation zones in Oregon | licence field "Public"; no further terms published (checked 2026-10-22) | "Oregon Department of Emergency Management" | us-official |
+| LANDFIRE LF2023 (same service as LF2024/LF2025) | pre-fire fuels of FY2024 fires | public domain (as today) | "LANDFIRE" (edition named) | us-pipeline |
+
+Not used (and why): FEMA IPAWS public feed (needs registration, round 2 item 5); Washington SEOC evacuation layer
+(indemnification terms declined, round 3 item 1); Florida SERT (county status only, round 2 item 6); Arizona DEMA
+planning zones (not maintained); NIFC GACC polygons (terms unverified); GOES-East imagery (deferred); county and
+vendor evacuation systems (out of scope).
+
+### 14.14 Fixed wording (exact strings shared across roles)
+
+- No evacuation feed: "Official evacuation zones are not available in this state ({State}). Follow local officials."
+  Short form (cards, phones): "Evacuation zones: not available in this state".
+- Not supported: "Fire-3d does not support Alaska, Hawaii or US territories yet." Outside the US: "Outside the United
+  States: Fire-3d has no data here."
+- Cameras: "Public cameras: California only (ALERTCalifornia, Caltrans). Not available in this state."
+- Accuracy: 14.4. Untested: "Accuracy not yet tested here." Always: "Outside the modeled area is unknown, not low."
+- National list down: "The national fire list (NIFC) is unavailable right now; only California fires (CAL FIRE) are
+  listed." CAL FIRE down: "CAL FIRE's list is unavailable right now; California fires are listed from NIFC WFIGS."
+- Standing: "Experimental model output, not evacuation advice. Follow local officials." (unchanged); never "safe" or
+  "low risk"; absence of official information is never an all-clear.
+
+### 14.15 As-built notes
+
+Each wave-1 role writes `docs/redesign/contract3/<label>.md` (what was built against each sub-section above, deviations,
+file list) and keeps it current; `validation` writes `docs/redesign/contract3/validation.md`. The integration folds
+them into this section as "14.x as built" sub-headings.
