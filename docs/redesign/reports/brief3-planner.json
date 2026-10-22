@@ -1,0 +1,39 @@
+{
+  "summary": "Planner for brief 3 (lower 48). Wrote docs/redesign/PLAN-3.md (prioritized plan honoring decisions 1-4, round 2 and round 3: Washington not built, CA active if either agency, CAL FIRE complex row, Oregon past zones not now), appended CONTRACT.md section 14 'Brief 3 (US) interfaces' (14.0 rules and day-one deliverables, 14.1 IncidentSummary/list/live status, 14.2 ids and CA merge with the constants CA_ACTIVE_RULE='either' and CA_COMPLEX_ROWS='calfire', 14.3 regions and /api/geo/lookup, 14.4 accuracy regions file/endpoint/wording, 14.5 fire records, 14.6 NWS national, 14.7 local officials' messages + OpenFEMA archive, 14.8 evacuations (Cal OES + Oregon only) and cameras, 14.9 the time formatter API and mixed clock with migration ownership and shims, 14.10 search, 14.11 overview, 14.12 pipeline interfaces, 14.13 sources and credits, 14.14 fixed wording, 14.15 as-built notes), and generated docs/redesign/plan3-roles.json with 4 wave-1 roles and 1 wave-2 role. Wave 1: us-catalog (8711/5181), us-web (8712/5182), us-official (8713/5183) start together; us-pipeline (8714/5184) starts 4th and is the only wave-1 role allowed to build (at most 3 smoke fires outside California after a weather probe). Wave 2: validation (8716), which builds Madre + the 12 test fires, implements the pre-registered GSI live fuel moisture and writes the regional accuracy file and docs/validation.md. Ownership globs checked disjoint (0 clashes over 457 wave-1 paths).",
+  "files": [
+    "docs/redesign/PLAN-3.md",
+    "docs/redesign/CONTRACT.md (section 14 appended, lines 1478-end)",
+    "docs/redesign/plan3-roles.json",
+    "docs/redesign/progress/brief3-planner.md",
+    "docs/redesign/reports/brief3-planner.json"
+  ],
+  "verification": [
+    "Ownership check (script in PLAN-3.md appendix B) over git ls-files plus 58 planned new paths: wave 1 owns 457 paths (us-catalog 62, us-web 217, us-official 98, us-pipeline 80), 0 clashes, every glob matches at least one path; wave 2 (validation) 26 paths, 0 clashes. Code paths without a wave-1 owner: backend/fire3d/__init__.py, api/__init__.py, sources/__init__.py (nobody edits them) and three wave-2-only new files.",
+    "Spot checks: ui/shell/dataStatus.ts, LayersPanel.tsx, UpdatesPanel.tsx, officialSummary*, location/official* -> us-official; ui/shell/FireCard.tsx, OverviewPanel.tsx, location/openFromSearch.ts, OverviewCard.tsx, ui/KeyEvents.tsx -> us-web; web/src/api/types.ts -> us-catalog.",
+    "Cross-role web imports listed with a script (role us-web calls buildFeedItems, officialBlock, officialFireWeatherNote, zoneDetail, cameraViewText, fmtStatusTime of us-official files); each gets an optional tf shim (CONTRACT 14.9.6) or a replacement so no signature breaks during wave 1.",
+    "37 non-test web files import lib/time.ts (audit: 214 calls in 43 files incl. wrappers); split: us-official migrates official/**, extras/**, ui/feed/**, 4 shell files and location/official.ts; us-web migrates every other file; check-time-api.mjs measures it.",
+    "plan3-roles.json parses; every 'read' path exists except the as-built notes and the pipeline report that earlier roles create.",
+    "Wording grep: no 'FireTrace'; 'safe' / 'low risk' appear only in the banned-word rules.",
+    "No code changed, no server started, no build, no browser run (0 requests of any kind)."
+  ],
+  "screenshots": [],
+  "contract_deviations": [
+    "CONTRACT.md is not edited by wave-1 roles: as-built notes go to docs/redesign/contract3/<label>.md (replaces RUNBOOK-3's 'append to section 14' so CONTRACT.md keeps one owner while three agents share a working tree). The orchestrator should use that wording in the role prompts.",
+    "New TS IncidentSummary fields are optional in wave 1 (5 marked (R) become required in the integration) so no role's fixtures break in parallel; the backend always sends them.",
+    "IncidentSummary keeps 'url' as the record link (no separate record_url, unlike the audits' wording); calfire_uid is '' for non-CAL FIRE rows to prevent the calfire.ts:89 mislabel."
+  ],
+  "known_issues": [
+    "Sizing: after deferring P2 and some P1 items, each wave-1 role is about 4-5 h of P0 work (target 3-4 h); every role is ordered P0 first with a cut line, leftovers go to the integration.",
+    "Deferred to a later brief: WFIGS change history outside California (B-R11), GOES-East imagery (B-R15), bundled NWS fire zones (B-R18), B-R19/20/21, EV-R11, EV-R12 (round 3: not now), V-R12, renaming the 'statewide' identifiers.",
+    "Live fuel moisture outside California stays California's table (with a bundle warning) until the validation role lands the pre-registered GSI method in wave 2.",
+    "Backend-generated text with a clock time is 24-hour with the fire's zone ('Jan 07, 18:18 MST'), so Public shows those few baked strings in 24-hour form.",
+    "NWCG agency-code terms and wording are not yet verified (us-catalog task)."
+  ],
+  "notes_for_integrator": [
+    "Fold docs/redesign/contract3/*.md into CONTRACT section 14 as 'as built' sub-headings; apply us-pipeline's SPEC section 8 text.",
+    "Pass tf at every remaining cross-role call (14.9.6), make the shims' tf required, run node web/scripts/check-time-api.mjs web/src (must be 0), then delete the deprecated Pacific time API (14.9.3).",
+    "Make IncidentSummary uid, record_source, record_issuer, state, time_zone and IncidentListResponse.sources required in web/src/api/types.ts; update fixtures (summaryFixture()).",
+    "Carry-over: web/src/data/rasters.test.ts tests (useRasterSet reload on key change, one layer above the 256 MiB cap stays cached, two names sharing one URL keep their names) if us-web left them below its cut line; also W11 windowing and W15 phone fixes if left; W16 comment clean-up if time allows.",
+    "README.md rows come from CONTRACT 14.13 (final verification)."
+  ]
+}

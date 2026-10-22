@@ -2217,8 +2217,9 @@ vendor evacuation systems (out of scope).
 - Accuracy: 14.4. Untested: "Accuracy not yet tested here." Always: "Outside the modeled area is unknown, not low."
 - National list down: "The national fire list (NIFC) is unavailable right now; only California fires (CAL FIRE) are
   listed." CAL FIRE down: "CAL FIRE's list is unavailable right now; California fires are listed from NIFC WFIGS."
-- Standing: "Experimental model output, not evacuation advice. Follow local officials." (unchanged); never "safe" or
-  "low risk"; absence of official information is never an all-clear.
+- Standing (unchanged, `lib/plainLanguage.ts`): "Experimental model output, not an official forecast or evacuation
+  instruction. Follow local officials."; never "safe" or "low risk"; absence of official information is never an
+  all-clear.
 
 ### 14.15 As-built notes
 
