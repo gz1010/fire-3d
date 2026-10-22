@@ -1,0 +1,44 @@
+{
+ "summary": "Audit A4 (validation outside California) written to docs/redesign/audit-3/validation.md (about 270 lines). Fires outside California cannot be built today: the CLI, catalog and pipeline know CAL FIRE incidents only. Four more blockers would make the scores wrong even after that is fixed. (1) Perimeters are filtered to US-CA. (2) The UTM zone is only 10 or 11: Table Rock SC would get scale 1.127, area x1.27 and a 21.4 degree grid rotation. (3) 2024 fires get LF2024 fuels that already contain their own burn: 38-39 of 40 interior points changed, so LF2023 is needed. (4) The California live-fuel-moisture month table makes Windy Deuce's dormant February grass and Table Rock's March fuels 1.20/1.20 (green). Proposed: 10 primary fires, 2 per region for the Northwest, Northern Rockies, Great Basin and Southwest and 1 each for the Southern Plains and Southeast. Also proposed: 2 stretch fires (Rush OK, Black Cove NC) so every region can show a number if the user allows 12, and 5 reserves. Each fire has a proposed id, IrwinID, UniqueFireIdentifier, point and pre-registered UTC hindcast starts. Every primary fire was checked: 12-35 WFIGS polygon times, 280-1,955 quality VIIRS NOAA-20 detections in its main 5 days, 120/120 archived HRRR hours and the AOI size. Defined: a per-region accuracy label (GACC regions with the Southern Area split TX/OK vs the rest; mean of per-fire mean growth Sorensen of the 31-member p50, leads 12-72 h; a number only with at least 2 fires and 16 leads), plain-language wording for each case and a JSON data file shape.",
+ "files": [
+  "docs/redesign/audit-3/validation.md",
+  "docs/redesign/progress/brief3-audit-validation.md",
+  "docs/redesign/reports/brief3-audit-validation.json"
+ ],
+ "verification": [
+  "Gates not run: this role changes no code (orchestrator instruction).",
+  "WFIGS_Daily_Perimeters_Public: lists via outStatistics grouped by attr_IrwinID/poly_IncidentName/attr_POOState for 2024 and 2025, by state and by attr_GACC. Per-fire detail by attr_IrwinID gave records / distinct polygon times / days, e.g. Emigrant 46/26/24, Island Creek 53/35/35, Windy Deuce 17/12/8, Table Rock 23/22/10, Windmill 26/1/1, Johnson FL 26/1/1 (2026-10-22 21:05-21:20Z).",
+  "WFIGS_Incident_Locations: IrwinID IN (17 ids) returned 17 records (UFI, discovery, containment, size, GACC, point).",
+  "FIRMS fetch_area VIIRS_NOAA20_SP, one 5-day request per fire (counts only; key never printed), 21:24-21:35Z: Emigrant 1,955/16 scan times, Lower Sugarloaf 1,048/16, Island Creek 1,205/16, Horse Gulch 280/11, France Canyon 1,034/13, Cottonwood Peak 1,203/16, Trout 1,097/12, Greer 611/12, Windy Deuce 309/8, Table Rock 375/9, Rush 416/10, Black Cove 156/9, Johnson FL 0/0.",
+  "Open-Meteo historical-forecast gfs_hrrr+gfs_seamless, one point and 5 days per fire: 120/120 complete HRRR hours for all 18 fires checked. Daly failed twice with 429 and once with a cached HTTP-200 error body, which I evicted.",
+  "ERA5 water-year precipitation through sources.weather.water_year_precip plus moisture.live_fuel_moisture: Windy Deuce P=206 mm gives herb/woody 1.20/1.20; Table Rock P=459 mm gives 1.20/1.20; Trout, Greer and France Canyon give 0.60/1.00; the PNW/NR/GB fires give 0.30/0.70.",
+  "LANDFIRE getSamples at 40 interior points: Horse Gulch FBFM40 LF2023 vs LF2024 differs at 38/40 (canopy 8% to 3%); Windy Deuce differs at 39/40; Emigrant LF2024 vs LF2025 differs at 39/40 (canopy 52% to 38%). All LF2023 *_CONUS services exist.",
+  "pyproj get_factors in EPSG:32611 (what grid.utm_epsg_for picks): Trout 1.008/4.8 deg, Windy Deuce 1.023/9.0 deg, Table Rock 1.127/21.4 deg, Black Cove 1.129/21.8 deg.",
+  "GACC: the 3 California validation fires are all OSCC (WFIGS attr_GACC); DMP_NationalGACCBoundaries_Public lists 10 GACCs and has no licence text.",
+  "No bundle builds, no servers, no non-GET requests."
+ ],
+ "screenshots": [],
+ "contract_deviations": [],
+ "known_issues": [
+  "Open-Meteo rate-limited the shared cloud egress (429s), and once answered HTTP 200 with an error body that fire3d.http caches for 30 days. Validation builds may silently fall back to ERA5 (G10/R7).",
+  "Daly (reserve): HRRR availability not confirmed because of the 429s. HRRR has been archived since 2018-01-01 per the Open-Meteo docs.",
+  "LANDFIRE terms were not re-checked (an existing source). The GACC boundary layer states no licence; its NIFC Open Data item must be checked before bundling it (recommended path: use WFIGS attr_GACC, an existing source).",
+  "The NFDRS 2016 GSI live-fuel-moisture recommendation (R5) is from knowledge of the method; its parameters must be verified against the NFDRS documentation by the implementing role.",
+  "Fire-to-fire spread makes 2-fire regional numbers rough; the label shows the range across fires and the number of fires."
+ ],
+ "notes_for_integrator": [
+  "P0 R1 (backend pipeline role): build a past national fire by IRWIN id. Take the summary from WFIGS_Incident_Locations (IrwinID, IncidentName, POOState, FireDiscoveryDateTime, ContainmentDateTime, IncidentSize, geometry). Use the id {UTC year}-{slug(IncidentName)}-{IrwinID hex[:6]} with the SPEC 4.4 regex. Change catalog.get_summary (catalog.py:317-354), cli.resolve_incident (cli.py:75-109), pipeline.build_incident (pipeline.py:466-469) and is_catalog_incident/spec_incident_id (pipeline.py:71-91). 2024 fires are needed (HISTORICAL_YEAR=2025, catalog.py:39).",
+  "P0 R2: sources/perimeters.py:80 STATE='US-CA' (used at :181,:326,:538). Query by attr_IrwinID='{...}' OR poly_IRWINID when the IRWIN id is known; otherwise use the fire's own POOState. Keep the oversize check.",
+  "P0 R3: grid.py:59-61 utm_epsg_for. Use the zone floor((lon+180)/6)+1 and EPSG 32600+zone; update SPEC 4.1 (SPEC.md:119-120). The web reads manifest.grid.utm_zone generically, but its tests cover only zones 10 and 11.",
+  "P0 R4: sources/landfire.py:34 EDITIONS add 'LF2023'. edition_for (:55-57): historical = LF{federal FY of ignition - 1} clamped to LF2023..LF2025 (FY starts Oct 1; e.g. Jul 2024 gives LF2023, Aug 2025 gives LF2024). Also update pipeline.py:568 fuels_edition and SPEC.md:63,494.",
+  "P0 R5: outside California, replace the CA month table (config.py:163-180, moisture.py:109-125, ensemble.py:307, behavior.py:246) with a location-independent method, e.g. NFDRS 2016 GSI from daily Tmin, VPD and day length via ERA5 (already fetched). Keep the CA table and drought rule for ONCC/OSCC so the California 32-lead result is unchanged. Otherwise Southern Plains, Southeast and Southwest scores measure a wrong fuel state.",
+  "P0 R9 (validation role): add 'validate regional' (per-fire and per-region aggregation, JSON writer, tests). Accept UTC start lists, or convert the pre-registered UTC starts in audit-3/validation.md section 3 to offsets from manifest ignition.t_ms.",
+  "Planner, CONTRACT section 14: define backend/fire3d/data/regional_accuracy.json (shape in audit-3/validation.md section 5), an endpoint such as GET /api/accuracy-regions, and IncidentSummary fields irwin_id, unique_fire_id, state, gacc, accuracy_region and time_zone (SPEC, contracts.py and web/src/api/types.ts together). Region ids: NWCC, NRCC, GBCC, SWCC, SACC-SP (TX, OK), SACC-SE, RMCC, EACC, ONCC, OSCC. Keep the wording templates in web/src/lib/plainLanguage.ts.",
+  "P1 R6: one shared local-time helper (IANA zone from the location) replacing America/Los_Angeles in ensemble.py:70,307, behavior.py:32,246, weather_bundle.py:520-525, observed.py:89,200-201 and overpass.py:50,115.",
+  "P1 R7: sources/weather.py:371-376. On an unparsable or invalid Open-Meteo body, call http.evict_cache(GET, url, params) as firms.py does; consider a longer 429 backoff. The validation role must check each bundle's weather source for ERA5 fill.",
+  "P1 R8: build/observed.py issuer text 'CAL FIRE point/start/acres' (:21-25,122,742,785,1326-1373,2113-2118) must name the real issuer for WFIGS fires.",
+  "P2 R11: firms.py:632-716 keyless fallback is cut to CA_BBOX. Outside California, warn clearly that the key is required (or use a national bbox).",
+  "User questions (audit section 7): 10 vs 12 fires; whether to label Rocky Mountain, Eastern and Northern California as 'not yet tested' or add fires there; whether Public shows the number.",
+  "Commit messages for this role ended with the requested Co-Authored-By and Claude-Session lines; nothing was pushed."
+ ]
+}
