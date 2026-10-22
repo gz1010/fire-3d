@@ -23,9 +23,9 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
   (c) two layer names sharing one URL each keep their own name. (minor, from the restore skeptic)
 - Baseline counts after restore: see "Gates" below.
 
-## User questions (batch after the audits)
-- From A3 evacuations §6: Q1 IPAWS registration, Q2 Washington daily layer, Q3 Florida county status,
-  Q4 archived official messages for past dates, Q5 county feeds.
+## User questions
+- Asked and answered 2026-10-22 ~21:50 UTC (8 questions from the four audits); recorded in BRIEF-3.md
+  "Decisions round 2", with the defaults taken. Validation is now 12 fires (task D).
 
 ## Gates
 - After restore (2026-10-22): backend 585 passed (your Mac ~605: test_official_real_bundles and test_endpoint_contracts run once per bundle in data/incidents; the cloud has 4 bundles); web 56 files, 694 passed + 2 skipped; typecheck 0; lint 55 warnings, all in src/scene; build OK.
