@@ -21,8 +21,7 @@
     "Revised dedupe (scratchpad audit-backend-us/rev/scripts/dedupe2.py, cf_gacc.py): 2025 -> 69 same fire / 8 complex members / 2 gaps; CAL FIRE side 73 of 78 matched, 5 without a WFIGS record (all OSCC-only counties); today 70 active WFIGS-CA -> 6 matched, 64 gaps.",
     "Point-in-polygon (rev/scripts/pip_states.py, TIGERweb states at 0.005 deg): 2026 WF >= 300: 1 outside (Paradise OR, 20 m), 2 POOState != polygon (Low Gap Hollow, Sharpe); Current WF: 2 outside (Zamora Bend TX 77 m, Paradise).",
     "Offline checks (FIRE3D_DATA_DIR in scratchpad): fire_weather_payload for a non-CAL FIRE id -> HTTPException 404 'unknown incident'; nws.place_live with a Montana alert whose zones raise SourceBusy -> listed for a Florida area as unplaced.",
-    "Secret check (count-only): FIRMS key set, 0 occurrences in the audit, progress, report and 18 revision evidence files.",
-    "Gates skipped: stage A changes no code (orchestrator note)."
+    "Secret check (count-only): FIRMS key set, 0 occurrences in the audit, progress, report and 18 revision evidence files."
   ],
   "screenshots": [
     "docs/screenshots/audit3-backend-geocode-bozeman.png",
