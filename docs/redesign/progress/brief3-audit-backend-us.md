@@ -1,18 +1,21 @@
 # brief3 audit-backend-us progress
 
 ## Done
-- (2026-10-22) read brief 3, CLAUDE.md, evacuations audit; read backend CA assumptions (catalog, calfire,
-  calfire_history, perimeters, firms, grid, nws, official, live, extras, geocode, aoi, landfire, weather, spread tz uses)
-- live checks (log in scratchpad out/evidence.log): WFIGS YTD/current/all-years counts, CAL FIRE dedupe, perimeters
-  coverage, NWS national, IEM OK/AZ, FIRMS 7d national + area API Oregon, NAIP MT/FL, LANDFIRE LF2024/LF2025/FA26,
-  3DEP OK, Open-Meteo hist+ensemble, Open-Meteo terms, LANDFIRE LF2025 schedule.
-- Key numbers: 2026 WF>=300 L48 = 1178 (CA 69); 2025 = 861 (CA 79); active now 241 (63 >10 ac); LF2025 NoData in OK/FL.
+- (2026-10-22) read brief 3, CLAUDE.md, evacuations/web/validation audits; read backend CA assumptions.
+- 45 polite live GETs (log summarized in audit-3/backend.md section 7; raw log in the session scratchpad).
+- Local API on 8711 (FIRE3D_LIVE=0): 11 GETs, 0 non-GET; 2 screenshots; API stopped.
+- Wrote docs/redesign/audit-3/backend.md; report docs/redesign/reports/brief3-audit-backend-us.json.
 
 ## Next
-- time zone + state boundary source checks (BTS NTAD, Census cb), gazetteer national sizes; write audit-3/backend.md;
-  report JSON; commit.
+- none (stage A complete); planner consumes R1-R21 and Q1-Q5.
 
 ## Decisions
-- No code changes (stage A). Gates skipped (no code).
+- No code changes (stage A); gates skipped (no code).
+- Contract field names aligned with web.md 3.4 (`time_zone`, `record_source`, `uid`) and validation.md 5 (`gacc`,
+  `accuracy_region`).
+- Time zone: BTS NTAD polygons (public domain) + Arizona/Navajo/Hopi rule, not NWS /points.
 
 ## Open problems
+- Navajo/Hopi AIANNH polygons not fetched (size unverified, expected small).
+- Open-Meteo per-location counting of multi-point requests unclear on its pricing page; budget conservatively.
+- LF2025 SC/SE/NC/NE release date (Nov 2026 per landfire.gov) may move.

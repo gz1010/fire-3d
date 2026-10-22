@@ -1,0 +1,41 @@
+{
+  "role": "audit-backend-us",
+  "stage": "A (read-only audit)",
+  "summary": "Audited every California-specific assumption in backend/ and SPEC.md that blocks lower-48 coverage and designed the generalization (docs/redesign/audit-3/backend.md, 273 lines). NIFC WFIGS works as the national incident list: 1,178 lower-48 wildfires >= 300 ac in 2026 (CA 69), 861 in 2025 (CA 79; CAL FIRE lists 78), 241 active now (63 > 10 ac, 109 <= 1 ac, 45 without size); AK/HI excluded by POOState plus point-in-state. NIFC's own 'Current' layer encodes the active rule (not contained/controlled/out, fall-off after 3/8/14 days without edits). CAL FIRE UniqueId is not the IRWIN id (0/79), so CA dedupe is by name/space/time (68/78 matched); recommendation: CAL FIRE stays the CA record, WFIGS adds unmatched CA fires (e.g. Timber, USFS, 25,350 ac, active, not on CAL FIRE's list). Eight BLOCKERs found: CAL FIRE-only catalog; FIRMS feeds and yearly archive cut to the CA box (non-CA live fires never refresh or auto-build; keyless historical builds get no archive rows); NWS live alerts area=CA (a Montana fire's card reports none while 3 RFWs were active in MT/WY); UTM zones 10/11 only (16 % scale error in Florida); Pacific time baked into bundle text and the fuel-moisture month; LANDFIRE LF2025 NoData in SC/SE/NC/NE until its November 2026 release, with partly covered AOIs silently turned non-burnable; perimeters filtered to US-CA; ids and build gate tied to calfire_uid. Time zone and state are computable offline from public-domain files (BTS NTAD Time Zones 111 KB + Arizona/Navajo/Hopi rule; Census state polygons 310 KB / 93 KB gz); national gazetteer is 2.8 MB (0.9 MB gz). 21 recommended changes (12 P0) and 5 user questions. Contract field names aligned with audit-3/web.md 3.4 and audit-3/validation.md 5.",
+  "files": [
+    "docs/redesign/audit-3/backend.md",
+    "docs/screenshots/audit3-backend-geocode-bozeman.png",
+    "docs/screenshots/audit3-backend-fireweather-ca-only.png",
+    "docs/redesign/progress/brief3-audit-backend-us.md",
+    "docs/redesign/reports/brief3-audit-backend-us.json"
+  ],
+  "verification": [
+    "Gates skipped: stage A changes no code (orchestrator note).",
+    "45 polite GETs through fire3d.http (2026-10-22 21:30-21:45 UTC), all HTTP 200; summarized with URL, time, size and result in audit section 7. Sources: WFIGS Incident Locations Current/YTD/all-years, WFIGS Interagency Perimeters YTD, AGOL item 4181a117dc9e43db8598533e29972015 (terms, active rule), CAL FIRE 2025 and live lists, NWS alerts (no area and 49-code area) and /zones batch, IEM bypoint (OK, AZ), FIRMS 7d SNPP feed and area API (Oregon, key masked), NAIP identify (MT, FL), LANDFIRE LF2024/LF2025/FA26 identify (OK, FL) and metadata, 3DEP identify (OK), Open-Meteo historical-forecast (OK, FL) and ensemble (MT), BTS NTAD Time Zones, Census TIGERweb states, Census 2026 Gazetteer national place/ZCTA/county files. Web pages: landfire.gov/node/6129 (LF2025 schedule), open-meteo.com/en/terms and /en/pricing.",
+    "Counts: 2026 WF >= 300 ac lower 48 = 1,178 (CA 69); 2025 = 861 (CA 79); active (Current, WF, lower 48, % < 100 or null) = 241, > 10 ac = 63, > 100 ac = 44, >= 300 ac = 34, unknown size = 45; Aug 1 2026 open estimate 180 (>= 10 ac) / 68 (>= 300 ac); perimeters for 822/1,178 (SACC 48 %, Southeast 30 %).",
+    "CA dedupe: CAL FIRE 2025 >= 300 = 78 vs WFIGS-CA 79; 68 matched (62 by name, median 0.6 km); 0 IRWIN ids equal CAL FIRE UniqueId.",
+    "UTM scale error in zone 11 (pyproj get_factors): Colorado 1.013, Oklahoma 1.040, Florida 1.160, Maine 1.175.",
+    "Local API: FIRE3D_LIVE=0 uv run uvicorn fire3d.api.app:app --port 8711; 11 GETs (geocode x3, health x2, incidents, live/status, official/fire-weather x2, favicon x2), 0 non-GET; stopped, port 8711 free afterwards. Browser runs: 2 shot.mjs runs on JSON URLs, 0 non-GET, no Prepare analysis.",
+    "Secret check (count-only): FIRMS key set, 0 occurrences in the audit and progress files."
+  ],
+  "screenshots": [
+    "docs/screenshots/audit3-backend-geocode-bozeman.png",
+    "docs/screenshots/audit3-backend-fireweather-ca-only.png"
+  ],
+  "contract_deviations": [],
+  "known_issues": [
+    "Navajo Nation / Hopi Reservation polygons (Census AIANNH) not fetched; their size is assumed small.",
+    "Open-Meteo pricing page does not state how multi-location requests count; the budget in R13 is conservative.",
+    "LF2025 remaining GeoAreas are scheduled for November 2026 by landfire.gov; the date may move.",
+    "The Aug 1 active estimate is rough: 44 % of 2026 fires >= 300 ac lack a containment time.",
+    "ALERTWildfire/ALERTWest camera terms could not be found (Q5).",
+    "The audit is 273 lines, slightly over the 150-250 guide, because of the evidence table."
+  ],
+  "notes_for_integrator": [
+    "Planner: P0 set is R1-R10, R12 and R14 (with validation) in audit-3/backend.md section 4; user questions Q1-Q5 in section 6 (Q1 CA source, Q2 active threshold, Q3 complexes, Q4 auto-build caps, Q5 cameras).",
+    "Contract field names proposed for CONTRACT section 14 match audit-3/web.md 3.4 (state, time_zone, uid, record_source, record_agency, record_url; calfire_uid kept as a deprecated alias) plus irwin_id, gacc, accuracy_region (validation.md 5), source_name; LiveStatus.detections_24h; GET /api/geo/lookup; GET /api/official/incident-record.",
+    "FIRMS yearly cache must be renamed (firms_ca_{year}.parquet -> firms_us_{year}.parquet) so a CA-only cache is never reused for other states.",
+    "Existing CA ids and bundles (2025-eaton-fire-dbfa57, 2025-palisades-fire-abfed7, fixtures) keep resolving if CAL FIRE stays the CA record (Q1 b).",
+    "EV-R1 in audit-3/evacuations.md depends on R3's states_in_bbox."
+  ]
+}
