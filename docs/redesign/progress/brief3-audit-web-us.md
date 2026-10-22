@@ -1,20 +1,21 @@
 # brief3-audit-web-us progress
 
 ## Done
-- read brief 3, CONTRACT §13 (shell/map/location), evacuations audit
-- grep counts: 418 CA-specific lines in web/src non-test (scratchpad ca_src.txt)
-- servers up (API 8712 FIRE3D_LIVE=0, Vite 5182); 10 screenshots taken and viewed (overview, fire card, Boise location card, search Boise/83702, official panels)
-- found: phone search message hidden under map controls (audit3-web-search-zip-phone.png)
-
-- national density check: WFIGS count-only 2026 YTD WF>=300 ac = 1,204 (lower 48: 1,178; CA 69); 2025 = 984; 1,178 real points injected into the store -> audit3-web-national-1178-*.png
-- time: 214 formatting call sites in 43 files; laWallToMs hard-codes PDT/PST offsets (time.ts:183-195)
-- 0 non-GET requests in browser runs (API log: 105 GET)
+- Read brief 3, CONTRACT §13 (shell/map/location/integration), evacuations audit, brief-2 map report.
+- Greps: 418 CA-specific non-test lines in web/src (160 code, 197 comments, 61 fixture/dev); 214 time calls in 43 files.
+- Servers (API 8712 FIRE3D_LIVE=0, Vite 5182): 12 screenshots taken and viewed; 105 API requests, 0 non-GET; servers stopped.
+- WFIGS count-only: 2026 YTD WF >= 300 ac lower 48 = 1,178 (CA 69); 2025 = 984. 1,178 real points injected in the
+  browser store -> audit3-web-national-1178-*.png (phone blob).
+- Wrote docs/redesign/audit-3/web.md (265 lines), report docs/redesign/reports/brief3-audit-web-us.json; committed.
 
 ## Next
-- write docs/redesign/audit-3/web.md, report JSON, commit; kill servers
+- none (stage A done for this role)
 
 ## Decisions
 - Stage A is read-only: no code changes, gates skipped.
+- Recommended: one tz-parameterised formatter in lib/time.ts (tz required), backend time_zone/state fields,
+  two clustered MapLibre sources (active/other), list "in this view" with windowing.
 
 ## Open problems
-- none yet
+- Questions Q1-Q5 for the user (clock style, active clusters, list scope, phone view, cameras).
+- laWallToMs hard-codes PDT/PST offsets: a TZ swap alone breaks ticks.

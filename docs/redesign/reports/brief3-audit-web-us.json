@@ -1,0 +1,61 @@
+{
+  "summary": "Stage A web audit for brief 3 (lower 48), read-only. The web app is California-shaped in five places: overview frame/wording, time zone, fire-record source (CAL FIRE), search (California Gazetteer) and official panels (Cal OES, NWS 'in California'). Biggest blockers: (1) every time is Pacific via lib/time.ts TZ (214 call sites, 43 files) and laWallToMs hard-codes PDT/PST offsets, so swapping the constant breaks timeline/chart ticks; no state or time_zone in any web type; (2) no clustering: 1,178 real 2026 lower-48 WFIGS fires (>=300 ac) injected into today's overview give one blob on phones and ~40 colliding labels on desktop; (3) CAL FIRE hard-wired as the only fire record issuer (89 code lines); (4) official panels outside CA say 'California only' or stay silent (NWS) and link Cal OES in Idaho. Proposed: one tz-parameterised formatter (tz required so typecheck finds every call; CA output identical), backend time_zone/state/record_* fields, two clustered MapLibre GeoJSON sources (active/other; built in, no dependency), cluster click capped at z8 below FOCUS_IN_ZOOM, zoom-stepped labels, list 'in this view' with windowing, national search parsing, AK/HI 'not supported yet', UTM tests for zones 10-19. 418 CA-specific non-test lines counted (160 code, 197 comments, 61 fixture/dev). 5 user questions with recommendations.",
+  "files": [
+    "docs/redesign/audit-3/web.md",
+    "docs/redesign/progress/brief3-audit-web-us.md",
+    "docs/redesign/reports/brief3-audit-web-us.json",
+    "docs/screenshots/audit3-web-overview-desktop.png",
+    "docs/screenshots/audit3-web-overview-phone.png",
+    "docs/screenshots/audit3-web-firecard-desktop.png",
+    "docs/screenshots/audit3-web-firecard-phone.png",
+    "docs/screenshots/audit3-web-location-boise-desktop.png",
+    "docs/screenshots/audit3-web-location-boise-phone.png",
+    "docs/screenshots/audit3-web-search-boise-desktop.png",
+    "docs/screenshots/audit3-web-search-zip-phone.png",
+    "docs/screenshots/audit3-web-official-eaton-command-desktop.png",
+    "docs/screenshots/audit3-web-official-overview-phone.png",
+    "docs/screenshots/audit3-web-national-1178-desktop.png",
+    "docs/screenshots/audit3-web-national-1178-phone.png"
+  ],
+  "verification": [
+    "No code changed (stage A): gates (typecheck/lint/test/build, pytest) intentionally not run.",
+    "Servers: cd backend && FIRE3D_LIVE=0 uv run uvicorn fire3d.api.app:app --port 8712; cd web && VITE_API_TARGET=http://localhost:8712 PORT=5182 npm run dev -- --port 5182 --strictPort; both stopped afterwards (ports free).",
+    "Browser runs: API access log 105 requests, all GET, 0 non-GET; 'Prepare analysis' never pressed; no fire built.",
+    "Screenshots: node scripts/shot.mjs <url> <out> --wait 10000-15000 --backend swiftshader --w 1440 --h 900 / --w 390 --h 844; 12 PNGs, each viewed; 0 page errors.",
+    "grep -rnE 'California|CAL FIRE|CALFIRE|Cal ?OES|CalOES|Pacific|America/Los_Angeles|Los_Angeles|\\bPDT\\b|\\bPST\\b|\\bPT\\b' web/src: 581 lines (418 non-test: 160 code, 197 comment, 61 fixture/dev; 163 in 19 test files).",
+    "Time call sites: grep of fmtDateTime|fmtTime|tzLabel|laParts|startOfLaDay|laWallTicks|laDayTicks|fmtDate|... outside lib/time.ts and tests: 214 calls in 43 files.",
+    "WFIGS count-only (6 polite GETs): YearToDate WF>=300 ac: 1,204 total, 1,109 outside AK/HI/CA, 69 CA; top states OK 135, TX 119, FL 105, OR 85, ID 84; 2025 (WFIGS_Incident_Locations by discovery date): 984; 1,178 lower-48 points fetched to scratchpad and injected into useStore.catalog.season in the browser only.",
+    "One indicative sample (software rendering, not a frame rate): setState of 1,262-row season list to next frame = 424 ms on desktop; frame-rate numbers are not meaningful without a GPU.",
+    "Node 22 Intl en-US zone abbreviations verified for 12 lower-48 IANA zones (PDT/PST, MDT/MST, MST Phoenix, CDT/CST, EDT/EST) and longGeneric 'Mountain Time'.",
+    "Secret check: count-only grep for the key name in API/Vite logs = 0."
+  ],
+  "screenshots": [
+    "docs/screenshots/audit3-web-overview-desktop.png",
+    "docs/screenshots/audit3-web-overview-phone.png",
+    "docs/screenshots/audit3-web-firecard-desktop.png",
+    "docs/screenshots/audit3-web-firecard-phone.png",
+    "docs/screenshots/audit3-web-location-boise-desktop.png",
+    "docs/screenshots/audit3-web-location-boise-phone.png",
+    "docs/screenshots/audit3-web-search-boise-desktop.png",
+    "docs/screenshots/audit3-web-search-zip-phone.png",
+    "docs/screenshots/audit3-web-official-eaton-command-desktop.png",
+    "docs/screenshots/audit3-web-official-overview-phone.png",
+    "docs/screenshots/audit3-web-national-1178-desktop.png",
+    "docs/screenshots/audit3-web-national-1178-phone.png"
+  ],
+  "contract_deviations": [],
+  "known_issues": [
+    "Stage A audit only; nothing fixed.",
+    "Overview list render timing (424 ms) is a single sample in a software-rendered sandbox; indicative only.",
+    "WFIGS 2025 count (984) uses the all-years layer filtered by discovery date; final sizes may differ from the backend's chosen source.",
+    "Pre-existing phone bugs seen in evidence: map controls row covers the search message (audit3-web-search-zip-phone.png); opening the overview list sheet refits the map so fires sit behind the sheet (audit3-web-official-overview-phone.png).",
+    "Backend-baked Pacific strings (build/observed.py:200 etc.) are outside web scope; flagged for the backend audit."
+  ],
+  "notes_for_integrator": [
+    "Planner: CONTRACT §14 should add IncidentSummary.state (USPS), time_zone (IANA), record_source/record_agency/record_url, uid (calfire_uid kept as deprecated alias), manifest.time_zone/state, time_zone + states[] on official/extras envelopes, live status detections_24h (keep detections_24h_ca one release); SPEC §4.2 to 'each fire's local time with its zone abbreviation'. Keep existing California ids (e.g. 2025-eaton-fire-dbfa57) resolving.",
+    "Time formatter: make tz a required parameter in lib/time.ts so typecheck enumerates all 214 call sites; replace laWallToMs's fixed 420/480-minute candidates with a generic offset search; CA fires pass America/Los_Angeles so all CA strings/tests stay identical.",
+    "Clustering: two clustered GeoJSON sources (active/other); hidden fires (replay, open fire) must be removed from the data before setData because layer filters do not change cluster counts; cap cluster-click zoom at 8 (< FOCUS_IN_ZOOM 8.5).",
+    "Cross-references: evacuations.md G1-G4/R1/R3/R5 (Cal OES wording, not-available state, time basis); validation audit for the per-region accuracy label field (W13); backend audit for the national fire source, Gazetteer and time_zone derivation (NWS /points timeZone or county-FIPS table).",
+    "User questions to batch: Q1 clock style (rec: 12-hour Public, 24-hour Command/Forensic), Q2 active fires cluster separately (rec), Q3 list 'in this view' (rec), Q4 phone opening view whole lower 48 (rec), Q5 cameras CA-only now (rec)."
+  ]
+}
