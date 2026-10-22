@@ -29,3 +29,12 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
 
 ## Gates
 - After restore (2026-10-22): backend 585 passed (your Mac ~605: test_official_real_bundles and test_endpoint_contracts run once per bundle in data/incidents; the cloud has 4 bundles); web 56 files, 694 passed + 2 skipped; typecheck 0; lint 55 warnings, all in src/scene; build OK.
+
+## Risks
+- **Open-Meteo daily cap on the shared cloud egress (found 2026-10-22).** Archive (ERA5) and historical-forecast
+  (HRRR) answered `429 Daily API request limit exceeded. Please try again tomorrow.` at 22:21 UTC; the live
+  forecast API still answered. Builds at 20:40 worked. Our own use is small (Eaton + Palisades: 32 cached
+  Open-Meteo requests), so other cloud users sharing the IP exhaust the 10,000/day cap. Plan: the pipeline role
+  makes daily-limit refusals explicit (no silent ERA5 fill, no cached error bodies, a quota probe, `--require-hrrr`);
+  smoke and validation builds run after a quota probe succeeds; if the cap blocks validation for long, consider a
+  NOAA HRRR (AWS Open Data) fallback or finishing validation on the user's Mac.
