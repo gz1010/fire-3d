@@ -41,4 +41,19 @@ Done so far (evidence in the session scratchpad audit-evacuations/):
 - AZ: Emergency_Evacuation_Zones_View_Only is a view of Arizona_Evacuation_Zones (same edits/counts); no data edit
   after 2026-02-12 while Coconino/Cochise sent 7 fire IPAWS messages in 2026; July export all 'None'.
 - IPAWS page: no MOA (remove the remark).
-Next: per-state web searches (log them), Reno screenshot, rewrite the audit, report JSON, commit.
+- Per-state web searches: 44 states logged (scratchpad audit-evacuations/websearch_log.md); ND firemonitor has no
+  evacuations; AZ DEMA layer not edited in the 2026 season.
+- Border check: offline web-model run (scratch vitest) instead of a browser run, because ports 8714/5184 were held by
+  another session's servers; 11 border places read "No evacuation order or warning listed here · Cal OES".
+- Rewrote docs/redesign/audit-3/evacuations.md (639 lines, section 11 = revision notes) and the report JSON
+  (new "revision" key).
+
+## Revision decisions
+- Questions: the round-2 answers are recorded; two remain open: Q-A Washington indemnity terms (default (c): built but
+  switched off), Q-B Oregon history for past dates (default (b): not now).
+- Verdicts: "blocked" merged into "none"; Florida partial but not shown (decision 6); Washington partial (Q-A).
+- Washington: TLS fix = host-scoped DigiCert intermediate (verification on); filter Active rows to the three levels.
+
+## Status
+- Revision done; committed (audit, progress, report). No servers started, no project code changed, gates not
+  required (stage A).

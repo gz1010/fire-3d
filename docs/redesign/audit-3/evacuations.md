@@ -1,447 +1,639 @@
 # Audit 3: official evacuation data for the lower 48 states
 
-Role `audit-evacuations` (brief 3, stage A). Research only: no project code changed, no servers started, no fire built.
-All requests were polite GETs (descriptive User-Agent, count-only or small queries) on **2026-10-22, 20:45-21:40 UTC**.
-The evidence log is in section 8.
+Role `audit-evacuations` (brief 3, stage A). Research only: no project code changed, no fire built, no browser run.
+First pass 2026-10-22, 20:45-21:40 UTC. Revision pass after an independent review, 22:00-22:40 UTC (section 11).
+All requests were polite GETs (descriptive User-Agent, count-only or small queries). The evidence log is section 10.
 
 ## 0. Summary
 
-- **One state has a usable statewide feed today: Oregon.** Oregon Department of Emergency Management (OEM) runs
-  "Evacuation Areas Public", a live statewide ArcGIS layer. It is fed by counties, Genasys Protect, Perimeter and
-  Clackamas/Deschutes integrations every 5-15 min, and its licence field says "Public".
-- **Two states are partial:**
-  - Washington: the State EOC aggregates county levels into one layer, but it is "updated daily", and its server's TLS
-    chain fails from this sandbox, so it is unverified.
-  - Florida: the state EOC (FDEM SERT) lists evacuation status per county, not per zone. It is hurricane-oriented and
-    every county reads "Not Reporting" today.
-- **The other 44 states have none** (43 "none", Utah "blocked"): no state-run, public, machine-readable feed of
-  current evacuation zones or orders. Some have only static hurricane "Know Your Zone" layers, dormant or stale layers, or per-incident
-  layers. County zones in much of the West live in Genasys Protect, a vendor system that needs agreements (blocked).
-- **The national channel that would cover most states is FEMA IPAWS:**
-  - Local officials' "Fire Warning" and "Evacuation Immediate" messages are archived by OpenFEMA: 1,213 fire-related
-    messages in 38 lower-48 states outside California, 2024 to Oct 21, 2026. About 84% carry a polygon.
-  - Live, they appear on the IPAWS public feed. It answers without a key, but FEMA asks consumers to register: that
-    is a user decision (question Q1).
-  - The NWS API relays only about 5% of them: only messages whose senders leave the NWS channel open.
-  - OpenFEMA's archive is published 24 h late, so it suits past dates only.
-- **Blocker in today's code:** outside California the backend still queries Cal OES. It answers `available` with zero
-  zones, and the UI then says "No orders or warnings are listed within 15 km of this fire … via Cal OES". For a fire in
-  Montana that reads as a check that never happened. It must become "not available in this state" (section 3, G1).
+- **The user's round-2 decisions (BRIEF-3, Oct 22) settle most of the first pass's questions.**
+  - FEMA IPAWS: no registration. Live, Fire-3d shows the local officials' messages the NWS relays. For past days it
+    uses FEMA's OpenFEMA archive, labelled as archived.
+  - Washington is the only partial state used, labelled "updated daily, may be out of date", and only if it loads
+    reliably. Florida is not shown ("not available in this state"). County feeds are out of scope.
+  - Two questions remain, both with a recommendation (section 8).
+- **Oregon: available.** OEM "Evacuation Areas Public" is a live statewide layer, empty off-season (count 0 at
+  22:34Z). Corrections from the revision:
+  - its whole terms basis is the one-word licence "Public";
+  - `last_edited_date` is an OEM recalculation time, not an issue time;
+  - half of the 2026 history rows have no fire name;
+  - a non-fire evacuation ("HWY 229 Landslide", hazard "Other", level 3) sat in the layer from July 1 to Aug 25, 2026.
+- **Washington: now read live.**
+  - Why it failed: the server sends only its own certificate, without DigiCert's intermediate, so Python fails on
+    any machine. Browsers often fill the gap themselves.
+  - With that public intermediate added for this one host (verification stays on), the layer reads: 583 rows, 73
+    "Active", but only 5 of those carry a level. The other 68 are automated rows with no level, and they must be
+    filtered out.
+  - Its licence also has an **indemnification ("hold harmless, defend, and indemnify")** clause and an "as-is"
+    clause. Only the user can accept those (question Q-A).
+- **Arizona: none, on firmer evidence.**
+  - DEMA's statewide zones are planning zones.
+  - Their data was last edited 2026-02-12, while Coconino and Cochise counties sent 7 fire alerts during the 2026
+    season.
+  - The 2026 "Emergency Evacuation Zones" items are views or exports of that same layer.
+- **The other 43 states: none.** 44 state searches are now logged, each naming the state agency checked.
+  "Blocked" is no longer a separate verdict: Utah is "none", with a note that its counties use Genasys.
+- **Blockers in today's code (California-only design):**
+  - G1: outside California the backend still queries Cal OES and answers `available` with zero zones.
+  - G2: the web treats a rectangle as California (lon -124.9..-113.8, lat 32.2..42.3). Points in Reno, Carson City,
+    Stateline and Las Vegas (NV), Klamath Falls, Ashland and Brookings (OR), Yuma, Lake Havasu City and Bullhead City
+    (AZ), and Tijuana (MX) therefore get a Cal OES point query. Each one reads "No evacuation order or warning listed
+    here · Cal OES, checked just now · not an all-clear". That is an implied check that never happened (offline run of
+    today's model, section 10).
+  - G11: `evac_status_key("No Evacuation Order")` returns `"order"`, and Washington's layer contains that wording.
 
 ## 1. What exists today (California only)
 
-Backend (`backend/fire3d/api/extras.py`, offline tests in `backend/tests/test_extras.py`):
-- Sources:
-  - `:69-71`: the Cal OES layer `CA_EVACUATIONS_CalOESHosted_view/FeatureServer/0` and the `County_Evacuation_Inventory_Public`.
-  - `:113-137`: their `SOURCES` metadata (name, publisher, url, licence, terms_url, attribution, disclaimer, cadence).
-  - `:83-84`: caching, 120 s for zones and 24 h for the inventory.
-  - `:271`: one rate limiter `UP_ARCGIS` ("Cal OES ArcGIS", 60/min).
-- `evac_status_key()` `:525-544` maps any wording to a styling key. It already understands "level 1/2/3", "go now",
-  "be set" and "be ready", so Oregon and Washington wording maps without change. The wording itself stays verbatim.
-- `normalize_zone()` `:553-582` reads these Cal OES fields: `STATUS`, `ZONE_ID`, `ZONE_NAME`, `COUNTY`, `CITY`,
-  `EVENT_TYPE`, `NOTES`, `CRITICAL_INFO`, `PUBLIC_INFO`, `EDIT_DATE` (issuer edit) and `EditDate` (Cal OES copy).
-- `_evac_zone_features()` `:604-620` caches per bbox and confirms a sudden drop in the count once, because of the
-  5-minute rebuild.
+Backend (`backend/fire3d/api/extras.py`; tests `backend/tests/test_extras.py`):
+- Layers `:69-71` (Cal OES `CA_EVACUATIONS_CalOESHosted_view/FeatureServer/0`, `County_Evacuation_Inventory_Public`),
+  `SOURCES` metadata `:113-137`, TTLs `:83-84` (zones 120 s, inventory 24 h), one limiter `UP_ARCGIS` "Cal OES ArcGIS"
+  60/min `:271`.
+- `evac_status_key()` `:525-544` (styling key; the wording stays verbatim). `normalize_zone()` `:553-582` reads the Cal
+  OES fields `STATUS, ZONE_ID, ZONE_NAME, COUNTY, CITY, EVENT_TYPE, NOTES, CRITICAL_INFO, PUBLIC_INFO, EDIT_DATE`
+  (issuer edit) and `EditDate` (Cal OES copy).
+- `_evac_zone_features()` `:604-620`: `outFields: "*"` at `:610`; a Cal OES-specific "confirm a drop" re-query after
+  `time.sleep(2.0)` at `:613-617`.
 - `evacuations_payload()` `:623-670`:
-  - a past time or a historical fire gives `not_available_for_past_dates` (`:628`);
-  - counties missing from the inventory give `unavailable`/`not_covered` (`:642`);
-  - no zones gives `available` + "No orders or warnings are listed here right now. That is not an all-clear" (`:668`).
-- Route: `GET /api/extras/evacuations` `:673`. Envelope and zone props are in CONTRACT §12.1. Terms are in §12.5, and
-  Genasys is blocked in §12.6.
+  - `issuing_authority` hard-coded with "Cal OES aggregates and does not verify" (`:625-626`);
+  - past time → `not_available_for_past_dates` (`:628`);
+  - inventory counties all missing → `unavailable`/`not_covered`, meaning "check the county's channels" (`:642-646`);
+  - the always-on caveat "During Cal OES's 5-minute rebuild…" (`:666`);
+  - no zones → `available` + "not an all-clear" (`:668`).
+- Envelope (CONTRACT §12.1): one `retrieved_ms` and one `source_updated_ms` per response; `reason_code` is
+  `past_date | upstream_error | not_covered` (also `contracts.py:450`, `web/src/extras/types.ts:6`).
+- NWS: `backend/fire3d/sources/nws.py:50` `FIRE_EVENTS` (Red Flag Warning, Fire Weather Watch only) and `area=CA` at
+  `:445`. backend.md R9 makes it national.
+- `fire3d/http.py:145-154`: one shared `httpx.Client` with default TLS verification (certifi, no fetching of missing
+  intermediates); `_transport` (`:142`) lets tests inject an `httpx.MockTransport`.
 
 Web:
-- Types:
-  - `web/src/extras/types.ts:23-39` `ExtrasEnvelope`;
-  - `:45-65` `EvacZoneProps`;
-  - `:75-91` `EvacCountyCoverage` / `EvacuationsResponse`.
-- `web/src/extras/ExtrasSync.tsx:61` fetches the incident query whatever the layer toggle says.
-- I5 brief-2 official shape: `web/src/official/model.ts`.
-  - `EvacuationOfficial` states are `listed | none-listed | not-checked | past-date | unavailable | loading`.
-  - `evacuationNow()` `:114`.
-  - `needsPointQuery()` `:158` and `insideCalifornia()` `:166`.
-  - `evacuationAtPointState()` `:195` returns "Cal OES lists evacuation zones in California only." outside California
-    (`:209`).
-- "Cal OES" is hard-coded in 83 lines across 19 web files. Among them:
-  - `extras/evacuation.ts` (15; `NOT_FIRE_SPECIFIC` `:263`, feed `source` `:410`);
-  - `official/model.ts` (19);
-  - `ui/feed/OfficialNow.tsx` (9, e.g. `:71` "via Cal OES", `:134`);
-  - `location/official.ts` (9, e.g. `:98`, `:154`);
-  - `ui/shell/dataStatus.ts` (6);
-  - `extras/credits.ts:17`.
-- NWS: `backend/fire3d/sources/nws.py:50` `FIRE_EVENTS` (Red Flag Warning, Fire Weather Watch only), and `:445`
-  `area=CA`. It is the natural home for national alert types (section 2.2).
+- Types `web/src/extras/types.ts` (`ExtrasEnvelope :23-39`, `EvacZoneProps :45-65`, `EvacuationsResponse :75-91`).
+  `ExtrasSync.tsx:61` fetches the incident query whatever the layer toggle says.
+- `official/model.ts`:
+  - `evacuationNow()` `:114-133` ("No orders or warnings are listed within 15 km … not an all-clear");
+  - `needsPointQuery()` `:158-163`, gated by **`insideCalifornia()` `:166-168`**, a rectangle;
+  - `evacuationAtPointState()` `:195-214` ("Cal OES lists evacuation zones in California only." `:209`, only outside
+    the rectangle);
+  - the same rectangle gates the statewide NWS answer (`:393`, `:425`; web.md G5/W7).
+- Location card `location/official.ts`: "No evacuation order or warning listed here · Cal OES · not an all-clear"
+  (`:98`), "not checked" (`:105`), a "Cal OES" link always (`:154`).
+- **"Cal OES" in non-test `web/src`** (regex `cal ?oes|CAL_OES|caloes`): 85 lines in 19 files. Line numbers:
+  - `official/model.ts` 30,32,36,40,50,52,54,68,103,104,106,116,128,165,187,196,199,209,213;
+  - `extras/evacuation.ts` 214,232,243,262,263 (`NOT_FIRE_SPECIFIC`),301,305,328,337,345,347,359,361,396,409,410;
+  - `ui/feed/OfficialNow.tsx` 4,71 ("via Cal OES"),95,102,134,157,158,171,176;
+  - `location/official.ts` 5,58,73,76,78,79,98,105,154; `ui/shell/dataStatus.ts` 8,130,142,148,155,160;
+  - `extras/credits.ts` 13,16,17 (evacuations) and 20,24,25 (cameras); `extras/EvacuationPanel.tsx` 2,43,45;
+  - `extras/types.ts` 62,81; `official/hooks.ts` 4,69; `official/mapLayer.ts` 4,40;
+  - one each in `ui/shell/officialSummary.ts:28`, `ui/shell/LayersPanel.tsx:45`, `ui/feed/types.ts:95`,
+    `official/fire.ts:4`, `map/mapController.ts:1343`, `extras/hooks.ts:13`, `styles/map-tokens.css:64` (comment);
+  - camera-only lines stay California-only (backend R16, web W10): `extras/cameras.ts` 2,226,235,236,
+    `extras/CameraPanel.tsx:54`, `credits.ts` 20-25.
+  - Tests and fixtures: 57 lines in 13 files:
+    - `extras/__fixtures__/samples.ts` 19, `location/official.test.ts` 13, `extras/evacuation.test.ts` 7;
+    - `ui/shell/dataStatus.test.ts` 3, `extras/credits.test.ts` 3;
+    - 2 each: `official/model.test.ts`, `extras/runtime.test.ts`, `extras/format.test.ts`, `extras/cameras.test.ts`;
+    - 1 each: `ui/feed/feedModel.test.ts`, `official/select.test.ts`, `official/mapLayer.test.ts`, `map/focus.test.ts`.
 
 ## 2. Findings
 
 ### 2.1 State feeds that exist
 
-**Oregon: available.** OEM, "Evacuation Areas Public".
-- Item `dd2bee51e3004dc4b1004df34fbd9e29`, owner `Oregon_OEM`; `accessInformation` "Oregon Department of Emergency
-  Management"; `licenseInfo` "Public".
+**Oregon: available.** Oregon Department of Emergency Management (OEM), "Evacuation Areas Public".
+- Item `dd2bee51e3004dc4b1004df34fbd9e29`, owner `Oregon_OEM`, modified 2026-08-05.
 - Service: `https://services.arcgis.com/uUvqNMGPm7axC2dD/arcgis/rest/services/Fire_Evacuation_Areas_Public/FeatureServer/0`
-  (polygons, maxRecordCount 1000).
+  (polygons, maxRecordCount 1000). It is also published as KML (`1559623319d74687a7a5c72f4643dd24`) and WFS
+  (`b43c89ad020c4fd7b65121a3dc2299d9`).
+- **Terms basis (all of it):**
+  - `licenseInfo` "Public" and `accessInformation` "Oregon Department of Emergency Management" on all three items;
+  - the OEM StoryMap "Evacuation Layer Initiative Overview" (`7b0a65738c1447dbbac2f46820a422bf`, licence "Public")
+    states the "need and desire to share information to the public";
+  - no disclaimer or redistribution text was found, on the items, the StoryMap or by web search (section 10).
+  - This is acceptable by analogy with the Cal OES item ("Public Use"). Credit: "Oregon Department of Emergency
+    Management". CONTRACT §12.5 must say "licence field 'Public'; no further terms published (checked 2026-10-22)".
 - Description (quoted): "Statewide evacuation layer - showing current evacuations issued across Oregon. Data is
-  entered by local/tribal/state GIS staff … Data updated as information is entered into the hosted feature service."
-- Integrations: Clackamas and Deschutes "updates every 5 minutes"; Genasys "for zones not in a normal status, updates
-  every 5 minutes"; Perimeter (synced); the OEM upload utility "updates every 15 minutes".
+  entered by local/tribal/state GIS staff …". Integrations:
+  - Clackamas and Deschutes, "updates every 5 minutes";
+  - Genasys "for zones not in a normal status, updates every 5 minutes";
+  - Perimeter (synced);
+  - the OEM upload utility, "every 15 minutes".
+  - Also: "Data calculations run every 15 minutes on this service".
 - Fields:
-  - `Fire_Evacuation_Level` (integer 1-3, no wording);
-  - `Fire_Name`, `Evac_Area_Name`, `County` (domain of 36 Oregon counties + "Del Norte", CA);
-  - `HazardType` (Earthquake, Fire, Flood, Tsunami, Nuclear, Other);
-  - `created_date`, `last_edited_date`;
-  - `StructuresWithin`, `AddressesWithin`, `PopulationWithin`;
-  - **`Editor_Name`, `Editor_Email`, `Editor_Phone`: personal data, never request them.**
-- Test: count 0 today. `dataLastEditDate` 2026-09-29T18:42Z, a minute after the history layer's last snapshot
-  (2026-09-29T18:41Z), so the season's last zones were most likely removed then.
-- Proof of use: OEM's "2026 Wildfire Evac History" holds 5.18 M snapshot rows from 2026-07-01 to 09-29, with 61
-  distinct fire names.
-- Level wording: from OEM's own definitions (press release, May 28, 2024,
-  `https://www.oregon.gov/oem/Documents/NR-052424-2024_Evacuation_Preparedness_Release_EN.pdf`):
-  - "Level one (green on a map) means BE READY to evacuate";
-  - "Level two (yellow on a map) means BE SET to evacuate";
-  - "Level three (red on a map) means GO NOW – Leave Immediately!".
-- Note: the item says "If there are no records in this dataset, there are no evacuations currently in place."
-  Fire-3d must **not** repeat that: absence is never an all-clear.
+  - `Fire_Evacuation_Level` (integer 1-3), `Fire_Name`, `Evac_Area_Name`, `County` (36 Oregon counties + "Del
+    Norte", CA), `HazardType` (Earthquake, Fire, Flood, Tsunami, Nuclear, Other), `created_date`,
+    `last_edited_date`, `StructuresWithin/AddressesWithin/PopulationWithin`;
+  - **personal or account data, never request: `Editor_Name`, `Editor_Email`, `Editor_Phone`, `created_user`,
+    `last_edited_user`.**
+- Today: count 0 (20:49Z and 22:34Z); `dataLastEditDate` 2026-09-29T18:42Z.
+- **History layer, for fixtures and for any later replay (Q-B):** "2026 Wildfire Evac History".
+  - Item `c8b3c502f58045269f32737fa8f5c025`, owner `Oregon_OEM`, `licenseInfo` empty.
+  - Service `https://services.arcgis.com/uUvqNMGPm7axC2dD/arcgis/rest/services/2026_Wildfire_Evac_History/FeatureServer/0`.
+  - Contents: 5,180,769 rows, one snapshot of the live layer every 5 minutes (field `Date`), 2026-07-01 to 09-29.
+  - Same fields as the live layer except `Editor_*`; `created_user` and `last_edited_user` are present.
+- What the history shows about the fields:
+  - **`last_edited_date` is not an issue time.** All 10 Fielders Mountain zones in the 12:01Z snapshot of 2026-08-15
+    read `last_edited_date` 12:00Z, which is OEM's 15-minute recalculation. `created_date` (2026-08-14 00:20-01:25Z)
+    is when the zone entered the state layer.
+  - `Fire_Name` is null in 2,630,502 of 5,180,769 rows (51%); in the 2026-08-15 12:01Z snapshot, 126 of 380 zones.
+  - `County` is null or empty in 101,432 rows (2%); "Del Norte" in 0 rows.
+  - The only non-fire hazard is "HWY 229 Landslide" (`HazardType` "Other", level 3, Lincoln County): created
+    2025-12-14, in the snapshots from 2026-07-01 to 08-25 (15,741 rows).
+  - `Evac_Area_Name` often carries Genasys zone ids ("US-OR-JAC-JAC-044").
+- Level wording, OEM press release of 2024-05-28
+  (`https://www.oregon.gov/oem/Documents/NR-052424-2024_Evacuation_Preparedness_Release_EN.pdf`): "Level one (green
+  on a map) means BE READY to evacuate"; "Level two (yellow on a map) means BE SET to evacuate"; "Level three (red on a
+  map) means GO NOW – Leave Immediately!".
+- Never repeat the item's "If there are no records in this dataset, there are no evacuations currently in place."
+  (also in the KML and WFS items): absence is never an all-clear.
 
-**Washington: partial, unverified.** WA State EOC (Military Dept / EMD), "Evacuation_Zone_Level".
-- Item `cee84395f08a4d32b2ae128e8f149cd3`, owner `waseocgis`.
-- Service: `https://wise.wamil.us/bmw/rest/services/Hosted/Evacuation_Zone_Level/FeatureServer/5`. The public viewer
-  map `834177125919449ba694c49518bc12e2` filters it with `status = 'Active'`.
-- Cadence: the description says "processed and updated daily". The snippet, by contrast, says "near-real-time".
-- Licence (quoted):
-  - "there may be a temporary lag between an official county-level evacuation order and the representation on this
-    layer";
-  - "Do not rely solely on this map layer for immediate life-safety decisions";
-  - "Users are permitted to view, request, share, and integrate this layer into public-facing applications, provided
-    that the data source is properly credited";
-  - required credit: "Washington State SEOC and Participating County Emergency Management Agencies";
+**Washington: partial; readable with a TLS fix; terms need the user (Q-A).** WA State EOC (Military Dept / EMD),
+"Evacuation_Zone_Level".
+- Item `cee84395f08a4d32b2ae128e8f149cd3`, owner `waseocgis`, modified 2026-08-17.
+- Service `https://wise.wamil.us/bmw/rest/services/Hosted/Evacuation_Zone_Level/FeatureServer/5` (polygons,
+  maxRecordCount 2000). Its capabilities include Create, Update and Delete: an editable layer.
+- **TLS root cause** (`openssl s_client` through the session proxy):
+  - wise.wamil.us presents one certificate (depth 0, "Military Department, Washington State", issuer "DigiCert Global
+    G2 TLS RSA SHA256 2020 CA1"; valid to **2026-11-26**), without the intermediate.
+  - services.arcgis.com presents leaf and intermediate from the same CA and verifies.
+  - The issuers are DigiCert's, not the proxy's, so this is the server's own chain. Python/httpx never fetches a
+    missing intermediate, so `fire3d.http` fails the same way on the user's machine. A browser loading the map proves
+    nothing.
+  - Fix, verification still on: add DigiCert's public intermediate
+    (`https://cacerts.digicert.com/DigiCertGlobalG2TLSRSASHA2562020CA1-1.crt`, valid to 2031-03-29, SHA-256
+    `C8:02:5F:9F:…:25:A9`) to the trust used for this one host. Tested: certifi alone gives
+    `CERTIFICATE_VERIFY_FAILED`; certifi plus the intermediate gives HTTP 200.
+- Live read (22:0x Z): 583 rows.
+  - By status and level: Inactive (L1 136, L2 138, L3 137, "Planning Zone" 39, **"No Evacuation Order" 5**); null or
+    empty status 55; **Active 73**.
+  - The Active rows are 5 with a level and 68 with `evactype` null. The 68 are Asotin 64 and Kittitas 4,
+    `data_source` "automated", aggregated from county layers `View_Evacuation_Zones` and `Active_Fire_Areas_View`.
+  - The 5 with a level: 4 manual "Hatch Grade" rows (Walla Walla, L3 ×3 and L2, `date_added` 2026-09-30T07:00Z =
+    local midnight, link `https://inciweb.wildfire.gov/`). News results could not confirm whether they are still in
+    force. One automated Chelan row, "Stehekin - Level 1 (Get Ready)", was added at 22:03Z.
+  - Newest `dateedited` 2026-10-22T22:03Z: automated rows are rewritten on each run, so `date_added` and
+    `dateedited` are compile times, not issue times. `level_{1,2,3}_active_date` was empty on all 73 Active rows.
+- Fields: `objectid, id, incidentna, evactype, county` ("Asotin_County"), `status, date_added, dateedited,
+  level_{1,2,3}_{active,inactive,reduction}_date, comments` ("Auto-aggregated from <county layer URL> on <time>"),
+  `incident_link, data_source`. There are no personal fields.
+- **Licence, full** (quoted from the item, 2026-10-22):
+  - "Operational Lag: … updated on a daily schedule, there may be a temporary lag between an official county-level
+    evacuation order and the representation on this layer."
+  - "Do not rely solely on this map layer for immediate life-safety decisions."
+  - "'As-Is' Provision: This data is provided 'as-is' without warranties of any kind …"
+  - **"Indemnification and Hold Harmless … By using this data, the user agrees to hold harmless, defend, and
+    indemnify the State of Washington, the State Emergency Operations Center (SEOC), participating Washington State
+    counties, and their respective officials, employees, and agents from any and all claims, demands, losses, or
+    liabilities arising from the use, misuse, or reliance upon this geospatial data."**
+  - "Freedom of Reuse: Users are permitted to view, request, share, and integrate this layer into public-facing
+    applications, provided that the data source is properly credited and not misrepresented."
+  - "Any public display … must provide visible attribution to the 'Washington State SEOC and Participating County
+    Emergency Management Agencies.'"
   - "No Endorsement".
-- Fields (from the state's viewer popup; the live service could not be read):
-  - `id`, `incidentna`, `evactype` ("Level 1 - Ready" | "Level 2 - Be Set" | "Level 3 - Go"), `county`, `status`
-    (Active | Inactive);
-  - `date_added`, `dateedited`;
-  - `level_{1,2,3}_active_date`, `level_{1,2,3}_inactive_date`, `level_{1,2,3}_reduction_date`;
-  - `comments`, `incident_link`.
-- Test: the TLS chain does not verify. curl gives error 60 "unable to get local issuer certificate", Python/httpx gives
-  `CERTIFICATE_VERIFY_FAILED`, and WebFetch gives 503 (twice). The same proxy verifies arcgis.com, so the server's
-  chain looks incomplete. Fire-3d must not disable TLS verification. It needs a check from the user's machine (Q2).
+  - The description adds: "Data is systematically compiled from multiple county websites, external web feeds, and
+    local public safety portals, then processed and updated daily".
 
-**Florida: partial (county-level, hurricane-oriented).** FDEM SERT, "SERT - Evacuations and Curfews".
-- Item `c64b6755aee247c8aef0f258e6d2dd52`. Service:
-  `https://services.arcgis.com/3wFbqsFPLeKqOlIK/arcgis/rest/services/SERT_EvacCurfew2026/FeatureServer/0`.
-- It is "WebEOC-connected" and tracks "evacuation, curfew, and reentry order status".
-- Fields:
-  - `agency` (county), `evacuation_status`;
-  - `evacuation_last_update`, a string such as "04/13/2026 10:05:54" with **no time zone** (Florida spans Eastern and
-    Central);
-  - `evacuation_info`, `evacuation_comments`, `url`, `incidentid`;
-  - personal or internal: `subscribername`, `positionid`, `Creator`, `Editor`.
-- Test: 87 rows, all `evacuation_status = "Not Reporting"`; last `EditDate` 2026-07-28.
-- Licence (quoted): "intended for informational use only … not authoritative for navigation, engineering, legal …
-  FDEM provides this data 'as is'".
-- The polygons are whole counties, not zones.
-- FDEM's "Know Your Zone" layer (`KYZ_ZL_Vector_Enriched_Calculated_20230608/FeatureServer/46`, 199 hurricane zones)
-  has a `STATUS` ("Current Evacuation Order") field. It is blank everywhere, and its `Edit_Date` is the string
-  "9/18/2015".
+**Florida: partial, but not shown (decision 6).** FDEM SERT "Evacuations and Curfews"
+(`SERT_EvacCurfew2026/FeatureServer/0`, item `c64b6755aee247c8aef0f258e6d2dd52`).
+- WebEOC county-level rows: 87, all `evacuation_status` "Not Reporting"; times without a zone.
+- Registry note only. If it is ever revisited: `evac_status_key` maps "Not Reporting", "Mandatory Evacuation" and
+  "Voluntary Evacuation" all to `other` (verified offline), and `other` is drawn (`web/src/extras/style.ts:26-31` hides
+  only `normal`/`training`). It would need its own mapping and a "Not Reporting" filter.
 
-### 2.2 National official channels (they carry local officials' messages, not zone maps)
+### 2.2 National official channels (local officials' messages, not zone maps)
 
-What such a message is:
-- an official alert written by a local authority (sheriff, county emergency management, a state on its behalf), sent
-  through FEMA IPAWS to phones (WEA), broadcasters (EAS), NOAA Weather Radio (via NWS) and the public feed;
-- often with a drawn polygon.
+They are official alerts written by local authorities and sent through FEMA IPAWS (WEA, EAS, NOAA Weather Radio, the
+public feed). They are not zone maps or complete order lists, and their absence is **not** an all-clear.
 
-What it is not:
-- an evacuation-zone map, a complete list of orders (many are given by text, phone, door-to-door or county websites
-  only), or anything Fire-3d wrote or checked;
-- its absence is **not** an all-clear.
+| Channel | Use (decision 5) | Terms (official page) | Latency, geometry | Fit |
+|---|---|---|---|---|
+| NWS API `api.weather.gov/alerts` (event types `Fire Warning`, `Evacuation Immediate`, `Civil Danger Warning`, `Civil Emergency Message`, `Shelter In Place Warning`, `Local Area Emergency`, `Law Enforcement Warning` exist in `/alerts/types`) | **Live** | Public domain (weather.gov/disclaimer, credited in `nws.py:76-78`); NWEMs are sent by "Federal, state, local, tribal and territorial public safety officials … through FEMA IPAWS" (weather.gov/dsb/nonweatheralerts) | Real time; `/alerts` keeps about 7 days. Both NWEMs seen this week had `geometry: null`, `affectedZones: []`, SAME codes only | **Thin:** only 122 of 2,233 FRW/EVI (2024-26) left the NWEM channel open (~5%) |
+| OpenFEMA "IPAWS Archived Alerts" v1 `fema.gov/api/open/v1/IpawsArchivedAlerts` | **Past days** | OpenFEMA terms (Jan 22, 2025): notice "This product uses the Federal Emergency Management Agency's OpenFEMA API, but is not endorsed by FEMA"; no FEMA/DHS logos. Dataset page: "published with a twenty-four (24) hour delay"; "FEMA does not validate the content of each message" | ~24 h (newest 2026-10-21T20:49Z at 21:00Z); full CAP, polygons in ~84% of fire FRW/EVI | All IPAWS messages, including the ~95% never relayed live. Nested filters are slow (15-60 s; one 503) |
+| IPAWS public feed (All-Hazards Information Feed) | **Not used** (no registration) | fema.gov page (updated June 9, 2026): "free of charge"; "Please register for an account on the IPAWS User Portal"; no advertising; "cannot stress IPAWS servers"; "active on the feed for 30 minutes or until they expire". No agreement or MOA is mentioned (re-checked) | Real time | – |
 
-| Channel | Terms (official page) | Latency | Geometry | Issuer fields | Fit |
-|---|---|---|---|---|---|
-| **IPAWS public feed** (All-Hazards Information Feed), `apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/<ISO time>` | fema.gov "IPAWS All-Hazards Information Feed" (updated June 9, 2026): "Access … is free of charge"; "Please register for an account on the IPAWS User Portal"; "Alerts cannot be used for advertising purposes"; "Providers cannot stress IPAWS servers with excessive requests". Search summaries also mention an MOA. | Real time; "Alerts are active on the feed for 30 minutes or until they expire" → Fire-3d must poll (≈60-120 s) and keep its own store | CAP `<polygon>` in ~84% of fire FRW/EVI; SAME county codes always | `senderName` (free text: "Oklahoma Emergency Management", "201057,Public - Chelan County, WA,CHELAN COUNTY", or a platform name "Public Alert System" in 18%); `sender` is an operator email/username: **never show** | Best coverage: 98% of 2024-26 FRW/EVI did not block the PUBLIC channel. Test: HTTP 200, 3 alerts, no key. Needs the user's decision (Q1) |
-| **NWS API** `api.weather.gov/alerts` (event types `Fire Warning`, `Evacuation Immediate`, `Civil Danger Warning`, `Civil Emergency Message`, `Shelter In Place Warning`, `Local Area Emergency`, `Law Enforcement Warning` exist in `/alerts/types`) | Public domain (weather.gov/disclaimer, already credited in `nws.py:76-78`); NWEMs are sent by "Federal, state, local, tribal and territorial public safety officials … through FEMA IPAWS" (weather.gov/dsb/nonweatheralerts) | Real time; history only about 7 days | None seen: both NWEMs this week had `geometry: null`, `affectedZones: []`, only SAME codes | `senderName` as IPAWS ("Public Alert System" for the LA County Bryson Fire CEM on 2026-10-16); `code: IPAWSv1.0` | Only ~5% of FRW/EVI (122 of 2,233) left the NWEM channel open, so it is a thin stopgap. Test: 0 active, 2 in the last 7 days (an LA County CEM about the Bryson Fire; an Indiana missing-child LAE) |
-| **OpenFEMA "IPAWS Archived Alerts" v1** `fema.gov/api/open/v1/IpawsArchivedAlerts` | OpenFEMA terms (updated Jan 22, 2025): required notice "This product uses the Federal Emergency Management Agency's OpenFEMA API, but is not endorsed by FEMA"; no FEMA/DHS logos. Dataset page (updated Oct 22, 2026): "published with a twenty-four (24) hour delay"; "FEMA does not validate the content of each message"; "not intended to be an official federal report" | 24 h (latest record 2026-10-21T20:49Z at run 2026-10-22T21:00Z) | Full CAP incl. polygons | Same as the feed + `cogId`; `sender` emails present despite the "no personally identifiable information" claim | Past dates and validation only. Nested filters are slow (15-60 s; one 503 after 60 s) |
+Fire messages, OpenFEMA, `status eq 'Actual'`, 2024-01-01 to 2026-10-21:
+- 2,233 unique FRW + EVI. Fire-related outside California: 1,213 (2024: 293, 2025: 341, 2026: 579) in 38 states.
+- Top states: WA 266, OR 179, ID 106, CO 96, OK 93, TX 65, NM 51, UT 49, NV 46, WY 41. Arizona in 2026: 7 (Cochise
+  County 4 in March-April; Coconino County 3 in June, including EVI "Pumpkin Center 141" on 2026-06-27).
+- Caveats in the data:
+  - 5 "TEST" texts sent as `Actual`, and burn bans and Red Flag notices sent as FRW: show the text verbatim, never
+    classify it;
+  - 53% have an empty `description` (the text is in `CMAMtext`/`CMAMlongtext`), and only 6% carry a `web` link;
+  - `senderName` is free text, 18% a platform name ("Public Alert System"), while `sender` is an operator email:
+    never show it;
+  - one CEM is stamped `+01:00` with `timezone: EST` for Los Angeles: convert the instant, never show the raw offset.
 
-How often wildfires use these messages (OpenFEMA, `status eq 'Actual'`, Jan 1, 2024 to Oct 21, 2026):
-- Totals: 2,233 unique Fire Warning (FRW) + Evacuation Immediate (EVI) messages. Fire-related, outside California:
-  1,213 (2024: 293, 2025: 341, 2026: 579), in 38 states; 16 states had some in each year.
-- Top states: WA 266, OR 179, ID 106, CO 96, OK 93, TX 65, NM 51, UT 49, NV 46, WY 41.
-- 2025 Civil Emergency Message / Local Area Emergency add 33 wildfire evacuation messages (e.g. SC Greenville/Pickens,
-  2025-03-26). Civil Danger Warning had none, and Shelter In Place Warning had 0 messages of any kind.
+### 2.3 Searched and not usable
 
-Real examples:
-- 2024-02-27, Oklahoma Emergency Management, EVI "Slapout Beaver County Fire Evacuation".
-- 2024-06-12, Washoe County NV, EVI "WILDFIRE in area North Valleys. EVACUATE NOW …".
-- 2025-03-26, Polk County NC, EVI "Leave area NOW. Wildfire in this area.".
-- 2025-03-20, El Paso County Sheriff CO: FRW "EVACUATION ORDER for FIRE near 27000 Sanborn Rd", then Cancel "… has
-  been LIFTED".
-- 2026-02-25, "IPAWS TSSF Alert on Behalf of CO Colorado Division of Homeland Security and Emergency Management", EVI
-  "Sterling Fire. Immediate evac …".
-- 2026-08-01, Madison County Sheriff ID, FRW "… GO Evacuate!".
-
-Caveats seen in the data:
-- 5 "TEST" texts sent as `Actual`.
-- "Burn Ban" and "Red Flag Warning" texts sent as FRW. Event codes do not prove an evacuation: show the text verbatim
-  and never class it.
-- 53% have an empty `description`; the text is in `CMAMtext`/`CMAMlongtext` (WEA, 90/360 characters).
-- Only 6% carry a `web` link.
-- One CEM is stamped `+01:00` with `timezone: EST` for Los Angeles. Convert the instant to the fire's local zone; never
-  show the raw offset.
-
-### 2.3 Searched and not usable (detail in the table)
-
-- **Arizona.** AZ DEMA `Evacuations_active_public`: 14 rows, all `activeincid = No`, edits from 2020. AZ DEMA statewide
-  "Emergency Evacuation Zones": 4,252 zones; 12 zones still read "Go"/"Set" since 2025-09-25, and there is a "TEST"
-  row. Its licence text is a planning caveat, not display terms, and it has `SubmitByEmail`/`SubmitByName` columns.
-- **North Carolina.** NCEM `ReadyNC_PROD_Mandatory_Evacuations_180` (coastal hurricane zones joined to WebEOC): every
-  layer answers "Invalid definition expression".
-- **Colorado.** DHSEM: only per-fire layers (Willow, Aspen Acres, Gold Mountain, Leroux, 2025-26).
-- **Missouri.** SEMA "NoticesAndEvacuations": 10 placeholder rows "No Evacuation Order", `publicview = No`; showing
-  them would be a false all-clear.
-- **New Mexico.** DHSEM `EM3628_Evacuations`: one declaration only.
-- **Maryland, Virginia, South Carolina.** Static hurricane or nuclear-plant zones.
-- **Vendors.** Genasys Protect (blocked, CONTRACT §12.6). Utah counties use it: Genasys press release and KJZZ news on
-  Washington County. Perimeter (vendor), Watch Duty and firerisk.ai (not official) are not sources.
+- **Arizona** (AZ DEMA, owner `SitUnit_AZDEMA`):
+  - The authoritative statewide layer is `services6.arcgis.com/l7uujk4hHifqabRB/…/Arizona_Evacuation_Zones/FeatureServer/0`
+    (item `282118c1fe054a749fa91dcb2079bed9`).
+    - Its rows are 4,252 zones in the Ready-Set-Go structure: Status "None" 4,240, Set 6, Go 5, Planning 1 (a "TEST"
+      incident). The 11 Set and Go zones are Coconino North Rim and Kaibab zones left over from 2025.
+    - `dataLastEditDate` is 2026-02-12, with no edits during the 2026 season.
+  - Other 2026 items are views or exports of the same layer:
+    - `Emergency_Evacuation_Zones_View_Only` has the same edits and counts;
+    - "Emergency Evacuation Zones_7 (YCU-2567 layer)" and the county items (Cochise, Gila, Tempe) point at the same
+      service;
+    - "…_03july2026_export" has 4,252 rows, all "None".
+  - Its licence is a planning caveat ("created using publicly available data … limited or no direct input from …
+    stakeholders"), not display terms. It has `SubmitByName`/`SubmitByEmail` columns.
+  - The older `Evacuations_active_public` has 14 inactive rows edited 2020-06-15..08-31; the layer itself last changed
+    2023-11-16.
+  - The AZGeo "Arizona Evacuations Project" aims "to provide statewide, public, and near-real-time evacuation data". A
+    launch was not found.
+  - Verdict: **none (planning layer; status not maintained in the 2026 season)**. R10 re-checks in season.
+- **North Carolina** NCEM `ReadyNC_PROD_Mandatory_Evacuations_180` (coastal hurricane zones and WebEOC): every query
+  errors. Know Your Zone is hurricane-only.
+- **Colorado** DHSEM: only per-fire layers (17 items), plus a large-fire map and a fire-restriction map.
+- **Missouri** SEMA "NoticesAndEvacuations": 10 placeholder rows "No Evacuation Order", `publicview = No`. Showing them
+  would be a false all-clear.
+- **New Mexico** DHSEM `EM3628_Evacuations`: one declaration only.
+- **North Dakota** DES "firemonitor": active fires with size and containment; its release does not mention
+  evacuations.
+- **Oklahoma** OEM situation updates and **Pennsylvania** PEMA daily reports list evacuations as text or PDF. Those are
+  not machine-readable, and scraping is excluded.
+- **Static hurricane, nuclear or planning zones:** MD, VA, SC, NC, CT, RI, DE, MA, ME, MS, AL, LA, NY.
+- **County-only systems** (out of scope): St. Louis and Lake MN, Spokane WA, Coconino AZ, Blaine ID (planned). Many
+  western counties use Genasys Protect (CONTRACT §12.6, needs agreements); Perimeter, Watch Duty and firerisk.ai are
+  not official sources.
 
 ## 3. Gaps
 
 | # | Gap | Grade | Evidence |
 |---|---|---|---|
-| G1 | Outside California the backend still queries Cal OES and answers `available` + zero zones. The UI then shows `none-listed`, "No orders or warnings are listed within 15 km of this fire right now … via Cal OES" (`official/model.ts:114-133`, `OfficialNow.tsx:71`). That is an implied check for a state nobody checked | **BLOCKER** | `extras.py:633-669` (empty inventory → `coverage == []` skips `:642`) |
-| G2 | No "not available in this state" state or wording anywhere; points outside California read "Cal OES lists evacuation zones in California only." | **BLOCKER** (brief decision 4) | `official/model.ts:166, :209`; `location/official.ts:105` |
-| G3 | No per-state availability metadata or state lookup for a fire, bbox or point; `IncidentSummary` has `county` but no `state` | MISSING | `contracts.py:62-82` |
-| G4 | Source wording is Cal OES-specific (83 lines, 19 web files; credits, freshness, feed `source`, `NOT_FIRE_SPECIFIC`) | INCOMPLETE | section 1 |
-| G5 | No adapter for Oregon (live, public) | MISSING | 2.1 |
-| G6 | No national official-message channel (IPAWS / NWS NWEM); `nws.py` reads only Red Flag Warning / Fire Weather Watch in CA | MISSING | `nws.py:50, :445` |
-| G7 | New sources carry personal data (OR `Editor_*`, AZ `SubmitBy*`, IPAWS `sender`, LAE missing-child texts); today's code requests `outFields=*` | INCOMPLETE (privacy) | `extras.py:609` |
-| G8 | Times: OR/WA give editor or integration edit times, not issue times; FL gives zone-less strings; several US zones. Zone times must render in the fire's zone and say what the time is | INCOMPLETE | 2.1; brief 3 "never assume Pacific time" |
-| G9 | Washington service cannot be verified from the cloud (TLS); its cadence is daily | INCOMPLETE | 2.1 |
-| G10 | Rate limiter and caches are named and sized for one host (`UP_ARCGIS` "Cal OES ArcGIS") | INCOMPLETE | `extras.py:271` |
+| G1 | Outside California the backend still queries Cal OES and answers `available` with zero zones and the Cal OES caveats | **BLOCKER** | `extras.py:633-669`; offline run for a Reno bbox: 2 Cal OES calls, `status` available, `coverage` [], both Cal OES caveats |
+| G2 | No "not available in this state". The California rectangle (`model.ts:166-168`) sends point queries for 11 non-California places, which then read "No evacuation order or warning listed here · Cal OES · not an all-clear" (`location/official.ts:98`); farther points read "Cal OES lists evacuation zones in California only" (`:209`) | **BLOCKER** (decision 4) | offline run of today's model (section 10): Reno, Carson City, Stateline, Las Vegas, Klamath Falls, Ashland, Brookings, Yuma, Lake Havasu City, Bullhead City, Tijuana `none-listed`; Medford, Boise, Bozeman `not-checked` |
+| G3 | No state lookup for a fire, bbox or point; `IncidentSummary` has no `state` | MISSING | `contracts.py:62-82`; backend.md R2/R3 add it |
+| G4 | Cal OES wording hard-coded: 85 lines in 19 files, plus 57 test lines in 13 files | INCOMPLETE | section 1 |
+| G5 | No Oregon adapter | MISSING | 2.1 |
+| G6 | No local-officials' messages: `nws.py` reads only RFW/FWW in CA; no OpenFEMA | MISSING | `nws.py:50, :445` |
+| G7 | Personal data in new sources (OR `Editor_*`, `created_user`, `last_edited_user`; AZ `SubmitBy*`; IPAWS `sender`); today `outFields=*` | INCOMPLETE (privacy) | `extras.py:610` |
+| G8 | Times: one `retrieved_ms`/`source_updated_ms` per response misattributes a merged CA+OR or OR+WA answer; OR and WA give state-layer times, not issue times; WA manual rows are date-only (07:00Z = local midnight); several US zones | INCOMPLETE | CONTRACT §12.1; 2.1 |
+| G9 | Washington: incomplete server chain (fix known), indemnity terms, 68 Active rows without a level, editable layer, daily lag | INCOMPLETE | 2.1 |
+| G10 | Per-source behaviour hard-coded: limiter "Cal OES ArcGIS" (`:271`), confirm-drop re-query (`:613-617`), `issuing_authority` (`:625-626`), rebuild caveat (`:666`), `NOT_FIRE_SPECIFIC` (`evacuation.ts:263`) | INCOMPLETE | section 1 |
+| G11 | Status mapping: `evac_status_key("No Evacuation Order") == "order"` (WA has 5 such rows, MO's template 10); null status → `unknown` → drawn as "other" | INCOMPLETE (must fix before any new source) | offline run; `style.ts:26-31` |
+| G12 | `reason_code: not_covered` means "a California county not in the statewide layer"; "not available in this state" has no code of its own | MISSING | `extras.py:642-646`; `types.ts:6` |
+| G13 | Border fires: OEM's `County` domain includes "Del Norte" (CA), so the same zone could come from two sources; no per-zone state, no dedup rule | MISSING (rare: 0 rows in 2026) | 2.1 |
+| G14 | Docs and credits name Cal OES only: README `:81, :100-101, :123, :572-574, :666`; SPEC §2 (no evacuation row; NWS row `area=CA`), §6 `:309`; CONTRACT §12.1, §12.5, §12.6 | INCOMPLETE | CLAUDE.md "credit every source" |
+| G15 | No way to exercise non-California evacuations: every local bundle is in California and the OR layer is empty until next season | MISSING (verification) | `data/incidents` |
 
-## 4. One adapter shape (matches CONTRACT §12.1 and the brief-2 I5 shape)
+## 4. One adapter shape (additive to CONTRACT §12.1 and the brief-2 I5 shape)
 
-Keep `GET /api/extras/evacuations` and its envelope; every change is additive.
+Keep `GET /api/extras/evacuations` and its envelope. Every change is additive, and California answers stay as they are.
 
 ```python
 # backend/fire3d/sources/evacuations.py (new; extras.py keeps the route and calls it)
 @dataclass(frozen=True)
 class EvacAdapter:
-    id: str                      # 'caloes_evacuations' | 'or_oem_evacuations' | 'wa_seoc_evacuations' | 'fl_sert_evacuation_status'
-    states: tuple[str, ...]      # USPS codes covered: ('CA',) / ('OR',) / ('WA',) / ('FL',)
-    level: Literal['zone', 'county']
+    id: str                          # 'caloes_evacuations' | 'or_oem_evacuations' | 'wa_seoc_evacuations'
+    home_state: str                  # 'CA' | 'OR' | 'WA'
+    enabled: bool                    # WA: False until the user accepts its terms (Q-A) and the count check passes
+    availability: Literal['available', 'partial']
     query_url: str
-    out_fields: tuple[str, ...]  # explicit whitelist: never '*', never editor/creator/email/phone/subscriber
-    where: str                   # '1=1' | "status = 'Active'"
-    ttl_s: float                 # CA 120, OR 120, WA 1800, FL 300
-    limiter: fhttp.RateLimiter   # one per host (services.arcgis.com shared; wise.wamil.us its own)
-    source: dict                 # today's SOURCES entry: name, publisher, url, license, terms_url, attribution, disclaimer, cadence
-    normalize: Callable[[dict], dict | None]   # -> EvacZoneProps (+ additive props below)
+    out_fields: tuple[str, ...]      # explicit whitelist, never '*'
+    where: str                       # WA: "status = 'Active' AND evactype IN ('Level 1 - Ready','Level 2 - Be Set','Level 3 - Go')"
+    ttl_s: float                     # CA 120, OR 120, WA 1800
+    limiter: fhttp.RateLimiter       # per host: services.arcgis.com (CA, OR) shared; wise.wamil.us its own
+    tls_extra_ca: str | None         # WA: bundled DigiCert intermediate PEM, used for this host only
+    confirm_drop: bool               # CA only (the 5-minute rebuild, extras.py:613-617)
+    source: dict                     # SOURCES entry + 'credit' (the visible attribution text)
+    issuing_authority: str           # replaces the literal at extras.py:625-626
+    aggregator: str                  # 'Cal OES' | 'Oregon OEM' | 'Washington SEOC'
+    standing_caveats: tuple[str, ...]   # CA: the rebuild caveat; WA: "Updated daily, may be out of date."
+    normalize: Callable[[dict], dict | None]   # -> EvacZoneProps, or None to drop the row
+    status_key: Callable[[dict], str]          # per-source mapping, unit-tested
+    zone_state: Callable[[dict], str | None]   # county -> state; else regions.state_at(representative point)
 
-STATE_AVAILABILITY: dict[str, dict]  # all 48 + DC: {state, name, availability: 'available'|'partial'|'not_available'|'unsupported',
+STATE_AVAILABILITY: dict[str, dict]  # 48 + DC: {state, name, availability: 'available'|'partial'|'not_available',
                                      #  adapter_ids, note, audited: '2026-10-22', links: [{label, url}]}
+# FL: not_available, note "Florida's state EOC lists county-level hurricane status only; not shown".
 ```
 
-Response additions (`EvacuationsResponse`, `web/src/extras/types.ts`):
-- `states: { state, name, availability, checked: boolean, source_ids, note }[]`: every state the bbox touches. A
-  bundled Census cartographic state boundary file (public domain) tells which states a bbox or point touches.
-- Zone props, additive:
-  - `state`, `source_id`;
-  - `status_label` (OR only: OEM's own definition for the level number, with `status_label_source` = the OEM URL);
-  - `incident_name` (the source's wording; a name match is not proof that it is this fire);
-  - `hazard_type`;
-  - `time_basis`: `'issuer' | 'source_edit' | 'none'`.
+State lookup: backend.md R3's `fire3d/regions.py` (`states_in_bbox`, `state_at`) and
+`backend/fire3d/data/us_states.geojson`. No second state file; the root `data/` is gitignored (`.gitignore:1`).
 
-Status rules:
-- The bbox is only in `not_available` states: `status: 'unavailable'`, `reason_code: 'not_covered'`, reason "Official
-  evacuation zones are not available in this state (Montana). Follow local officials." Nothing is fetched.
-- Mixed states (border fires, e.g. OR/CA, WA/ID): fetch each available adapter, merge the features (each keeps
-  `source_id`), list each source in `sources`, and add the caveat "<State>: not available in this state." per
-  uncovered state.
-- `partial` adds its limit as a caveat:
-  - WA: "Compiled daily by the Washington SEOC from county sources; it can lag county orders."
-  - FL: "County-level status reported to the Florida state EOC, not zone maps."
-- No zones in a checked state: today's "not an all-clear" caveat, never the source's own "no evacuations" sentence.
-- Past dates: unchanged (`not_available_for_past_dates`).
+Response additions:
+- `states: { state, name, availability, checked, source_ids, note, links }[]`: every state the bbox touches.
+- Per-source fields in `sources[]`: `retrieved_ms`, `updated_ms`, `status` (`available` | `unavailable`), `reason`,
+  `home_state`, `credit`.
+  - The envelope `retrieved_ms`/`source_updated_ms` stay as they are when one zone source answered (every California
+    answer).
+  - They are `null` when several answered, and the UI then reads `sources[]`. Each issuer's times stay with it.
+- `reason_code` gains `'state_not_available'`. Use the same code for the CAL FIRE record (backend R10) and cameras
+  (backend R16). `not_covered` keeps its California-county meaning.
+- Zone props:
+  - `state`, `source_id`;
+  - `status_verbatim` (false when Fire-3d renders the source's number), `status_raw`, `status_label`,
+    `status_label_source`;
+  - `incident_name` (the source's text; a name match is not proof that it is this fire), `hazard_type`;
+  - `listed_ms` (the zone entered the state layer);
+  - `time_basis`: `'issuer' | 'state_layer_added' | 'state_layer_edit' | 'date_only' | 'none'`.
+
+Rules:
+- The bbox touches no enabled adapter's state: `status: 'unavailable'`, `reason_code: 'state_not_available'`, reason
+  "Official evacuation zones are not available in this state (Montana). Follow local officials." No upstream request.
+  Outside the lower 48, the reason follows web W9's coverage wording.
+- Mixed states (OR/CA, WA/ID, CA/NV): fetch each enabled adapter whose state the bbox touches and merge the features.
+  Each uncovered state adds the caveat "Nevada: official evacuation zones are not available in this state". A failed
+  source is `unavailable` in `sources[]` and never turns into "none".
+- Partial (WA): standing caveat "Washington's state layer is updated daily and may be out of date; it can lag county
+  orders." Show the required credit whenever WA zones are drawn.
+- No zones in a checked state: the per-source "not an all-clear" caveat, never the source's own "no evacuations"
+  sentence.
+- Dedup: each zone gets its state from `zone_state`. If a zone's state has its own enabled adapter that answered for
+  this bbox, keep that source's copy and drop the other. If that source failed, keep the other copy with its own
+  source.
+- Hazards: keep every hazard type, as Cal OES does today (no `EVENT_TYPE` filter). Show the type when it is not fire
+  ("Evacuation for: Other, as recorded by Oregon OEM").
+- Past dates: unchanged (`not_available_for_past_dates`), unless Q-B says otherwise.
 
 Web (I5, `official/model.ts`):
-- Add `EvacuationOfficial.state: 'not-available'` with `reason` "not available in this state (<State>)" and
-  `links` (the state's official page, if any).
-- Replace `insideCalifornia` by `states[]` from the response, or by the same state lookup for points.
-- `issuer`/credit text come from `sources[].attribution`, not literals.
+- Add `EvacuationOfficial.state: 'not-available'` with `reason` "Not available in this state (Nevada)" and `links`.
+- Remove `insideCalifornia` from the evacuation paths (`:160`, `:209`). For a point outside the fire's area, at the
+  current time, always ask the backend. It answers from the registry with no upstream request, so the web holds no
+  second copy of state boundaries.
+- Issuer, aggregator, credit and `NOT_FIRE_SPECIFIC` ("<aggregator> does not say which fire this is for") come from
+  `sources[]`. Times come from per-source fields.
 
-| Zone prop | CA Cal OES (today) | OR OEM | WA SEOC | FL SERT (county) |
-|---|---|---|---|---|
-| zone_id | `ZONE_ID` | `GlobalID` | `id` | `dataid` |
-| zone_name | `ZONE_NAME` | `Evac_Area_Name` | – | `agency` |
-| status (verbatim) | `STATUS` | `"Level " + Fire_Evacuation_Level` (the source gives a number only) | `evactype` | `evacuation_status` ("Not Reporting" → `unknown`, not drawn) |
-| status_label | – | OEM: BE READY / BE SET / GO NOW – Leave Immediately! | – (inside `evactype`) | – |
-| status_key | `evac_status_key()` | same (level 1/2/3 → advisory/warning/order) | same | same |
-| county / jurisdiction | `COUNTY` | `County` (+ "County"; CA "Del Norte" possible) | `county` | `agency` |
-| incident_name | – | `Fire_Name` | `incidentna` | `incidentid` |
-| event_type | `EVENT_TYPE` | `HazardType` | – | – |
-| notes / public_info | `NOTES`, `PUBLIC_INFO`, `CRITICAL_INFO` | – | `comments` | `evacuation_info`, `evacuation_comments` |
-| link | inventory `Reference_App` | – | `incident_link` (https only) | `url` (https only) |
-| status_updated_ms | `EDIT_DATE` (issuer) | `last_edited_date` (`time_basis: source_edit`: an editor or integration edit) | `level_<n>_active_date` for the current level, else `dateedited` | none: `evacuation_last_update` shown as text, zone not stated |
-| aggregated_ms | `EditDate` | – | `date_added` | `EditDate` |
-| filter | – | – | `status = 'Active'` | – |
-| never request | – | `Editor_Name`, `Editor_Email`, `Editor_Phone`, `created_user`, `last_edited_user` | anything not listed | `subscribername`, `positionid`, `Creator`, `Editor` |
+| Zone prop | CA Cal OES (today) | OR OEM | WA SEOC |
+|---|---|---|---|
+| zone_id | `ZONE_ID` | `GlobalID` | `id` (else `objectid`) |
+| zone_name | `ZONE_NAME` | `Evac_Area_Name` | – |
+| status | `STATUS` (verbatim) | `"Level " + Fire_Evacuation_Level`, `status_verbatim: false`, `status_raw` the integer | `evactype` (verbatim) |
+| status_label | – | OEM's definition (BE READY / BE SET / GO NOW – Leave Immediately!) + press-release URL | – (inside `evactype`) |
+| status_key | `evac_status_key` (fixed, G11) | level 1/2/3 → advisory/warning/order | `evac_status_key(evactype)` |
+| county | `COUNTY` | `County` + " County" (null in 2%: state from geometry) | `county`, "Asotin_County" → "Asotin County" |
+| incident_name | – | `Fire_Name` (null in 51%) | `incidentna` |
+| hazard / event_type | `EVENT_TYPE` | `HazardType` | – |
+| notes | `NOTES`, `PUBLIC_INFO`, `CRITICAL_INFO` | – | – (`comments` is system text; at most a "compiled from the county layer" link) |
+| link | inventory `Reference_App` | – | `incident_link` (https only; a bare InciWeb home page is not this zone's link) |
+| status_updated_ms | `EDIT_DATE` (issuer) | null: OR gives no issue time | `level_<n>_active_date` for the current level, else null |
+| listed_ms | `EditDate` (`aggregated_ms`) | `created_date` ("added to the Oregon state layer") | manual rows: `date_added`, `date_only` when it is local midnight; automated rows: null |
+| layer edit | – | `last_edited_date` ("state layer recalculated") | `dateedited` ("state layer compiled") |
+| never request | – | `Editor_Name`, `Editor_Email`, `Editor_Phone`, `created_user`, `last_edited_user` | anything not listed |
 
-**National messages: a separate official kind, never zones.**
+**Local officials' messages: a separate official kind, never zones (R7, per decision 5).**
 - `GET /api/official/local-alerts?incident=&at_ms=` with the I7 envelope (`kind: 'local_alerts'`).
+- Channels:
+  - `nws_api`: live and the last 7 days, NWS NWEM event types;
+  - `openfema_archive`: past days of 24 h or more. Prefetched in the background after a fire is prepared, cached on
+    disk, never on the request path.
 - `alerts[]` fields:
-  - `id`, `channel: 'ipaws_feed' | 'nws_api' | 'openfema_archive'`, `archived`;
-  - `event`, `event_code` (SAME), `msg_type` (Alert / Update / Cancel), `references`;
-  - `sender_name` (verbatim), plus `sender_is_platform` (true for names like "Public Alert System"; the UI then says
-    "The sending system did not name the office; the message text names the issuer");
-  - times: `sent_ms`, `effective_ms`, `onset_ms`, `expires_ms`;
-  - text, verbatim: `headline`, `description`, `instruction`, `wea_text`, `wea_long_text`;
+  - `id`, `channel`, `archived`;
+  - `event`, `event_code`, `msg_type`, `references`;
+  - `sender_name` (verbatim) and `sender_is_platform`;
+  - `sent_ms`, `effective_ms`, `onset_ms`, `expires_ms`;
+  - verbatim `headline`, `description`, `instruction`, `wea_text`, `wea_long_text`;
   - `web` (https only), `area_desc`, `same_codes`, `polygon | null`, `covers_reported_location`, `nearest_km`.
-- Never return `sender`.
-- Scope: FRW, EVI, SPW and CDW always. CEM and LAE only when the text mentions fire or evacuation. The panel says which
-  types it lists.
-- Live alerts come from the IPAWS feed, plus NWS NWEMs deduplicated by CAP identifier, sent time and sender. They are
-  stored on arrival like `calfire_history`, because they leave the feed after 30 min. Past dates come from OpenFEMA,
-  labelled "archived copy, published by FEMA 24 h later".
-- Card line: "Alert from <issuer>: "<verbatim text>" · sent <time in the fire's zone> · via FEMA IPAWS · <link>".
-  Then: "This is an official message, not an evacuation-zone map. Other notices may not be listed. No message here
-  is not an all-clear: follow local officials."
-- Links: the issuer's `web` when given, the NWS API record for NWS items, and the OpenFEMA record for archived items.
-  The live IPAWS feed has no per-message public page (Q1).
+  - Never `sender`.
+- Matching to a fire: by polygon when one is present. Otherwise by SAME county codes against the counties the fire's
+  area touches, which needs a Census county boundary file (public domain) next to backend R3's states.
+- Scope: FRW, EVI, SPW and CDW always; CEM and LAE only when the text mentions fire or evacuation.
+- Card wording:
+  - live: "Alert from <issuer>: "<verbatim text>" · sent <time in the fire's zone> · relayed by the National Weather
+    Service · <link>";
+  - then: "Fire-3d lists only the local alerts the National Weather Service relays; most are not relayed (about 1 in
+    20 fire and evacuation alerts in 2024-26). No alert here is not an all-clear: follow local officials."
+  - archived: "Archived copy from FEMA (OpenFEMA, published about a day later); FEMA does not validate message
+    content", plus the required OpenFEMA notice. Replays can therefore list more than was visible live, and they say so.
 
 ## 5. Recommended changes
 
 | # | Change | Value | Effort | Risk | Files | Priority |
 |---|---|---|---|---|---|---|
-| R1 | State availability registry + state lookup. Backend: no Cal OES call outside CA; `states[]`; "not available in this state". Web: `not-available` state replaces `insideCalifornia` | Fixes G1-G3; the brief's decision 4 | M | Low; needs a state boundary file (Census, public domain, ~100 KB) | `backend/fire3d/sources/evacuations.py` (new), `api/extras.py`, `data/us_states*.json` (new), `tests/test_extras.py`; `web/src/extras/types.ts`, `official/model.ts`(+test), `location/official.ts`, `ui/feed/OfficialNow.tsx`, `ui/shell/dataStatus.ts`; SPEC §6, CONTRACT §14 | **P0** |
-| R2 | Oregon OEM adapter (mapping above, field whitelist, level labels quoted from OEM) | The only live statewide feed outside CA | S | Low; source empty off-season (test with recorded samples) | `sources/evacuations.py`, `tests/data/official/or_oem_*.json` (new), tests | **P0** |
-| R3 | Source-neutral wording: issuer and aggregator from `sources[]`; `NOT_FIRE_SPECIFIC` per source ("<aggregator> does not say which fire this is for") | Correct credit outside CA | M | Medium: many strings; keep CA snapshots unchanged | the 19 web files of section 1, `extras/credits.ts`, `extras/evacuation.ts` | **P0** |
-| R4 | Privacy: explicit `outFields`; drop IPAWS `sender`; tests assert that no `email`/`phone` key leaves the backend | Prevents publishing operators' personal data | S | Low | `sources/evacuations.py`, tests | **P0** |
-| R5 | Fire-local time zone for zone and alert times + `time_basis` wording ("edited in the state layer", "time not stated") | Brief 3 time-zone rule | S-M | Low (shared with the web-us audit) | `extras/evacuation.ts`, `official/model.ts`, `location/official.ts`, `extras/format.ts` | **P0** |
-| R6 | Washington SEOC adapter, after Q2 (TLS check on the user's machine; "compiled daily" caveat) | WA is the busiest non-CA state for alerts (266) | S | Medium: daily lag, editable layer, TLS | `sources/evacuations.py`, tests | P1 |
-| R7 | National local-alert messages (IPAWS feed + NWS NWEM), separate official kind (section 4) | Covers the 38 states with no feed | L | Medium: registration (Q1), 30-min feed needs a poller and store, noisy event codes | `sources/ipaws.py` (new), `sources/nws.py` (event list, all states), `api/official.py`, `contracts.py`, `web/src/official/*`, `ui/feed/*` | P1 |
-| R8 | Past dates (Q4): OpenFEMA IPAWS archive (all states) and OEM "Evac History" (OR) as labelled archived copies | Replay shows what officials said | M | Medium: slow queries; must never look current | `sources/ipaws.py`, `sources/evacuations.py`, `api/official.py` | P2 |
-| R9 | Florida SERT as a text-only county list, no polygons (Q3) | Only state signal in FL | S | Medium: "Not Reporting" ≠ none; hurricane focus | `sources/evacuations.py`, web panel | P2 |
-| R10 | `scripts/audit_evacuation_sources.py`: count-only check of each registry source (reachable, `dataLastEditDate`), run before releases | Keeps "available" honest | S | Low | `backend/scripts/` (new) | P2 |
+| R1 | State registry + "not available in this state": backend makes no upstream call for uncovered states; `states[]`, `state_not_available`, per-source times; web `not-available` state; the rectangle removed from the evacuation paths | Fixes G1-G3, G8 (times), G12; decision 4 | M | Low; depends on backend R3 (`regions.py`, `fire3d/data/us_states.geojson`) | `backend/fire3d/sources/evacuations.py` (new), `api/extras.py`, `contracts.py`, `tests/test_extras.py`; `web/src/extras/types.ts`, `official/model.ts`(+test), `official/hooks.ts`, `location/official.ts`(+test), `ui/feed/OfficialNow.tsx`, `ui/shell/dataStatus.ts`, `ui/shell/officialSummary.ts` | **P0** |
+| R2 | Oregon OEM adapter: mapping above, field whitelist, level rendering flagged non-verbatim, hazard labels, `created_date` vs `last_edited_date` wording, credit | The only live statewide feed outside CA | S-M | Low; empty off-season (recorded fixtures, section 6) | `sources/evacuations.py`, `tests/data/official/or_oem_*.json` (new) + `PROVENANCE.md`, tests | **P0** |
+| R3 | Source-neutral wording from `sources[]`: every evacuation line of section 1 (17 non-test files; camera lines stay CA) and the 13 test/fixture files; California snapshots unchanged | Correct credit and issuer outside CA | M | Medium: many strings | section 1 list; overlaps web W7 | **P0** |
+| R4 | Privacy: explicit `outFields` per adapter; never `sender`; a test asserts no key matching `email|phone|user|editor|creator|submit` leaves the backend | Keeps operators' personal data out | S | Low | `sources/evacuations.py`, `api/extras.py:610`, tests | **P0** |
+| R5 | Fire-local time zone for zone and alert times; `time_basis` wording ("added to the Oregon state layer", "Washington state layer compiled", date-only "added Sep 30") | Brief 3 time rule; issuer times not overstated | S-M | Low (backend R2 `time_zone`, web.md 3.1) | `extras/evacuation.ts`, `official/model.ts`, `location/official.ts`, `extras/format.ts` | **P0** |
+| R6 | Status mapping hardening, before any new source: negations ("no …", "not …") never map to order, warning or advisory; adapters drop placeholder and null-level rows; regression tests for "No Evacuation Order", "Not Reporting", "Level 1 - Ready", "Level 2 - Be Set", "Level 3 - Go", "Level 3", "Planning Zone", null | No false orders, no blank zones | S | Low | `api/extras.py:525-544` (or `sources/evacuations.py`), tests | **P0** |
+| R7 | Local officials' messages (section 4): NWS NWEM live, OpenFEMA archive for past days; separate official kind; county matching by SAME | Covers part of the 45 states with no feed; decision 5 | M | Medium: thin live coverage (~5%), slow archive, noisy event codes | `sources/nws.py` (event list; national with backend R9), `sources/openfema.py` (new), `api/official.py`, `contracts.py`, `fire3d/data/us_counties*` (new, public domain), `web/src/official/*`, `ui/feed/*` | P1 |
+| R8 | Docs and credits: README table and "Evacuation data" limits (`:572-574`, `:666`); SPEC §2 rows (OEM, WA SEOC, NWS NWEM, OpenFEMA) and §6 `:309`; CONTRACT §12.1 (new fields and code), §12.5 (OEM "Public"; WA attribution and indemnity; OpenFEMA notice), §12.6 (AZ planning layer, FL SERT, IPAWS feed, county systems), §14 | Every source credited (CLAUDE.md) | S | Low | `README.md`, `SPEC.md`, `docs/redesign/CONTRACT.md` | **P0** (with R1-R2) |
+| R9 | Border rules: per-zone `state`, home-source dedup, tests for an OR/CA bbox at Brookings and a WA/ID bbox at Clarkston | No double zones at borders | S | Low | `sources/evacuations.py`, tests | P1 |
+| R10 | Washington SEOC adapter, only if Q-A is "accept". TLS: a host-scoped trust with the bundled DigiCert intermediate (`backend/fire3d/data/certs/`), never verification off. Filter as section 4; label; credit; check again when the leaf renews (2026-11-26) | WA has the most fire alerts outside CA (266) | S-M | Medium: daily lag, editable layer, stale manual rows | `fire3d/http.py` (backend owner), `sources/evacuations.py`, tests | P1 |
+| R11 | `backend/scripts/audit_evacuation_sources.py`: count-only check per registry source (reachable with verification on, `dataLastEditDate`, counts); AZ re-check in its May-July season | Keeps "available" honest | S | Low | `backend/scripts/` (new) | P2 |
+| R12 | Oregon zones for past dates from OEM's history layer (only if Q-B is yes), labelled archived | Replay of 2026 Oregon fires | M | Medium: no licence text on that item, 5-min snapshots | `sources/evacuations.py`, tests | P2 |
 
-No new dependency is needed. Shapely, httpx and orjson are already used, and CAP XML parses with the standard library.
+No new dependency: httpx, certifi (already pulled in by httpx), shapely and orjson are present, and CAP parses with the
+standard library. New bundled data: the DigiCert intermediate (1.2 KB) and a county boundary file for R7.
 
-## 6. Questions only the user can answer
+## 6. Verification path for builders (FIRE3D_LIVE=0, no Oregon bundle)
 
-1. **Q1: IPAWS public feed.** FEMA's page asks consumers to "register for an account on the IPAWS User Portal",
-   although the endpoint answered without a key.
-   - (a) You register (your name and organisation), then Fire-3d adds live IPAWS messages.
-   - (b) No registration: use only the NWS relay (~5% of messages) live and the OpenFEMA archive (24 h late) for past
-     dates.
-   - (c) No national messages for now.
-2. **Q2: Washington.** Its layer is compiled daily and its certificate chain fails from the cloud.
-   - (a) Add it with a "compiled daily, may lag" label once it loads on your machine.
-   - (b) Skip it and show "not available in this state".
-3. **Q3: Florida.** County-level, hurricane-oriented status.
-   - (a) Show it as a text list ("as reported to the Florida state EOC").
-   - (b) Treat FL as "not available in this state".
-4. **Q4: Past dates.** Evacuations are "current status only" today. Should replay show archived official messages
-   (OpenFEMA, all states) and Oregon's evacuation history, clearly labelled as archived?
-   - (a) Yes.
-   - (b) No, keep "not available for past dates".
-5. **Q5: County feeds.** Some counties publish public layers without agreements: Spokane WA, Boulder CO, Lake/Cook/St.
-   Louis MN, Coconino AZ.
-   - (a) Keep to state feeds, as the brief says.
-   - (b) Research county feeds later as a separate brief.
+FIRE3D_LIVE=0 only stops the live loop. The extras routes still query their sources, so:
+- **Backend tests** (offline):
+  - Serve recorded samples through `fire3d.http._transport = httpx.MockTransport(...)`, or monkeypatch
+    `_arcgis_features`.
+  - Assert: Reno, Carson City, Las Vegas, Klamath Falls, Yuma and a Montana bbox make no upstream request and return
+    `state_not_available`; a California interior bbox is unchanged; a Brookings OR/CA bbox merges and dedups; WA
+    filters null-level rows; no personal keys appear.
+- **Oregon fixture recipe** (history layer, a real season snapshot): `…/2026_Wildfire_Evac_History/FeatureServer/0/query?
+  where=Fire_Name IN ('Fielders Mountain','HWY 229 Landslide') AND Date >= TIMESTAMP '2026-08-15 12:00:00' AND Date <
+  TIMESTAMP '2026-08-15 12:05:00'&outFields=GlobalID,Fire_Name,Fire_Evacuation_Level,County,Evac_Area_Name,HazardType,
+  created_date,last_edited_date,Date&outSR=4326&geometryPrecision=5&f=geojson`.
+  - Tested: HTTP 200, 28 KB, 11 zones (levels 1/2/3; Jackson, Josephine and Lincoln counties; one non-fire hazard), bbox
+    -123.974, 42.419, -123.131, 44.813.
+  - Drop `Date` for a live-layer-shaped sample. Add a `Fire_Name` null case from the same snapshot.
+- **Washington fixture** (if R10): `where` as section 4, the field whitelist, `f=geojson`, through the
+  intermediate-aware client.
+- **Web unit tests:** fixture responses in `extras/__fixtures__/samples.ts` (OR, WA, `state_not_available`, mixed CA+OR)
+  and border-point tests in `official/model.test.ts` and `location/official.test.ts`. The scratch test in section 10
+  is a template.
+- **Browser** (count non-GET requests; never press "Prepare analysis"):
+  - an address in Reno and one in Montana through the national Census address search: "not available in this state";
+  - a Brookings point: OEM checked live, 0 zones off-season, "No evacuation order or warning listed here · Oregon OEM ·
+    not an all-clear";
+  - Oregon zones with content: an `extras-dev.html` preset fed by the recorded sample (dev page only), because the
+    live layer stays empty until next season;
+  - California regression: the Eaton and fixture screens against `docs/screenshots/audit3-web-official-eaton-command-desktop.png`.
 
-## 7. Per-state table (47 states; California is excluded; DC is not relevant)
+## 7. Cross-references
 
-Verdicts: **available** = official statewide, public, machine-readable, display allowed, tested. **partial** = official
-but limited. **none** = no state feed found. **blocked** = only vendor or agreement systems.
+- backend.md: R2 (`state`, `time_zone`), R3 (`regions.py`, `/api/geo/lookup`), R9 (national NWS), R10/R16 (CAL FIRE
+  record and cameras answer "not available in this state": share `state_not_available`).
+- web.md: G5/W7 (official UI outside CA, NWS rectangle gates `:393`, `:425`), W9 (coverage outside the lower 48),
+  W10 (cameras), 3.1 (time zones).
 
-Evidence for every row:
-- an ArcGIS Online catalogue search of public Feature/Map services, `(evacuation OR evacuations) AND "<State>"`, with
-  the hit count given as `AGOL n`;
+## 8. Questions only the user can answer
+
+Answered in round 2 (BRIEF-3): IPAWS registration → no (decision 5); past dates → OpenFEMA archive, labelled
+(decision 5); Washington → yes if reliable, "updated daily, may be out of date" (decision 6); Florida → not shown
+(decision 6); county feeds → out of scope (defaults). Still open:
+
+1. **Q-A: Washington's terms.** By using the layer, "the user agrees to hold harmless, defend, and indemnify the State
+   of Washington, the SEOC, participating counties …"; the data is "as-is". This is a legal promise made by whoever
+   runs Fire-3d, and I cannot judge it for you.
+   - (a) I accept these terms. Washington zones are shown, labelled "updated daily, may be out of date", with the
+     required credit.
+   - (b) I do not accept. Washington says "not available in this state"; its local officials' alerts still show (R7).
+   - (c) Decide later. The adapter is built and tested offline but switched off, so Washington says "not available in
+     this state" until you choose (a).
+   - **Recommendation: (c) unless you are comfortable with (a).** It is also the default if there is no answer: no
+     agreement is accepted for you.
+2. **Q-B: Oregon zones for past dates.** OEM keeps a 5-minute history of its layer for 2026 (since July 1), but that
+   item has no licence text at all.
+   - (a) Yes: replay shows Oregon's past zones, labelled "archived copy from Oregon OEM's history layer".
+   - (b) Not now: evacuation zones stay current-only everywhere (as in California); past days show the archived
+     official alerts (decision 5).
+   - **Recommendation and default: (b).** The terms are thinner than the live layer's, and replay of zones adds work to
+     the build for one state.
+
+## 9. Per-state table (47 states; California excluded)
+
+Verdicts:
+- **available**: official, statewide, public, machine-readable current status, with display allowed by its terms or
+  licence, tested.
+- **partial**: the same, but limited (daily cadence or county level).
+- **none**: no such feed found. County or vendor systems, static planning zones, text or PDF reports and per-incident
+  layers are noted in the evidence column.
+
+Evidence for each row:
+- `AGOL n`: hits from an ArcGIS Online search of public services for `(evacuation OR evacuations) AND "<State>"`;
 - a keyword and owner review (sections 2.1 and 2.3);
-- a web search.
+- for 44 states, a logged web search for the state agency's map (section 10). OR, WA and FL were researched through
+  their layers directly.
 
-`IPAWS` = fire-related FRW/EVI messages 2024 to Oct 21, 2026 touching the state (OpenFEMA): how much the national
-channel would carry there.
+`IPAWS` counts fire-related FRW/EVI messages from 2024 to Oct 21, 2026 touching the state (OpenFEMA).
 
-| State | Verdict | Official state source (owner) | Evidence (2026-10-22) | IPAWS |
-|---|---|---|---|---|
-| Alabama | none | – | AGOL 21: no state layer | 1 |
-| Arizona | none | AZ DEMA layers unusable | 2020 layer dormant (14 rows inactive); statewide EEZ 4,252 zones with stale "Go"/"Set" (2025-09-25), TEST row, PII columns, no display terms | 34 |
-| Arkansas | none | – | AGOL 12 | 1 |
-| Colorado | none | DHSEM per-fire layers only | 17 DHSEM evac items, each one fire, no statewide feed or terms | 96 |
-| Connecticut | none | – | AGOL 10 | 0 |
-| Delaware | none | – | AGOL 18 | 1 |
-| Florida | **partial** | FDEM SERT "Evacuations and Curfews" (county-level, WebEOC) | 87 rows, all "Not Reporting"; times without zone; KYZ `STATUS` blank; hurricane-oriented | 22 |
-| Georgia | none | – | AGOL 25 | 24 |
-| Idaho | none | – | AGOL 8; county zones (Blaine County map planned 2026, KMVT) | 106 |
-| Illinois | none | – | AGOL 21 | 2 |
-| Indiana | none | – | AGOL 6 | 1 |
-| Iowa | none | – | AGOL 10 | 0 |
-| Kansas | none | – | AGOL 6 | 16 |
-| Kentucky | none | – | AGOL 15 | 0 |
-| Louisiana | none | – | AGOL 27: hurricane/EPA items only | 1 |
-| Maine | none | – | AGOL hits are unrelated | 2 |
-| Maryland | none | MDEM static hurricane zones | `Maryland Evacuation Zones` items: planning zones, no status | 1 |
-| Massachusetts | none | – | AGOL 35: planning layers | 0 |
-| Michigan | none | – | AGOL 8 | 1 |
-| Minnesota | none | – | AGOL 16: county layers only (Lake, Cook, St. Louis) | 13 |
-| Mississippi | none | – | AGOL 19 | 2 |
-| Missouri | none | SEMA template (not live) | 10 rows "No Evacuation Order", `publicview = No`, last edit 2025-02-12 | 0 |
-| Montana | none | – | AGOL 9 | 24 |
-| Nebraska | none | – | AGOL 3 | 19 |
-| Nevada | none | – | AGOL 10; Washoe County alerts via IPAWS | 46 |
-| New Hampshire | none | – | AGOL 21 | 2 |
-| New Jersey | none | – | AGOL 30: research layers | 0 |
-| New Mexico | none | DHSEM per-declaration layer | `EM3628_Evacuations` (one declaration) | 51 |
-| New York | none | – | AGOL 54: NYC coastal planning | 0 |
-| North Carolina | none | NCEM coastal KYZ (hurricane) | MapServer 200, every query errors "Invalid definition expression" | 7 |
-| North Dakota | none | – | AGOL 7 | 4 |
-| Ohio | none | – | AGOL 10 | 4 |
-| Oklahoma | none | – | AGOL 9; Oklahoma EM sends IPAWS alerts | 93 |
-| Oregon | **available** | OEM "Evacuation Areas Public" | HTTP 200, count 0 (off-season), last data edit 2026-09-29; licence "Public"; 2026 history 5.18 M rows / 61 fires | 179 |
-| Pennsylvania | none | – | AGOL 19: nuclear-plant zones | 3 |
-| Rhode Island | none | – | AGOL 15 | 0 |
-| South Carolina | none | SCEMD hurricane/REP zones | static planning zones | 1 (+8 CEM/LAE 2025) |
-| South Dakota | none | – | AGOL 3 | 29 |
-| Tennessee | none | – | AGOL 10 | 2 |
-| Texas | none | – | AGOL 136: research/regional layers; no TDEM feed | 65 |
-| Utah | blocked | – | County zones in Genasys Protect (web search: Genasys release on Utah counties; KJZZ on Washington County); no state feed | 49 |
-| Vermont | none | – | AGOL 1 | 0 |
-| Virginia | none | VDEM hurricane KYZ (static) | "Data was updated July 2020", planning only | 4 |
-| Washington | **partial** | WA SEOC "Evacuation_Zone_Level" | Terms allow public apps with credit; "updated daily"; TLS fails from the sandbox (curl 60, httpx verify error); fields from the viewer map | 266 |
-| West Virginia | none | – | AGOL 4 | 1 |
-| Wisconsin | none | – | AGOL 13 | 2 |
-| Wyoming | none | – | AGOL 5: county view (Washakie) | 41 |
+| State | Verdict | Evidence (2026-10-22) | IPAWS |
+|---|---|---|---|
+| Alabama | none | AGOL 21; Alabama EMA: hurricane zones/routes only | 1 |
+| Arizona | none | DEMA EEZ planning layer, no edits after 2026-02-12, 11 stale Set/Go zones (2.3) | 34 |
+| Arkansas | none | AGOL 12; ADEM: no map | 1 |
+| Colorado | none | DHSEM: 17 per-fire layers, large-fire and restriction maps | 96 |
+| Connecticut | none | AGOL 10; DEMHS: shoreline Know Your Zone, Millstone REP | 0 |
+| Delaware | none | AGOL 18; DEMA: Know Your Zone locator (zones A-D) | 1 |
+| Florida | partial, **not shown** (decision 6) | FDEM SERT county-level status, 87 rows "Not Reporting"; KYZ `STATUS` blank | 22 |
+| Georgia | none | AGOL 25; GEMA: no map (news of Apr 2026 fires) | 24 |
+| Idaho | none | AGOL 8; Idaho OEM: Ready-Set-Go adopted May 2026, sheriffs order; Blaine County map planned | 106 |
+| Illinois | none | AGOL 21; IEMA: Ready Illinois only | 2 |
+| Indiana | none | AGOL 6; IDHS: county travel-status map only | 1 |
+| Iowa | none | AGOL 10; HSEMD: Alert Iowa, proclamations | 0 |
+| Kansas | none | AGOL 6; KDEM: SEOC news; county orders | 16 |
+| Kentucky | none | AGOL 15; KYEM: EM region map only | 0 |
+| Louisiana | none | AGOL 27; GOHSEP: static hurricane plan maps | 1 |
+| Maine | none | AGOL unrelated; MEMA: hurricane evacuation dashboard (static) | 2 |
+| Maryland | none | MDEM Know Your Zone (hurricane zones A-C), no live status | 1 |
+| Massachusetts | none | AGOL 35; MEMA: hurricane zones A-C | 0 |
+| Michigan | none | AGOL 8; MSP EMHSD: no map | 1 |
+| Minnesota | none | AGOL 16; HSEM: none; county maps (St. Louis 1,600 zones; Lake) | 13 |
+| Mississippi | none | AGOL 19; MEMA: hurricane guides, MDOT routes | 2 |
+| Missouri | none | SEMA template, 10 rows "No Evacuation Order", `publicview = No` | 0 |
+| Montana | none | AGOL 9; DES: no map | 24 |
+| Nebraska | none | AGOL 3; NEMA coordinates; county orders (Mar 2026) | 19 |
+| Nevada | none | AGOL 10; NDEM: wildfire info page; counties' zones in Genasys | 46 |
+| New Hampshire | none | AGOL 21; HSEM: ReadyNH, NH Alerts | 2 |
+| New Jersey | none | AGOL 30; NJOEM: no verified map | 0 |
+| New Mexico | none | DHSEM `EM3628_Evacuations` (one declaration); no map | 51 |
+| New York | none | AGOL 54; DHSES: none; NYC hurricane zones | 0 |
+| North Carolina | none | NCEM KYZ (hurricane) layer errors on query; ReadyNC hub | 7 |
+| North Dakota | none | AGOL 7; DES firemonitor (size, containment; no evacuations) | 4 |
+| Ohio | none | AGOL 10; Ohio EMA: plans only | 4 |
+| Oklahoma | none | AGOL 9; OEM: text situation updates; Oklahoma EM sends IPAWS alerts | 93 |
+| Oregon | **available** | OEM "Evacuation Areas Public": HTTP 200, count 0 off-season, licence "Public"; 2026 history 5.18 M rows | 179 |
+| Pennsylvania | none | AGOL 19; PEMA: daily PDF reports | 3 |
+| Rhode Island | none | AGOL 15; RIEMA: 2012-13 hurricane zones | 0 |
+| South Carolina | none | SCEMD: hurricane/REP zones; no map | 1 (+8 CEM/LAE 2025) |
+| South Dakota | none | AGOL 3; SD OEM: no map | 29 |
+| Tennessee | none | AGOL 10; TEMA: no map | 2 |
+| Texas | none | AGOL 136 (research, regional); TDEM: no map | 65 |
+| Utah | none | DEM: no map; county zones in Genasys Protect, a vendor system (Genasys release; KJZZ on Washington County) | 49 |
+| Vermont | none | AGOL 1; VEM: VT-Alert only | 0 |
+| Virginia | none | VDEM hurricane KYZ ("updated July 2020"); VDOF fire map | 4 |
+| Washington | **partial** (Q-A) | WA SEOC layer: 583 rows, 73 Active (5 with a level), daily; incomplete TLS chain (fix in R10); indemnity terms | 266 |
+| West Virginia | none | AGOL 4; WVEMD: none; Forestry daily fire report | 1 |
+| Wisconsin | none | AGOL 13; WEM: WebEOC restricted (TLP) | 2 |
+| Wyoming | none | AGOL 5 (Washakie county view); OHS: no map | 41 |
 
-DC: no wildland fires of list size, so it is not relevant. Alaska and Hawaii are out of scope (brief 3 decision 1);
-Alaska has an `AK_State_Authoritative_nifc` "Unorganized Alaska Evacuation Zones" layer for later.
+DC has no fires of list size. Alaska and Hawaii are out of scope (decision 1); Alaska's `AK_State_Authoritative_nifc`
+"Unorganized Alaska Evacuation Zones" layer is noted for later.
 
-## 8. Evidence log (2026-10-22 UTC; GET only; 0 non-GET requests; no browser runs; no secrets involved)
+## 10. Evidence log (2026-10-22 UTC; GET only; 0 non-GET; no browser runs; no secrets involved)
 
-- ArcGIS catalogue (`arcgis.com/sharing/rest/search`): 60 queries at 1 per second (3 by views, 47 per state, 7 keyword,
-  3 owner/org). Item JSON for 17 items.
+First pass (20:45-21:40):
+- ArcGIS catalogue: 60 queries at 1 per second (3 by views, 47 per state, 7 keyword, 3 owner/org); item JSON for 17
+  items.
+- OR: item, service and layer JSON 200; `returnCountOnly` at 20:49:16Z `{"count":0}`; history levels 1/2/3 had
+  1,554,704 / 1,719,348 / 1,906,717 rows.
+- FL SERT: count 87, all "Not Reporting", last EditDate 2026-07-28; KYZ layer 46: 199 rows, `STATUS` blank.
+- NC: MapServer 200, 4 layer queries error -2147467259. MO: count 10.
+- NWS: `/alerts/types` 111 types; `/alerts/active` for the 7 types at 20:59:08Z: 0; `/alerts`: 2 in 7 days.
+- IPAWS feed `recent/2026-10-22T00:00:00Z`: 200, 3 alerts, no key.
+- OpenFEMA: `$top=1` 200 in 0.8 s, 4,870,228 rows; FRW+EVI since 2024: 10.6 MB in 14.7 s; one `any()` filter: 503
+  after 60 s.
+
+Revision pass (22:00-22:40):
+- Code: `evac_status_key` run offline:
+  - "No Evacuation Order" → order;
+  - "Not Reporting", "Mandatory Evacuation", "Voluntary Evacuation", "Ready", "Set", "Go", "No Evacuation in Place"
+    → other;
+  - "Level 1 - Ready" → advisory, "Level 2 - Be Set" → warning, "Level 3 - Go" → order.
+- Offline backend run for a Reno bbox (upstream mocked as empty): calls "Cal OES county inventory" and "Cal OES
+  evacuation layer"; `available`, 0 zones, both Cal OES caveats.
+- Offline web model run (scratch vitest outside the repo; the backend's real answer shape for a non-CA point):
+  - 11 points inside the rectangle → `none-listed`, "No evacuation order or warning listed here" · "Cal OES, checked
+    just now · not an all-clear", and `needsStatewideFireWeather` true;
+  - Medford (42.33° N), Boise and Bozeman → `not-checked`, "Cal OES lists evacuation zones in California only.";
+  - all 14 link "Cal OES".
+- WA:
+  - `openssl s_client` via the proxy: wise.wamil.us chain depth 0 only (verify error 20/21); services.arcgis.com: 2
+    certificates, verify 0;
+  - DigiCert intermediate from cacerts.digicert.com: 200, 1,228 B;
+  - httpx with certifi: `CERTIFICATE_VERIFY_FAILED`; with certifi + intermediate: service 200 (layer 5
+    "Evacuation_Zones_Level", 22 fields);
+  - counts 583 (`1=1`) and 73 (`status='Active'`); grouped stats as 2.1; active rows read without geometry, whitelisted
+    fields; item JSON 200 (full licence).
+- OR:
+  - item, KML, WFS and StoryMap JSON, 3 catalogue searches;
+  - history item and layer JSON; count 5,180,769;
+  - grouped queries: by fire since Sep 20 (1 fire, Grasshopper); by Date/level for 2026-08-15 12:00-12:05 (22
+    groups); County null/empty 101,432; "Del Norte" 0; `Fire_Name` null 2,630,502; hazard "Other" 15,741. One
+    whole-layer grouping timed out with a 400 after 56 s;
+  - one 28 KB geojson sample (11 zones; scratch only);
+  - live count 0 at 22:34:16Z.
+- AZ: 4 catalogue searches; 3 item JSON; both services' layer JSON, grouped by Status; the 12 non-"None" rows; the July
+  export (4,252 "None"); `Evacuations_active_public` (14 rows, EditDate 2020-06-15..08-31, layer edit 2023-11-16).
+  OpenFEMA 2026 AZ fire messages: 7 (from the first pass's download).
+- Web: 47 WebSearch queries (44 states as in section 9, OR terms, Oregon GEOHub terms, Hatch Grade Fire). WebFetch:
+  fema.gov IPAWS feed page (no MOA; updated June 9, 2026), ndresponse.gov firemonitor release (no evacuations). Not
+  reached: omls.oregon.gov (503 and a reset).
+- No browser run: the role's ports 8714 and 5184 were held by another session's servers during this pass, so the
+  border check used the offline model run instead. No servers were started, and nothing was written to `data/`.
+- Scratch files (outside the repository): `reno_flow.py`, `vt/border.scratch.test.ts`, `wa_tls.py`, `wa_active.py`,
+  `az2026.py`, `websearch_log.md`, `dl/`.
+
+## 11. Revision notes (after the independent review)
+
+- Questions rewritten: the round-2 answers are recorded, and the two open questions (Washington's indemnity terms;
+  Oregon history) each have options, a recommendation and a default.
+- Washington:
+  - full licence quoted (indemnification, as-is, compiled from county websites and feeds);
+  - TLS root cause found (missing intermediate in the server's own chain, not the proxy), with a fix that keeps
+    verification on;
+  - layer read live (583 / 73 / 5 with a level; 68 rows with no level must be filtered).
+- California rectangle: added as part of G2, with 11 border places verified offline. Border tests are in R1 and
+  section 6.
+- Florida county shape removed: Florida is not shown (decision 6), so the adapter has no county level. The status
+  mapping finding is recorded.
+- Per-source times, per-source behaviour fields (`confirm_drop`, `issuing_authority`, `aggregator`,
+  `standing_caveats`, `tls_extra_ca`), the reason code `state_not_available` and the border dedup rule are added.
+- Doc and credit updates are now R8, the verification path is section 6, and the Oregon fixture source and a tested
+  query recipe are given.
 - Oregon:
-  - item, FeatureServer and layer JSON: 200;
-  - `returnCountOnly` 20:49:16Z: `{"count":0}`;
-  - grouped stats: `[]`;
-  - history layer: 1,554,704 / 1,719,348 / 1,906,717 rows for levels 1/2/3; Date 2026-07-01..09-29; 61 distinct names.
-- Washington: `wise.wamil.us` gave curl error 60 at 20:50:35Z, httpx `CERTIFICATE_VERIFY_FAILED`, and WebFetch 503
-  (×2). Web map `834177125919449ba694c49518bc12e2/data`: 200.
-- Florida:
-  - SERT: count 87; grouped `evacuation_status` = [("Not Reporting", 87)]; last EditDate 2026-07-28;
-  - KYZ layer 46: count 199; `STATUS` = [" " × 199].
-- Arizona:
-  - `Evacuations_active_public` L0: count 14, L1: 0, last edit 2023-11-16;
-  - EEZ: count 4,252, statuses None 4,240 / Set 6 / Go 5 / Planning 1 (12 non-normal rows listed).
-- North Carolina: MapServer 200; 4 layer queries return error -2147467259.
-- Missouri: count 10. Colorado: org search 17 items.
-- NWS:
-  - `/alerts/types`: 200, 111 types;
-  - `/alerts/active?event=<7 types>` at 20:59:08Z: 0 features;
-  - `/alerts?event=…`: 2 features (the window is 7 days, even with `start=2026-08-01`).
-- IPAWS public feed `recent/2026-10-22T00:00:00Z`: 200, `application/xml`, 36,726 B, 3 alerts (NWS weather), no key.
-- OpenFEMA:
-  - `$top=1`: 200 in 0.8 s, count 4,870,228, newest `sent` 2026-10-21T20:49Z;
-  - FRW+EVI since 2024: 200 in 14.7 s, 10.6 MB, 2,233 unique identifiers;
-  - 2025 counts: CEM 479, CDW 34, SPW 0, LAE 1,715 (CEM/CDW/LAE download 8.3 MB);
-  - one `any()` filter attempt: 503 after 60 s.
-- Analysis scripts and raw downloads stayed in the session scratchpad. Nothing was written to `data/`.
+  - terms basis stated as "Public" only;
+  - `last_edited_date` corrected to a recalculation time;
+  - level rendering flagged as not verbatim, with a hazard-type rule;
+  - personal-field list extended (`created_user`, `last_edited_user`).
+- Arizona: the authoritative layer identified, the 2026 items explained as views or exports, verdict "none" kept on
+  firmer evidence. Count corrected (11 Set/Go + 1 Planning) and dates reconciled.
+- Corrections:
+  - `outFields` is at `extras.py:610`;
+  - the state file comes from backend R3 (`backend/fire3d/data/`), not the gitignored `data/`;
+  - the IPAWS MOA remark is removed (not on FEMA's page);
+  - the Cal OES list is complete (85 lines / 19 files; tests 57 / 13 by the same regex; the reviewer counted 52);
+  - "blocked" merged into "none" (Utah).
+- R7 rescoped by decision 5: no IPAWS feed, so no poller or store, and effort M. The reviewer's last point was cut off
+  in the input; the visible part (effort, scope, poller) is addressed. The latent `evac_status_key` bug became R6, P0.
+- Where the reviewer was not quite right:
+  - its caveat that the sandbox re-terminates TLS does not apply to this host: the chain seen carries DigiCert's
+    issuer, and arcgis.com shows a full chain through the same proxy, so the result reflects the server;
+  - Arizona's 2026 items did not change the verdict;
+  - the Del Norte border duplicate is possible but did not occur in 2026 (0 rows).
