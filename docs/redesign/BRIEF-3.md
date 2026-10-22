@@ -75,3 +75,16 @@ Defaults taken without asking (the user can override):
 - County evacuation feeds are out of scope (state feeds only, as decision 4 says); a later brief may research them.
 - Areas outside the six tested regions (Rocky Mountain, Eastern, Northern California) say "accuracy not yet tested
   here".
+
+## Decisions round 3 (answered Oct 22, 2026, after the audit revisions)
+
+1. **Washington: don't build it.** Its layer's terms require the user of the data to "hold harmless, defend, and
+   indemnify the State of Washington"; the user declined. Washington says "not available in this state"; the
+   local officials' messages relayed by the NWS still show there. (This replaces round 2, decision 6: no partial
+   state evacuation source is shown; Florida stays "not available in this state" too.)
+2. **California fire active per one agency only: active if either agency says so.** The card shows each agency's
+   record with its own issuer, status and time (for example the Timber Fire, active in NIFC, not in CAL FIRE).
+3. **California complexes: CAL FIRE's one row.** One marker for the complex in California, with its member fires
+   named on the card. Other states list member fires on their own (round 2 default).
+4. **Oregon past zones: not now.** Evacuation zones stay current-only; past days show the archived official FEMA
+   messages, labelled archived.
