@@ -16,6 +16,15 @@ temporary folder (never ``data/``; ``--cache-dir`` keeps it between runs instead
   for LOX FW.W #1, FW.A #1, FW.W #2 and FW.A #2 of 2025 (4), and ``geojson/vtec_event.py`` for FW.W #1 (1).
 * Element 84 Earth Search STAC: the Sentinel-2 L2A item S2A_11SLT_20250102_0_L2A (1).
 
+Brief 3 (``--only national``, 3 requests; ``--only existing`` re-records only the files above):
+
+* api.weather.gov: the national ``/alerts/active`` answer for the 48 states + DC with the fire weather and local
+  officials' events, exactly as ``nws.national_url()`` asks (1), and the Los Angeles County Civil Emergency Message
+  ``v2-3.13.8-1556392-1792113838542`` of 2026-10-16 (a relayed local officials' message, NWEM) by its id (1).
+* OpenFEMA ``IpawsArchivedAlerts``: the actual messages sent 2026-10-09 21:00 to 2026-10-10 03:00 UTC (Kern County
+  "Cyrus Fire" Fire Warnings, a Sheridan County WY Fire Warning without a polygon, and weather alerts that are out of
+  scope), with the app's own ``$select`` (1).
+
 No API key is needed or sent. How each file is trimmed, and which values are set rather than recorded, is written
 down in ``tests/data/official/PROVENANCE.md`` and ``tests/data/terrain/PROVENANCE.md``. Every sample is checked
 against what the tests need before anything is written; a failed check stops the script and writes nothing.
@@ -27,6 +36,7 @@ import argparse
 import copy
 import json
 import os
+import re
 import sys
 import tempfile
 import time
@@ -263,32 +273,108 @@ def check_stac(item: dict) -> None:
 
 
 # ------------------------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------------------------------
+# Brief 3: national NWS answer, a relayed local officials' message, an OpenFEMA window
+# ------------------------------------------------------------------------------------------------------------------
+NWEM_ID = "v2-3.13.8-1556392-1792113838542"        # LA County CEM, 2026-10-16 01:23:59 UTC ("+01:00" stamp kept)
+OPENFEMA_WINDOW = ("2026-10-09T21:00:00Z", "2026-10-10T03:00:00Z")
+REDACTED_SENDER = "redacted@example.invalid"     # operators' sender addresses are never recorded
+OUT_OF_SCOPE_KEPT = ("FFW", "TOR", "LEW")         # one record each, to test the scope filter
+
+
+def build_national() -> tuple[dict, dict, dict]:
+    from fire3d.sources import openfema
+
+    national = fetch_json(nws.national_url(), None, NWS_HEADERS)
+    nwem = fetch_json(f"{nws.NWS_API}/alerts/{NWEM_ID}", None, NWS_HEADERS)
+    nwem = copy.deepcopy(nwem)
+    nwem["properties"]["sender"] = REDACTED_SENDER
+    for f in national.get("features", []):
+        if isinstance(f.get("properties"), dict) and "sender" in f["properties"]:
+            f["properties"]["sender"] = f["properties"]["sender"] if str(f["properties"]["sender"]).startswith("w-nws") else REDACTED_SENDER
+    a, b = (iso_to_ms(t) for t in OPENFEMA_WINDOW)
+    raw = fetch_json(openfema.API_URL, openfema.window_params(a, b, 0))
+    rows = raw.get("IpawsArchivedAlerts") or []
+    kept, seen_codes = [], set()
+    for r in rows:
+        info = (r.get("info") or [{}])[0] if r.get("info") else {}
+        codes = [e.get("value") for e in info.get("eventCode") or []]
+        in_scope = bool(set(codes) & set(nws.LOCAL_CODES))
+        extra = next((c for c in codes if c in OUT_OF_SCOPE_KEPT and c not in seen_codes), None)
+        if not (in_scope or extra or (r.get("msgType") == "Cancel" and "Cancel" not in seen_codes)):
+            continue
+        seen_codes.add(extra or ("Cancel" if r.get("msgType") == "Cancel" else ""))
+        r = copy.deepcopy(r)
+        if "sender" in r:
+            r["sender"] = REDACTED_SENDER
+        om = r.get("originalMessage") or ""
+        m = re.search(r"<references>.*?</references>", om, re.S)
+        r["originalMessage"] = m.group(0) if m else ""
+        r["originalMessage"] = re.sub(r"[^,\s<>]+@[^,\s<>]+", REDACTED_SENDER, r["originalMessage"])
+        for inf in r.get("info") or []:
+            for ar in inf.get("area") or []:
+                if isinstance(ar.get("polygon"), dict):
+                    ar["polygon"] = simplify_geometry(ar["polygon"], 0.0, 4)
+        kept.append(r)
+    meta = dict(raw.get("metadata") or {})
+    meta["count"] = len(kept)
+    meta.pop("rundate", None)
+    return national, nwem, {"metadata": meta, "IpawsArchivedAlerts": kept}
+
+
+def check_national(national: dict, nwem: dict, fema: dict) -> None:
+    from fire3d.sources import openfema
+
+    need(isinstance(national.get("features"), list), "national answer is a FeatureCollection")
+    need("Alabama" in str(national.get("title")) and "Wyoming" in str(national.get("title")), "49-state title")
+    a = nws.normalize_local_nws(nwem)
+    need(a is not None and a["event_code"] == "CEM" and a["sender_is_platform"], "NWEM CEM parses, fire keyword, platform")
+    need(a is not None and a["same_codes"] == ["006037"] and a["source_url"].startswith("https://api.weather.gov/alerts/"), "NWEM codes and link")
+    parsed = openfema.parse_records(fema["IpawsArchivedAlerts"])
+    need(any(x["event_code"] == "FRW" and x["_geom"] is not None for x in parsed), "an FRW with a polygon")
+    need(any(x["event_code"] == "FRW" and x["_geom"] is None for x in parsed), "an FRW without a polygon")
+    need(any(x["references"] for x in parsed), "an update with references")
+    need(nwem["properties"].get("sender") == REDACTED_SENDER, "the NWEM operator address is redacted")
+    need(all(r.get("sender") in (None, REDACTED_SENDER) for r in fema["IpawsArchivedAlerts"]), "OpenFEMA senders redacted")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--dry-run", action="store_true", help="fetch, trim and check; write nothing")
     ap.add_argument("--cache-dir", type=Path, help="keep the HTTP cache here between runs (never under data/)")
+    ap.add_argument("--only", choices=("all", "existing", "national"), default="all",
+                    help="record everything, only the brief-2 samples, or only the brief-3 national samples")
     args = ap.parse_args()
     if args.cache_dir:
         cache = args.cache_dir.resolve()
         need(not cache.is_relative_to((config.REPO_ROOT / "data").resolve()), "--cache-dir outside data/")
         config.CACHE_DIR = cache
 
-    lox, empty, zones = build_nws()
-    check_nws(lox, empty, zones)
-    bypoint, events, geo = build_iem()
-    check_iem(bypoint, events, geo)
-    item = build_stac()
-    check_stac(item)
-
-    files = {
-        OFFICIAL_DIR / "nws_alerts_lox_rfw.json": dump(lox),
-        OFFICIAL_DIR / "nws_alerts_ca_empty.json": dump(empty),
-        OFFICIAL_DIR / "nws_zones_fire.json": dump_zone_map(zones),
-        OFFICIAL_DIR / "iem_bypoint_eaton.json": dump(bypoint),
-        **{OFFICIAL_DIR / f"iem_event_lox_fw_{s.lower()}_{e}.json": dump(d) for (s, e), d in events.items()},
-        OFFICIAL_DIR / "iem_geojson_lox_fw_w_1.json": dump_features(geo, geo["features"]),
-        TERRAIN_DIR / "stac_item_s2_11SLT_20250102.json": dump(item),
-    }
+    files: dict[Path, str] = {}
+    if args.only in ("all", "existing"):
+        lox, empty, zones = build_nws()
+        check_nws(lox, empty, zones)
+        bypoint, events, geo = build_iem()
+        check_iem(bypoint, events, geo)
+        item = build_stac()
+        check_stac(item)
+        files.update({
+            OFFICIAL_DIR / "nws_alerts_lox_rfw.json": dump(lox),
+            OFFICIAL_DIR / "nws_alerts_ca_empty.json": dump(empty),
+            OFFICIAL_DIR / "nws_zones_fire.json": dump_zone_map(zones),
+            OFFICIAL_DIR / "iem_bypoint_eaton.json": dump(bypoint),
+            **{OFFICIAL_DIR / f"iem_event_lox_fw_{s.lower()}_{e}.json": dump(d) for (s, e), d in events.items()},
+            OFFICIAL_DIR / "iem_geojson_lox_fw_w_1.json": dump_features(geo, geo["features"]),
+            TERRAIN_DIR / "stac_item_s2_11SLT_20250102.json": dump(item),
+        })
+    if args.only in ("all", "national"):
+        national, nwem, fema = build_national()
+        check_national(national, nwem, fema)
+        files.update({
+            OFFICIAL_DIR / "nws_alerts_national.json": dump(national),
+            OFFICIAL_DIR / "nws_nwem_cem_la.json": dump(nwem),
+            OFFICIAL_DIR / "openfema_window_frw.json": dump(fema),
+        })
     key = config.FIRMS_MAP_KEY
     if key and any(key in body for body in files.values()):
         raise SystemExit("the FIRMS key reached a sample: nothing written")

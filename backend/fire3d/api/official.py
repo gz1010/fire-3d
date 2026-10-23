@@ -1,12 +1,20 @@
-"""Official information endpoints (BRIEF-2 U-R6, U-R7): CAL FIRE status history and NWS fire weather alerts.
+"""Official information endpoints (BRIEF-2 U-R6, U-R7; brief 3 CONTRACT 14.5-14.7): CAL FIRE status history, NWS
+fire weather alerts and the local officials' messages relayed by NWS (with FEMA's archive for past days).
 
 * ``GET /api/official/calfire?incident=<id>``: CAL FIRE's current record of the incident, every change Fire-3d has
   recorded since it first checked (``sources.calfire_history``) and caveats. Each call is a check: it records the
-  current record.
+  current record. A fire whose record is NIFC WFIGS's answers ``not_covered``.
 * ``GET /api/official/fire-weather?incident=<id>&at_ms=<ms>&margin_km=15``: NWS Red Flag Warnings and Fire Weather
-  Watches near the incident (``sources.nws``): the live NWS list for the present, the IEM archive (``archived:
-  true``) for a time older than now - 6 h or a historical incident. Without ``incident``: every current California
-  alert (for the overview).
+  Watches near the incident (``sources.nws``): the live national NWS list for the present (alerts of the states the
+  fire's area touches), the IEM archive (``archived: true``) for a time older than now - 6 h or a historical
+  incident. Without ``incident``: every current alert in the lower 48 states (for the overview). ``states_checked``
+  says which states the answer covers, ``alert_states`` which of them have an alert.
+* ``GET /api/official/local-alerts?incident=<id>&at_ms=&margin_km=15`` or ``?bbox=w,s,e,n``: local officials'
+  messages (Fire Warning, Evacuation Immediate, ...) tied to the area, from the NWS (live and its last 7 days) and the
+  FEMA IPAWS archive via OpenFEMA (older than 24 h), one alert per CAP id, each with a link (``source_url``).
+
+Incidents are resolved from their bundle on disk, else from ``catalog.get_summary`` (any listed fire, CAL FIRE or
+NIFC WFIGS, with or without a bundle; :func:`fill_from_catalog`).
 
 Both carry the official envelope (docs/redesign/CONTRACT.md section 13, official-backend). An upstream failure is not
 an HTTP error: the answer is 200 with ``status: "unavailable"`` (CAL FIRE, live NWS) or
@@ -27,7 +35,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 
 from .. import bundle, catalog, config
-from ..sources import calfire, calfire_history, nws
+from ..sources import calfire, calfire_history, nws, openfema
 from ..timeutil import DAY_MS, HOUR_MS, now_ms
 from .extras import expand_bbox
 
@@ -47,6 +55,29 @@ CALFIRE_SOURCE: dict[str, str] = {"name": "CAL FIRE incident list", "url": "http
 EMPTY_FC: dict[str, Any] = {"type": "FeatureCollection", "features": []}
 STANDING_NWS = ("A Red Flag Warning or Fire Weather Watch is a weather alert about fire danger, not an evacuation "
                 "order. Follow local officials.")
+SCOPE_WORDS = "the lower 48 states"     # the national request's scope, in the caveats (CONTRACT 14.6)
+WFIGS_NOT_CALFIRE = "CAL FIRE does not list this fire; its official record is published by NIFC WFIGS."
+
+# Local officials' messages (CONTRACT 14.7)
+LOCAL_SOURCE: dict[str, str] = {
+    "name": "National Weather Service (relayed local officials' messages)",
+    "url": "https://www.weather.gov/dsb/nonweatheralerts",
+    "credit": "National Weather Service (relayed local officials' messages)",
+    "license": nws.NWS_SOURCE["license"],
+    "terms_url": nws.NWS_SOURCE["terms_url"],
+}
+LOCAL_CAVEAT = ("Fire-3d lists only the local alerts the National Weather Service relays; most are not relayed (about "
+                "1 in 20 fire and evacuation alerts in 2024-26). No alert here is not an all-clear: follow local "
+                "officials.")
+ARCHIVE_CAVEAT = ("Archived copy from FEMA (OpenFEMA, published about a day later); FEMA does not validate message "
+                  "content. Replays can list more than was visible live.")
+NWS_KEEPS_REASON = "NWS keeps about 7 days of alerts."
+ARCHIVE_NOT_BUILT_REASON = "The FEMA archive is not checked in this version."
+ARCHIVE_RECENT_REASON = ("FEMA publishes its archive about a day later; messages of the last 24 hours come from the "
+                         "National Weather Service.")
+ARCHIVE_POINT_REASON = "The FEMA archive is checked for a chosen fire only."
+NWS_PAST_POINT_REASON = "Past local alerts are checked for a chosen fire only."
+ARCHIVE_ENABLED = False                # the background OpenFEMA prefetch (below us-pipeline's cut line)
 
 BBox = tuple[float, float, float, float]
 
@@ -97,13 +128,16 @@ class IncidentRef:
     started_ms: int | None
     end_ms: int | None
     uid: str | None             # CAL FIRE UniqueId (from the bundle's summary)
-    catalog_id: bool            # a real CAL FIRE id (SPEC 4.4), not a fixture
+    catalog_id: bool            # an id of the catalog's form (SPEC 4.4: CAL FIRE or NIFC WFIGS), not a fixture
     has_bundle: bool
+    record_source: str | None = None    # "calfire" | "wfigs" (from the bundle's summary or the catalog)
+    state: str | None = None
+    time_zone: str | None = None
 
 
 def incident_ref(incident_id: str) -> IncidentRef:
-    """What the bundle on disk says about an incident (400 for an invalid id; 404 when the id is neither a CAL FIRE
-    id nor a bundle). Incidents without a bundle are filled in from CAL FIRE by :func:`fill_from_calfire`."""
+    """What the bundle on disk says about an incident (400 for an invalid id; 404 when the id is neither of the
+    catalog's form nor a bundle). Incidents without a bundle are filled in by :func:`fill_from_catalog`."""
     try:
         bdir = bundle.bundle_dir(incident_id)
     except ValueError:
@@ -121,11 +155,16 @@ def incident_ref(incident_id: str) -> IncidentRef:
     tr = (m or {}).get("time_range") if isinstance((m or {}).get("time_range"), dict) else {}
     uid = calfire_history.valid_uid(s.get("calfire_uid"))
     mode = (m or {}).get("mode") or s.get("mode")
+    rs = s.get("record_source")
+    if rs not in ("calfire", "wfigs"):
+        rs = "calfire" if uid else None          # old manifests: a CAL FIRE uid means a CAL FIRE record
     return IncidentRef(
         id=incident_id, mode=mode if mode in ("live", "historical") else None, lon=_num(s.get("lon")), lat=_num(s.get("lat")),
         aoi=_bbox(grid.get("bbox_lonlat")), started_ms=_int(s.get("started_ms")),
         end_ms=_int(tr.get("end_ms")) if mode == "historical" else _int(s.get("contained_ms")),
-        uid=uid, catalog_id=parsed is not None and (uid is None or uid.startswith(parsed[2])), has_bundle=m is not None)
+        uid=uid, catalog_id=parsed is not None and (uid is None or uid.startswith(parsed[2])), has_bundle=m is not None,
+        record_source=rs, state=s.get("state") if isinstance(s.get("state"), str) else None,
+        time_zone=s.get("time_zone") if isinstance(s.get("time_zone"), str) else None)
 
 
 def match_record(recs: list[dict], ref: IncidentRef) -> dict | None:
@@ -159,26 +198,49 @@ def find_record(ref: IncidentRef) -> tuple[dict | None, str | None]:
     return (rec, calfire.list_key({"inactive": "true", "year": parsed[0]})) if rec is not None else (None, None)
 
 
-def fill_from_calfire(ref: IncidentRef) -> None:
-    """Location, mode and times of an incident without a bundle, from its CAL FIRE record (best effort)."""
-    if ref.lat is not None and ref.lon is not None and ref.mode is not None and ref.started_ms is not None:
-        return
-    if not ref.catalog_id:
-        return
+def _catalog_summary(incident_id: str) -> tuple[Any, bool]:
+    """``(catalog.get_summary(id) as a dict or None, reachable)``; a lookup failure is (None, False)."""
     try:
-        rec, key = find_record(ref)
-    except Exception as e:  # noqa: BLE001 - CAL FIRE unreachable (or any transport failure): no location then
-        log.info("official: CAL FIRE lookup for %s failed: %s", ref.id, config.mask_secrets(e))
+        s = catalog.get_summary(incident_id)
+    except Exception as e:  # noqa: BLE001 - a list unreachable (or any transport failure)
+        log.info("official: catalog lookup for %s failed: %s", incident_id, config.mask_secrets(e))
+        return None, False
+    if s is None:
+        return None, True
+    if hasattr(s, "model_dump"):
+        s = s.model_dump()
+    return (s if isinstance(s, dict) else None), True
+
+
+def fill_from_catalog(ref: IncidentRef) -> None:
+    """Location, mode, times, state, time zone and record source of an incident from the catalog
+    (``catalog.get_summary``: any listed fire, CAL FIRE or NIFC WFIGS, with or without a bundle), filling only what
+    the bundle did not say. HTTP 404 for an id nobody lists and no bundle; a lookup failure leaves the gaps."""
+    complete = (ref.lat is not None and ref.lon is not None and ref.mode is not None and ref.started_ms is not None
+                and ref.record_source is not None)
+    if complete or not ref.catalog_id:
         return
-    if rec is None:
-        if not ref.has_bundle:
+    s, reachable = _catalog_summary(ref.id)
+    if s is None:
+        if reachable and not ref.has_bundle:
             raise HTTPException(status_code=404, detail=f"unknown incident {ref.id!r}")
         return
-    ref.lat = ref.lat if ref.lat is not None else rec.get("lat")
-    ref.lon = ref.lon if ref.lon is not None else rec.get("lon")
-    ref.mode = ref.mode or ("live" if key == "live" or rec.get("is_active") else "historical")
-    ref.started_ms = ref.started_ms or rec.get("started_ms")
-    ref.end_ms = ref.end_ms or rec.get("extinguished_ms")
+    ref.lat = ref.lat if ref.lat is not None else _num(s.get("lat"))
+    ref.lon = ref.lon if ref.lon is not None else _num(s.get("lon"))
+    mode = s.get("mode")
+    ref.mode = ref.mode or (mode if mode in ("live", "historical") else None)
+    ref.started_ms = ref.started_ms or _int(s.get("started_ms"))
+    ref.end_ms = ref.end_ms or _int(s.get("contained_ms"))
+    rs = s.get("record_source")
+    ref.record_source = ref.record_source or (rs if rs in ("calfire", "wfigs") else None)
+    ref.state = ref.state or (s.get("state") if isinstance(s.get("state"), str) else None)
+    ref.time_zone = ref.time_zone or (s.get("time_zone") if isinstance(s.get("time_zone"), str) else None)
+    ref.uid = ref.uid or calfire_history.valid_uid(s.get("calfire_uid"))
+
+
+def fill_from_calfire(ref: IncidentRef) -> None:
+    """Deprecated alias of :func:`fill_from_catalog` (brief 3)."""
+    fill_from_catalog(ref)
 
 
 # ----------------------------------------------------------------------------------------------------------------
@@ -205,6 +267,13 @@ def calfire_payload(incident_id: str) -> dict[str, Any]:
         out.update(status="unavailable", reason_code="not_covered",
                    reason="This incident is not in CAL FIRE's incident list (it is synthetic or local data), so there "
                           "is no CAL FIRE record.")
+        return out
+    if ref.record_source is None and not ref.has_bundle:
+        s, _ = _catalog_summary(incident_id)
+        rs = (s or {}).get("record_source")
+        ref.record_source = rs if rs in ("calfire", "wfigs") else None
+    if ref.record_source == "wfigs":
+        out.update(status="unavailable", reason_code="not_covered", reason=WFIGS_NOT_CALFIRE)
         return out
     rec: dict | None = None
     key: str | None = None
@@ -290,12 +359,13 @@ def _quiet(alerts: list[dict]) -> bool:
 
 
 def _statewide(out: dict[str, Any], at_ms: int | None, now: int) -> dict[str, Any]:
+    """The overview: every current alert in the lower 48 states (the shared national request)."""
     if at_ms is not None and at_ms < now - PAST_TOLERANCE_MS:
         out.update(status="not_available_for_past_dates", reason_code="past_date",
                    reason="Past fire weather alerts are shown for a chosen fire only (from the archive).")
         return out
     try:
-        alerts, fetched, updated = nws.active_alerts()
+        ans = nws.national_active()
     except nws.SourceBusy as e:
         raise HTTPException(status_code=429, detail=str(e)) from None
     except nws.SourceError as e:
@@ -303,39 +373,47 @@ def _statewide(out: dict[str, Any], at_ms: int | None, now: int) -> dict[str, An
                    reason=f"{e}. Fire weather alerts are not shown; check weather.gov.")
         out["caveats"].append(STANDING_NWS)
         return out
-    placed, zones, cav = nws.place_live(alerts, None, None, now=now, tol_deg=STATEWIDE_SIMPLIFY_DEG)
-    out.update(alerts=placed, zones=zones, retrieved_ms=fetched, source_updated_ms=updated)
+    placed, zones, cav = nws.place_live(ans.fire, None, None, now=now, tol_deg=STATEWIDE_SIMPLIFY_DEG)
+    out.update(alerts=placed, zones=zones, retrieved_ms=ans.fetched_ms, source_updated_ms=ans.updated_ms,
+               states_checked=list(ans.states), alert_states=nws.alert_states(placed))
     out["caveats"] += cav
     if _quiet(placed):
         out["caveats"].append("No Red Flag Warning or Fire Weather Watch from the National Weather Service is in "
-                              "effect in California right now. That is not an all-clear: follow local officials.")
+                              f"effect in {SCOPE_WORDS} right now. That is not an all-clear: follow local officials.")
     out["caveats"].append(STANDING_NWS)
     return out
+
+
+def _fire_area(ref: IncidentRef, margin_km: float) -> tuple[tuple[float, float], BBox, BBox]:
+    """``(reported location, base area, area)`` of a located incident: its analysis area (else the reported
+    location +- 10 km), expanded by ``margin_km``."""
+    point = (float(ref.lon), float(ref.lat))  # type: ignore[arg-type]
+    base = ref.aoi or expand_bbox((point[0], point[1], point[0], point[1]), POINT_BOX_KM)
+    return point, base, expand_bbox(base, margin_km)
 
 
 def fire_weather_payload(incident: str | None, at_ms: int | None, margin_km: float = DEFAULT_MARGIN_KM) -> dict[str, Any]:
     """``GET /api/official/fire-weather`` body (see the module doc)."""
     now = now_ms()
     out = _envelope("fire_weather", nws.NWS_SOURCE, incident, at_ms, now)
-    out.update(alerts=[], zones=EMPTY_FC, area_bbox=None, reported_location=None)
+    out.update(alerts=[], zones=EMPTY_FC, area_bbox=None, reported_location=None, states_checked=[], alert_states=[])
     if not incident:
         return _statewide(out, at_ms, now)
     ref = incident_ref(incident)
-    fill_from_calfire(ref)
+    fill_from_catalog(ref)
     if ref.lat is None or ref.lon is None:
         out.update(status="unavailable", reason_code="upstream_error",
-                   reason="The fire's reported location could not be looked up (CAL FIRE could not be reached), so "
-                          "fire weather alerts near it are not shown.")
+                   reason="The fire's reported location could not be looked up (the fire lists could not be reached), "
+                          "so fire weather alerts near it are not shown.")
         out["caveats"].append(STANDING_NWS)
         return out
-    point = (float(ref.lon), float(ref.lat))
-    base = ref.aoi or expand_bbox((point[0], point[1], point[0], point[1]), POINT_BOX_KM)
-    area = expand_bbox(base, margin_km)
+    point, base, area = _fire_area(ref, margin_km)
     out.update(area_bbox=list(area), reported_location=list(point))
+    states = nws.states_in_area(area)
     past = ref.mode == "historical" or (at_ms is not None and at_ms < now - PAST_TOLERANCE_MS)
     if not past:
         try:
-            alerts, fetched, updated = nws.active_alerts()
+            ans = nws.national_active()
         except nws.SourceBusy as e:
             raise HTTPException(status_code=429, detail=str(e)) from None
         except nws.SourceError as e:
@@ -343,8 +421,11 @@ def fire_weather_payload(incident: str | None, at_ms: int | None, margin_km: flo
                        reason=f"{e}. Fire weather alerts are not shown; check weather.gov.")
             out["caveats"].append(STANDING_NWS)
             return out
-        placed, zones, cav = nws.place_live(alerts, area, point, now=now)
-        out.update(alerts=placed, zones=zones, retrieved_ms=fetched, source_updated_ms=updated)
+        checked = [st for st in states if st in ans.states]
+        mine = nws.in_states(ans.fire, checked)             # before any zone outline is loaded
+        placed, zones, cav = nws.place_live(mine, area, point, now=now)
+        out.update(alerts=placed, zones=zones, retrieved_ms=ans.fetched_ms, source_updated_ms=ans.updated_ms,
+                   states_checked=checked, alert_states=nws.alert_states(placed))
         out["caveats"] += cav
         if _quiet(placed):
             out["caveats"].append("No Red Flag Warning or Fire Weather Watch from the National Weather Service is in "
@@ -368,7 +449,8 @@ def fire_weather_payload(incident: str | None, at_ms: int | None, margin_km: flo
                           "there were none.")
         out["caveats"].append(STANDING_NWS)
         return out
-    out.update(alerts=res["alerts"], zones=res["zones"], retrieved_ms=res["retrieved_ms"])
+    out.update(alerts=res["alerts"], zones=res["zones"], retrieved_ms=res["retrieved_ms"], states_checked=states,
+               alert_states=nws.alert_states(res["alerts"]))
     cav = out["caveats"]
     cav.append("Archived copy of NWS products from the Iowa Environmental Mesonet (Iowa State University), not an "
                "official NWS source. Wording and times are those of the latest NWS statement issued by the selected "
@@ -383,12 +465,157 @@ def fire_weather_payload(incident: str | None, at_ms: int | None, margin_km: flo
 
 
 # ----------------------------------------------------------------------------------------------------------------
+# Local officials' messages (CONTRACT 14.7)
+# ----------------------------------------------------------------------------------------------------------------
+def parse_bbox_param(v: str) -> BBox:
+    """``w,s,e,n`` -> a bbox; HTTP 400 when it is not four finite numbers with w < e, s < n in lon/lat range."""
+    parts = [x.strip() for x in str(v).split(",")]
+    vals = [_num(x) for x in parts] if len(parts) == 4 else []
+    b = _bbox(vals) if vals and all(x is not None for x in vals) else None
+    if b is None or not (-180 <= b[0] <= 180 and -180 <= b[2] <= 180 and -90 <= b[1] <= 90 and -90 <= b[3] <= 90):
+        raise HTTPException(status_code=400, detail="bbox must be w,s,e,n in degrees (west < east, south < north)")
+    if (b[2] - b[0]) > 10 or (b[3] - b[1]) > 10:
+        raise HTTPException(status_code=400, detail="bbox is too large (at most 10 degrees a side)")
+    return b
+
+
+def _counties(area: BBox, point: tuple[float, float] | None) -> tuple[list[dict], str | None]:
+    """The counties the area touches (``regions.counties_in_bbox``) and the county FIPS at the point."""
+    r = nws._regions()
+    if r is None:
+        return [], None
+    try:
+        cs = [{"fips": c.fips, "name": c.name, "state": c.state} for c in r.counties_in_bbox(tuple(area))]
+        here = r.county_at(*point) if point is not None else None
+    except Exception as e:  # noqa: BLE001 - a broken data file: polygon matching still works
+        log.warning("official: county lookup failed: %s", e)
+        return [], None
+    return cs, (here.fips if here is not None else None)
+
+
+def _channel(cid: str, status: str, reason: str | None = None, retrieved: int | None = None,
+             updated: int | None = None) -> dict[str, Any]:
+    return {"id": cid, "status": status, "retrieved_ms": retrieved, "source_updated_ms": updated, "reason": reason}
+
+
+def _archive_channel(incident: str | None, at: int, now: int, area: BBox, point: tuple[float, float] | None,
+                     fips: list[str], point_county: str | None) -> tuple[dict, list[dict], list[str]]:
+    """The ``openfema_archive`` channel: ``(channel, alerts, caveats)``."""
+    if incident is None:
+        return _channel("openfema_archive", "not_checked", ARCHIVE_POINT_REASON), [], []
+    if at > now - openfema.ARCHIVE_DELAY_MS:
+        return _channel("openfema_archive", "not_checked", ARCHIVE_RECENT_REASON), [], []
+    if not ARCHIVE_ENABLED:
+        return _channel("openfema_archive", "not_checked", ARCHIVE_NOT_BUILT_REASON), [], []
+    return _channel("openfema_archive", "not_checked", ARCHIVE_NOT_BUILT_REASON), [], []
+
+
+def merge_local(nws_alerts: list[dict], archive_alerts: list[dict]) -> tuple[list[dict], int]:
+    """One alert per CAP id (the ``nws_api`` copy wins over the archived one), only alerts with an https
+    ``source_url``; returns ``(alerts, dropped for want of a link)``. Sorted like ``nws.place_local``."""
+    out: dict[str, dict] = {}
+    for a in list(nws_alerts) + list(archive_alerts):
+        out.setdefault(a["id"], a)
+    alerts = list(out.values())
+    kept = [a for a in alerts if str(a.get("source_url") or "").startswith("https://")]
+    kept.sort(key=nws._local_sort_key)
+    return kept, len(alerts) - len(kept)
+
+
+def local_alerts_payload(incident: str | None, bbox: str | None, at_ms: int | None,
+                         margin_km: float = DEFAULT_MARGIN_KM) -> dict[str, Any]:
+    """``GET /api/official/local-alerts`` body (CONTRACT 14.7)."""
+    if (incident is None) == (bbox is None):
+        raise HTTPException(status_code=400, detail="give either incident or bbox, not both")
+    now = now_ms()
+    out = _envelope("local_alerts", LOCAL_SOURCE, incident, at_ms, now)
+    out.update(alerts=[], channels=[], area_bbox=None, reported_location=None, counties=[])
+    point: tuple[float, float] | None = None
+    if incident is not None:
+        ref = incident_ref(incident)
+        fill_from_catalog(ref)
+        if ref.lat is None or ref.lon is None:
+            out.update(status="unavailable", reason_code="upstream_error",
+                       reason="The fire's reported location could not be looked up (the fire lists could not be "
+                              "reached), so local officials' alerts near it are not shown.",
+                       channels=[_channel("nws_api", "not_checked", "The fire's location is unknown."),
+                                 _channel("openfema_archive", "not_checked", "The fire's location is unknown.")])
+            out["caveats"].append(LOCAL_CAVEAT)
+            return out
+        point, _, area = _fire_area(ref, margin_km)
+        out["reported_location"] = list(point)
+    else:
+        area = parse_bbox_param(bbox or "")
+    out["area_bbox"] = list(area)
+    at = int(at_ms) if at_ms is not None else now
+    states = nws.states_in_area(area)
+    counties, point_county = _counties(area, point)
+    out["counties"] = counties
+    fips = [c["fips"] for c in counties]
+    caveats: list[str] = []
+    nws_alerts: list[dict] = []
+    dropped = 0
+    age = now - at
+    try:
+        if age <= nws.LIVE_WINDOW_MS:
+            ans = nws.national_active()
+            checked = [st for st in states if st in ans.states]
+            nws_alerts = nws.place_local(nws.local_in_states(ans.local, checked), area, point, fips, at,
+                                         point_county=point_county)
+            dropped += ans.dropped_no_link
+            nws_ch = _channel("nws_api", "available", None, ans.fetched_ms, ans.updated_ms)
+        elif age <= nws.NWS_KEEPS_MS and incident is None:
+            nws_ch = _channel("nws_api", "not_checked", NWS_PAST_POINT_REASON)
+        elif age <= nws.NWS_KEEPS_MS:
+            local, fetched, d = nws.past_local(states, at, now=now)
+            nws_alerts = nws.place_local(local, area, point, fips, at, point_county=point_county)
+            dropped += d
+            nws_ch = _channel("nws_api", "available", None, fetched, None)
+        else:
+            nws_ch = _channel("nws_api", "not_checked", NWS_KEEPS_REASON)
+    except nws.SourceBusy as e:
+        raise HTTPException(status_code=429, detail=str(e)) from None
+    except nws.SourceError as e:
+        nws_ch = _channel("nws_api", "unavailable", f"{e}. Local officials' alerts relayed by NWS are not shown; "
+                                                    "that does not mean there were none.")
+    arch_ch, arch_alerts, arch_cav = _archive_channel(incident, at, now, area, point, fips, point_county)
+    caveats += arch_cav
+    kept, no_link = merge_local(nws_alerts, arch_alerts)
+    dropped += no_link
+    out.update(alerts=kept, channels=[nws_ch, arch_ch])
+    tried = [c for c in (nws_ch, arch_ch) if c["status"] != "not_checked"]
+    if tried and not any(c["status"] in ("available", "pending") for c in tried):
+        out.update(status="unavailable", reason_code="upstream_error", reason=next(c["reason"] for c in tried))
+    elif not tried:
+        out.update(status="not_available_for_past_dates", reason_code="past_date",
+                   reason="Local officials' alerts are not checked for this time: " + " ".join(
+                       dict.fromkeys(c["reason"] for c in (nws_ch, arch_ch) if c["reason"])))
+    avail = [c for c in (nws_ch, arch_ch) if c["status"] == "available"]
+    out["retrieved_ms"] = min((c["retrieved_ms"] for c in avail if c["retrieved_ms"]), default=None)
+    out["source_updated_ms"] = nws_ch["source_updated_ms"]
+    if dropped:
+        caveats.append(f"{dropped} alert(s) without a source link were not shown.")
+    out["caveats"] = [LOCAL_CAVEAT] + caveats
+    return out
+
+
+# ----------------------------------------------------------------------------------------------------------------
 # Routes
 # ----------------------------------------------------------------------------------------------------------------
 @router.get("/api/official/calfire")
 def get_calfire(incident: str = Query(..., min_length=1, max_length=160)) -> Response:
     """CAL FIRE's record of the incident plus the status changes Fire-3d has recorded."""
     return _json(calfire_payload(incident))
+
+
+@router.get("/api/official/local-alerts")
+def get_local_alerts(incident: str | None = Query(None, min_length=1, max_length=160),
+                     bbox: str | None = Query(None, min_length=1, max_length=120),
+                     at_ms: int | None = Query(None, ge=0),
+                     margin_km: float = Query(DEFAULT_MARGIN_KM, ge=0, le=60)) -> Response:
+    """Local officials' messages relayed by NWS near the incident (or in ``bbox``), with FEMA's archive for past
+    days (CONTRACT 14.7)."""
+    return _json(local_alerts_payload(incident, bbox, at_ms, margin_km))
 
 
 @router.get("/api/official/fire-weather")

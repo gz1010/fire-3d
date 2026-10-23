@@ -133,3 +133,41 @@ Nothing was rebuilt from the IEM archive, because NWS still serves the Oct 17 20
 - **IEM:** public domain ([IEM disclaimer](https://mesonet.agron.iastate.edu/disclaimer.php): "may be used freely by
   anyone for any lawful purpose"). It is an archived copy of NWS products, not an official NWS source. Credit:
   National Weather Service, archived copy via the Iowa Environmental Mesonet (Iowa State University).
+
+## Brief 3 national samples (recorded 2026-10-23, about 00:58 UTC)
+
+Re-record with `cd backend && uv run python scripts/record_test_samples_official.py --only national` (3 requests;
+the relayed message below leaves NWS's 7-day list, so a later run will fail there and write nothing). Read by
+`tests/test_local_alerts_nws.py` and `tests/test_openfema_parse.py`.
+
+### `nws_alerts_national.json`
+
+- **What it is:** the real national answer of
+  `https://api.weather.gov/alerts/active?area=<the 48 states + DC>&event=Red Flag Warning,Fire Weather Watch,Fire
+  Warning,Evacuation Immediate,Shelter In Place Warning,Civil Danger Warning,Civil Emergency Message,Local Area
+  Emergency`, exactly the URL of `nws.national_url()`. Three Red Flag Warnings (Wyoming and Montana zones) and no
+  local officials' message were in effect.
+- **Set by hand:** nothing. `sender` values other than NWS's own `w-nws.webmaster@noaa.gov` would have been replaced
+  by `redacted@example.invalid` (none were).
+
+### `nws_nwem_cem_la.json`
+
+- **What it is:** one real local officials' message relayed by NWS (a Non-Weather Emergency Message): Civil
+  Emergency Message `v2-3.13.8-1556392-1792113838542`, Los Angeles County ("Public Alert System"; mentions the Bryson
+  Fire), sent 2026-10-16 01:23:59 UTC but stamped `02:23:59+01:00` by the sender (the time-zone quirk the evacuations
+  audit noted), from `https://api.weather.gov/alerts/v2-3.13.8-1556392-1792113838542`.
+- **Set by hand:** the operator's `sender` address is replaced by `redacted@example.invalid`.
+
+### `openfema_window_frw.json`
+
+- **What it is:** a real OpenFEMA `IpawsArchivedAlerts` answer for `status eq 'Actual'` and `sent` from
+  2026-10-09T21:00Z to 2026-10-10T03:00Z with the app's own `$select` (`openfema.window_params`). Kept: every
+  message with an event code of `nws.LOCAL_CODES` (Kern County "Cyrus Fire" Fire Warnings with polygons, including an
+  Update that references the first one; a Sheridan County WY Fire Warning without a polygon; a Sandoval County NM
+  Shelter in Place Warning; Local Area Emergencies that are not about fire, including Long Beach's "Get sandbags-Fire
+  Station 7"), plus one FFW, one TOR, one LEW and one Cancel to test the scope filter. 16 of the window's records.
+- **Set by hand:** `sender` replaced by `redacted@example.invalid`; `originalMessage` cut to its `<references>`
+  element with the sender addresses inside it replaced the same way; polygons rounded to 4 decimals;
+  `metadata.count` set to the number kept and `metadata.rundate` removed.
+- **Terms:** OpenFEMA terms (https://www.fema.gov/about/openfema/terms-conditions): "This product uses the Federal
+  Emergency Management Agency's OpenFEMA API, but is not endorsed by FEMA".

@@ -1,0 +1,66 @@
+{
+ "@context": [
+  "https://geojson.org/geojson-ld/geojson-context.jsonld",
+  {
+   "@version": "1.1",
+   "wx": "https://api.weather.gov/ontology#",
+   "@vocab": "https://api.weather.gov/ontology#"
+  }
+ ],
+ "id": "https://api.weather.gov/alerts/v2-3.13.8-1556392-1792113838542",
+ "type": "Feature",
+ "geometry": null,
+ "properties": {
+  "@id": "https://api.weather.gov/alerts/v2-3.13.8-1556392-1792113838542",
+  "@type": "wx:Alert",
+  "id": "v2-3.13.8-1556392-1792113838542",
+  "areaDesc": "Los Angeles",
+  "geocode": {
+   "SAME": [
+    "006037"
+   ]
+  },
+  "affectedZones": [],
+  "references": [],
+  "sent": "2026-10-16T02:23:59+01:00",
+  "effective": "2026-10-16T02:23:59+01:00",
+  "onset": null,
+  "expires": "2026-10-16T03:23:59+01:00",
+  "ends": null,
+  "status": "Actual",
+  "messageType": "Alert",
+  "category": "Safety",
+  "severity": "Extreme",
+  "certainty": "Observed",
+  "urgency": "Immediate",
+  "event": "Civil Emergency Message",
+  "sender": "redacted@example.invalid",
+  "senderName": "Public Alert System",
+  "headline": "Alert from AlertLACounty",
+  "description": "This is an emergency message from the County of Los Angeles. Due to the Bryson Fire and Red Flag weather conditions, wildfires burning in the area can spread fast. Follow fire and law enforcement directions. Check on neighbors who may need assistance if able to safely do so. If you feel unsafe due to a fire nearby, do not wait for an official alert to leave. Visit AlertLA.org for more information. Call NINE ONE ONE for emergency help.",
+  "instruction": null,
+  "response": "Prepare",
+  "note": null,
+  "parameters": {
+   "EAS-ORG": [
+    "CIV"
+   ],
+   "timezone": [
+    "EST"
+   ],
+   "BLOCKCHANNEL": [
+    "CMAS",
+    "EAS"
+   ]
+  },
+  "scope": "Public",
+  "code": "IPAWSv1.0",
+  "language": "en-US",
+  "web": null,
+  "eventCode": {
+   "SAME": [
+    "CEM"
+   ]
+  }
+ }
+}

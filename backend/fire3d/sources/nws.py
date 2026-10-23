@@ -1,10 +1,15 @@
-"""National Weather Service fire weather alerts: Red Flag Warnings and Fire Weather Watches (BRIEF-2 U-R7).
+"""National Weather Service alerts: Red Flag Warnings and Fire Weather Watches (BRIEF-2 U-R7), and the local
+officials' messages the NWS relays (Fire Warning, Evacuation Immediate and similar; CONTRACT 14.6, 14.7).
 
-Live (:func:`active_alerts`, :func:`place_live`): one statewide request,
-``api.weather.gov/alerts/active?area=CA&event=Red Flag Warning,Fire Weather Watch``, cached 2 min, serves every
-incident and the California overview. Each alert names its fire weather zones; their polygons
+Live (:func:`national_active`, :func:`place_live`, :func:`place_local`): one national request,
+``api.weather.gov/alerts/active?area=<the 48 states + DC>&event=Red Flag Warning,Fire Weather Watch,Fire Warning,
+Evacuation Immediate,...``, cached 2 min, serves every incident, the overview and the local-alerts endpoint; the
+answer is split in code into fire weather alerts and local officials' messages. Per fire, alerts are kept only when
+one of their zones (UGC) is in a state the fire's area touches, before any zone outline is loaded, so a Montana alert
+never reaches a Florida fire. Each fire weather alert names its fire weather zones; their polygons
 (``/zones/fire/{UGC}``) are cached 30 days. Coverage and distances use the full polygons; the map gets a copy
-simplified to about 100 m.
+simplified to about 100 m. Past local messages (2 h to 7 days back) come from one cached ``/alerts?start=&end=``
+request per incident; NWS keeps about 7 days of alerts.
 
 Past times (:func:`archive_for_area`): the Iowa Environmental Mesonet (IEM, Iowa State University) VTEC archive, a
 public-domain copy of NWS products, always labelled as archived. ``json/vtec_events_bypoint.py`` finds the fire
@@ -12,7 +17,8 @@ weather events at sample points, ``json/vtec_event.py`` gives each event's per-z
 ``geojson/vtec_event.py`` its zone polygons. NWS keeps no archive itself (it answers an empty list for past dates), so
 an archive failure is an error for the caller ("not available for past dates"), never "no alerts".
 
-Wording (event names, headlines, descriptions, instructions) is passed through verbatim. Archived text is the
+Wording (event names, headlines, descriptions, instructions, the issuer's name) is passed through verbatim; the
+operator's ``sender`` address of a local message is never read into an answer. Archived text is the
 segment for the zone in question of the latest statement issued by the requested time; archived times are the
 archive's per-zone times (some watch rows end before they begin: upgraded or cancelled early). Requests go through
 :mod:`fire3d.http` (disk cache, one retry) behind Fire-3d's own request limits, with the User-Agent
@@ -440,16 +446,10 @@ def normalize_alert(feature: dict) -> dict[str, Any] | None:
 
 
 def active_alerts() -> tuple[list[dict], int, int | None]:
-    """California's current Red Flag Warnings and Fire Weather Watches: ``(alerts, fetched_ms, NWS updated_ms)``.
-    Raises SourceError / SourceBusy."""
-    url = f"{NWS_API}/alerts/active?area=CA&event={quote(','.join(FIRE_EVENTS), safe=',')}"
-    resp = _get(url, None, ttl_s=ALERTS_TTL_S, limiter=NWS_LIMITER, name=_NWS_NAME, headers=_nws_headers())
-    data = _json(resp, url, None, _NWS_NAME)
-    if not isinstance(data, dict) or not isinstance(data.get("features"), list):
-        fhttp.evict_cache("GET", url, None)
-        raise SourceError(f"{_NWS_NAME} sent an unexpected reply")
-    alerts = [a for a in (normalize_alert(f) for f in data["features"]) if a is not None]
-    return alerts, int(resp.fetched_ms), _ms(data.get("updated"))
+    """The current Red Flag Warnings and Fire Weather Watches in the lower 48 states (from the shared national
+    request, :func:`national_active`): ``(alerts, fetched_ms, NWS updated_ms)``. Raises SourceError / SourceBusy."""
+    ans = national_active()
+    return ans.fire, ans.fetched_ms, ans.updated_ms
 
 
 @dataclass
@@ -543,9 +543,10 @@ def place_live(alerts: list[dict], area: BBox | None, point: tuple[float, float]
                     parts.append((z.ugc, z.name, z.geom))
         near = [pt for pt in parts if abox is None or pt[2].intersects(abox)]
         if not near and not missing:
-            continue                                    # elsewhere in California
+            continue                                    # elsewhere in the states asked for
         alert = _public(a)
         alert["phase"] = live_phase(a, now)
+        alert["time_zone"] = alert_time_zone(parts[0][2] if parts else None, a.get("ugcs") or [])
         if not near:
             unplaced += 1
             alert.update(covers_reported_location=None, nearest_km=None)
@@ -574,6 +575,369 @@ def place_live(alerts: list[dict], area: BBox | None, point: tuple[float, float]
         caveats.append("Some NWS zone outlines did not load, so a few distances are not shown.")
     out.sort(key=_sort_key)
     return out, zones_collection(zones, tol_deg), caveats
+
+
+# ----------------------------------------------------------------------------------------------------------------
+# National request: states, time zones, local officials' messages (CONTRACT 14.6, 14.7)
+# ----------------------------------------------------------------------------------------------------------------
+# The 48 states + DC (USPS), as regions.L48; used when fire3d.regions is not importable.
+L48_CODES: tuple[str, ...] = (
+    "AL", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
+    "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI",
+    "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
+)
+# State FIPS -> USPS for the lower 48 + DC (a SAME code is "0" + state FIPS + county FIPS).
+STATE_BY_FIPS: dict[str, str] = {
+    "01": "AL", "04": "AZ", "05": "AR", "06": "CA", "08": "CO", "09": "CT", "10": "DE", "11": "DC", "12": "FL",
+    "13": "GA", "16": "ID", "17": "IL", "18": "IN", "19": "IA", "20": "KS", "21": "KY", "22": "LA", "23": "ME",
+    "24": "MD", "25": "MA", "26": "MI", "27": "MN", "28": "MS", "29": "MO", "30": "MT", "31": "NE", "32": "NV",
+    "33": "NH", "34": "NJ", "35": "NM", "36": "NY", "37": "NC", "38": "ND", "39": "OH", "40": "OK", "41": "OR",
+    "42": "PA", "44": "RI", "45": "SC", "46": "SD", "47": "TN", "48": "TX", "49": "UT", "50": "VT", "51": "VA",
+    "53": "WA", "54": "WV", "55": "WI", "56": "WY",
+}
+# Local officials' messages relayed by NWS (Non-Weather Emergency Messages): NWS event name -> SAME event code.
+LOCAL_EVENTS: dict[str, str] = {
+    "Fire Warning": "FRW", "Evacuation Immediate": "EVI", "Shelter In Place Warning": "SPW",
+    "Civil Danger Warning": "CDW", "Civil Emergency Message": "CEM", "Local Area Emergency": "LAE",
+}
+LOCAL_ALWAYS = frozenset({"FRW", "EVI", "SPW", "CDW"})       # always in scope
+LOCAL_KEYWORD = frozenset({"CEM", "LAE"})                     # only when the text mentions fire, smoke or evacuation
+LOCAL_CODES = LOCAL_ALWAYS | LOCAL_KEYWORD
+_FIRE_WORDS = re.compile(r"\b(fires?|wildfires?|brush ?fires?|grass ?fires?|smoke|evacuat\w*)\b", re.IGNORECASE)
+# Names that contain "fire" or "smoke" without being about one ("Get sandbags at Fire Station 7"), removed before the
+# CEM / LAE keyword test. The text itself is never changed.
+_NOT_A_FIRE = re.compile(r"\b(fire\s+(stations?|departments?|dept\.?|halls?|hydrants?|chiefs?|districts?|marshals?|"
+                         r"rescue|houses?)|fireworks?|smoke\s+(detectors?|alarms?))\b", re.IGNORECASE)
+# Sender names that name the alerting platform, not the issuing agency (OpenFEMA 2026: "Public Alert System" is
+# about 18 % of messages): the card then says "issuer not named".
+PLATFORM_SENDERS = frozenset({"public alert system", "ipaws", "everbridge", "onsolve", "rave mobile safety",
+                              "genasys", "hyper-reach", "codered", "alertus", "regroup"})
+LOCAL_PAST_TTL_S = 600.0
+LIVE_WINDOW_MS = 2 * HOUR_MS          # local-alerts "live": at_ms within the last 2 h (or none)
+NWS_KEEPS_MS = 7 * DAY_MS             # NWS keeps about 7 days of alerts
+PAST_BEFORE_MS = 24 * HOUR_MS         # a past answer lists messages sent from at_ms - 24 h ...
+PAST_AFTER_MS = HOUR_MS               # ... to at_ms + 1 h
+PAST_LIMIT = 500
+
+
+def _regions() -> Any:
+    try:
+        from .. import regions
+    except ImportError:            # before the regions data lands (us-catalog M2)
+        return None
+    return regions
+
+
+def national_states() -> tuple[str, ...]:
+    """The states of the shared national request: ``regions.L48`` (the 48 states + DC)."""
+    r = _regions()
+    codes = tuple(getattr(r, "L48", ()) or ()) if r is not None else ()
+    return codes or L48_CODES
+
+
+def states_in_area(area: BBox) -> list[str]:
+    """The lower-48 states (+ DC) that ``area`` touches (``regions.states_in_bbox``); every state of the national
+    request when the regions data is unavailable (the area test then decides alone)."""
+    r = _regions()
+    allowed = set(national_states())
+    if r is None:
+        return list(national_states())
+    try:
+        found = r.states_in_bbox(tuple(area))
+    except Exception as e:  # noqa: BLE001 - a broken data file must not hide alerts
+        log.warning("regions.states_in_bbox failed: %s", e)
+        return list(national_states())
+    return [st for st in found if st in allowed]
+
+
+def time_zone_at(lon: float, lat: float) -> str | None:
+    r = _regions()
+    try:
+        return r.time_zone_at(lon, lat) if r is not None else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def main_zone(state: str | None) -> str | None:
+    r = _regions()
+    if r is None or not state:
+        return None
+    try:
+        return r.main_zone(state) or None
+    except Exception:  # noqa: BLE001 - an unknown state
+        return None
+
+
+def ugc_state(ugc: str) -> str | None:
+    """The two-letter state prefix of a UGC code ("MTZ114" -> "MT")."""
+    return ugc[:2] if isinstance(ugc, str) and UGC_RE.match(ugc) else None
+
+
+def same_state(code: str) -> str | None:
+    """The USPS state of a SAME county code ("006037" -> "CA"); None for anything else."""
+    return STATE_BY_FIPS.get(code[1:3]) if isinstance(code, str) and re.fullmatch(r"\d{6}", code) else None
+
+
+def in_states(alerts: list[dict], states: Iterable[str]) -> list[dict]:
+    """Fire weather alerts with at least one UGC in ``states`` (the cheap filter before any zone is loaded)."""
+    want = set(states)
+    return [a for a in alerts if any(ugc_state(u) in want for u in a.get("ugcs") or [])]
+
+
+def alert_states(alerts: Iterable[dict]) -> list[str]:
+    """The sorted states named by the alerts' UGC codes (fire weather) or SAME codes (local messages)."""
+    out: set[str] = set()
+    for a in alerts:
+        out.update(st for st in (ugc_state(u) for u in a.get("ugcs") or []) if st)
+        out.update(st for st in (same_state(c) for c in a.get("same_codes") or []) if st)
+    return sorted(out)
+
+
+def alert_time_zone(geom: BaseGeometry | None, ugcs: Iterable[str] = (), same_codes: Iterable[str] = ()) -> str | None:
+    """IANA zone of an alert: at its first zone's outline (or polygon) centroid, else the main zone of its first
+    state; None when unknown."""
+    if geom is not None and not geom.is_empty:
+        c = geom.representative_point()
+        tz = time_zone_at(c.x, c.y)
+        if tz:
+            return tz
+    for st in [ugc_state(u) for u in ugcs] + [same_state(c) for c in same_codes]:
+        tz = main_zone(st)
+        if tz:
+            return tz
+    return None
+
+
+@dataclass
+class NationalAnswer:
+    """The shared national ``/alerts/active`` answer, split in code."""
+
+    fire: list[dict]                    # Red Flag Warnings and Fire Weather Watches (normalize_alert)
+    local: list[dict]                   # local officials' messages in scope (normalize_local_nws)
+    fetched_ms: int
+    updated_ms: int | None
+    states: list[str]                   # the states asked for
+    dropped_no_link: int = 0            # local messages without an https link (never shown)
+
+
+def national_url(states: Iterable[str] | None = None) -> str:
+    """The one live request: every lower-48 state, fire weather and local officials' events."""
+    codes = ",".join(states or national_states())
+    events = ",".join(FIRE_EVENTS + tuple(LOCAL_EVENTS))
+    return f"{NWS_API}/alerts/active?area={codes}&event={quote(events, safe=',')}"
+
+
+def national_active() -> NationalAnswer:
+    """The current fire weather alerts and local officials' messages in the lower 48 states: one request, cached
+    :data:`ALERTS_TTL_S` (2 min), shared by every caller. Raises SourceError / SourceBusy."""
+    states = list(national_states())
+    url = national_url(states)
+    resp = _get(url, None, ttl_s=ALERTS_TTL_S, limiter=NWS_LIMITER, name=_NWS_NAME, headers=_nws_headers())
+    data = _json(resp, url, None, _NWS_NAME)
+    if not isinstance(data, dict) or not isinstance(data.get("features"), list):
+        fhttp.evict_cache("GET", url, None)
+        raise SourceError(f"{_NWS_NAME} sent an unexpected reply")
+    fire = [a for a in (normalize_alert(f) for f in data["features"]) if a is not None]
+    local, dropped = split_local(data["features"])
+    return NationalAnswer(fire, local, int(resp.fetched_ms), _ms(data.get("updated")), states, dropped)
+
+
+def mentions_fire(*texts: Any) -> bool:
+    """True when any text mentions fire, smoke or evacuation (the CEM / LAE scope rule)."""
+    return any(isinstance(t, str) and _FIRE_WORDS.search(_NOT_A_FIRE.sub(" ", t)) for t in texts)
+
+
+def is_platform_sender(name: str | None) -> bool:
+    """True when a sender name names the alerting platform ("Public Alert System"), not the issuer."""
+    return bool(name) and str(name).strip().strip(",").strip().lower() in PLATFORM_SENDERS
+
+
+def local_in_scope(code: str | None, *texts: Any) -> bool:
+    """FRW, EVI, SPW and CDW always; CEM and LAE only when their text mentions fire, smoke or evacuation."""
+    if code in LOCAL_ALWAYS:
+        return True
+    return code in LOCAL_KEYWORD and mentions_fire(*texts)
+
+
+def _param(params: dict, key: str) -> str | None:
+    v = params.get(key) if isinstance(params, dict) else None
+    if isinstance(v, list):
+        v = v[0] if v else None
+    return _verbatim(v) if isinstance(v, str) else None
+
+
+def geojson_out(geom: BaseGeometry | None) -> dict | None:
+    """GeoJSON of a message polygon (Polygon, or MultiPolygon when the message has several areas)."""
+    if geom is None:
+        return None
+    return mapping(shapely.set_precision(geom, COORD_PRECISION / 10))
+
+
+def normalize_local_nws(feature: dict) -> dict[str, Any] | None:
+    """One NWS-relayed local officials' message -> a LocalAlert dict (``channel`` nws_api; text verbatim; keys
+    starting with "_" internal); None when it is not an actual message in scope. ``source_url`` is the alert's own
+    API URL (``@id``); the operator's ``sender`` address is never read."""
+    p = feature.get("properties") if isinstance(feature, dict) else None
+    if not isinstance(p, dict) or p.get("status") != "Actual":
+        return None
+    event = _text(p.get("event"))
+    codes = (p.get("eventCode") or {}).get("SAME") if isinstance(p.get("eventCode"), dict) else None
+    code = (codes[0] if isinstance(codes, list) and codes else None) or LOCAL_EVENTS.get(event or "")
+    if code not in LOCAL_CODES:
+        return None
+    params = p.get("parameters") if isinstance(p.get("parameters"), dict) else {}
+    wea, wea_long = _param(params, "CMAMtext"), _param(params, "CMAMlongtext")
+    headline, desc, instr = _text(p.get("headline")), _verbatim(p.get("description")), _verbatim(p.get("instruction"))
+    if not local_in_scope(code, event, headline, desc, instr, wea, wea_long):
+        return None
+    geocode = p.get("geocode") if isinstance(p.get("geocode"), dict) else {}
+    same = [c for c in (geocode.get("SAME") or []) if isinstance(c, str) and re.fullmatch(r"\d{6}", c)]
+    ugcs = [u for u in (geocode.get("UGC") or []) if isinstance(u, str) and UGC_RE.match(u)]
+    refs = [str(r.get("identifier")) for r in (p.get("references") or []) if isinstance(r, dict) and r.get("identifier")]
+    geom = polygonal(feature.get("geometry"))
+    mt = _text(p.get("messageType"))
+    sender_name = _text(p.get("senderName"))
+    return {
+        "id": str(p.get("id") or ""),
+        "channel": "nws_api",
+        "archived": False,
+        "event": event or code,
+        "event_code": code,
+        "message_type": mt if mt in ("Alert", "Update", "Cancel") else None,
+        "references": refs,
+        "sender_name": sender_name,
+        "sender_is_platform": is_platform_sender(sender_name),
+        "sent_ms": _ms(p.get("sent")),
+        "effective_ms": _ms(p.get("effective")),
+        "onset_ms": _ms(p.get("onset")),
+        "expires_ms": _ms(p.get("expires")),
+        "headline": headline,
+        "description": desc,
+        "instruction": instr,
+        "wea_text": wea,
+        "wea_long_text": wea_long,
+        "web": _https(p.get("web")),
+        "source_url": _https(p.get("@id")) or _https(feature.get("id")),
+        "area_desc": _text(p.get("areaDesc")),
+        "same_codes": list(dict.fromkeys(same)),
+        "ugcs": list(dict.fromkeys(ugcs)),
+        "polygon": geojson_out(geom),
+        "_geom": geom,
+    }
+
+
+def split_local(features: Iterable[Any]) -> tuple[list[dict], int]:
+    """The local officials' messages in scope among ``features`` (one per CAP id), and how many were dropped for
+    want of an https link."""
+    out: dict[str, dict] = {}
+    dropped = 0
+    for f in features:
+        a = normalize_local_nws(f) if isinstance(f, dict) else None
+        if a is None or not a["id"]:
+            continue
+        if not a["source_url"]:
+            dropped += 1
+            continue
+        out.setdefault(a["id"], a)
+    return list(out.values()), dropped
+
+
+def local_phase(a: dict, at_ms: int) -> str:
+    """``upcoming`` | ``in_effect`` | ``ended`` of a local message at ``at_ms`` (a Cancel is ended)."""
+    if a.get("message_type") == "Cancel":
+        return "ended"
+    start = a.get("onset_ms") or a.get("effective_ms") or a.get("sent_ms")
+    if start is not None and at_ms < start:
+        return "upcoming"
+    exp = a.get("expires_ms")
+    if exp is not None and at_ms >= exp:
+        return "ended"
+    return "in_effect"
+
+
+def _local_sort_key(a: dict) -> tuple:
+    return (_PHASE_ORDER.get(a.get("phase"), 3), 0 if a.get("covers_reported_location") else 1,
+            -(a.get("sent_ms") or 0), a.get("id"))
+
+
+def place_local(alerts: Iterable[dict], area: BBox, point: tuple[float, float] | None, county_fips: Iterable[str],
+                at_ms: int, *, point_county: str | None = None) -> list[dict]:
+    """The local messages tied to ``area``: by polygon when the message has one (it meets the area), else by SAME
+    county codes against ``county_fips`` (5-digit FIPS of the counties the area touches). Each gets ``match``,
+    ``covers_reported_location`` / ``nearest_km`` (polygon matches only; a county match says nothing about the
+    point), ``time_zone`` and ``phase`` (relative to ``at_ms``). Internal keys are dropped."""
+    abox = box(*area)
+    fips = set(county_fips)
+    here = Point(*point) if point is not None else None
+    out: list[dict] = []
+    for a in alerts:
+        geom = a.get("_geom")
+        same5 = {c[1:] for c in a.get("same_codes") or [] if isinstance(c, str) and len(c) == 6}
+        if geom is not None:
+            if not geom.intersects(abox):
+                continue
+            match = "polygon"
+            if here is not None:
+                covers = bool(geom.covers(here))
+                nearest = 0.0 if covers else round(distance_km(geom, *point), 1)   # type: ignore[misc]
+            else:
+                covers, nearest = None, None
+            tz = alert_time_zone(geom, a.get("ugcs") or [], a.get("same_codes") or [])
+        else:
+            hit = same5 & fips
+            if not hit:
+                continue
+            match, covers, nearest = "county", None, None
+            if point is not None and point_county and point_county in hit:
+                tz = time_zone_at(*point)
+            else:
+                tz = main_zone(STATE_BY_FIPS.get(sorted(hit)[0][:2]))
+        alert = _public(a)
+        alert.update(match=match, covers_reported_location=covers, nearest_km=nearest, time_zone=tz,
+                     phase=local_phase(a, at_ms))
+        out.append(alert)
+    out.sort(key=_local_sort_key)
+    return out
+
+
+def local_in_states(alerts: Iterable[dict], states: Iterable[str]) -> list[dict]:
+    """Local messages whose SAME or UGC codes name one of ``states``, or that carry a polygon (the polygon test
+    decides for those)."""
+    want = set(states)
+    out = []
+    for a in alerts:
+        named = {same_state(c) for c in a.get("same_codes") or []} | {ugc_state(u) for u in a.get("ugcs") or []}
+        if a.get("_geom") is not None or named & want:
+            out.append(a)
+    return out
+
+
+def past_local_url(states: Iterable[str], start_ms: int, end_ms: int) -> str:
+    """``/alerts?start=&end=&event=<the local events>&area=<states>&limit=500`` (hour-aligned, so one window is one
+    cache entry for the 10 min TTL)."""
+    fmt = "%Y-%m-%dT%H:%M:%SZ"
+    a = ms_to_dt(start_ms // HOUR_MS * HOUR_MS).strftime(fmt)
+    b = ms_to_dt(max(end_ms // HOUR_MS, start_ms // HOUR_MS + 1) * HOUR_MS).strftime(fmt)
+    area = ",".join(sorted(set(states)))
+    events = quote(",".join(LOCAL_EVENTS), safe=",")
+    return f"{NWS_API}/alerts?start={a}&end={b}&event={events}&area={area}&limit={PAST_LIMIT}"
+
+
+def past_local(states: Iterable[str], at_ms: int, *, now: int | None = None) -> tuple[list[dict], int, int]:
+    """Local officials' messages NWS sent in ``[at_ms - 24 h, at_ms + 1 h]`` in ``states``: one cached
+    ``/alerts?start=&end=&event=&area=`` request (TTL 10 min). Returns ``(alerts, fetched_ms, dropped_no_link)``.
+    Raises SourceError / SourceBusy."""
+    t_now = now if now is not None else now_ms()
+    start = int(at_ms) - PAST_BEFORE_MS
+    end = min(int(at_ms) + PAST_AFTER_MS, t_now)
+    url = past_local_url(states, start, end)
+    resp = _get(url, None, ttl_s=LOCAL_PAST_TTL_S, limiter=NWS_LIMITER, name=_NWS_NAME, headers=_nws_headers())
+    data = _json(resp, url, None, _NWS_NAME)
+    if not isinstance(data, dict) or not isinstance(data.get("features"), list):
+        fhttp.evict_cache("GET", url, None)
+        raise SourceError(f"{_NWS_NAME} sent an unexpected reply")
+    local, dropped = split_local(data["features"])
+    return local, int(resp.fetched_ms), dropped
 
 
 # ----------------------------------------------------------------------------------------------------------------
@@ -826,6 +1190,7 @@ def place_archive(events: list[ArchiveEvent], details: dict[tuple, EventDetail |
                                       if geoms and point is not None else None)
         alert_id = f"{ev.year}-{office}-{ev.phenomena}-{ev.significance}-{ev.etn:04d}"
         all_ugcs = list(dict.fromkeys(r["ugc"] for r in rows))
+        first_geom = next((geoms[u] for u in all_ugcs if u in geoms), None)
         sent = prod["valid_ms"] if prod else row.get("product_issue_ms")
         onset, ends = stated_times(seg_vtec, row, phase, at_ms)
         out.append({
@@ -853,6 +1218,7 @@ def place_archive(events: list[ArchiveEvent], details: dict[tuple, EventDetail |
             "nearest_km": nearest,
             "archived": True,
             "phase": phase,
+            "time_zone": alert_time_zone(first_geom, all_ugcs),
         })
         for ugc in sorted(u for u in near if u in geoms):
             z = zones.setdefault(ugc, {"ugc": ugc, "name": names.get(ugc), "geom": geoms[ugc], "alert_ids": []})
