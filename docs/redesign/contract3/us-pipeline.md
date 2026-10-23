@@ -15,7 +15,8 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
 | Cut-line (b) weighted Open-Meteo counter, soft cap, hourly live refetch | `brief 3 us-pipeline: M4 cut-line b and d` | done |
 | Cut-line (d) `SkillEntry.growth_sorensen` writer | `brief 3 us-pipeline: M4 cut-line b and d` | done |
 | Cut-line (c) 3rd smoke build | fallback used: recorded LANDFIRE window test | no active Southern/Eastern fire of 1,000 ac or more on 2026-10-23 (0 of 22 non-CA fires >= 1,000 ac); test `test_recorded_black_cove_window_switches_lf2025_to_lf2024` on `tests/data/pipeline_us/landfire_black_cove_*_fbfm40.tif` |
-| M4 smoke builds (§14.12.11) | `brief 3 us-pipeline: M4 smoke builds` | Horse Gulch done; Black Cove **pending (quota)**: Open-Meteo historical-forecast daily limit, reset 2026-10-24T00:00Z (22 h away at 02:04Z, so no wait under the stop rule) |
+| M4 smoke builds (§14.12.11) | `brief 3 us-pipeline: M4 smoke builds` | Horse Gulch done; Black Cove **still pending (quota)** after review round 1: 7 probes 02:57-03:59Z, none `overall ok` (table below); validation builds it first |
+| Review round 1 fixes (R2 OpenFEMA prefetch, R3 daily-block re-check, R4 LEW sample) | `brief 3 us-pipeline: review fixes round 1` | done |
 
 ## §14.12.2 Weather quota (as built, M1)
 
@@ -305,6 +306,7 @@ Each build ran with `fire3d.cli build <id> --require-hrrr` only after `fire3d.cl
 |---|---|---|
 | `2024-horse-gulch-889237` (MT) | 01:21Z ok (first build, 322 s); 02:01:12Z ok (rebuild `--force`, 17 s, weather and rasters cached) | ready; `check_bundle.py`: 0 problems |
 | `2025-black-cove-95c3c8` (NC) | 02:04:08Z: historical-forecast `daily_limit` (HTTP 429 "Daily API request limit exceeded"), forecast unreachable (connect timeout) | **pending (quota)**: not built. Reset 2026-10-24T00:00Z |
+| `2025-black-cove-95c3c8` (NC), review round 1 fixer | 7 fresh-process probes, every 10 min for 60 min (the reviewer's 02:31:49Z probe was all ok, but no later one was): 02:57:52Z archive `daily_limit`; 03:08:49Z archive; 03:18:54Z archive; 03:28:54Z historical-forecast and archive; 03:38:58Z archive (forecast unreachable, connect timeout); 03:49:16Z historical-forecast (forecast unreachable); 03:59:35Z historical-forecast. `overall daily_limit` each time (exit 1) | **still pending (quota)**: not built (never built with a refused probe). Validation builds Black Cove first (stop rule) |
 
 Horse Gulch (rebuild, 2026-10-23T02:03Z):
 - grid EPSG:32612 (UTM 12N), AOI 20 km, fire grid 512² at 39.1 m, elevation 1114-2170 m;
@@ -325,7 +327,13 @@ WFIGS", 3,502 ac); `/api/official/local-alerts` at 2025-03-21 18:00Z answers the
 Cove (LF2025 all NoData there, so LF2024) is proved on recorded windows by
 `test_recorded_black_cove_window_switches_lf2025_to_lf2024`.
 
-To finish Black Cove after the reset: `cd backend && uv run python -m fire3d.cli weather-probe` (overall ok), then
+On this shared IP the refused host changed between probes (archive, then historical-forecast) while the others
+answered, so the "daily limit" answers look like a pooled or rolling count rather than a fixed daily reset; a probe
+can say `overall ok` at any time (02:13Z and 02:31Z did). Black Cove's build with `--require-hrrr` needs
+historical-forecast for its hours and asks the archive for the water-year rain total (outside California a refusal
+there is only a warning), but the rule is `overall ok` and it was never met.
+
+To finish Black Cove (any time a fresh `weather-probe` says `overall ok`, or after the reset): `cd backend && uv run python -m fire3d.cli weather-probe` (overall ok), then
 `uv run python -m fire3d.cli build 2025-black-cove-95c3c8 --require-hrrr` (expect EPSG:32617, LF2024 as the pre-fire
 edition of a fiscal-year-2025 fire, America/New_York, 0 "CAL FIRE"), then `uv run python scripts/check_bundle.py
 2025-black-cove-95c3c8` and the Public screenshot (12-hour EDT on the timeline).
