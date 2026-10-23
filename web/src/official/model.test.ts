@@ -96,6 +96,12 @@ describe('evacuation at a point (location card)', () => {
   it('past dates and no point are said as such; a point outside the fire always asks the backend (brief 3)', () => {
     expect(evacuationAtPointState({ ...base, lon: -118.99, lat: 34.29, past: true })).toMatchObject({ state: 'past-date', reason: 'Official status is shown only for the current time.' })
     expect(evacuationAtPointState({ ...base, lon: null, lat: null }).state).toBe('not-checked')
+    // a past time in a state without a feed (the fire's own answer is state_not_available): the state reason, as the
+    // fire's panel says, never "not shown for past dates" (integration)
+    const reno = { ...base, incident: ok(EVAC_RENO_NOT_AVAILABLE), incidentBbox: EVAC_RENO_NOT_AVAILABLE.bbox, past: true }
+    expect(evacuationAtPointState({ ...reno, lon: -119.81, lat: 39.53 })).toMatchObject({ state: 'not-available', reason: 'Not available in this state (Nevada)' })
+    // outside that fire's area a past time stays "not shown for past dates"
+    expect(evacuationAtPointState({ ...reno, lon: -118.0, lat: 39.53 }).state).toBe('past-date')
     // no California rectangle any more: a Kansas point is asked about too (the backend answers from its registry)
     expect(needsPointQuery({ lon: -100, lat: 40, incidentBbox: null, past: false, incidentData: null })).toBe(true)
     expect(evacuationAtPointState({ ...base, lon: -100, lat: 40, point: ok(null, { loading: true }) }).state).toBe('loading')

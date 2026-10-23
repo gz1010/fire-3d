@@ -365,9 +365,17 @@ function pointSource(sources: EvacuationSourceInfo[], state: string): Partial<Ev
 export function evacuationAtPointState(i: EvacuationAtPointInput): EvacuationOfficial {
   const notChecked = (reason: string): EvacuationOfficial => ({ state: 'not-checked', zones: [], checkedMs: null, sourceUpdatedMs: null, sourceUrl: null, caveat: 'Follow local officials.', reason })
   if (i.lon == null || i.lat == null || !Number.isFinite(i.lon) || !Number.isFinite(i.lat)) return notChecked('No location selected.')
-  if (i.past)
-    return { state: 'past-date', zones: [], checkedMs: null, sourceUpdatedMs: null, sourceUrl: null, caveat: `${PAST_DATE_CAVEAT} Follow local officials.`, reason: 'Official status is shown only for the current time.' }
   const inc = i.incident?.data ?? null
+  if (i.past) {
+    // a state without an official evacuation feed says so at any time, as the backend and the fire's panel do (it
+    // checks the state before the date, §14.8.3): "not available in this state (Montana)", not "not shown for past
+    // dates" (integration, us-web review note on Horse Gulch)
+    if (inc?.reason_code === 'state_not_available' && bboxContains(inc.bbox ?? i.incidentBbox, i.lon, i.lat)) {
+      const env = envelopeState(i.incident)
+      if (env) return env
+    }
+    return { state: 'past-date', zones: [], checkedMs: null, sourceUpdatedMs: null, sourceUrl: null, caveat: `${PAST_DATE_CAVEAT} Follow local officials.`, reason: 'Official status is shown only for the current time.' }
+  }
   if (inc && inc.status === 'available') {
     const r = atPoint(inc, i.lon, i.lat, i.fire, i.pointState)
     if (r) return r
