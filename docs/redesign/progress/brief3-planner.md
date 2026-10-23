@@ -28,6 +28,19 @@ rewritten as this instance's own log).
 - Deferred to a later brief: WFIGS change history (B-R11), GOES-East (B-R15), bundled NWS zones (B-R18), B-R19/20/21,
   EV-R11, EV-R12, V-R12; to the integration: W16, renaming `statewide`, P1 leftovers below the cut lines.
 
+- ~23:50-00:40 (revision pass): checked the 23 critic problems received (the list was cut off after item 23 of 41)
+  against the code (contracts.py strict mode and the NWS tests, firms.py `_keyless`, pipeline.py build gate,
+  app.py:184/496, test_api.py:241-244, CardParts.tsx, official.ts, nws.py:445, official.py:394-397, perimeters.py
+  `identity_filter` / `_calfire_hint`, weather.py `WeatherError`, types.ts, shot.mjs, RUNBOOK-3:97): all 23 confirmed.
+  Revised CONTRACT §14 (14.0 commits, gate attribution, defaulted fields, schedule, hand-offs; 14.1 naming and
+  `OtherRecord.name`; 14.2 complex rows and the build gate; 14.4 status and fuel rules; 14.5 synthetic ids and the
+  shared `records.ts` helpers; 14.6 `states_checked` / `alert_states`; 14.7 windows and card lines; 14.8.7 dev preset;
+  14.9.3 script; 14.12.1/2/8/9/10/11), regenerated plan3-roles.json (cut lines in every role, schedule, reviews,
+  validation `owns_bugfix_only`), updated PLAN-3.md (schedule, commits, reviews, cut lines, integration checklist,
+  appendix B rerun, Revision notes). Ownership check: wave 1 466 paths, 0 clashes; wave 2 69 paths, 0 clashes.
+
 ## Open problems
-- Roles are sized at about 4-5 h each (above the 3-4 h target) after deferring P2 and some P1 items; each has a
-  P0-first order and a cut line. Stated in PLAN-3.md.
+- Roles are sized at about 4-5 h each above their cut lines (above the 3-4 h target); every role now has an explicit
+  cut line with fallbacks, and the overflow is on the integration checklist.
+- Critic items 24-41 were not received in the revision pass.
+- RUNBOOK-3 still shows a plain `git commit`; the orchestrator should use the pathspec form of CONTRACT §14.0.
