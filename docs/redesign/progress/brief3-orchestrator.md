@@ -73,6 +73,10 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
 - ~11:00 UTC: a second usage limit stopped validation and integration fix round 3 (reset 11:20 UTC); nothing woke
   the session until 13:04 (about 1 h 45 min lost). Resumed both; an hourly safety check now resumes stopped work
   (scheduled task, removed when the build is finished).
+- ~13:40 UTC: fix round 3 (9cf2936): N4 (message never shown in effect before its sent time) and wheel zoom fixed;
+  its re-check found a regression (phase decided at the start of the hour, not the replay time): round 4 runs.
+  Left as designed (mention in the final summary): zooming in on an open fire card can switch to a nearby prepared
+  fire, per the brief-2 zoom-focus rule.
 - Lesson: never SendMessage a workflow agent (it starts a second copy); relay through files or Agent-tool agents.
 
 ## Carry-over items for later stages (integration unless a role owns the file)
