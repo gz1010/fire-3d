@@ -182,6 +182,11 @@ describe('focus candidates follow every list, not the overview filter', () => {
     bundle_status: 'none',
     bundle_built_ms: null,
     bbox_lonlat: null,
+    uid: 'u',
+    record_source: 'calfire',
+    record_issuer: 'CAL FIRE',
+    state: 'CA',
+    time_zone: 'America/Los_Angeles',
     ...over,
   })
   // the real Eaton row: a prepared 2025 fire (only in the 2025 list)

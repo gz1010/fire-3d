@@ -63,6 +63,11 @@ function fire(over: Partial<IncidentSummary>): IncidentSummary {
     detections_24h: null,
     bundle_status: 'none',
     bundle_built_ms: null,
+    uid: 'u',
+    record_source: 'calfire',
+    record_issuer: 'CAL FIRE',
+    state: 'CA',
+    time_zone: 'America/Los_Angeles',
     ...over,
   }
 }
