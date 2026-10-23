@@ -404,6 +404,55 @@ def collect(run_dir: Path, checks: list[dict], california_meta: dict) -> dict:
             "secondary": "WFIGS discovery + 6/12/24 h (California: bundle ignition + 6/12/24 h)"}
 
 
+def _fmt(v, nd: int = 3) -> str:
+    return "–" if v is None else f"{v:.{nd}f}"
+
+
+def _median(xs: list[float]) -> float | None:
+    xs = sorted(xs)
+    if not xs:
+        return None
+    n = len(xs)
+    return xs[n // 2] if n % 2 else 0.5 * (xs[n // 2 - 1] + xs[n // 2])
+
+
+def tables_markdown(run_dir: Path, checks: list[dict]) -> str:
+    """docs/validation.md 10.x tables: per fire (label p50, deterministic, ignition-relative, ablation), per lead."""
+    by_check = {c["id"]: c for c in checks}
+    out = ["| # | fire (state, region; zone) | starts / scored leads | p50 growth Sørensen | deterministic | "
+           "ignition + 6/12/24 h (p50) | California table (det.) | total Sørensen (p50) | obs / fc growth, mean ac | "
+           "growth ratio (median) | GSI at the starts | herb / woody |",
+           "|---|---|---|---:|---:|---:|---:|---:|---|---:|---|---|"]
+    for f in FIRES:
+        main_rows = _load_rows(run_dir, f.id, "main")
+        if main_rows is None:
+            out.append(f"| {f.n} | {f.name} ({f.state}, {f.region}; {f.time_zone}) | not run | | | | | | | | | |")
+            continue
+        sc = [r for r in main_rows if "lead_h" in r]
+        det = _mean(_load_rows(run_dir, f.id, "main_det"))
+        ign = _mean(_load_rows(run_dir, f.id, "ignition"))
+        abl = _mean(_load_rows(run_dir, f.id, "ablation_det"))
+        tot = _mean(main_rows, "sorensen")
+        og = _mean(main_rows, "observed_growth_acres")
+        fg = _mean(main_rows, "forecast_growth_acres")
+        ratio = _median([float(r["area_ratio"]) for r in sc if r.get("area_ratio") is not None])
+        lm = [x for x in (by_check.get(f.id) or {}).get("live_fuel_moisture") or [] if x["start"] in f.main_starts_utc]
+        gsi = ", ".join(_fmt(x["gsi"], 2) for x in lm) or "–"
+        hw = ", ".join(f"{x['herb']:.0%}/{x['woody']:.0%}" for x in lm) or "–"
+        out.append(f"| {f.n} | {f.name} ({f.state}, {f.region}; {f.time_zone}) | {len(f.main_starts_utc)} / {len(sc)} | "
+                   f"**{_fmt(_mean(main_rows))}** | {_fmt(det)} | {_fmt(ign)} | {_fmt(abl)} | {_fmt(tot)} | "
+                   f"{0 if og is None else og:,.0f} / {0 if fg is None else fg:,.0f} | {_fmt(ratio, 2)} | {gsi} | {hw} |")
+    out += ["", "| fire | start (UTC; local) | lead (h) | observed growth (ac) | forecast growth p50 (ac) | growth Sørensen | "
+            "total Sørensen |", "|---|---|---:|---:|---:|---:|---:|"]
+    for f in FIRES:
+        for r in [r for r in _load_rows(run_dir, f.id, "main") or [] if "lead_h" in r]:
+            st = r.get("start_utc") or ""
+            out.append(f"| {f.name} | {st} ({local_label(st, f.time_zone) if st else ''}) | {r['lead_h']:.0f} | "
+                       f"{r['observed_growth_acres']:,.0f} | {r['forecast_growth_acres']:,.0f} | {r['sorensen_growth']:.2f} | "
+                       f"{r['sorensen']:.2f} |")
+    return "\n".join(out) + "\n"
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -421,7 +470,13 @@ def main(argv: list[str] | None = None) -> int:
     co.add_argument("--runs", required=True, help="directory of hindcast rows (<id>.<what>.json)")
     co.add_argument("--checks", required=True, help="checks JSON of the 12 fires")
     co.add_argument("--out", required=True, help="fires.json for fire3d.spread.validate regional")
+    tb = sub.add_parser("tables")
+    tb.add_argument("--runs", required=True)
+    tb.add_argument("--checks", required=True)
     a = p.parse_args(argv)
+    if a.cmd == "tables":
+        print(tables_markdown(Path(a.runs), json.loads(Path(a.checks).read_text())))
+        return 0
     if a.cmd == "collect":
         from fire3d import bundle as fb
         from fire3d import config
