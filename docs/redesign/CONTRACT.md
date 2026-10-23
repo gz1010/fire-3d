@@ -3036,6 +3036,14 @@ round-4 carry-over and the validation review's web leftovers:
 - 14.12: deprecated FIRMS loaders and names removed; GSI folded; `INTERIM_LFM_WARNING` text; Black Cove's acceptance
   numbers ("14.12 as built").
 
+- 14.10: a search sent while a fire list is still loading (the first seconds after page load) that finds nothing says
+  "No US city, town, county or ZIP code matches “…”. The fire lists are still loading, so fires were not all searched:
+  try again in a moment." instead of "No listed fire … matches" (`search.ts` `LISTS_PENDING_NOTE`).
+- 14.11: a map flight requested moments before the map exists is still flown (`pendingMapFlyTo`, 5 s); overview labels
+  of fires under 10 acres keep one decimal ("Hulsey Bench · 0.1 ac", never "0 ac").
+- 14.8: while an evacuation check is pending, no source is named (brief 2's "Cal OES" default stays only for a brief-2
+  answer without `sources`); official lines wrap long verbatim sender names.
+
 **Folded (integration part 1, 2026-10-23):** `us-catalog.md`, `us-official.md`, `us-pipeline.md` and `us-web.md` are
 summarised in the "14.0 as built" to "14.14 as built" sub-headings above (what differs from the text, the deviations
 and the integration's own changes). The role notes stay in `docs/redesign/contract3/` as the detailed record (file

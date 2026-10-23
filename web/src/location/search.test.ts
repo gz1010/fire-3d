@@ -14,6 +14,7 @@ import {
   fireResultFacts,
   incidentAction,
   likelyMissingWestSign,
+  LISTS_PENDING_NOTE,
   looksLikeAddress,
   noMatchMessage,
   noPlaceMessage,
@@ -152,6 +153,19 @@ describe('incidents: readiness and actions (never a build without asking)', () =
     expect(incidentAction({ id: 'x', bundle_status: 'building' }, null)).toBe('open')
     expect(incidentAction(POOL[6], null)).toBe('ask-prepare')
     expect(incidentAction({ id: 'y', bundle_status: 'error' }, null)).toBe('ask-prepare')
+  })
+})
+
+describe('a search while a fire list is still loading (integration part 2)', () => {
+  it('says the fires were not all searched, never "no listed fire matches"', () => {
+    const plan = planSearch('Black Cove', [], true)
+    expect(plan).toMatchObject({ kind: 'lookup', listsPending: true })
+    const d = decide(plan as Extract<SearchPlan, { kind: 'lookup' }>, res([]))
+    expect(d).toEqual({ kind: 'none', message: `No US city, town, county or ZIP code matches “Black Cove”. ${LISTS_PENDING_NOTE}` })
+    expect(d.kind === 'none' && d.message).not.toMatch(/No listed fire/)
+    // loaded lists: the usual sentence
+    const done = decide(planSearch('Black Cove', [], false) as Extract<SearchPlan, { kind: 'lookup' }>, res([]))
+    expect(done).toEqual({ kind: 'none', message: 'No listed fire, US city, town, county or ZIP code matches “Black Cove”.' })
   })
 })
 

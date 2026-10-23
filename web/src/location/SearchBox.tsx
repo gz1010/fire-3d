@@ -264,7 +264,10 @@ export function SearchBox() {
   }
 
   const submit = () => {
-    const plan = planSearch(text, incidentPool(useStore.getState()))
+    const st = useStore.getState()
+    // a fire list not arrived yet (first seconds after load): a search finding nothing says so (integration part 2)
+    const pending = (['live', 'season', 'historical'] as const).some((k) => st.catalog.updatedMs[k] == null && st.catalog.listLoading[k])
+    const plan = planSearch(text, incidentPool(st), pending)
     switch (plan.kind) {
       case 'empty':
         return dispatch({ type: 'close' })
