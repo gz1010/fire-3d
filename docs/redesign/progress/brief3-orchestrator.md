@@ -82,6 +82,12 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
   0.247, Southwest 0.351, Southern Plains 0.394, Southeast 0.193; Southern California 0.433 (tuned, best case).
   Faster-spread variant helped the 12 fires but lowered California, so not adopted (pre-registered rule). An
   independent science + wording review of validation runs before integration part 2.
+- ~14:20 UTC: fix round 4 done (code in checkpoint fa4a09c, report 32154aa): local officials' messages are decided at
+  the panel's own time (checked at 7 times on Horse Gulch). Left for integration part 2: (1) the feed shows 'Not yet in
+  effect' for up to 59 s after a message's sent second, because useOfficialPanelTime() rounds the replay time to the
+  minute while the feed splits on the exact time (use one time for both; vitest at 5:45:12 and 5:45:30 PM MDT);
+  (2) afterSpan rounds seconds while sentText cuts to the minute ('sent 2:45 PM · sent 46 min after this time' at
+  2:00 PM): work from the minute-cut time, 'less than a minute' under 60 s.
 - Lesson: never SendMessage a workflow agent (it starts a second copy); relay through files or Agent-tool agents.
 
 ## Carry-over items for later stages (integration unless a role owns the file)
