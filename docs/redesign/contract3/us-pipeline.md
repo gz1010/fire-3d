@@ -283,6 +283,33 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
   skill entry (any run with observed data inside the horizon: historical runs and hindcasts); `validate.hindcast_skill`
   returns the same shape. Test: `test_us_pipeline_build.py::test_forecast_skill_carries_growth_sorensen`.
 
+## For the web (us-official, §14.6 / §14.7 consumers)
+
+- Both endpoints are live on `main` since `b12dd1e` (§14.6, §14.7) and `4329f42` / `3fb2eba` (archive channel).
+  Field names and statuses are exactly §14.6 / §14.7; what to know beyond the contract text:
+  - `/api/official/fire-weather` without `incident`: `states_checked` has the 49 codes, `alert_states` the states with an
+    alert; the caveats always include "Checked: every National Weather Service Red Flag Warning and Fire Weather
+    Watch in effect in the lower 48 states (49 areas, including DC), in one request." and, when none is in effect, "No
+    Red Flag Warning or Fire Weather Watch from the National Weather Service is in effect in the lower 48 states right
+    now. That is not an all-clear: follow local officials.". When NWS cannot be reached `states_checked` is `[]` (read:
+    nothing was checked). Per fire: `states_checked` = the states the fire's area touches.
+  - `/api/official/local-alerts`: read `channels[]`, not only `status`: the envelope is `available` whenever a channel
+    answered or is `pending`; `not_available_for_past_dates` + `past_date` only when no channel was checked.
+  - A county match (`match: "county"`) has `covers_reported_location` and `nearest_km` **null** (the county says nothing
+    about the point); only polygon matches fill them.
+  - `polygon` is a GeoJSON `Polygon`, or a `MultiPolygon` when an archived message had several areas.
+  - `sender_name` is verbatim and can carry the sender's COG number and commas ("201703,ReadyKern,Kern County OES",
+    "202505,IN Whitley County …,"); `sender_is_platform` is true for "Public Alert System" (and "IPAWS", a few vendor
+    names): show "issuer not named" then.
+  - `wea_text` holds the short WEA text (CMAMtext); about half of the archived messages have an empty `description`, so
+    show `headline`, else `wea_text`, else `description`.
+  - Real example (archive, `?incident=2025-black-cove-95c3c8&at_ms=1742580000000`): two "Civil Emergency Message"
+    alerts from "North Carolina EOC - SWP", `match: "polygon"`, `time_zone` America/New_York, phase `ended`, WEA text
+    "Polk CO Mandatory Evacuation ALL Piney Gate Leave Now …". The first request for a fire's archive answers
+    `pending` (about 10-20 s of background fetch), later ones `available` from the disk cache.
+  - `/api/official/calfire` for a WFIGS fire: `unavailable` + `not_covered`, reason "CAL FIRE does not list this fire;
+    its official record is published by NIFC WFIGS." (use `/api/official/incident-record` for it, §14.5).
+
 ## Files
 
 `backend/fire3d/http.py`, `backend/fire3d/sources/weather.py`, `backend/fire3d/build/weather_bundle.py`,
