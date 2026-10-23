@@ -32,6 +32,10 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
   review fixer). ~02:25: us-web finished. Reviews: us-catalog running, us-pipeline running; us-official still building.
 - Open-Meteo in the cloud: refusals are intermittent (daily-limit 429 at 02:04, success at 02:13); host blocks are
   in-process only, so a fresh CLI build can retry. Validation must re-probe every ~10 min, not wait for midnight.
+- ~02:50 UTC: the container restarted. Nothing committed was lost; data/incidents survived; deps reinstalled.
+  Reviews of us-catalog and us-pipeline had committed their review3 reports (2dfb78e, b28e7f9; both fix-needed);
+  their fixers were interrupted with uncommitted edits. Resumed both workflows from their journals (the fixer
+  prompt now tells a re-run fixer to review its predecessor's uncommitted edits) and us-official via SendMessage.
 - Lesson: never SendMessage a workflow agent (it starts a second copy); relay through files or Agent-tool agents.
 
 ## Carry-over items for later stages (integration unless a role owns the file)
