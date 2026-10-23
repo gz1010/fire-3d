@@ -57,7 +57,7 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
 - 06:25 UTC (wake-up): validation resumed; us-official review resumed for its last re-check; integration part 1
   started early (orchestrator decision: everything except validation's files, API 8715 / Vite 5185), part 2 after
   validation does the end-to-end checks on the validation fires.
-- ~06:55 UTC: us-official review done (fix rounds 18808f4, 14f126d; one minor left, passed to integration part 1).
+- ~06:35 UTC: us-official review done (fix rounds 18808f4, 14f126d; one minor left, passed to integration part 1).
   Wave 1 complete: all four roles reviewed and fixed.
 - Lesson: never SendMessage a workflow agent (it starts a second copy); relay through files or Agent-tool agents.
 
@@ -84,7 +84,7 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
 ## Gates
 - After restore (2026-10-22): backend 585 passed (your Mac ~605: test_official_real_bundles and test_endpoint_contracts run once per bundle in data/incidents; the cloud has 4 bundles); web 56 files, 694 passed + 2 skipped; typecheck 0; lint 55 warnings, all in src/scene; build OK.
 
-- Build done (wave 1 reviewed and fixed), clean worktree of 7166a7f, 2026-10-23 ~07:00 UTC: backend 892 passed,
+- Build done (wave 1 reviewed and fixed), clean worktree of 7166a7f, 2026-10-23 ~06:40 UTC: backend 892 passed,
   36 skipped; web typecheck 0, lint 55 (all src/scene), 72 files 1,109 passed + 3 skipped, build OK.
 
 ## Risks
