@@ -1,8 +1,9 @@
 // The location card's official block (owner: us-official in brief 3; brief 2 C-R7). Pure. It words the I5 answers of
 // useOfficialAtPoint (web/src/official/hooks.ts) for the card: always at least one evacuation line, in every state
 // (listed / none listed where checked / not checked here / not available in this state / past date / unavailable /
-// loading), on phones, in replay and with the map layer off; an NWS line only while an alert is in effect or upcoming
-// at the point; and "Follow local officials" with the fire's agency record and the state evacuation source's page.
+// loading), on phones, in replay and with the map layer off; always the NWS status at the point (the alerts in effect,
+// "checked, none in effect here" or "not checked here"; brief 3), then the local officials' alerts relayed by NWS or
+// archived by FEMA; and "Follow local officials" with the fire's agency record and the state evacuation source's page.
 // Issuer, aggregator ("Cal OES", "Oregon OEM") and times come from the answer's sources. Official wording stays
 // verbatim, with its issuer and its own times (Oregon's levels are flagged as Fire-3d's wording of OEM's level number,
 // with OEM's definition); Fire-3d's fetch time is only ever called "checked". Nothing here is an all-clear.
@@ -11,6 +12,7 @@ import { area, distance } from '../lib/plainLanguage'
 import { fmtAt, fmtRelative, type TimeFmt } from '../lib/time'
 import { getTimeFormat } from '../state/timeZone'
 import type { Units } from '../state/workspace'
+import { answeredChannelsText, ARCHIVE_CREDIT, LOCAL_STANDING_CAVEAT, localAlertPlace, localAlertsAt, localPhaseText, OPENFEMA_NOTICE, sentText, type LocalAlertsOfficial } from '../official/localAlerts'
 
 export type OfficialTone = 'order' | 'warning' | 'other' | 'quiet' | 'unknown' | 'loading'
 
@@ -28,6 +30,9 @@ export interface OfficialLine {
   tone: OfficialTone
   /** The source's own page for this item (https). */
   url: string | null
+  /** What the link is (brief 3, local alerts): "issuer's link", "source record (NWS)", "source record (FEMA archive)";
+   *  renderers that show no label may ignore it. */
+  urlLabel?: string
 }
 
 export interface OfficialLink {
@@ -38,7 +43,9 @@ export interface OfficialLink {
 export interface OfficialBlock {
   /** Always at least one line. */
   evacuation: OfficialLine[]
-  /** Fire weather alerts in effect or upcoming at the point (empty otherwise: no "none" line in the card). */
+  /** Brief 3 (CONTRACT §14.6/§14.7): the NWS status line(s) at the point (always one: the alerts in effect, "checked,
+   *  none in effect here", or "not checked here"), then the local officials' alert lines (the field name stays until
+   *  the integration; us-web's OfficialSection renders the array as it is). */
   fireWeather: OfficialLine[]
   /** "Follow local officials." */
   follow: string
@@ -56,8 +63,12 @@ export interface OfficialContext {
   incidentUrl: string | null
   /** Zones shown before "+N more". */
   maxZones?: number
-  /** Zone and clock of the times (the fire's zone, else the point's; CONTRACT §14.9.6). Default `getTimeFormat()`. */
-  tf?: TimeFmt
+  /** Zone and clock of the times (the fire's zone, else the point's; CONTRACT §14.9.6, required since the
+   *  integration). */
+  tf: TimeFmt
+  /** The time the official answers are for (the replay time at a past time; default `nowMs`): a local message sent
+   *  after it says so ("sent 32 min after this time"; integration review UX-m2). */
+  refMs?: number
 }
 
 const CAL_OES_FALLBACK = 'https://gis.data.ca.gov/datasets/CalEMA::california-evacuation-aggregation-layer'
@@ -75,6 +86,16 @@ const at = (ms: number, tf: TimeFmt) => fmtAt(ms, tf, { zone: true })
 const https = (u: string | null | undefined) => (u && /^https:\/\//i.test(u) ? u : null)
 
 /** "Follow local officials." is said once, in its own line: drop it from a caveat. */
+/** A reason without "Follow local officials" and without its own "that does not mean there were none" (the line adds
+ *  that sentence once). */
+export function withoutNoneClause(s: string | null | undefined): string | null {
+  const t = withoutFollow(s)
+  if (!t) return null
+  const u = t.replace(/[;,.]?\s*that does not mean there were (?:none|no alerts)\.?\s*$/i, '').trim()
+  if (!u) return null
+  return /[.!?]$/.test(u) ? u : `${u}.`
+}
+
 export function withoutFollow(s: string | null | undefined): string | null {
   if (!s) return null
   const t = s
@@ -116,7 +137,8 @@ function evacuationLines(e: EvacuationOfficial, c: OfficialContext & { tf: TimeF
       // CONTRACT §14.8.5: "No evacuation order or warning listed here · {Oregon OEM}, checked {time} · not an all-clear"
       const who = e.checkedBy ?? 'Cal OES'
       return [
-        { key: 'evac-none', text: 'No evacuation order or warning listed here', sub: `${who}${checked ? `, ${checked}` : ''} · not an all-clear`, subCompact: `${who} · not an all-clear`, official: true, tone: 'quiet', url: null },
+        // phones keep the check time too: "none" means something only with who checked and when
+        { key: 'evac-none', text: 'No evacuation order or warning listed here', sub: `${who}${checked ? `, ${checked}` : ''} · not an all-clear`, subCompact: `${who}${checked ? `, ${checked}` : ''} · not an all-clear`, official: true, tone: 'quiet', url: null },
       ]
     }
     case 'not-checked':
@@ -146,7 +168,8 @@ function evacuationLines(e: EvacuationOfficial, c: OfficialContext & { tf: TimeF
         },
       ]
     case 'past-date':
-      return [{ key: 'evac-past', text: 'Evacuation orders: not shown for past dates', sub: null, subCompact: null, official: false, tone: 'unknown', url: null }]
+      // the fire's panel's wording (integration review UX-m6)
+      return [{ key: 'evac-past', text: 'Evacuation zones: not available for past dates', sub: null, subCompact: null, official: false, tone: 'unknown', url: null }]
     case 'unavailable':
       return [{ key: 'evac-unavailable', text: 'Evacuation zones: unavailable right now', sub: withoutFollow(e.reason) ?? null, subCompact: null, official: false, tone: 'unknown', url: null }]
     case 'loading':
@@ -177,17 +200,120 @@ function alertLine(a: OfficialAlert, fw: FireWeatherOfficial): OfficialLine {
   }
 }
 
+/**
+ * The NWS status at the point, always (CONTRACT §14.6): the alert lines while one is in effect or upcoming, else
+ * "Fire weather alerts (NWS): checked, none in effect here · Not an all-clear", or "… not checked here" where the
+ * answer's `states_checked` does not hold the point's state; loading, past times and outages said as such.
+ */
+export function fireWeatherLines(fw: FireWeatherOfficial): OfficialLine[] {
+  const alerts = alertsInEffect(fw)
+  if (alerts.length) return alerts.map((a) => alertLine(a, fw))
+  const line = (key: string, text: string, sub: string | null, tone: OfficialTone, official = false): OfficialLine => ({ key, text, sub, subCompact: sub, official, tone, url: null })
+  switch (fw.state) {
+    case 'loading':
+      return [line('nws-loading', 'Checking NWS fire weather alerts…', null, 'loading')]
+    case 'none':
+    case 'active':
+      return [line('nws-none', 'Fire weather alerts (NWS): checked, none in effect here', fw.archived ? 'Archived copy · not an all-clear' : 'Not an all-clear', 'quiet', true)]
+    case 'past-date':
+      return [line('nws-past', 'Fire weather alerts (NWS): not checked for this time', withoutFollow(fw.reason) ?? null, 'unknown')]
+    default:
+      if (fw.reasonCode === 'not_checked' || fw.reasonCode === 'demo') return [line('nws-unchecked', 'Fire weather alerts (NWS): not checked here', withoutFollow(fw.reason) ?? null, 'unknown')]
+      return [line('nws-unavailable', 'Fire weather alerts (NWS): unavailable right now', withoutFollow(fw.reason) ?? null, 'unknown')]
+  }
+}
+
+/** The "none here" line's subject, by the channels that answered (integration review UX-m3). */
+const NONE_HERE: Record<ReturnType<typeof answeredChannelsText>, string> = {
+  'relayed by NWS': "Local officials' alerts relayed by NWS",
+  'FEMA archive': "Local officials' alerts (FEMA archive)",
+  'NWS, FEMA archive': "Local officials' alerts (NWS, FEMA archive)",
+}
+
+/**
+ * Local officials' messages at the point (CONTRACT §14.7): "Alert from <issuer>: "<verbatim text>" · sent <time> ·
+ * relayed by the National Weather Service", archived "Archived alert from <issuer> … (FEMA archive)" with the OpenFEMA
+ * notice; every line links (the issuer's own link, else the record it was read from) and says where the message's
+ * area lies, on phones too ("area covers this point", "area 0.2 mi from this point · may be about another fire";
+ * review round 1, R1: useOfficialAtPoint measures from the point and keeps the messages whose area reaches it). None:
+ * "Local officials' alerts relayed by NWS: none here · not an all-clear" with the standing caveat (and how many of the
+ * fire's messages are for other places, or, for the live box answer, how many nearby ones are for a neighbouring
+ * county: review round 2, N3); endpoint missing or failed, outside the lower 48 or the point's state unknown: "Local
+ * officials' alerts: not checked", never "none" (N2).
+ */
+export function localAlertLines(answer: LocalAlertsOfficial | undefined, tf: TimeFmt, max = 3, opts: { units?: Units; fireOpen?: boolean; refMs?: number } = {}): OfficialLine[] {
+  if (!answer) return []
+  // in effect and the order at the card's own time (the replay minute, or now), from each message's own times (round 4)
+  const l = localAlertsAt(answer, opts.refMs)
+  const metric = opts.units === 'metric'
+  const elsewhere = [
+    // the fire's own answer: its messages for other places in its area are in Updates
+    l.elsewhere ? `${l.elsewhere} of the fire's local alerts ${l.elsewhere === 1 ? 'is' : 'are'} for other places in its area (see Updates).` : null,
+    // the live answer for the point's small box (review round 2, N3): never called the fire's, and not in Updates
+    l.nearby?.county ? `${l.nearby.county} nearby local alert${l.nearby.county === 1 ? ' is' : 's are'} for a neighbouring county, not this point's county.` : null,
+    l.nearby?.area ? `${l.nearby.area} nearby local alert${l.nearby.area === 1 ? ' is for an area that does' : 's are for areas that do'} not reach this point.` : null,
+  ]
+    .filter(Boolean)
+    .join(' ') || null
+  const status = (key: string, text: string, sub: string | null, tone: OfficialTone, official = false): OfficialLine => ({ key, text, sub, subCompact: sub, official, tone, url: null })
+  switch (l.state) {
+    case 'loading':
+      return [status('local-loading', "Checking local officials' alerts…", null, 'loading')]
+    case 'unavailable':
+      // the service could not be reached: "unavailable right now", and the "none" caveat once (panel SR-m1)
+      return [status('local-unavailable', "Local officials' alerts: unavailable right now", withoutNoneClause(l.reason) ? `${withoutNoneClause(l.reason)} That does not mean there were none.` : 'That does not mean there were none.', 'unknown')]
+    case 'not-checked':
+      return [status('local-unchecked', "Local officials' alerts: not checked", withoutFollow(l.reason) ?? null, 'unknown')]
+    case 'none':
+      return [
+        {
+          // named by the channels that answered: a past time older than NWS keeps reads FEMA's archive only (review UX-m3)
+          ...status('local-none', `${NONE_HERE[answeredChannelsText(l)]}: none here · not an all-clear`, [elsewhere, withoutFollow(LOCAL_STANDING_CAVEAT)].filter(Boolean).join(' '), 'quiet', true),
+          subCompact: elsewhere ? `${elsewhere} Most local alerts are not relayed by NWS` : 'Most local alerts are not relayed by NWS',
+        },
+        ...(l.archivePending ? [status('local-pending', "FEMA's archive of local alerts: still being checked", 'Ask again in a minute.', 'loading')] : []),
+      ]
+    case 'listed': {
+      // the live answer for the point's own box is not in Updates (it lists the open fire's messages), so every message
+      // that reaches the point is shown here (the integration, after review round 2's N3); the fire's own answer keeps
+      // `max` lines and points to Updates for the rest
+      const shown = l.pointSource === 'box' ? l.alerts.length : max
+      const out = l.alerts.slice(0, shown).map((a): OfficialLine => {
+        const when = sentText(a, tf)
+        const phase = localPhaseText(a, l.refMs)
+        const place = localAlertPlace(a, { metric, fireOpen: opts.fireOpen })
+        const sub = [a.event, when, a.archived ? 'FEMA archive' : 'relayed by the National Weather Service', phase, place, a.archived ? `${ARCHIVE_CREDIT}: ${OPENFEMA_NOTICE}` : null].filter(Boolean).join(' · ')
+        const subCompact = [when, a.archived ? 'FEMA archive' : 'relayed by NWS', phase, place].filter(Boolean).join(' · ')
+        return {
+          key: `local-${a.id}`,
+          text: `${a.lead}: "${a.text}"`,
+          sub,
+          subCompact,
+          official: true,
+          tone: a.phase === 'active' || a.phase === 'upcoming' ? 'warning' : 'other',
+          url: a.link.url,
+          urlLabel: a.link.label,
+        }
+      })
+      if (l.alerts.length > shown) out.push(status('local-more', `+${l.alerts.length - shown} more local alerts (see Updates)`, null, 'other'))
+      if (elsewhere) out.push(status('local-elsewhere', elsewhere, null, 'other'))
+      if (l.archivePending) out.push(status('local-pending', "FEMA's archive of local alerts: still being checked", 'Ask again in a minute.', 'loading'))
+      return out
+    }
+  }
+}
+
 function calfireUrl(cf: CalFireOfficial, fallback: string | null): string | null {
   return https(cf.url) ?? https(fallback)
 }
 
-export function officialBlock(info: OfficialInfo, ctx: OfficialContext): OfficialBlock {
-  const c = { ...ctx, tf: ctx.tf ?? getTimeFormat() }
+export function officialBlock(info: OfficialInfo, c: OfficialContext): OfficialBlock {
   const evacuation = evacuationLines(info.evacuation, c)
-  const fireWeather = alertsInEffect(info.fireWeather).map((a) => alertLine(a, info.fireWeather))
+  const fireWeather = [...fireWeatherLines(info.fireWeather), ...localAlertLines(info.local, c.tf, 3, { units: c.units, fireOpen: c.fireName != null, refMs: c.refMs ?? c.nowMs })]
   const links: OfficialLink[] = []
   const cf = calfireUrl(info.calfire, c.incidentUrl)
-  if (cf) links.push({ label: 'CAL FIRE', url: cf })
+  // the fire's agency record, labelled from its publisher ("CAL FIRE", "NIFC WFIGS"; CONTRACT §14.5)
+  if (cf) links.push({ label: info.calfire.linkLabel && info.calfire.linkLabel !== 'Agency record' ? info.calfire.linkLabel : 'CAL FIRE', url: cf })
   // the state evacuation source(s) checked here; none for a state without a feed (never a Cal OES link outside California)
   for (const s of evacuationLinks(info.evacuation)) if (!links.some((x) => x.url === s.url)) links.push(s)
   for (const l of info.evacuation.links ?? []) if (https(l.url) && !links.some((x) => x.url === l.url)) links.push({ label: l.label, url: l.url })
@@ -202,16 +328,19 @@ export function officialBlock(info: OfficialInfo, ctx: OfficialContext): Officia
 }
 
 /** The dryness reason may cite an official threshold: the Red Flag Warning (or Fire Weather Watch) in effect here.
- *  `tf` (CONTRACT §14.9.6) is accepted for the shared signature; the note has no time in it today. */
-export function officialFireWeatherNote(fw: FireWeatherOfficial, _tf?: TimeFmt): string | null {
+ *  `tf` (CONTRACT §14.9.6, required since the integration) is part of the shared signature; the note has no time in
+ *  it today. */
+export function officialFireWeatherNote(fw: FireWeatherOfficial, _tf: TimeFmt): string | null {
   const a = alertsInEffect(fw).find((x) => x.phase === 'active')
   return a ? `NWS ${a.event} in effect` : null
 }
 
-/** CAL FIRE's own record, one line ("CAL FIRE: 14,021 acres, 100% contained · updated Jan 31, 2025, 10:48 PST"). */
+/** The fire's agency record, one line ("CAL FIRE: 14,021 acres, 100% contained · updated Jan 31, 2025, 10:48 PST";
+ *  "USFS (USDA Forest Service) via NIFC WFIGS: …"), labelled from the issuer. */
 export function calfireLine(cf: CalFireOfficial, units: Units, tf: TimeFmt = getTimeFormat()): string | null {
   if (cf.state !== 'available') return null
+  const issuer = cf.issuer && cf.issuer !== 'Agency record' ? cf.issuer : 'CAL FIRE'
   const parts = [cf.acres != null ? area(cf.acres, units).text : null, cf.percentContained != null ? `${Math.round(cf.percentContained)}% contained` : null]
   const facts = parts.filter(Boolean).join(', ')
-  return facts ? `CAL FIRE: ${facts}${cf.updatedMs != null ? ` · updated ${at(cf.updatedMs, tf)}` : ''}` : null
+  return facts ? `${issuer}: ${facts}${cf.updatedMs != null ? ` · updated ${at(cf.updatedMs, tf)}` : ''}` : null
 }

@@ -34,8 +34,11 @@ import { alertBounds, alertEndMs, alertPhase, alertsAtPoint, alertStartMs, alert
 import { bboxContains, type BBox } from './geo'
 import type { FireWeatherResponse } from './types'
 import { stateName } from '../lib/usStates'
+import type { TimeFmt } from '../lib/time'
 import { httpsUrl } from './url'
 import type { CalFireStatus } from './calfire'
+import type { RecordStatus } from './record'
+import { localAlertsAt, sentAfter, type LocalAlertsOfficial } from './localAlerts'
 import type { FeedItemStatus } from '../ui/feed/types'
 
 export type { CalFireStatus } from './calfire'
@@ -141,7 +144,12 @@ export function evacuationWho(e: Pick<EvacuationOfficial, 'state' | 'checkedBy' 
   if (e.state === 'not-available') return null
   if (e.checkedBy) return e.checkedBy
   const names = [...new Set((e.sources ?? []).map((s) => s.aggregator))]
-  return names.length ? names.join(' and ') : e.sources ? null : 'Cal OES'
+  if (names.length) return names.join(' and ')
+  if (e.sources) return null
+  // a brief-2 answer (no `sources`: California only) was Cal OES's; with no answer yet (loading, an outage, a past
+  // date) the source is not known and never guessed (it named Cal OES for a fire in North Carolina while checking;
+  // integration part 2)
+  return e.state === 'listed' || e.state === 'none-listed' ? 'Cal OES' : null
 }
 export const NOT_ALL_CLEAR = 'That is not an all-clear: follow local officials.'
 const PAST_DATE_CAVEAT = 'Official evacuation status is published as current status only, so none is shown for past dates.'
@@ -310,13 +318,6 @@ export function needsPointQuery(i: Pick<EvacuationAtPointInput, 'lon' | 'lat' | 
   return !bboxContains(b, i.lon, i.lat)
 }
 
-/** Rough bounds of California (+ a margin).
- *  @deprecated Brief 3: no evacuation or NWS path uses it any more (the backend's registry and `states_checked`
- *  decide); kept until the integration removes it. */
-export function insideCalifornia(lon: number, lat: number): boolean {
-  return lon >= -124.9 && lon <= -113.8 && lat >= 32.2 && lat <= 42.3
-}
-
 /** A small, cache-friendly query box around a point (±0.005°, centre rounded to 0.001°: it always contains the point). */
 export function pointQueryBbox(lon: number, lat: number): BBox {
   const r = (v: number) => Math.round(v * 1000) / 1000
@@ -370,9 +371,17 @@ function pointSource(sources: EvacuationSourceInfo[], state: string): Partial<Ev
 export function evacuationAtPointState(i: EvacuationAtPointInput): EvacuationOfficial {
   const notChecked = (reason: string): EvacuationOfficial => ({ state: 'not-checked', zones: [], checkedMs: null, sourceUpdatedMs: null, sourceUrl: null, caveat: 'Follow local officials.', reason })
   if (i.lon == null || i.lat == null || !Number.isFinite(i.lon) || !Number.isFinite(i.lat)) return notChecked('No location selected.')
-  if (i.past)
-    return { state: 'past-date', zones: [], checkedMs: null, sourceUpdatedMs: null, sourceUrl: null, caveat: `${PAST_DATE_CAVEAT} Follow local officials.`, reason: 'Official status is shown only for the current time.' }
   const inc = i.incident?.data ?? null
+  if (i.past) {
+    // a state without an official evacuation feed says so at any time, as the backend and the fire's panel do (it
+    // checks the state before the date, §14.8.3): "not available in this state (Montana)", not "not shown for past
+    // dates" (integration, us-web review note on Horse Gulch)
+    if (inc?.reason_code === 'state_not_available' && bboxContains(inc.bbox ?? i.incidentBbox, i.lon, i.lat)) {
+      const env = envelopeState(i.incident)
+      if (env) return env
+    }
+    return { state: 'past-date', zones: [], checkedMs: null, sourceUpdatedMs: null, sourceUrl: null, caveat: `${PAST_DATE_CAVEAT} Follow local officials.`, reason: 'Official status is shown only for the current time.' }
+  }
   if (inc && inc.status === 'available') {
     const r = atPoint(inc, i.lon, i.lat, i.fire, i.pointState)
     if (r) return r
@@ -450,6 +459,8 @@ export interface OfficialAlert {
   ugcs: string[]
   /** [w, s, e, n] of its zones (fit on the map). */
   bounds: BBox | null
+  /** Brief 3: IANA zone of the alert's area (its own times are shown in it). */
+  timeZone?: string | null
 }
 
 export interface FireWeatherOfficial {
@@ -468,12 +479,19 @@ export interface FireWeatherOfficial {
   reason?: string | null
   /** Always present: "A fire weather alert is a weather warning, not an evacuation order." etc. */
   caveat: string
+  // ---- brief 3 (CONTRACT §14.6)
+  /** The states the answer covers (`states_checked`; missing → ["CA"]). */
+  statesChecked?: string[]
+  /** The states with an alert in the answer. */
+  alertStates?: string[]
+  /** "the lower 48 states" (all 49 codes), "California", "these states (…)", or null (nothing checked). */
+  scope?: string | null
 }
 
 const FW_CAVEAT = 'A fire weather alert is a weather warning, not an evacuation order. Follow local officials.'
 const FW_NONE = 'No Red Flag Warning or Fire Weather Watch is listed here. That is not an all-clear: follow local officials.'
 
-function toOfficialAlert(d: FireWeatherResponse, a: ListedAlert, refMs: number): OfficialAlert {
+function toOfficialAlert(d: FireWeatherResponse, a: ListedAlert, refMs: number, tf?: TimeFmt): OfficialAlert {
   const phase = alertPhase(a, refMs)
   const start = alertStartMs(a)
   const end = alertEndMs(a)
@@ -489,7 +507,8 @@ function toOfficialAlert(d: FireWeatherResponse, a: ListedAlert, refMs: number):
     url: httpsUrl(a.url),
     archived: a.archived === true,
     phase,
-    timeText: alertTimeText(a, phase, refMs),
+    timeText: alertTimeText(a, phase, refMs, tf),
+    timeZone: a.time_zone ?? null,
     coversReportedLocation: a.covers_reported_location ?? null,
     nearestKm: a.nearest_km ?? null,
     ugcs: a.ugcs ?? [],
@@ -500,9 +519,17 @@ function toOfficialAlert(d: FireWeatherResponse, a: ListedAlert, refMs: number):
 const PHASE_ORDER: Record<FeedItemStatus, number> = { active: 0, upcoming: 1, expired: 2, cancelled: 3 }
 const sortAlerts = (a: OfficialAlert, b: OfficialAlert) => PHASE_ORDER[a.phase] - PHASE_ORDER[b.phase] || (b.sentMs ?? 0) - (a.sentMs ?? 0)
 
-function fwBase(d: FireWeatherResponse | null): Pick<FireWeatherOfficial, 'checkedMs' | 'archived' | 'credit' | 'sourceUrl'> {
+function fwBase(d: FireWeatherResponse | null): Pick<FireWeatherOfficial, 'checkedMs' | 'archived' | 'credit' | 'sourceUrl' | 'statesChecked' | 'alertStates' | 'scope'> {
   const archived = !!d && (d.alerts.some((a) => a.archived) || /mesonet/i.test(d.source?.name ?? ''))
-  return { checkedMs: d?.retrieved_ms ?? null, archived, credit: fireWeatherCredit(archived), sourceUrl: httpsUrl(d?.source?.url) ?? (archived ? IEM_URL : NWS_ALERTS_URL) }
+  return {
+    checkedMs: d?.retrieved_ms ?? null,
+    archived,
+    credit: fireWeatherCredit(archived),
+    sourceUrl: httpsUrl(d?.source?.url) ?? (archived ? IEM_URL : NWS_ALERTS_URL),
+    statesChecked: d ? statesChecked(d) : [],
+    alertStates: d?.alert_states ?? [],
+    scope: d ? checkedScope(d) : null,
+  }
 }
 
 function fwEnvelope(q: Pick<ExtrasQueryState<FireWeatherResponse>, 'data' | 'loading' | 'error'> | null, opts: { demo: boolean; hasIncident: boolean }): FireWeatherOfficial | null {
@@ -513,6 +540,9 @@ function fwEnvelope(q: Pick<ExtrasQueryState<FireWeatherResponse>, 'data' | 'loa
     if (q?.error) return { state: 'unavailable', alerts: [], ...fwBase(null), reasonCode: 'request_error', reason: q.error, caveat: FW_CAVEAT }
     return { state: 'loading', alerts: [], ...fwBase(null), caveat: FW_CAVEAT }
   }
+  // the archive of past alerts could not be reached: unavailable right now, never "not available for this time" (panel SR-m1)
+  if (d.status === 'not_available_for_past_dates' && d.reason_code === 'upstream_error')
+    return { state: 'unavailable', alerts: [], ...fwBase(d), reasonCode: 'upstream_error', reason: d.reason, caveat: FW_CAVEAT }
   if (d.status === 'not_available_for_past_dates')
     return { state: 'past-date', alerts: [], ...fwBase(d), reasonCode: d.reason_code ?? 'past_date', reason: d.reason ?? 'Past NWS alerts are not available for this time.', caveat: FW_CAVEAT }
   if (d.status === 'unavailable') return { state: 'unavailable', alerts: [], ...fwBase(d), reasonCode: d.reason_code ?? 'upstream_error', reason: d.reason, caveat: FW_CAVEAT }
@@ -524,13 +554,13 @@ function fwEnvelope(q: Pick<ExtrasQueryState<FireWeatherResponse>, 'data' | 'loa
 export function fireWeatherNow(
   q: Pick<ExtrasQueryState<FireWeatherResponse>, 'data' | 'loading' | 'error'> | null,
   refMs: number,
-  opts: { demo: boolean; hasIncident: boolean; statewide?: boolean },
+  opts: { demo: boolean; hasIncident: boolean; statewide?: boolean; tf?: TimeFmt },
 ): FireWeatherOfficial {
   const env = fwEnvelope(q, { demo: opts.demo, hasIncident: opts.hasIncident || !!opts.statewide })
   if (env) return env
   const d = q!.data!
   const alerts = listedAlerts(d, refMs)
-    .map((a) => toOfficialAlert(d, a, refMs))
+    .map((a) => toOfficialAlert(d, a, refMs, opts.tf))
     .sort(sortAlerts)
   const inEffect = alerts.some((a) => a.phase === 'active' || a.phase === 'upcoming')
   return {
@@ -544,9 +574,9 @@ export function fireWeatherNow(
 }
 
 /** Alerts covering a point in one answer: 'active' when one is in effect or upcoming, else 'none'. */
-function alertsHere(d: FireWeatherResponse, lon: number, lat: number, refMs: number): FireWeatherOfficial {
+function alertsHere(d: FireWeatherResponse, lon: number, lat: number, refMs: number, tf?: TimeFmt): FireWeatherOfficial {
   const alerts = listedAlerts({ alerts: alertsAtPoint(d, lon, lat) }, refMs)
-    .map((a) => toOfficialAlert(d, a, refMs))
+    .map((a) => toOfficialAlert(d, a, refMs, tf))
     .filter((a) => a.phase === 'active' || a.phase === 'upcoming')
     .sort(sortAlerts)
   if (alerts.length) return { state: 'active', alerts, ...fwBase(d), caveat: FW_CAVEAT }
@@ -570,6 +600,8 @@ export interface FireWeatherAtPointInput {
   /** The point's state (USPS, /api/geo/lookup): undefined while unknown, null outside the lower 48 (or the lookup
    *  failed). "Checked" is decided from the answer's `states_checked` and this state only. */
   pointState?: string | null
+  /** Zone and clock of the times (each alert uses its own area's zone when known). Default `getTimeFormat()`. */
+  tf?: TimeFmt
 }
 
 /** The 49 codes of the lower 48 states + DC (the national NWS request, CONTRACT §14.6). */
@@ -600,6 +632,14 @@ export function checkedScope(d: Pick<FireWeatherResponse, 'states_checked'> | nu
   return names.length === 1 ? names[0] : `these states (${names.join(', ')})`
 }
 
+/** The overview header's scope (CONTRACT §14.6): "lower 48 states" (all 49 codes), else the states named
+ *  ("California"); null while nothing was checked. */
+export function officialNowScope(f: Pick<FireWeatherOfficial, 'scope'>): string | null {
+  const s = f.scope
+  if (!s) return null
+  return s === 'the lower 48 states' ? 'lower 48 states' : s.replace(/^these states \((.*)\)$/, '$1')
+}
+
 /** Does the point need the overview (national) answer: current time, outside the open fire's checked area? The
  *  answer's `states_checked` then decides whether the point was checked (no client-side state boxes). */
 export function needsStatewideFireWeather(i: Pick<FireWeatherAtPointInput, 'lon' | 'lat' | 'hasIncident' | 'demo' | 'past' | 'fallbackArea'> & { incidentData: FireWeatherResponse | null }): boolean {
@@ -613,10 +653,9 @@ export function needsStatewideFireWeather(i: Pick<FireWeatherAtPointInput, 'lon'
  *  `states_checked` only), or loading while the point's state is not known yet; null when it is covered. */
 function notCheckedAt(d: FireWeatherResponse, pointState: string | null | undefined): FireWeatherOfficial | null {
   const covered = statesChecked(d)
-  if (pointState === undefined) {
-    // the point's state is still being looked up; an answer that covers every state needs no lookup
-    return coversLower48(d) ? null : { state: 'loading', alerts: [], ...fwBase(d), caveat: FW_CAVEAT }
-  }
+  // the point's state is still being looked up (cached and fast): wait for it, even with all 49 codes checked, so a
+  // point in Alaska, Canada or Mexico never reads "checked, none in effect here" for a moment (review round 1, R2)
+  if (pointState === undefined) return { state: 'loading', alerts: [], ...fwBase(d), caveat: FW_CAVEAT }
   if (pointState && covered.includes(pointState)) return null
   const where = pointState ? (stateName(pointState) ?? pointState) : null
   return {
@@ -643,7 +682,7 @@ export function fireWeatherAtPointState(i: FireWeatherAtPointInput): FireWeather
     const d = i.incident?.data ?? null
     if (bboxContains(d?.area_bbox ?? i.fallbackArea, i.lon, i.lat)) {
       const env = fwEnvelope(i.incident, { demo: false, hasIncident: true })
-      return env ?? notCheckedAt(d!, i.pointState) ?? alertsHere(d!, i.lon, i.lat, i.refMs)
+      return env ?? notCheckedAt(d!, i.pointState) ?? alertsHere(d!, i.lon, i.lat, i.refMs, i.tf)
     }
     if (i.past)
       return {
@@ -656,37 +695,70 @@ export function fireWeatherAtPointState(i: FireWeatherAtPointInput): FireWeather
       }
   }
   const env = fwEnvelope(i.statewide, { demo: false, hasIncident: true })
-  return env ?? notCheckedAt(i.statewide!.data!, i.pointState) ?? alertsHere(i.statewide!.data!, i.lon, i.lat, i.refMs)
+  return env ?? notCheckedAt(i.statewide!.data!, i.pointState) ?? alertsHere(i.statewide!.data!, i.lon, i.lat, i.refMs, i.tf)
+}
+
+/** The national summary's count (integration review UX-m5): "4 alerts in effect in 4 states", or "in effect or upcoming"
+ *  when any starts later (an upcoming Red Flag Warning is not in effect yet). */
+export function statewideCountText(alerts: readonly { phase: string }[], stateCount: number, scope: string): string {
+  const phase = alerts.some((a) => a.phase === 'upcoming') ? (alerts.every((a) => a.phase === 'upcoming') ? 'upcoming' : 'in effect or upcoming') : 'in effect'
+  const where = stateCount > 1 ? `${stateCount} states` : scope
+  return `${alerts.length} alerts ${phase} in ${where}; the 3 most recent:`
 }
 
 // ---- badge -----------------------------------------------------------------------------------------------------
 export interface OfficialBadge {
-  /** Active official items: evacuation (status, issuer) groups of orders / shelter / warnings near the fire, plus NWS
-   *  alerts in effect (or upcoming) at the reference time. */
+  /** Active official items: evacuation (status, issuer) groups of orders / shelter / warnings near the fire, NWS
+   *  alerts in effect (or upcoming) at the reference time, and local officials' messages in effect (or upcoming; brief
+   *  3, CONTRACT §14.7: integration review UX-M1) at the panel's own time, from their own times: a message sent after
+   *  that time (a replay's next hour) is not counted (review round 3, N4); one already sent and past its own effective
+   *  time is (review round 4). */
   count: number
-  /** The most urgent: an order (or shelter in place), a warning, a fire weather alert, or none. */
-  level: 'order' | 'warning' | 'fire-weather' | null
+  /** The most urgent: an order (an evacuation order or shelter in place, or a local "Evacuation Immediate" / "Shelter
+   *  In Place Warning"), an evacuation warning, another local officials' message (a "Fire Warning", a civil emergency
+   *  message), a fire weather alert, or none. */
+  level: 'order' | 'warning' | 'local' | 'fire-weather' | null
 }
 
-export function officialBadge(evac: EvacuationOfficial, fw: FireWeatherOfficial): OfficialBadge {
+const BADGE_RANK: Record<NonNullable<OfficialBadge['level']>, number> = { order: 3, warning: 2, local: 1, 'fire-weather': 0 }
+const higher = (a: OfficialBadge['level'], b: NonNullable<OfficialBadge['level']>): NonNullable<OfficialBadge['level']> => (a != null && BADGE_RANK[a] >= BADGE_RANK[b] ? a : b)
+
+/** A local officials' message's badge level from its verbatim event (never from its text: Fire-3d does not read it). */
+export function localBadgeLevel(event: string): 'order' | 'local' {
+  return /^(evacuation immediate|shelter in place warning)$/i.test(event.trim()) ? 'order' : 'local'
+}
+
+/** `refMs`: the panel's own time (the replay minute on screen, or now when live); local officials' messages are
+ *  decided at it (`localAlertsAt`), else at the time the answer was decided at (`local.refMs`). */
+export function officialBadge(
+  evac: EvacuationOfficial,
+  fw: FireWeatherOfficial,
+  local?: Pick<LocalAlertsOfficial, 'state' | 'alerts' | 'refMs'> | null,
+  refMs?: number | null,
+): OfficialBadge {
   const groups = new Set<string>()
   let level: OfficialBadge['level'] = null
   if (evac.state === 'listed') {
     for (const z of evac.zones) {
       if (z.group === 'other') continue
       groups.add(`${z.status}|${z.issuer}`)
-      if (z.group === 'order') level = 'order'
-      else if (level !== 'order') level = 'warning'
+      level = higher(level, z.group === 'order' ? 'order' : 'warning')
     }
   }
   const alerts = fw.state === 'active' ? fw.alerts.filter((a) => a.phase === 'active' || a.phase === 'upcoming').length : 0
-  if (alerts && !level) level = 'fire-weather'
-  return { count: groups.size + alerts, level }
+  if (alerts) level = higher(level, 'fire-weather')
+  // decided at the panel's time from each message's own times (review round 4); a message sent after it did not exist
+  // yet there: never counted (review round 3, N4)
+  const l = local ? localAlertsAt(local, refMs) : null
+  const messages = l?.state === 'listed' ? l.alerts.filter((a) => (a.phase === 'active' || a.phase === 'upcoming') && !sentAfter(a, l.refMs)) : []
+  for (const m of messages) level = higher(level, localBadgeLevel(m.event))
+  return { count: groups.size + alerts + messages.length, level }
 }
 
 // ---- CAL FIRE ---------------------------------------------------------------------------------------------------
-/** The I5 `calfire` shape (CalFireStatus: state, acres?, percentContained?, isActive?, updatedMs?, url? + extras). */
-export type CalFireOfficial = CalFireStatus
+/** The I5 `calfire` shape: the fire's agency record (brief 3: CAL FIRE's or NIFC WFIGS's, a RecordStatus; a brief-2
+ *  CalFireStatus with only state, acres?, percentContained?, isActive?, updatedMs?, url? still fits). */
+export type CalFireOfficial = CalFireStatus & Partial<Pick<RecordStatus, 'source' | 'issuer' | 'linkLabel' | 'blocks' | 'members' | 'complexName' | 'synthetic' | 'notChecked' | 'protectingUnit' | 'discoveredMs' | 'controlledMs' | 'outMs'>>
 
 /** End of the hazard for display, used by the card line ("until …"). */
 export const officialAlertEnd = (a: Pick<OfficialAlert, 'endsMs' | 'expiresMs'>): number | null => a.endsMs ?? a.expiresMs ?? null

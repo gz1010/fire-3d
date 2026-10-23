@@ -146,16 +146,19 @@ export function chipTargets(
  *  change which fire is open, however close another prepared fire is: fitting Henderson's Orange County zone must not
  *  focus the Norte Fire it touches, nor return to the overview. The focus rule is held from that flight until the user
  *  moves the map again (a gesture or the zoom buttons), another explicit flight or framing, or the open fire changes.
- *  Orbit moves (rotate, tilt, north up) keep the hold. */
+ *  Orbit moves (rotate, tilt, north up) keep the hold. The same holds for the flight to an unprepared fire's card
+ *  (`source: 'fire-card'`, brief-3 integration): picking Little Giant (WA) from the list must show Little Giant's card,
+ *  not open the prepared Lower Sugarloaf Fire whose analysis area its view covers. */
 export class FocusHold {
   private held = false
   /** The focus rule is held: keep what is open. */
   get active(): boolean {
     return this.held
   }
-  /** An explicit map flight starts: an official one holds the focus, any other releases it. */
+  /** An explicit map flight starts: an official one or one to an unprepared fire's card holds the focus, any other
+   *  releases it. */
   flight(source: string | null | undefined): void {
-    this.held = source === 'official'
+    this.held = source === 'official' || source === 'fire-card'
   }
   /** The user moved the map, the map was framed, or the open fire changed. */
   release(): void {

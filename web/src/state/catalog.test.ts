@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { IncidentSummary } from '../api/types'
+import type { IncidentListResponse, IncidentSummary } from '../api/types'
 import { catalogApply, catalogFail, catalogPatch, catalogPending, EMPTY_CATALOG, listsForModes } from './catalog'
 
 const row = (id: string, year: number, over: Partial<IncidentSummary> = {}): IncidentSummary =>
@@ -16,11 +16,11 @@ describe('catalog lists', () => {
     let c = catalogPending(EMPTY_CATALOG, ['live', 'season'], 300)
     expect(c.listLoading).toEqual({ live: true, season: true, historical: false })
     expect(c.loading).toBe(true)
-    c = catalogApply(c, 'live', { incidents: [row('2026-a', 2026, { mode: 'live' })], updated_ms: 10 })
+    c = catalogApply(c, 'live', { incidents: [row('2026-a', 2026, { mode: 'live' })], updated_ms: 10, sources: [] })
     expect(c.live).toHaveLength(1)
     expect(c.updatedMs.live).toBe(10)
     expect(c.loading).toBe(true)
-    c = catalogApply(c, 'season', { incidents: [row('2026-a', 2026), row('2025-z', 2025)], updated_ms: 11 })
+    c = catalogApply(c, 'season', { incidents: [row('2026-a', 2026), row('2025-z', 2025)], updated_ms: 11, sources: [] })
     expect(c.loading).toBe(false)
     // a server that ignores ?year= answers the 2025 list: those rows never enter the season
     expect(c.season.map((s) => s.id)).toEqual(['2026-a'])
@@ -34,13 +34,14 @@ describe('catalog lists', () => {
     let c = catalogApply(EMPTY_CATALOG, 'live', { incidents: [], updated_ms: 1, sources: wfigsDown })
     expect(c.sources.live).toEqual(wfigsDown)
     expect(c.sources.season).toBeNull()
-    c = catalogApply(c, 'season', { incidents: [], updated_ms: 1 })
+    // an older backend's answer without sources[] (the field is required since the integration) reads null
+    c = catalogApply(c, 'season', { incidents: [], updated_ms: 1 } as unknown as IncidentListResponse)
     expect(c.sources.season).toBeNull()
     expect(c.sources.live).toEqual(wfigsDown)
   })
 
   it('keeps the last rows on failure and joins the errors', () => {
-    let c = catalogApply(EMPTY_CATALOG, 'historical', { incidents: [row('2025-a', 2025)], updated_ms: 1 })
+    let c = catalogApply(EMPTY_CATALOG, 'historical', { incidents: [row('2025-a', 2025)], updated_ms: 1, sources: [] })
     c = catalogPending(c, ['historical', 'live'], 100)
     expect(c.minAcres).toBe(100)
     c = catalogFail(c, 'historical', 'Server error (HTTP 502)')
@@ -48,14 +49,14 @@ describe('catalog lists', () => {
     expect(c.historical).toHaveLength(1)
     expect(c.error).toBe('Server error (HTTP 502)')
     expect(c.listErrors.live).toBe('Server error (HTTP 502)')
-    c = catalogApply(c, 'live', { incidents: [], updated_ms: 2 })
+    c = catalogApply(c, 'live', { incidents: [], updated_ms: 2, sources: [] })
     expect(c.listErrors.live).toBeNull()
     expect(c.error).toBe('Server error (HTTP 502)')
   })
 
   it('patches a fresh summary into every list, keeping list-only fields', () => {
-    let c = catalogApply(EMPTY_CATALOG, 'live', { incidents: [row('2026-a', 2026, { mode: 'live', bbox_lonlat: [1, 2, 3, 4] })], updated_ms: 1 })
-    c = catalogApply(c, 'season', { incidents: [row('2026-a', 2026, { bbox_lonlat: [1, 2, 3, 4] })], updated_ms: 1 })
+    let c = catalogApply(EMPTY_CATALOG, 'live', { incidents: [row('2026-a', 2026, { mode: 'live', bbox_lonlat: [1, 2, 3, 4] })], updated_ms: 1, sources: [] })
+    c = catalogApply(c, 'season', { incidents: [row('2026-a', 2026, { bbox_lonlat: [1, 2, 3, 4] })], updated_ms: 1, sources: [] })
     c = catalogPatch(c, row('2026-a', 2026, { mode: 'live', bundle_status: 'ready', acres: 50 }))
     expect(c.live[0]).toMatchObject({ bundle_status: 'ready', acres: 50, bbox_lonlat: [1, 2, 3, 4] })
     expect(c.season[0].bundle_status).toBe('ready')

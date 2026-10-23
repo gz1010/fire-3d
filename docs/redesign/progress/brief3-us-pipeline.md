@@ -44,8 +44,15 @@ endpoint, §14.6, §14.7, §14.9.7, §14.12.2/3/5/6/7/8/10/11). Ports API 8714, 
   3 failed in us-official's uncommitted working-tree edits (evacuation.test.ts, model.test.ts; both pass on HEAD).
 - Wording scan: 7 hits, all "not an all-clear" negations or `quote(..., safe=...)`. Key scan: 239 files, 0.
 
+- Review round 1 (fixer, 02:55-04:05Z): R2 fixed (API build jobs only start the OpenFEMA fetch; CLI capped 15 s,
+  no retry; drain waits for follow-ups), R3 fixed (hourly re-check of a daily Open-Meteo block; deviation), R4 fixed
+  (LEW texts removed from the OpenFEMA sample; test loads the recorder by path), R1 still pending (quota): 7 probes
+  02:57-03:59Z, none overall ok, so Black Cove was not built. Gates: backend 880 passed; web typecheck 0, lint 55
+  (src/scene), tests 1107 passed / 2 skipped, build ok. Key scan 0, wording scan 0.
+
 ## Next
-- Done except Black Cove (pending quota). After 2026-10-24T00:00Z: weather-probe, build Black Cove
+- Done except Black Cove (pending quota; validation builds it first). Whenever weather-probe says overall ok (or
+  after 2026-10-24T00:00Z): build Black Cove
   --require-hrrr, check_bundle, Public screenshot with 12-hour EDT (steps in contract3/us-pipeline.md §14.12.11).
 
 ## Decisions

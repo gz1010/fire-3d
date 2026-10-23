@@ -36,7 +36,7 @@ from fastapi.responses import Response
 
 from .. import bundle, catalog, config
 from ..sources import calfire, calfire_history, nws, openfema
-from ..timeutil import DAY_MS, HOUR_MS, now_ms
+from ..timeutil import DAY_MS, HOUR_MS, MAX_QUERY_MS, now_ms
 from .extras import expand_bbox
 
 log = logging.getLogger(__name__)
@@ -77,6 +77,7 @@ ARCHIVE_RECENT_REASON = ("FEMA publishes its archive about a day later; messages
                          "National Weather Service.")
 ARCHIVE_POINT_REASON = "The FEMA archive is checked for a chosen fire only."
 NWS_PAST_POINT_REASON = "Past local alerts are checked for a chosen fire only."
+LOWER48_ONLY_REASON = "Fire-3d checks local officials' alerts in the lower 48 states only."
 ARCHIVE_ENABLED = True                 # the background OpenFEMA prefetch (us-pipeline cut-line item a)
 ARCHIVE_PENDING_REASON = "FEMA's archive is being fetched; ask again in a minute."
 
@@ -237,11 +238,6 @@ def fill_from_catalog(ref: IncidentRef) -> None:
     ref.state = ref.state or (s.get("state") if isinstance(s.get("state"), str) else None)
     ref.time_zone = ref.time_zone or (s.get("time_zone") if isinstance(s.get("time_zone"), str) else None)
     ref.uid = ref.uid or calfire_history.valid_uid(s.get("calfire_uid"))
-
-
-def fill_from_calfire(ref: IncidentRef) -> None:
-    """Deprecated alias of :func:`fill_from_catalog` (brief 3)."""
-    fill_from_catalog(ref)
 
 
 # ----------------------------------------------------------------------------------------------------------------
@@ -571,6 +567,18 @@ def local_alerts_payload(incident: str | None, bbox: str | None, at_ms: int | No
     out["area_bbox"] = list(area)
     at = int(at_ms) if at_ms is not None else now
     states = nws.states_in_area(area)
+    if not states:
+        # outside the lower 48 (Alaska, Hawaii, territories, Mexico, Canada, the sea): nothing is checked, so never
+        # "available" with an empty list (that would read as "none here"; integration, after review round 2 N2)
+        from ..sources import evacuations as evac
+
+        cx, cy = point or ((area[0] + area[2]) / 2, (area[1] + area[3]) / 2)
+        out.update(status="unavailable", reason_code="state_not_available",
+                   reason=f"{LOWER48_ONLY_REASON} {evac.outside_reason(cx, cy)}",
+                   channels=[_channel("nws_api", "not_checked", LOWER48_ONLY_REASON),
+                             _channel("openfema_archive", "not_checked", LOWER48_ONLY_REASON)])
+        out["caveats"] = [LOCAL_CAVEAT]
+        return out
     counties, point_county = _counties(area, point)
     out["counties"] = counties
     fips = [c["fips"] for c in counties]
@@ -633,7 +641,7 @@ def get_calfire(incident: str = Query(..., min_length=1, max_length=160)) -> Res
 @router.get("/api/official/local-alerts")
 def get_local_alerts(incident: str | None = Query(None, min_length=1, max_length=160),
                      bbox: str | None = Query(None, min_length=1, max_length=120),
-                     at_ms: int | None = Query(None, ge=0),
+                     at_ms: int | None = Query(None, ge=0, le=MAX_QUERY_MS),
                      margin_km: float = Query(DEFAULT_MARGIN_KM, ge=0, le=60)) -> Response:
     """Local officials' messages relayed by NWS near the incident (or in ``bbox``), with FEMA's archive for past
     days (CONTRACT 14.7)."""
@@ -642,7 +650,7 @@ def get_local_alerts(incident: str | None = Query(None, min_length=1, max_length
 
 @router.get("/api/official/fire-weather")
 def get_fire_weather(incident: str | None = Query(None, min_length=1, max_length=160),
-                     at_ms: int | None = Query(None, ge=0),
+                     at_ms: int | None = Query(None, ge=0, le=MAX_QUERY_MS),
                      margin_km: float = Query(DEFAULT_MARGIN_KM, ge=0, le=60)) -> Response:
     """NWS Red Flag Warnings and Fire Weather Watches near the incident (archive for past times), or statewide."""
     return _json(fire_weather_payload(incident, at_ms, margin_km))

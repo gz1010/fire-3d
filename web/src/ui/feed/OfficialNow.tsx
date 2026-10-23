@@ -2,11 +2,11 @@
 // the top of the updates panel and the phone sheet (mounted by shell). Three compact rows, each with its issuer, the
 // issuer's own time, a source link and an explicit quiet state that says it is not an all-clear:
 //   evacuations (the state source: Cal OES, Oregon OEM; zones within 15 km with their distance; "not available in this
-//   state" elsewhere), the fire's agency record, NWS fire weather.
+//   state" elsewhere), the fire's agency record (CAL FIRE's or NIFC WFIGS's, labelled from its issuer), NWS fire weather.
 // Extras (agencies, county maps, recording notes, ended alerts) sit behind each row's "More". Shown whatever the map
 // layers show; "Show" fits and highlights the official area. Official wording is verbatim, and the block never mixes
 // in observations, estimates or model output.
-import { ChevronDown, ExternalLink, Flag, Landmark, MapPinned, ShieldAlert, TriangleAlert } from 'lucide-react'
+import { ChevronDown, ExternalLink, Flag, Landmark, MapPinned, Megaphone, ShieldAlert, TriangleAlert } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { DEFAULT_MARGIN_KM } from '../../extras/client'
@@ -15,11 +15,28 @@ import { calfireHistoryNote, changeTitleParts, laggedEditNote } from '../../offi
 import { distanceText } from '../../official/geo'
 import { useOfficialNow, type CalFireOfficial, type EvacuationOfficial, type FireWeatherOfficial } from '../../official/hooks'
 import { forIncident } from '../../official/guard'
-import { evacuationWho, groupZones } from '../../official/model'
+import { evacuationWho, groupZones, officialNowScope, statewideCountText } from '../../official/model'
+import { partOfComplex, recordBlockText, recordEndTimes, recordLinkLabel } from '../../official/record'
+import {
+  answeredChannelsText,
+  ARCHIVE_CAVEAT,
+  ARCHIVE_CREDIT,
+  LOCAL_PLACE_NOTE,
+  LOCAL_STANDING_CAVEAT,
+  localAlertPlace,
+  localAlertsAt,
+  localPhaseText,
+  OPENFEMA_NOTICE,
+  OPENFEMA_TERMS_URL,
+  sentText,
+  type LocalAlertsOfficial,
+} from '../../official/localAlerts'
+import { alertTimeFmt } from '../../official/fireWeather'
 import { useOfficialRuntime } from '../../official/runtime'
 import { showOfficialArea } from '../../official/select'
 import { useStore } from '../../state/store'
-import { useTimeFormat } from '../../state/timeZone'
+import { fmtAt, localYear, recordYearMode, zoneLine } from '../../lib/time'
+import { useTimeFormat, useZoneSource } from '../../state/timeZone'
 import { useWorkspace } from '../../state/workspace'
 import { useNow } from '../hooks'
 import { NOT_AN_ORDER } from './feedMeta'
@@ -66,6 +83,17 @@ const checked = (ms: number | null | undefined, wallMs: number): string | null =
 const join = (parts: (string | null | undefined | false)[]) => parts.filter(Boolean).join(' · ')
 
 const capital = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s)
+
+/** A reason as one sentence before "Follow local officials." (never said twice, always with its full stop). */
+function reasonSentence(reason: string | null | undefined): string {
+  // the row adds "Follow local officials." and its own "That does not mean …" sentence: never twice (panel SR-m1)
+  const t = (reason ?? '')
+    .replace(/\s*:?\s*follow local officials\.?\s*$/i, '')
+    .replace(/[;,.]?\s*that does not mean there were (?:none|no alerts)\.?\s*$/i, '')
+    .trim()
+  if (!t) return ''
+  return /[.!?]$/.test(t) ? `${t} ` : `${t}. `
+}
 
 function EvacuationRow({ e, nowMs, wallMs, metric }: { e: EvacuationOfficial; nowMs: number; wallMs: number; metric: boolean }) {
   const highlightId = useOfficialRuntime((s) => s.highlight?.id ?? null)
@@ -133,7 +161,7 @@ function EvacuationRow({ e, nowMs, wallMs, metric }: { e: EvacuationOfficial; no
     return (
       <Row icon={icon} label={label} source={e.state === 'unavailable' ? source : null} tone="muted" more={counties ?? undefined}>
         <p className="on-line">
-          <strong>{e.state === 'unavailable' ? 'Unavailable right now.' : 'Not checked.'}</strong> {e.reason ?? ''} Follow local officials.
+          <strong>{e.state === 'unavailable' ? 'Unavailable right now.' : 'Not checked.'}</strong> {reasonSentence(e.reason)}Follow local officials.
         </p>
       </Row>
     )
@@ -215,12 +243,18 @@ function EvacuationRow({ e, nowMs, wallMs, metric }: { e: EvacuationOfficial; no
   )
 }
 
-function CalfireRow({ c, nowMs, wallMs, live }: { c: CalFireOfficial; nowMs: number; wallMs: number; live: boolean }) {
-  const label = 'CAL FIRE'
+function RecordRow({ c, nowMs, wallMs, live }: { c: CalFireOfficial; nowMs: number; wallMs: number; live: boolean }) {
+  const tf = useTimeFormat()
+  // labelled from the record's issuer (CONTRACT §14.5): "CAL FIRE", "USFS (USDA Forest Service) via NIFC WFIGS"
+  const issuer = c.issuer ?? 'CAL FIRE'
+  // a long issuer ("USFS (USDA Forest Service) via NIFC WFIGS") is named in full in the row's text; the header keeps
+  // the publisher's short name so the link stays visible
+  const label = issuer.length > 18 ? (c.linkLabel ?? issuer) : issuer
   const source = 'incident record'
   const icon = <ShieldAlert size={13} />
   const mode = useStore((s) => (s.manifest?.status === 'ready' ? s.manifest.mode : (s.summary?.mode ?? s.mode)))
   const incidentId = useStore((s) => s.incidentId)
+  const fireYear = useStore((s) => s.summary?.year ?? null)
   const last = useOfficialRuntime((s) => {
     const d = forIncident(s.calfire.data, incidentId)
     const ch = d?.current ? d.changes : null
@@ -228,31 +262,46 @@ function CalfireRow({ c, nowMs, wallMs, live }: { c: CalFireOfficial; nowMs: num
   })
   if (c.state === 'loading')
     return (
-      <Row icon={icon} label={label} source={source} tone="muted">
-        <p className="on-line">Checking CAL FIRE…</p>
+      <Row icon={icon} label={issuer === 'Agency record' ? 'Fire record' : label} source={source} tone="muted">
+        <p className="on-line">Checking the agency record…</p>
       </Row>
     )
   if (c.state === 'unavailable')
     return (
-      <Row icon={icon} label={label} source={source} tone="muted">
+      <Row icon={icon} label={issuer === 'Agency record' ? 'Fire record' : label} source={source} tone="muted">
         <p className="on-line">
-          <strong>No record shown.</strong> {c.reason ?? ''}
+          {c.synthetic ? (
+            <strong>Not available: synthetic or local data.</strong>
+          ) : c.notChecked ? (
+            <strong>Agency record not checked.</strong>
+          ) : (
+            <>
+              <strong>No record shown.</strong> {c.reason ?? ''}
+            </>
+          )}
         </p>
       </Row>
     )
+  const cf = c.source !== 'wfigs'
+  // years on the update and containment times when either differs from the fire's year, the replay's or today's, so
+  // "contained Dec 16" never sits beside "Sep 6, 2026" as that year (review UX-m1)
+  // the record's end times, each with its own label: a NIFC WFIGS record's control or fire-out time is never shown as
+  // its containment time (§14.17)
+  const ends = live ? [] : recordEndTimes({ contained: c.containedMs, controlled: c.controlledMs, out: c.outMs })
+  const yearMode = recordYearMode([c.updatedMs, ...ends.map((e) => e.ms)], tf.tz, [fireYear, localYear(nowMs, tf.tz), localYear(wallMs, tf.tz)])
   const status = c.final ? 'final record' : c.isActive === false ? 'not active' : c.isActive ? 'active' : null
-  const note = calfireHistoryNote(c, mode)
+  const note = cf ? calfireHistoryNote(c, mode, tf) : 'NIFC WFIGS publishes the current record only; Fire-3d does not record changes to it yet.'
   const lagged = laggedEditNote(c)
-  const lastParts = last ? changeTitleParts(last) : []
+  const lastParts = cf && last ? changeTitleParts(last) : []
   const extra =
     c.agencies || note ? (
       <>
-        {c.agencies && <p className="on-meta">Agencies: {c.agencies}</p>}
+        {c.agencies && <p className="on-meta">{cf ? 'Agencies' : 'Protecting agency'}: {c.agencies}</p>}
         {note && <p className="on-meta">{note}</p>}
       </>
     ) : undefined
   return (
-    <Row icon={icon} label={label} source={source} tone="info" aside={<SourceLink href={c.url}>Incident page</SourceLink>} more={extra}>
+    <Row icon={icon} label={label} source={source} tone="info" aside={<SourceLink href={c.url}>{cf ? 'Incident page' : 'Record'}</SourceLink>} more={extra}>
       <p className="on-line">
         <strong className="on-official">
           {join([
@@ -262,13 +311,35 @@ function CalfireRow({ c, nowMs, wallMs, live }: { c: CalFireOfficial; nowMs: num
           ])}
         </strong>
       </p>
+      {c.complexName && <p className="on-meta">{partOfComplex(c.complexName)}</p>}
+      {c.members && c.members.length > 0 && (
+        <p className="on-meta">
+          Includes (NIFC WFIGS names):{' '}
+          {c.members.map((m, k) => (
+            <span key={m.name}>
+              {k > 0 ? ', ' : ''}
+              {m.url ? <SourceLink href={m.url}>{m.name}</SourceLink> : m.name}
+            </span>
+          ))}
+        </p>
+      )}
+      {c.blocks && c.blocks.length > 1 && (
+        <>
+          <p className="on-meta">The agencies&apos; records differ on whether the fire is active; each is shown as published:</p>
+          {c.blocks.map((b) => (
+            <p key={`${b.source}|${b.name ?? ''}`} className="on-meta">
+              {recordBlockText(b, tf)} {b.url && <SourceLink href={b.url}>{recordLinkLabel(b.source)}</SourceLink>}
+            </p>
+          ))}
+        </>
+      )}
       {live && lastParts.length > 0 && <p className="on-meta">Last change: {lastParts.join(' · ')}</p>}
       {c.reason && <p className="on-meta">{c.reason}</p>}
       {lagged && <p className="on-meta">{lagged}</p>}
       <p className="on-meta">
         {join([
-          c.updatedMs != null ? `Updated by CAL FIRE ${fmtWhen(c.updatedMs, nowMs)}` : 'CAL FIRE gives no update time',
-          !live && c.containedMs != null ? `contained ${fmtWhen(c.containedMs, nowMs)}` : null,
+          c.updatedMs != null ? `Updated by ${issuer} ${fmtAt(c.updatedMs, tf, { zone: true, year: yearMode })}` : `${issuer} gives no update time`,
+          ...ends.map((e) => `${e.label} ${fmtAt(e.ms, tf, { zone: true, year: yearMode })}`),
           checked(c.checkedMs, wallMs),
         ])}
       </p>
@@ -278,6 +349,9 @@ function CalfireRow({ c, nowMs, wallMs, live }: { c: CalFireOfficial; nowMs: num
 
 function FireWeatherRow({ f, nowMs, wallMs, metric, statewide = false }: { f: FireWeatherOfficial; nowMs: number; wallMs: number; metric: boolean; statewide?: boolean }) {
   const highlightId = useOfficialRuntime((s) => s.highlight?.id ?? null)
+  const tf = useTimeFormat()
+  // the overview's scope follows the answer's states_checked (CONTRACT §14.6): "the lower 48 states" only with all 49
+  const scope = f.scope ?? 'the states checked'
   const label = 'Fire weather'
   const source = f.archived ? 'NWS, archived copy' : 'NWS'
   const icon = <Flag size={13} />
@@ -291,7 +365,7 @@ function FireWeatherRow({ f, nowMs, wallMs, metric, statewide = false }: { f: Fi
     return (
       <Row icon={icon} label={label} source={source} tone="muted">
         <p className="on-line">
-          <strong>{f.state === 'past-date' ? 'Not available for this time.' : 'Unavailable right now.'}</strong> {f.reason ?? ''} That does not mean there were no alerts.
+          <strong>{f.state === 'past-date' ? 'Not available for this time.' : f.reasonCode === 'demo' || f.reasonCode === 'not_checked' ? 'Not checked.' : 'Unavailable right now.'}</strong> {reasonSentence(f.reason)}That does not mean there were no alerts.
         </p>
       </Row>
     )
@@ -311,7 +385,7 @@ function FireWeatherRow({ f, nowMs, wallMs, metric, statewide = false }: { f: Fi
       <Row icon={icon} label={label} source={source} tone="quiet" aside={<SourceLink href={f.sourceUrl}>Source</SourceLink>} more={endedLines}>
         <p className="on-line">
           <strong>
-            No Red Flag Warning or Fire Weather Watch {f.archived ? 'in effect at this time' : 'in effect'} {statewide ? 'in California' : 'near this fire'}.
+            No Red Flag Warning or Fire Weather Watch {f.archived ? 'in effect at this time' : 'in effect'} {statewide ? `in ${scope}` : 'near this fire'}.
           </strong>{' '}
           Not an all-clear.
         </p>
@@ -338,7 +412,7 @@ function FireWeatherRow({ f, nowMs, wallMs, metric, statewide = false }: { f: Fi
         </>
       }
     >
-      {statewide && inEffect.length > 3 && <p className="on-meta">{inEffect.length} alerts in effect in California; the 3 most recent:</p>}
+      {statewide && inEffect.length > 3 && <p className="on-meta">{statewideCountText(inEffect, f.alertStates?.length ?? 0, scope)}</p>}
       {(statewide ? inEffect.slice(0, 3) : inEffect).map((a) => {
         const id = `official-now:fw:${a.id}`
         const active = highlightId === id
@@ -350,7 +424,7 @@ function FireWeatherRow({ f, nowMs, wallMs, metric, statewide = false }: { f: Fi
             <p className="on-meta">
               {join([
                 a.senderName,
-                a.sentMs != null ? `issued ${fmtWhen(a.sentMs, nowMs)}` : null,
+                a.sentMs != null ? `issued ${fmtWhen(a.sentMs, nowMs, alertTimeFmt({ time_zone: a.timeZone ?? null }, tf))}` : null,
                 a.coversReportedLocation ? 'covers the fire area' : a.nearestKm != null ? `zone ${distanceText(a.nearestKm, metric)} from the fire` : null,
               ])}
             </p>
@@ -370,10 +444,109 @@ function FireWeatherRow({ f, nowMs, wallMs, metric, statewide = false }: { f: Fi
   )
 }
 
-/** The block: the open fire's official status, or on the California overview the state's current NWS fire weather
- *  alerts with a pointer to zoom in on a fire (CONTRACT §13). */
+/** "None here" in the words of the channels that answered (a past time older than NWS keeps reads FEMA's archive only). */
+const NONE_HERE: Record<ReturnType<typeof answeredChannelsText>, string> = {
+  'relayed by NWS': 'None relayed by NWS here.',
+  'FEMA archive': "None in FEMA's archive here.",
+  'NWS, FEMA archive': "None relayed by NWS or in FEMA's archive here.",
+}
+
+/** Local officials' messages relayed by NWS, or archived by FEMA for a past time (CONTRACT §14.7): each with its
+ *  issuer, own time, verbatim text, link and where its area lies ("area covers the fire's reported location", "area
+ *  1.7 mi from the fire's reported location · may be about another fire"; review round 1, R1), the most relevant
+ *  first (localAlertOrder); the archive with its notice and credit; pending and not-checked states said as such; the
+ *  standing caveat behind "More". */
+export function LocalAlertsRow({ l: answer, wallMs, refMs }: { l: LocalAlertsOfficial; wallMs: number; /** The time the panel is for (the replay time, or now). */ refMs?: number }) {
+  const tf = useTimeFormat()
+  const metric = useWorkspace((s) => s.units === 'metric')
+  // in effect and the order at the panel's own time, from each message's own times (review round 4)
+  const l = useMemo(() => localAlertsAt(answer, refMs), [answer, refMs])
+  const label = "Local officials' alerts"
+  // the channels that answered: a past time older than NWS keeps reads FEMA's archive only (review UX-m3)
+  const source = answeredChannelsText(l)
+  const icon = <Megaphone size={13} />
+  const pending = l.archivePending ? <p className="on-meta">FEMA&apos;s archive is still being checked for this time; ask again in a minute.</p> : null
+  const notice = l.archive ? (
+    <p className="on-meta">
+      {ARCHIVE_CAVEAT} {ARCHIVE_CREDIT}: {OPENFEMA_NOTICE}.{' '}
+      <SourceLink href={OPENFEMA_TERMS_URL}>OpenFEMA terms</SourceLink>
+    </p>
+  ) : null
+  const standing = (
+    <>
+      <p className="on-meta">{LOCAL_STANDING_CAVEAT}</p>
+      {l.state === 'listed' && l.alerts.some((a) => !a.where.covers) && <p className="on-meta">{LOCAL_PLACE_NOTE}</p>}
+      {notice}
+      {l.channels
+        .filter((c) => c.status === 'not_checked' && c.reason)
+        .map((c) => (
+          <p key={c.id} className="on-meta">
+            {c.id === 'nws_api' ? 'National Weather Service' : 'FEMA archive'}: {c.reason}
+          </p>
+        ))}
+    </>
+  )
+  if (l.state === 'loading')
+    return (
+      <Row icon={icon} label={label} source={source} tone="muted">
+        <p className="on-line">Checking local officials&apos; alerts…</p>
+      </Row>
+    )
+  if (l.state === 'not-checked' || l.state === 'unavailable')
+    return (
+      <Row icon={icon} label={label} source={null} tone="muted" more={standing}>
+        <p className="on-line">
+          <strong>{l.state === 'unavailable' ? 'Unavailable right now.' : 'Not checked.'}</strong> {reasonSentence(l.reason)}
+          {l.state === 'unavailable' ? 'That does not mean there were none. ' : ''}Follow local officials.
+        </p>
+        {pending}
+      </Row>
+    )
+  if (l.state === 'none')
+    return (
+      <Row icon={icon} label={label} source={source} tone="quiet" more={standing}>
+        <p className="on-line">
+          <strong>{NONE_HERE[answeredChannelsText(l)]}</strong> Not an all-clear: most local alerts are not relayed.
+        </p>
+        {pending}
+        <p className="on-meta">{checked(l.checkedMs, wallMs)}</p>
+      </Row>
+    )
+  const shown = l.alerts.slice(0, 3)
+  return (
+    <Row icon={icon} label={label} source={source} tone="alert" more={standing}>
+      {l.alerts.length > shown.length && (
+        <p className="on-meta">{`${l.alerts.length} messages for this fire's area; in effect first, then the nearest to its reported location:`}</p>
+      )}
+      {shown.map((a) => (
+        <div key={a.id} className="on-alert">
+          <p className="on-line">
+            {a.lead}: <strong className="on-official">&ldquo;{a.text}&rdquo;</strong>
+          </p>
+          <p className="on-meta">
+            {join([a.event, sentText(a, tf), a.archived ? 'FEMA archive' : 'relayed by the National Weather Service', localPhaseText(a, l.refMs)])}
+            {' · '}
+            <SourceLink href={a.link.url}>{a.link.label}</SourceLink>
+          </p>
+          <p className="on-meta">{localAlertPlace(a, { metric })}</p>
+          {a.archived && <p className="on-meta">{`${ARCHIVE_CREDIT}: ${OPENFEMA_NOTICE}.`}</p>}
+        </div>
+      ))}
+      {l.alerts.length > shown.length && <p className="on-meta">+{l.alerts.length - shown.length} more: see the Official filter.</p>}
+      {pending}
+    </Row>
+  )
+}
+
+/** The block: the open fire's official status, or on the overview the current NWS fire weather alerts of every state
+ *  the answer covers (`states_checked`) with a pointer to zoom in on a fire (CONTRACT §13, §14.6). */
 export function OfficialNow() {
-  const { evacuation, fireWeather, calfire } = useOfficialNow()
+  const { evacuation, fireWeather, calfire, local } = useOfficialNow()
+  // "Official now · lower 48 states" only when the answer covers all 49 codes; today's California-only backend:
+  // "California" (the header follows states_checked, never a hard-coded scope)
+  const headScope = officialNowScope(fireWeather)
+  const tf = useTimeFormat()
+  const whose = useZoneSource()
   const wallMs = useNow(30_000)
   const { hasIncident, live, minute } = useStore(
     useShallow((s) => ({
@@ -392,12 +565,13 @@ export function OfficialNow() {
         <header className="on-head" data-tip="Agencies' own updates, with their wording, issuer, times and a link to the source">
           <Landmark size={13} aria-hidden="true" />
           <h3 id="on-title">Official now</h3>
-          <span className="on-head-sub">California</span>
+          {headScope && <span className="on-head-sub">{headScope}</span>}
         </header>
         <ul className="on-rows">
           <FireWeatherRow f={fireWeather} nowMs={wallMs} wallMs={wallMs} metric={metric} statewide />
         </ul>
-        <p className="on-meta">Official evacuation zones and CAL FIRE's record are shown for a fire: zoom in on a fire or pick one, or check an address.</p>
+        <p className="on-meta">Official evacuation information and each fire&apos;s agency record are shown for a fire: zoom in on a fire or pick one, or check an address.</p>
+        <p className="on-meta">Times: each alert in its own area&apos;s local time.</p>
         <p className="on-foot">{NOT_AN_ORDER}</p>
       </section>
     )
@@ -410,9 +584,12 @@ export function OfficialNow() {
       </header>
       <ul className="on-rows">
         <EvacuationRow e={evacuation} nowMs={nowMs} wallMs={wallMs} metric={metric} />
-        <CalfireRow c={calfire} nowMs={nowMs} wallMs={wallMs} live={live} />
+        <RecordRow c={calfire} nowMs={nowMs} wallMs={wallMs} live={live} />
         <FireWeatherRow f={fireWeather} nowMs={nowMs} wallMs={wallMs} metric={metric} />
+        {local && <LocalAlertsRow l={local} wallMs={wallMs} refMs={nowMs} />}
       </ul>
+      {/* the replay time's abbreviation first, today's too when it differs (integration review UX-m4) */}
+      <p className="on-meta">{zoneLine(tf, nowMs, whose, wallMs)}</p>
       <p className="on-foot">{NOT_AN_ORDER}</p>
     </section>
   )

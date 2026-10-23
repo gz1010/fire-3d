@@ -6,6 +6,8 @@
 import type { Feature, FeatureCollection, Geometry } from 'geojson'
 import type { IncidentManifest, Mode } from '../api/types'
 import { fmtWhen } from '../extras/format'
+import { timeFmt, type TimeFmt } from '../lib/time'
+import { getTimeFormat } from '../state/timeZone'
 import { lonLatToLocal } from '../lib/reproject'
 import type { FeedItem, FeedItemStatus } from '../ui/feed/types'
 import { officialSeekable } from './calfire'
@@ -170,19 +172,27 @@ export function segmentSections(a: Pick<ListedAlert, 'segments' | 'headline'>): 
   })
 }
 
-/** "until Oct 20, 18:00 PDT" / "from Oct 19, 10:00 PDT until Oct 20, 18:00 PDT" / "Expired Oct 17, 18:00 PDT". */
-export function alertTimeText(a: NwsAlert, phase: FeedItemStatus, refMs: number): string {
+/** The zone and clock of an alert's own times: its area's zone (`time_zone`, brief 3), else `tf`'s; `tf`'s clock. */
+export function alertTimeFmt(a: Pick<NwsAlert, 'time_zone'>, tf: TimeFmt = getTimeFormat()): TimeFmt {
+  return a.time_zone ? timeFmt(a.time_zone, tf.clock) : tf
+}
+
+/** "until Oct 20, 18:00 PDT" / "from Oct 19, 10:00 PDT until Oct 20, 18:00 PDT" / "Expired Oct 17, 18:00 PDT", in the
+ *  alert's own zone (CONTRACT §14.6) with `tf`'s clock. */
+export function alertTimeText(a: NwsAlert, phase: FeedItemStatus, refMs: number, tf?: TimeFmt): string {
+  const z = alertTimeFmt(a, tf)
+  const w = (ms: number) => fmtWhen(ms, refMs, z)
   const end = usableEndMs(a)
   const start = alertStartMs(a)
   if (phase === 'cancelled') {
-    const at = a.sent_ms != null ? ` ${fmtWhen(a.sent_ms, refMs)}` : ''
+    const at = a.sent_ms != null ? ` ${w(a.sent_ms)}` : ''
     return a.vtec?.action?.toUpperCase() === 'UPG' ? `Replaced by a newer NWS alert${at}` : `Cancelled${at}`
   }
-  if (phase === 'expired' && a.dropped_ms != null && (end == null || end > a.dropped_ms)) return `No longer in the NWS feed since ${fmtWhen(a.dropped_ms, refMs)}`
-  if (phase === 'expired') return end != null ? `Expired ${fmtWhen(end, refMs)}` : 'Expired'
+  if (phase === 'expired' && a.dropped_ms != null && (end == null || end > a.dropped_ms)) return `No longer in the NWS feed since ${w(a.dropped_ms)}`
+  if (phase === 'expired') return end != null ? `Expired ${w(end)}` : 'Expired'
   const open = alertEndMs(a) != null ? '(end time unclear in the archive)' : 'until further notice'
-  if (phase === 'upcoming') return `${start != null ? `from ${fmtWhen(start, refMs)} ` : ''}${end != null ? `until ${fmtWhen(end, refMs)}` : open}`
-  return end != null ? `until ${fmtWhen(end, refMs)}` : open
+  if (phase === 'upcoming') return `${start != null ? `from ${w(start)} ` : ''}${end != null ? `until ${w(end)}` : open}`
+  return end != null ? `until ${w(end)}` : open
 }
 
 /** The sender as NWS names it ("NWS Los Angeles/Oxnard CA"), else the office code. */
@@ -227,6 +237,8 @@ export interface FireWeatherFeedContext {
   refMs: number
   manifest: Pick<IncidentManifest, 'grid' | 'time_range'> | null
   metric?: boolean
+  /** Zone and clock (the fire's; each alert uses its own area's zone when known). Default `getTimeFormat()`. */
+  tf?: TimeFmt
 }
 
 function zonesCentreLocation(zones: NwsZoneFeature[], manifest: FireWeatherFeedContext['manifest']): FeedItem['location'] {
@@ -248,7 +260,7 @@ export function fireWeatherFeedItems(d: FireWeatherResponse | null, ctx: FireWea
   const items: FeedItem[] = []
   for (const a of listedAlerts(d, ctx.refMs)) {
     const phase = alertPhase(a, ctx.refMs)
-    const when = alertTimeText(a, phase, ctx.refMs)
+    const when = alertTimeText(a, phase, ctx.refMs, ctx.tf)
     const zones = alertZones(d, a)
     const bounds = geometriesBounds(zones.map((z) => z.geometry as GeoPolygon | null))
     const t = a.sent_ms ?? a.effective_ms ?? alertStartMs(a) ?? d.source_updated_ms ?? null

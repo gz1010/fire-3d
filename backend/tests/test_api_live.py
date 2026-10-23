@@ -125,7 +125,8 @@ def test_loop_runs_cycles_and_auto_builds(fake, jm, monkeypatch):
         while time.time() < deadline:
             await asyncio.sleep(0.05)
             built = [i for i in (LIVE_A, LIVE_B) if (bundle.load_manifest(bundle.bundle_dir(i)) or {}).get("status") == "ready"]
-            if len(built) == 2 and cycles["n"] >= 3:
+            # a failed cycle makes the count unknown (None, never 0) until the next good one (final verification)
+            if len(built) == 2 and cycles["n"] >= 3 and live.STATE.active_incidents == 4:
                 break
         st = live.live_status()
         task.cancel()

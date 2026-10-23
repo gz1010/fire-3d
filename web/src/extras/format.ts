@@ -1,18 +1,19 @@
-// Plain-language time and status text for the optional sources (owner: optional-sources). Times show in
-// America/Los_Angeles with the zone label (lib/time.ts); every text says which clock it refers to (issuer update,
-// Fire-3d fetch, satellite acquisition, camera image).
-import { fmtAt, fmtDateTime, fmtDateTimeYear, tzLabel, type TimeFmt } from '../lib/time'
+// Plain-language time and status text for the optional sources (owner: us-official in brief 3; earlier
+// optional-sources). Times show in the fire's own zone (else the selected place's, else the viewer's) with the zone
+// label and the preset's clock (CONTRACT §14.9; `getTimeFormat()` unless a `tf` is given); every text says which clock
+// it refers to (issuer update, Fire-3d fetch, satellite acquisition, camera image).
+import { fmtAt, type TimeFmt } from '../lib/time'
+import { getTimeFormat } from '../state/timeZone'
 import type { ExtrasEnvelope } from './types'
 
 const MIN = 60_000
 const HOUR = 3_600_000
 const DAY = 86_400_000
 
-/** "Oct 17, 13:05 PDT" (the year is added when it differs from the reference year), in `tf`'s zone and clock. */
+/** "Oct 17, 13:05 PDT" / "Oct 17, 1:05 PM MDT" (the year is added when the local year differs from the reference
+ *  year), in `tf`'s zone and clock (default `getTimeFormat()`: the open fire's zone and the preset's clock). */
 export function fmtWhen(ms: number, refMs?: number, tf?: TimeFmt): string {
-  if (tf) return fmtAt(ms, tf, { zone: true, year: refMs == null ? 'never' : 'auto', refMs })
-  const sameYear = refMs == null || new Date(ms).getUTCFullYear() === new Date(refMs).getUTCFullYear()
-  return `${sameYear ? fmtDateTime(ms) : fmtDateTimeYear(ms)} ${tzLabel(ms)}`
+  return fmtAt(ms, tf ?? getTimeFormat(), { zone: true, year: refMs == null ? 'never' : 'auto', refMs })
 }
 
 /** Rounded duration: "45 s", "12 min", "5 h", "3 days". */
@@ -61,19 +62,22 @@ export function envelopeStatusLine(env: (Pick<ExtrasEnvelope, 'status' | 'reason
 }
 
 /** "Source updated 13:05 PDT · fetched 2 min ago". */
-export function freshnessText(env: Pick<ExtrasEnvelope, 'source_updated_ms' | 'retrieved_ms'>, nowMs: number, updatedLabel = 'Source updated'): string {
+export function freshnessText(env: Pick<ExtrasEnvelope, 'source_updated_ms' | 'retrieved_ms'>, nowMs: number, updatedLabel = 'Source updated', tf?: TimeFmt): string {
   const parts: string[] = []
-  if (env.source_updated_ms) parts.push(`${updatedLabel} ${fmtWhen(env.source_updated_ms, nowMs)}`)
+  if (env.source_updated_ms) parts.push(`${updatedLabel} ${fmtWhen(env.source_updated_ms, nowMs, tf)}`)
   if (env.retrieved_ms) parts.push(`fetched ${agoText(env.retrieved_ms, nowMs)}`)
   return parts.join(' · ')
 }
+
+/** The error text of an HTTP 404 (an endpoint or an id the server does not know). */
+export const NOT_FOUND_TEXT = 'This incident is not known to the Fire-3d server.'
 
 /** Error text for a failed request to the Fire-3d API (status codes from the backend contract). */
 export function requestErrorText(e: unknown): string {
   const status = (e as { status?: number } | null)?.status
   if (status === 429) return 'Too many requests to this source right now. Try again in a minute.'
   if (status === 400) return 'The request was not valid for this source.'
-  if (status === 404) return 'This incident is not known to the Fire-3d server.'
+  if (status === 404) return NOT_FOUND_TEXT
   if (status != null && status >= 500) return 'The Fire-3d server could not get data from this source.'
   if (e instanceof DOMException && (e.name === 'TimeoutError' || e.name === 'AbortError')) return 'The request timed out.'
   return 'Could not reach the Fire-3d server.'

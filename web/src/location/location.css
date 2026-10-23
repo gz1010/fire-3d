@@ -410,6 +410,7 @@
 .loc-official-line {
   padding-left: 9px;
   border-left: 3px solid var(--m-border-strong);
+  overflow-wrap: anywhere; /* verbatim sender names can be one long word */
 }
 .loc-official-line.is-order {
   border-left-color: var(--m-evac-order);

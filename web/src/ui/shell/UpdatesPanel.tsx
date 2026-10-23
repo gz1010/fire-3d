@@ -6,11 +6,13 @@
 // the freshness line and "Official details and all updates", which expands the panel to the full block and the feed.
 // Command and the expanded panel show the full block. Phones: a bottom sheet opened from the header's labelled
 // "Updates" button, always the full block.
-import { ChevronDown, ChevronRight, ChevronUp, Clock, Flag, ListChecks, ShieldAlert, TriangleAlert, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, Clock, Flag, ListChecks, Megaphone, ShieldAlert, TriangleAlert, X } from 'lucide-react'
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useOfficialNow } from '../../official/hooks'
 import { useStore } from '../../state/store'
+import { zoneLine } from '../../lib/time'
+import { useTimeFormat, useZoneSource } from '../../state/timeZone'
 import { useWorkspace } from '../../state/workspace'
 import { OfficialNow } from '../feed/OfficialNow'
 import { useNow } from '../hooks'
@@ -31,9 +33,30 @@ function useStatusRows() {
   )
   const official = useOfficialNow()
   const nowMs = useNow(30_000)
-  const rows = useMemo(() => buildDataStatus({ ...inp, official }, nowMs), [inp, official, nowMs])
+  // the fire's zone and the preset's clock (CONTRACT §14.9): a Montana fire's rows read MDT, never PDT
+  const tf = useTimeFormat()
+  const rows = useMemo(() => buildDataStatus({ ...inp, official, tf }, nowMs), [inp, official, nowMs, tf])
   const checks = [official.evacuation.checkedMs, official.fireWeather.checkedMs, official.calfire.checkedMs].filter((t): t is number => t != null && Number.isFinite(t))
-  return { manifest: inp.manifest, rows, nowMs, checkedMs: checks.length ? Math.max(...checks) : null }
+  return { manifest: inp.manifest, rows, nowMs, checkedMs: checks.length ? Math.max(...checks) : null, tf }
+}
+
+/** The time an open fire's panel is for: now for a live fire, else the replay time (to the minute). */
+function usePanelTime(nowMs: number): number {
+  const replayMinute = useStore((s) => {
+    const live = (s.manifest?.status === 'ready' ? s.manifest.mode : (s.summary?.mode ?? s.mode)) === 'live'
+    return live || s.incidentId == null ? null : Math.floor(s.timeMs / 60_000)
+  })
+  return replayMinute == null ? nowMs : replayMinute * 60_000
+}
+
+/** "Times: Mountain Time (MDT), the fire's local time" (CONTRACT §14.9.1): which zone the rows are in. A replay names
+ *  the abbreviation at the replay time first, and today's too when it differs ("Pacific Time (PST/PDT)": a January
+ *  replay's rows read PST, the checks read today's PDT; integration review UX-m4). */
+function ZoneNote({ nowMs }: { nowMs: number }) {
+  const tf = useTimeFormat()
+  const whose = useZoneSource()
+  const refMs = usePanelTime(nowMs)
+  return <p className="mw-set-note mw-status-zone">{zoneLine(tf, refMs, whose, nowMs)}</p>
 }
 
 function StatusRows({ rows }: { rows: StatusRow[] }) {
@@ -60,7 +83,7 @@ function StatusRows({ rows }: { rows: StatusRow[] }) {
 
 /** Command: every source's newest time, open by default. */
 function DataStatus() {
-  const { manifest, rows } = useStatusRows()
+  const { manifest, rows, nowMs } = useStatusRows()
   const [open, setOpen] = useState(true)
   if (!manifest) return null
   return (
@@ -70,7 +93,12 @@ function DataStatus() {
         <span className="mw-status-mode">{manifest.mode === 'live' ? 'Live data' : 'Archived replay'}</span>
         {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
       </button>
-      {open && <StatusRows rows={rows} />}
+      {open && (
+        <>
+          <StatusRows rows={rows} />
+          <ZoneNote nowMs={nowMs} />
+        </>
+      )}
     </section>
   )
 }
@@ -78,10 +106,10 @@ function DataStatus() {
 /** Public: one freshness line ("Sources checked 2 min ago · satellite data 16 h old"), the same rows on demand. The
  *  compact panel shows the line in its summary list; the expanded panel shows it here with the rows. */
 function Freshness({ defaultOpen = false }: { defaultOpen?: boolean }) {
-  const { manifest, rows, nowMs, checkedMs } = useStatusRows()
+  const { manifest, rows, nowMs, checkedMs, tf } = useStatusRows()
   const [open, setOpen] = useState(defaultOpen)
   if (!manifest) return null
-  const line = freshnessLine(rows, manifest.mode === 'live', nowMs, checkedMs)
+  const line = freshnessLine(rows, manifest.mode === 'live', nowMs, checkedMs, tf)
   return (
     <section className="mw-status is-public" aria-label="How current the data is">
       <button type="button" className="mw-status-head" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
@@ -90,13 +118,19 @@ function Freshness({ defaultOpen = false }: { defaultOpen?: boolean }) {
         <span className="mw-fresh-more">{open ? 'Hide' : 'Sources'}</span>
         {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
       </button>
-      {open && <StatusRows rows={rows} />}
+      {open && (
+        <>
+          <StatusRows rows={rows} />
+          <ZoneNote nowMs={nowMs} />
+        </>
+      )}
     </section>
   )
 }
 
 const SUMMARY_ICON: Record<SummaryLine['key'], ReactNode> = {
   evacuation: <TriangleAlert size={14} />,
+  local: <Megaphone size={14} />,
   calfire: <ShieldAlert size={14} />,
   'fire-weather': <Flag size={14} />,
 }
@@ -107,10 +141,11 @@ function OfficialSummary() {
   const info = useOfficialNow()
   const metric = useWorkspace((s) => s.units === 'metric')
   const hasIncident = useStore((s) => s.incidentId != null)
-  const { manifest, rows, nowMs, checkedMs } = useStatusRows()
-  const lines = useMemo(() => officialSummary(info, nowMs, metric), [info, nowMs, metric])
+  const { manifest, rows, nowMs, checkedMs, tf } = useStatusRows()
+  const refMs = usePanelTime(nowMs)
+  const lines = useMemo(() => officialSummary(info, nowMs, metric, tf, refMs), [info, nowMs, metric, tf, refMs])
   if (!hasIncident) return null
-  const fresh = manifest ? freshnessLine(rows, manifest.mode === 'live', nowMs, checkedMs) : null
+  const fresh = manifest ? freshnessLine(rows, manifest.mode === 'live', nowMs, checkedMs, tf) : null
   return (
     <div className="os">
       <ul className="os-rows">
@@ -122,6 +157,14 @@ function OfficialSummary() {
             <span className="os-text">
               <span className="os-label">{l.label}</span> {l.text}
               {l.source && <span className="os-src"> ({l.source})</span>}
+              {l.link && (
+                <>
+                  {' · '}
+                  <a className="os-link" href={l.link.url} target="_blank" rel="noreferrer noopener">
+                    {l.link.label}
+                  </a>
+                </>
+              )}
             </span>
           </li>
         ))}

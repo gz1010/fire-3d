@@ -41,23 +41,25 @@ import { recordIssuerLabel } from '../api/records'
 import type { ForecastLayerName, ForecastManifest, IncidentManifest, IncidentSummary } from '../api/types'
 import { HOUR_MS, loadRasterSet, type LoadedLayer, type RasterSet } from '../data/rasters'
 import { aoiBounds, fireBounds, type LonLatBox } from '../lib/fireBounds'
-import { area as areaText } from '../lib/plainLanguage'
 import { aoiCornersLonLat, localToLonLat, overlayMapping } from '../lib/reproject'
 import { fmtAt, timeFmt, type TimeFmt } from '../lib/time'
 import { mountOfficialLayers, type OfficialLayersHandle } from '../official/mapLayer'
 import { useAnnotations } from '../state/annotations'
-import { findFire, fireFlyTo, fireStatus, fireWhere, overviewFires, PAST_YEAR, SEASON_YEAR, type OverviewCatalog } from '../state/overview'
+import { showFireCard } from '../state/fireCard'
+import { findFire, overviewFires, PAST_YEAR, SEASON_YEAR, type OverviewCatalog } from '../state/overview'
 import { readUrlParams } from '../state/runtime'
 import { useStore } from '../state/store'
 import { getTimeFormat } from '../state/timeZone'
-import { useWorkspace, type Basemap, type MapFlyTo, type MapLayerKey, type Perspective, type SafeInsets } from '../state/workspace'
+import { pendingMapFlyTo, useWorkspace, type Basemap, type MapFlyTo, type MapLayerKey, type Perspective, type SafeInsets } from '../state/workspace'
 import { buildFeedItems, selectFeedItem } from '../ui/feed/feedModel'
 import type { FeedItem } from '../ui/feed/types'
 import { BUILDINGS_3D_LAYER, HILLSHADE_SOURCE, IMAGERY_SOURCE, loadBasemap, TERRAIN_SOURCE, VECTOR_SOURCE, type DerivedStyle } from './basemapStyle'
 import { maskGeometry } from './contours'
+import { MapInput } from './userInput'
 import { allFocusCandidates, CENTRAL_FRACTION, chipTargets, FocusHold, focusUnlessHeld, FOCUS_DEBOUNCE_MS, FOCUS_OUT_ZOOM, type FocusCurrent, type FocusView } from './focus'
 import { boundsCenter, Framing, goalFor, latestPerimeter, LOWER48_BOUNDS, LOWER48_START, mapCovered, zoomForBounds, type CameraPose, type FrameGoal } from './framing'
 import { drapedLayers, HATCH_IMAGE, hatchImage, LAYER_GROUPS, LYR, SRC, topLayers, type MapTheme } from './layers'
+import { recordHoverLines, zoneHoverLines } from './hoverText'
 import { fmtLatLon, SelectionPin } from './markers'
 import { EMPTY_OVERLAYS, motionMs, patchOverlays, setProvider, useMapRuntime, type MapActions } from './mapStore'
 import {
@@ -92,6 +94,8 @@ import {
   OVERVIEW_HIT_LAYERS,
   OVERVIEW_LABEL_LAYERS,
   OVERVIEW_SOURCES,
+  NARROW_PX,
+  narrowLabelAnchorOffset,
   overviewData,
   overviewFilters,
   overviewLayers,
@@ -108,7 +112,7 @@ import { BASEMAP_STYLE, devProviderFailures, OPENFREEMAP_GLYPHS, UNREACHABLE } f
 import { RasterOverlay } from './rasterOverlay'
 import { bindExtrasLayers, EXTRAS_HOVER_LAYERS, type ExtrasLayers } from './extrasLayers'
 import { cameraViewText } from '../extras/cameras'
-import { EVAC_LAYERS, zoneDetail } from '../extras/evacuation'
+import { EVAC_LAYERS } from '../extras/evacuation'
 import { useExtrasRuntime } from '../extras/runtime'
 import { KIND_META } from '../ui/feed/feedMeta'
 
@@ -128,8 +132,6 @@ const FIT_MAX_ZOOM = 15
 const FIT_MS = 1200
 /** The opening fit waits this long for the fire rasters, then frames with the vector data alone. */
 const RASTER_WAIT_MS = 6000
-/** Input on the map within this time before an interruption means the user took the camera. */
-const USER_INPUT_MS = 400
 /** A safe-area change this soon after a completed fit (the layout still settling as data arrives) fits the goal again,
  *  so an instant fit (reduced motion) ends where an animated one does. */
 const SETTLE_MS = 2000
@@ -191,6 +193,8 @@ export class MapController {
   private derived: DerivedStyle | null = null
   private basemapSeq = 0
   private styleReady = false
+  /** The overview labels use a narrow map's anchors (onStyleLoad, updateLabelAnchors). */
+  private narrowLabels = false
   private rasters: RasterSet | null = null
   private rasterKey = ''
   private bufs: Buffers | null = null
@@ -231,8 +235,8 @@ export class MapController {
   /** The last move on the overview was a fly to a fire (marker or list click): not an overview view to remember. */
   private overviewFireFly = false
   private overviewRefs: { live: unknown; season: unknown; historical: unknown; filter: string; units: string } | null = null
-  private pointerDown = false
-  private lastInputMs = -Infinity
+  /** Input on the map itself: tells the user's camera moves from ours (map/userInput.ts; review round 2, R1). */
+  private readonly input = new MapInput()
   private imageryTimer = 0
   private readonly domUnsubs: Array<() => void> = []
   /** Decision 10: the debounced focus evaluation after the camera settles. */
@@ -297,6 +301,9 @@ export class MapController {
     // whatever is ready now is framed without a flight (the overview, or an incident already loaded)
     this.offerGoal(false)
     this.updateCamera()
+    // a flight requested moments before this map existed (a search sent right after page load) is still flown
+    const pending = pendingMapFlyTo(ws.mapFlyTo, Date.now())
+    if (pending) this.flyRequested(pending)
   }
 
   destroy(): void {
@@ -318,6 +325,20 @@ export class MapController {
     useMapRuntime.setState({ map: null, camera: null, terrainOn: false, aoiInView: null, actions: null, framing: 'idle', framedKind: null, fireBounds: null, viewBox: null })
   }
 
+  /** A requested flight (search, a fire in the overview list, return to incident, an official area). */
+  private flyRequested(req: MapFlyTo): void {
+    this.flyNonce = req.nonce
+    // a requested target is the user's choice: data arriving later keeps it
+    this.framing.explicit()
+    if (useStore.getState().incidentId == null) this.overviewFireFly = true
+    // showing an official area (an evacuation zone, an NWS alert's zones) never changes the open fire, even when the
+    // area touches another prepared fire: the focus rule waits for the user's next move
+    this.focusHold.flight(req.source)
+    if (this.focusHold.active) this.keepShownFocus()
+    this.fly(req)
+    this.publishFraming()
+  }
+
   // ------------------------------------------------------------------------------------------------ subscriptions
   private subscribe(): void {
     this.unsubs.push(
@@ -325,19 +346,7 @@ export class MapController {
         if (s.basemap !== p.basemap) void this.applyBasemap(s.basemap)
         if (s.perspective !== p.perspective) this.applyPerspective(s.perspective, true)
         if (s.selection !== p.selection || s.mapLayers.selection !== p.mapLayers.selection) this.updatePin()
-        if (s.mapFlyTo && s.mapFlyTo.nonce !== this.flyNonce) {
-          this.flyNonce = s.mapFlyTo.nonce
-          // a requested target (search, a fire in the overview list, return to incident) is the user's choice: data
-          // arriving later keeps it
-          this.framing.explicit()
-          if (useStore.getState().incidentId == null) this.overviewFireFly = true
-          // showing an official area (an evacuation zone, an NWS alert's zones) never changes the open fire, even when
-          // the area touches another prepared fire: the focus rule waits for the user's next move
-          this.focusHold.flight(s.mapFlyTo.source)
-          if (this.focusHold.active) this.keepShownFocus()
-          this.fly(s.mapFlyTo)
-          this.publishFraming()
-        }
+        if (s.mapFlyTo && s.mapFlyTo.nonce !== this.flyNonce) this.flyRequested(s.mapFlyTo)
         if (s.mapLayers !== p.mapLayers) this.applyLayerVisibility(p.mapLayers)
         if (s.safeInsets !== p.safeInsets) this.applySafeInsets(true)
         if (s.fireCardId !== p.fireCardId) this.updateFireCardRing()
@@ -432,6 +441,15 @@ export class MapController {
     this.map.setStyle(derived.style, { diff: false })
   }
 
+  /** A map that became narrow or wide (a phone turned, a window resized): the overview labels' anchors follow. */
+  private updateLabelAnchors(): void {
+    if (!this.styleReady) return
+    const narrow = this.map.getContainer().clientWidth < NARROW_PX
+    if (narrow === this.narrowLabels) return
+    this.narrowLabels = narrow
+    for (const id of OVERVIEW_LABEL_LAYERS) if (this.map.getLayer(id)) this.map.setLayoutProperty(id, 'text-variable-anchor-offset', narrow ? (narrowLabelAnchorOffset() as never) : undefined)
+  }
+
   private onStyleLoad(): void {
     const map = this.map
     if (!this.derived) {
@@ -462,8 +480,10 @@ export class MapController {
       if ((layer.id === LYR.observedRaster && !map.getSource(SRC.observedRaster)) || (layer.id === LYR.forecastRaster && !map.getSource(SRC.forecastRaster))) continue
       map.addLayer(layer, before)
     }
-    // fire markers above the basemap labels, below the open fire's own markers and labels
-    for (const layer of overviewLayers(theme)) map.addLayer(layer)
+    // fire markers above the basemap labels, below the open fire's own markers and labels; a narrow map's national view
+    // grows each label towards the middle of the country (overviewLayers.ts LABEL_ANCHORS)
+    this.narrowLabels = width < NARROW_PX
+    for (const layer of overviewLayers(theme, { narrow: this.narrowLabels })) map.addLayer(layer)
     for (const layer of topLayers(theme)) map.addLayer(layer)
     this.applyLayerVisibility(null)
     if (useWorkspace.getState().perspective === '3d') this.enableTerrain()
@@ -651,7 +671,7 @@ export class MapController {
     this.publishFraming()
     const go = (z: number) => {
       if (this.destroyed) return
-      this.map.easeTo({ center: [c.lon, c.lat], zoom: clusterClickZoom(z, this.map.getZoom()), duration: motionMs(700) })
+      this.input.ours(() => this.map.easeTo({ center: [c.lon, c.lat], zoom: clusterClickZoom(z, this.map.getZoom()), duration: motionMs(700) }))
     }
     void src.getClusterExpansionZoom(c.clusterId).then(go, () => go(Number.NaN))
   }
@@ -665,13 +685,11 @@ export class MapController {
     return typeof id === 'string' ? id : null
   }
 
-  /** Open a fire's card from the overview map and fly to its area (decision 1: clicking a fire flies to it). */
+  /** Open a fire's card from the overview map and fly to its area (decision 1: clicking a fire flies to it). The same
+   *  path as the list and the picker (state/fireCard.ts): an unprepared fire holds the zoom focus, so a nearby prepared
+   *  fire does not open instead (brief-3 integration review R1). */
   private openFireFromOverview(id: string): void {
-    const ws = useWorkspace.getState()
-    ws.setFireCard(id)
-    const s = findFire(id, useStore.getState().summary, catalogOf())
-    const req = s ? fireFlyTo(s) : null
-    if (req) ws.requestMapFlyTo(req)
+    showFireCard(id)
   }
 
   // ------------------------------------------------------------------------------------------------ camera
@@ -762,32 +780,36 @@ export class MapController {
     const pitch = map.getPitch()
     this.issuing = true
     try {
-      if (!paddingEquals(map.getPadding(), padding)) map.setPadding(padding)
-      let pose: CameraPose
-      let fallback = false
-      if (goal.bounds) {
-        const overview = goal.kind === 'overview'
-        const margin = overview ? OVERVIEW_MARGIN_PX : FIT_MARGIN_PX
-        const maxZoom = overview ? 8 : FIT_MAX_ZOOM
-        const cam = map.cameraForBounds(goal.bounds, { padding: margin, bearing, maxZoom })
-        if (cam?.center && Number.isFinite(cam.zoom)) {
-          const c = LngLat.convert(cam.center)
-          pose = { lon: c.lng, lat: c.lat, zoom: cam.zoom as number, bearing, pitch }
+      // our own camera command: the move it starts is never the user's, whatever input came just before (review
+      // round 3); a move it stops is handled here (issuing)
+      this.input.ours(() => {
+        if (!paddingEquals(map.getPadding(), padding)) map.setPadding(padding)
+        let pose: CameraPose
+        let fallback = false
+        if (goal.bounds) {
+          const overview = goal.kind === 'overview'
+          const margin = overview ? OVERVIEW_MARGIN_PX : FIT_MARGIN_PX
+          const maxZoom = overview ? 8 : FIT_MAX_ZOOM
+          const cam = map.cameraForBounds(goal.bounds, { padding: margin, bearing, maxZoom })
+          if (cam?.center && Number.isFinite(cam.zoom)) {
+            const c = LngLat.convert(cam.center)
+            pose = { lon: c.lng, lat: c.lat, zoom: cam.zoom as number, bearing, pitch }
+          } else {
+            fallback = true
+            const [lon, lat] = boundsCenter(goal.bounds)
+            const el = map.getContainer()
+            pose = { lon, lat, zoom: zoomForBounds(goal.bounds, el.clientWidth, el.clientHeight, margin, maxZoom), bearing, pitch }
+          }
         } else {
-          fallback = true
-          const [lon, lat] = boundsCenter(goal.bounds)
-          const el = map.getContainer()
-          pose = { lon, lat, zoom: zoomForBounds(goal.bounds, el.clientWidth, el.clientHeight, margin, maxZoom), bearing, pitch }
+          const v = goal.view ?? LOWER48_START
+          pose = { lon: v.lon, lat: v.lat, zoom: v.zoom, bearing, pitch }
         }
-      } else {
-        const v = goal.view ?? LOWER48_START
-        pose = { lon: v.lon, lat: v.lat, zoom: v.zoom, bearing, pitch }
-      }
-      // recorded before the move: an instant move ends inside the call below
-      this.framing.started(goal, pose, reissue)
-      if (import.meta.env.DEV) mapStats.fits++
-      if (fallback) map.easeTo({ center: [pose.lon, pose.lat], zoom: pose.zoom, bearing, pitch, padding, duration })
-      else map.flyTo({ center: [pose.lon, pose.lat], zoom: pose.zoom, bearing, pitch, duration })
+        // recorded before the move: an instant move ends inside the call below
+        this.framing.started(goal, pose, reissue)
+        if (import.meta.env.DEV) mapStats.fits++
+        if (fallback) map.easeTo({ center: [pose.lon, pose.lat], zoom: pose.zoom, bearing, pitch, padding, duration })
+        else map.flyTo({ center: [pose.lon, pose.lat], zoom: pose.zoom, bearing, pitch, duration })
+      })
     } finally {
       this.issuing = false
     }
@@ -804,7 +826,7 @@ export class MapController {
       this.reissueTimer = 0
       const g = this.framing.goal
       if (this.destroyed || this.framing.phase !== 'flying' || !g) return
-      if (this.userInputActive()) {
+      if (this.input.active) {
         this.framing.userGesture()
         this.publishFraming()
         return
@@ -813,10 +835,6 @@ export class MapController {
       if (this.map.isMoving()) return
       this.issueFit(g, true, true)
     }, 0)
-  }
-
-  private userInputActive(): boolean {
-    return this.pointerDown || performance.now() - this.lastInputMs < USER_INPUT_MS
   }
 
   private publishFraming(): void {
@@ -832,18 +850,21 @@ export class MapController {
     const map = this.map
     const duration = animate ? motionMs(1100) : 0
     const padding = this.padding()
-    if (!paddingEquals(map.getPadding(), padding)) map.setPadding(padding)
-    if (f.bounds) {
-      const cam = map.cameraForBounds(f.bounds, { padding: FIT_MARGIN_PX, bearing: map.getBearing(), maxZoom: FIT_MAX_ZOOM })
-      if (cam?.center && Number.isFinite(cam.zoom)) map.flyTo({ center: cam.center, zoom: cam.zoom, bearing: map.getBearing(), duration })
-      else {
-        const el = map.getContainer()
-        map.easeTo({ center: boundsCenter(f.bounds), zoom: zoomForBounds(f.bounds, el.clientWidth, el.clientHeight, FIT_MARGIN_PX, FIT_MAX_ZOOM), padding, duration })
+    // our own camera command: the move it stops (or its own instant move, with reduced motion) is not the user's
+    this.input.ours(() => {
+      if (!paddingEquals(map.getPadding(), padding)) map.setPadding(padding)
+      if (f.bounds) {
+        const cam = map.cameraForBounds(f.bounds, { padding: FIT_MARGIN_PX, bearing: map.getBearing(), maxZoom: FIT_MAX_ZOOM })
+        if (cam?.center && Number.isFinite(cam.zoom)) map.flyTo({ center: cam.center, zoom: cam.zoom, bearing: map.getBearing(), duration })
+        else {
+          const el = map.getContainer()
+          map.easeTo({ center: boundsCenter(f.bounds), zoom: zoomForBounds(f.bounds, el.clientWidth, el.clientHeight, FIT_MARGIN_PX, FIT_MAX_ZOOM), padding, duration })
+        }
+      } else {
+        const zoom = f.zoom ?? Math.max(map.getZoom(), 13)
+        map.easeTo({ center: [f.lon, f.lat], zoom, duration })
       }
-    } else {
-      const zoom = f.zoom ?? Math.max(map.getZoom(), 13)
-      map.easeTo({ center: [f.lon, f.lat], zoom, duration })
-    }
+    })
     // remembered after the call: starting a move ends the previous one, whose moveend clears activeFly
     this.activeFly = duration > 0 && map.isMoving() ? { req: f, animate } : null
   }
@@ -865,8 +886,12 @@ export class MapController {
     if (this.map.isMoving()) {
       const f = this.activeFly
       if (f) {
-        this.map.setPadding(padding)
-        this.fly(f.req, f.animate)
+        // restart our flight with the new padding (setPadding stops it first): that stop is ours, so a fire card's
+        // focus hold survives the card's own layout change (review round 2, R1)
+        this.input.ours(() => {
+          this.map.setPadding(padding)
+          this.fly(f.req, f.animate)
+        })
       } else this.pendingPadding = true
       return
     }
@@ -876,7 +901,7 @@ export class MapController {
       this.issueFit(g, animate, false)
       return
     }
-    this.map.easeTo({ padding, duration: animate ? motionMs(250) : 0 })
+    this.input.ours(() => this.map.easeTo({ padding, duration: animate ? motionMs(250) : 0 }))
   }
 
   private applyPerspective(p: Perspective, animate: boolean): void {
@@ -885,9 +910,9 @@ export class MapController {
     if (p === '3d') {
       map.setMaxPitch(MAX_PITCH_3D)
       this.enableTerrain()
-      map.easeTo({ pitch: Math.max(map.getPitch(), PITCH_3D), duration })
+      this.input.ours(() => map.easeTo({ pitch: Math.max(map.getPitch(), PITCH_3D), duration }))
     } else {
-      map.easeTo({ pitch: 0, bearing: 0, duration })
+      this.input.ours(() => map.easeTo({ pitch: 0, bearing: 0, duration }))
       const done = () => {
         if (useWorkspace.getState().perspective !== '2d' || this.destroyed) return
         map.setTerrain(null)
@@ -915,13 +940,18 @@ export class MapController {
   }
 
   private onMoveEnd(byUser: boolean): void {
+    // a gesture that stopped the opening flight shows up as an input on the map just before this moveend, and a move
+    // that started as the user's (a wheel zoom, whose moveend comes 400+ ms after the wheel) is theirs (review round 3);
+    // never a move one of our own camera commands ended (restarting a flight with the new padding stops it first).
+    // Every moveend closes its move, also the ones issueFit handles.
+    const user = this.input.moveEnd(byUser)
     // moves that issueFit interrupts (or its own instant jump) are handled by issueFit itself
     if (this.issuing) return
-    // a gesture that stopped the opening flight shows up as an input on the map just before this moveend
-    if (!byUser && this.framing.phase === 'flying' && this.userInputActive()) this.framing.userGesture()
-    // MapLibre starts a wheel zoom without an originalEvent (only its moveend carries the wheel event): a move the user
-    // made ends an official area's focus hold, and on the overview it is the user's view (not a fly to a fire)
-    if (byUser || this.userInputActive()) {
+    if (!byUser && this.framing.phase === 'flying' && user) this.framing.userGesture()
+    // MapLibre starts and ends a single wheel notch's zoom without an originalEvent (MapLibre 5.24: its scroll handler
+    // has no wheel event to pass for a lone notch): a move the user made ends an official area's or a fire card's focus
+    // hold, and on the overview it is the user's view (not a fly to a fire)
+    if (user) {
       this.focusHold.release()
       if (useStore.getState().incidentId == null) this.overviewFireFly = false
     }
@@ -1025,7 +1055,7 @@ export class MapController {
   private evaluateFocus(): void {
     // the decision needs only the camera and the lists (not the style); a move or gesture in progress re-schedules it
     // at its end
-    if (this.destroyed || this.map.isMoving() || this.userInputActive()) return
+    if (this.destroyed || this.map.isMoving() || this.input.active) return
     const phase = this.framing.phase
     if (phase === 'waiting' || phase === 'flying') return
     const v = this.focusView()
@@ -1072,7 +1102,9 @@ export class MapController {
 
   // ------------------------------------------------------------------------------------------------ controls
   private actions(): MapActions {
-    const ease = (o: { bearing?: number; pitch?: number }, ms: number) => this.map.easeTo({ ...o, duration: motionMs(ms) })
+    // the chrome's camera buttons are our own camera commands (review round 3): the zoom buttons end a focus hold
+    // themselves
+    const ease = (o: { bearing?: number; pitch?: number }, ms: number) => this.input.ours(() => this.map.easeTo({ ...o, duration: motionMs(ms) }))
     return {
       frameFire: () => this.frameRequest('fire'),
       frameArea: () => this.frameRequest('area'),
@@ -1091,9 +1123,9 @@ export class MapController {
         if (this.framing.phase === 'flying' && p) {
           // zooming during the opening flight: relative to where the flight ends, not where it happens to be
           this.framing.explicit()
-          this.map.flyTo({ center: [p.lon, p.lat], zoom: Math.max(0, Math.min(this.map.getMaxZoom(), p.zoom + delta)), duration: motionMs(FIT_MS) })
+          this.input.ours(() => this.map.flyTo({ center: [p.lon, p.lat], zoom: Math.max(0, Math.min(this.map.getMaxZoom(), p.zoom + delta)), duration: motionMs(FIT_MS) }))
           this.publishFraming()
-        } else this.map.easeTo({ zoom: this.map.getZoom() + delta, duration: motionMs(250) })
+        } else this.input.ours(() => this.map.easeTo({ zoom: this.map.getZoom() + delta, duration: motionMs(250) }))
       },
       retryAerial: () => {
         setProvider('imagery', 'idle')
@@ -1160,6 +1192,7 @@ export class MapController {
   private bindMapEvents(): void {
     const map = this.map
     map.on('style.load', () => this.onStyleLoad())
+    map.on('resize', () => this.updateLabelAnchors())
     map.on('move', () => {
       if (this.moveRaf) return
       this.moveRaf = requestAnimationFrame(() => {
@@ -1168,6 +1201,9 @@ export class MapController {
       })
     })
     map.on('movestart', (e: { originalEvent?: unknown }) => {
+      // a move that starts as the user's (a wheel zoom MapLibre starts without an originalEvent) stays theirs until
+      // its moveend, however late that comes (review round 3); one that starts inside our own command is ours
+      this.input.moveStart(e.originalEvent != null)
       // the camera moves again: no focus change until it settles
       window.clearTimeout(this.focusTimer)
       this.focusTimer = 0
@@ -1231,16 +1267,9 @@ export class MapController {
 
   /** Input on the map itself (not on the chrome): tells a user gesture from a programmatic interruption. */
   private bindInputEvents(container: HTMLElement): void {
-    const down = () => {
-      this.pointerDown = true
-      this.lastInputMs = performance.now()
-    }
-    const up = () => {
-      this.pointerDown = false
-    }
-    const input = () => {
-      this.lastInputMs = performance.now()
-    }
+    const down = () => this.input.pointerDown()
+    const up = () => this.input.pointerUp()
+    const input = () => this.input.input()
     const opts = { capture: true, passive: true } as const
     container.addEventListener('pointerdown', down, opts)
     container.addEventListener('touchstart', down, opts)
@@ -1326,6 +1355,8 @@ export class MapController {
     // a fire marker or label (at every zoom, decision 10) opens its card (I3) and flies to it, never a location select
     const fireId = this.fireAt(e.point)
     if (fireId) {
+      // a request, not a camera gesture: the moves that follow are the flight's and the card's (review round 2, R1)
+      this.input.consumeClick()
       this.openFireFromOverview(fireId)
       return
     }
@@ -1434,15 +1465,10 @@ export class MapController {
     const clock = getTimeFormat().clock
     /** A fire's own zone with the current clock (overview rows and hovers use each row's zone, §14.9.1). */
     const tfOf = (s: Pick<IncidentSummary, 'time_zone'> | null | undefined): TimeFmt => timeFmt(s?.time_zone, clock)
-    /** The agency's official record of a fire, as text ("USFS via NIFC WFIGS (official): …"), in the fire's zone. */
+    /** The agency's official record of a fire ("USFS via NIFC WFIGS (official): …"), with its own status, in the
+     *  fire's zone; another agency's differing record on its own line (hoverText.ts). */
     const record = (s: IncidentSummary) => {
-      const where = fireWhere(s)
-      if (where) line(where)
-      const parts = [s.acres != null ? areaText(s.acres, units).text : 'size not reported']
-      if (s.percent_contained != null) parts.push(`${Math.round(s.percent_contained)} % contained`)
-      parts.push(fireStatus(s).label)
-      line(`${recordIssuerLabel(s)} (official): ${parts.join(' · ')}`)
-      if (s.updated_ms) line(`Updated ${fmtAt(s.updated_ms, tfOf(s), { zone: true })}`, 'fxm-tip-hint')
+      for (const l of recordHoverLines(s, units, tfOf(s))) line(l.text, l.cls)
     }
     if (EXTRAS_HOVER_LAYERS.cameras.includes(f.layer.id)) {
       const cam = useExtrasRuntime.getState().cams.data?.cameras.features.find((c) => c.properties.id === p.id)
@@ -1454,13 +1480,11 @@ export class MapController {
       return el
     }
     if (EXTRAS_HOVER_LAYERS.zones.includes(f.layer.id)) {
-      const zone = useExtrasRuntime.getState().evac.data?.zones.features.find((z) => z.id === p.id)
+      const evac = useExtrasRuntime.getState().evac.data ?? null
+      const zone = evac?.zones.features.find((z) => z.id === p.id)
       if (!zone) return null
-      const d = zoneDetail(zone, Date.now(), getTimeFormat())
-      line(d.status, 'fxm-tip-title')
-      line(d.title)
-      line(`${d.jurisdiction} · ${d.updatedText}`)
-      line('Official status from local officials via Cal OES. Fire-3d forecasts are not evacuation instructions.', 'fxm-tip-hint')
+      // the state source that listed the zone (Cal OES, Oregon OEM), from the answer's sources (§14.8.5)
+      for (const l of zoneHoverLines(zone, evac, Date.now(), getTimeFormat())) line(l.text, l.cls)
       return el
     }
     if (OVERVIEW_CLUSTER_LAYERS.includes(f.layer.id)) {

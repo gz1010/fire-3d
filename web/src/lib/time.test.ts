@@ -5,35 +5,20 @@ import {
   MINUTE_MS,
   fmtAt,
   fmtClock,
-  fmtDate,
-  fmtDateRange,
-  fmtDateTime,
-  fmtDateTimeTz,
-  fmtDateTimeYear,
-  fmtDateTimeYearTz,
-  fmtDay,
   fmtDayDate,
   fmtDayRange,
-  fmtTime,
-  fmtWeekdayDay,
   isValidZone,
-  laDayTicks,
-  laParts,
-  laTicks,
-  laWallTicks,
-  laWallToMs,
   localDayTicks,
   localHourTicks,
   localWallTicks,
   localYear,
-  startOfLaDay,
   startOfLocalDay,
   timeFmt,
-  tzLabel,
   viewerZone,
   wallParts,
   wallTimeToMs,
   zoneAbbr,
+  recordYearMode,
   zoneLine,
   zoneName,
   zoneOffsetMinutes,
@@ -172,6 +157,22 @@ describe('six zones (Node ICU, July and January)', () => {
     expect(zoneLine(timeFmt(DENVER, '12h'), jul, 'fire')).toBe("Times: Mountain Time (MDT), the fire's local time")
     expect(zoneLine(timeFmt(NY, '24h'), jan, 'place')).toBe('Times: Eastern Time (EST), local time at this place')
     expect(zoneLine(timeFmt(CHI, '24h'), jul, 'viewer')).toBe("Times: your device's time (CDT)")
+    // a January replay read in October (integration review UX-m4): the replay's abbreviation first, today's too
+    expect(zoneLine(timeFmt(LA, '24h'), jan, 'fire', jul)).toBe("Times: Pacific Time (PST/PDT), the fire's local time")
+    expect(zoneLine(timeFmt(LA, '24h'), jul, 'fire', jul)).toBe("Times: Pacific Time (PDT), the fire's local time")
+    expect(zoneLine(timeFmt(PHX, '24h'), jan, 'fire', jul)).toBe("Times: Mountain Standard Time (MST), the fire's local time")
+  })
+
+  it('record times show years when any differs from the fire year, the replay year or this year (review UX-m1)', () => {
+    const y2025 = Date.UTC(2025, 11, 16, 22, 30)
+    const y2026 = Date.UTC(2026, 8, 6, 21, 18)
+    // Emigrant: updated Sep 6, 2026, contained Dec 16, 2025: both carry their year
+    expect(recordYearMode([y2026, y2025], LA, [2025, 2025, 2026])).toBe('always')
+    // Dragon Bravo (2025): record last edited in 2026
+    expect(recordYearMode([y2026], PHX, [2025, 2026])).toBe('always')
+    // a live fire of this year updated this year: no year
+    expect(recordYearMode([y2026, null], LA, [2026, 2026])).toBe('never')
+    expect(recordYearMode([null, undefined], LA, [2025, 2026])).toBe('never')
   })
 })
 
@@ -268,41 +269,33 @@ describe('DST start and end (2026: Mar 8 and Nov 1)', () => {
   })
 })
 
-describe('deprecated Pacific names keep their old strings (§14.9.3)', () => {
+describe('Pacific 24-hour keeps the brief-2 California strings (the deprecated names were removed, §14.9.3)', () => {
   // Eaton: Jan 8, 2025 19:40 PST = Jan 9 03:40 UTC
   const eaton = Date.UTC(2025, 0, 9, 3, 40)
+  const tf = timeFmt(LA, '24h')
   it('formatters', () => {
-    expect(fmtDateTime(eaton)).toBe('Jan 8, 19:40')
-    expect(fmtDate(eaton)).toBe('Jan 8, 2025')
-    expect(fmtDateTimeYear(eaton)).toBe('Jan 8, 2025 19:40')
-    expect(fmtTime(eaton)).toBe('19:40')
-    expect(fmtDay(eaton)).toBe('Jan 8')
-    expect(tzLabel(eaton)).toBe('PST')
-    expect(fmtDateTimeTz(eaton)).toBe('Jan 8, 19:40 PST')
-    expect(fmtDateTimeYearTz(eaton)).toBe('Jan 8, 2025 19:40 PST')
-    expect(fmtWeekdayDay(eaton)).toBe('Wed Jan 8')
-    expect(fmtDateRange(Date.UTC(2025, 0, 7, 20), Date.UTC(2025, 0, 31, 20))).toBe('Jan 7, 2025 – Jan 31, 2025')
-    expect(laParts(eaton)).toMatchObject({ year: 2025, month: 1, day: 8, hour: 19, minute: 40, weekday: 3 })
-  })
-  it('the new API in Pacific 24-hour gives the same strings (California Command/Forensic unchanged)', () => {
-    const tf = timeFmt(LA, '24h')
-    expect(fmtAt(eaton, tf)).toBe(fmtDateTime(eaton))
-    expect(fmtAt(eaton, tf, { zone: true })).toBe(fmtDateTimeTz(eaton))
-    expect(fmtClock(eaton, tf)).toBe(fmtTime(eaton))
-    expect(fmtDayDate(eaton, LA, { year: 'always' })).toBe(fmtDate(eaton))
+    expect(fmtAt(eaton, tf)).toBe('Jan 8, 19:40')
+    expect(fmtDayDate(eaton, LA, { year: 'always' })).toBe('Jan 8, 2025')
+    expect(fmtAt(eaton, tf, { year: 'always' })).toBe('Jan 8, 2025 19:40')
+    expect(fmtClock(eaton, tf)).toBe('19:40')
+    expect(fmtDayDate(eaton, LA)).toBe('Jan 8')
+    expect(zoneAbbr(eaton, LA)).toBe('PST')
+    expect(fmtAt(eaton, tf, { zone: true })).toBe('Jan 8, 19:40 PST')
+    expect(fmtAt(eaton, tf, { year: 'always', zone: true })).toBe('Jan 8, 2025 19:40 PST')
+    expect(fmtDayDate(eaton, LA, { weekday: true })).toBe('Wed Jan 8')
+    expect(fmtDayRange(Date.UTC(2025, 0, 7, 20), Date.UTC(2025, 0, 31, 20), LA)).toBe('Jan 7, 2025 – Jan 31, 2025')
+    expect(wallParts(eaton, LA)).toMatchObject({ year: 2025, month: 1, day: 8, hour: 19, minute: 40, weekday: 3 })
   })
   it('ticks and wall times', () => {
-    expect(laWallToMs(2025, 1, 8, 19, 40)).toBe(eaton)
-    expect(laWallToMs(2026, 3, 8, 2, 30)).toBe(Date.UTC(2026, 2, 8, 10, 30)) // gap resolves forward
-    expect(laWallToMs(2026, 11, 1, 1, 30)).toBe(Date.UTC(2026, 10, 1, 8, 30)) // earliest of the two
-    expect(startOfLaDay(eaton)).toBe(Date.UTC(2025, 0, 8, 8))
+    expect(wallTimeToMs(LA, 2025, 1, 8, 19, 40)).toBe(eaton)
+    expect(wallTimeToMs(LA, 2026, 3, 8, 2, 30)).toBe(Date.UTC(2026, 2, 8, 10, 30)) // gap resolves forward
+    expect(wallTimeToMs(LA, 2026, 11, 1, 1, 30)).toBe(Date.UTC(2026, 10, 1, 8, 30)) // earliest of the two
+    expect(startOfLocalDay(eaton, LA)).toBe(Date.UTC(2025, 0, 8, 8))
     const s = Date.UTC(2025, 0, 7, 20)
     const e = Date.UTC(2025, 0, 10, 20)
-    expect(laDayTicks(s, e)).toEqual(localDayTicks(s, e, LA))
-    expect(laTicks(s, e, 6)).toEqual(localHourTicks(s, e, LA, 6))
-    const ticks = laWallTicks(s, e, 6)
+    const ticks = localWallTicks(s, e, 6, tf)
     expect(ticks[0]).toMatchObject({ t: s, day: false, timeLabel: '12:00' })
-    expect(ticks.find((t) => t.day)).toMatchObject({ dayLabel: 'Jan 8', timeLabel: '00:00', t: Date.UTC(2025, 0, 8, 8) })
+    expect(ticks.find((x) => x.day)).toMatchObject({ dayLabel: 'Jan 8', timeLabel: '00:00', t: Date.UTC(2025, 0, 8, 8) })
   })
 })
 

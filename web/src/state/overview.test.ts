@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { IncidentSummary } from '../api/types'
+import type { IncidentSummary, ListSource } from '../api/types'
 import { analysisState, findFire, FIRE_VIEW_MIN_M, fireFlyTo, fireStatus, fireViewRadiusM, isActiveFire, newestRecordMs, overviewFires, preparedFires, SEASON_YEAR } from './overview'
 
 const row = (id: string, over: Partial<IncidentSummary> = {}): IncidentSummary => ({
@@ -23,6 +23,11 @@ const row = (id: string, over: Partial<IncidentSummary> = {}): IncidentSummary =
   detections_24h: null,
   bundle_status: 'none',
   bundle_built_ms: null,
+  uid: id,
+  record_source: 'calfire',
+  record_issuer: 'CAL FIRE',
+  state: null,
+  time_zone: 'America/Los_Angeles',
   ...over,
 })
 
@@ -205,7 +210,67 @@ describe('never an all-clear (§14.14)', () => {
     const calDown = { ...ok, status: 'unavailable' as const }
     expect(listSourceNotices([[ok], null, undefined])).toEqual([])
     expect(listSourceNotices([[ok, nifcDown], [nifcDown]])).toEqual([NIFC_LIST_DOWN])
-    expect(listSourceNotices([[calDown], [nifcDown]])).toEqual([NIFC_LIST_DOWN, CALFIRE_LIST_DOWN])
+    const wfOk = { ...ok, id: 'wfigs' as const, name: 'NIFC WFIGS (IRWIN)' }
+    expect(listSourceNotices([[calDown, wfOk], [ok, nifcDown]])).toEqual([NIFC_LIST_DOWN, CALFIRE_LIST_DOWN])
+  })
+})
+
+// ------------------------------------------------------------------------------------------------- final verification (§14.16)
+import { activeCountText, ALL_LISTS_DOWN, listCheckedText, listErrorLines, listHealth, newestRecordText, noLiveText, staleListText } from './overview'
+
+describe('outages of the source lists (§14.16)', () => {
+  const NOW = Date.UTC(2026, 9, 23, 16, 0)
+  const cal = (o: Partial<ListSource> = {}): ListSource => ({ id: 'calfire', name: 'CAL FIRE', status: 'available', retrieved_ms: NOW - 2 * 60_000, reason: null, stale: false, ...o })
+  const wf = (o: Partial<ListSource> = {}): ListSource => ({ id: 'wfigs', name: 'NIFC WFIGS (IRWIN)', status: 'available', retrieved_ms: NOW - 3 * 60_000, reason: null, stale: false, ...o })
+  const down = { status: 'unavailable' as const, retrieved_ms: null, reason: 'The fire lists (CAL FIRE and NIFC) could not be reached right now.' }
+
+  it('both lists down: one notice, never the two contradicting per-source ones (panel SR-B1, F4)', () => {
+    const h = listHealth([[cal(down), wf(down)]])
+    expect(h.allDown).toBe(true)
+    expect(listSourceNotices([[cal(down), wf(down)]], NOW)).toEqual([ALL_LISTS_DOWN])
+    expect(ALL_LISTS_DOWN).toMatch(/could not be reached/)
+    expect(ALL_LISTS_DOWN).toMatch(/Not an all-clear: follow local officials\.$/)
+    for (const f of ['active', 'season', 'past'] as const) {
+      const t = emptyListText(f, 300, h)
+      expect(t).not.toMatch(/list no|no active fires/i)
+      expect(t).toMatch(/unavailable/)
+    }
+    expect(emptyListText('active', 300, listHealth([[cal(), wf(down)]]))).toMatch(/unavailable right now/)
+    expect(listHealth([null, undefined]).allDown).toBe(false) // nothing reported: not "down"
+  })
+
+  it('an old copy says how old it is; "checked" is when Fire-3d fetched the lists (panel SR-M1, F2)', () => {
+    const t = NOW - 47 * 60_000
+    const h = listHealth([[cal(), wf({ stale: true, retrieved_ms: t, reason: 'could not be refreshed' })]])
+    expect(h.allDown).toBe(false)
+    expect(h.stale.get('wfigs')).toBe(t)
+    expect(h.fetchedMs).toBe(t) // the oldest available copy, never the answer's own time
+    expect(listSourceNotices([[cal(), wf({ stale: true, retrieved_ms: t })]], NOW)).toEqual([
+      'The national fire list (NIFC) could not be refreshed right now; showing the copy fetched 47 min ago. Newer fires may be missing.',
+    ])
+    expect(staleListText('calfire', null, NOW)).toBe("CAL FIRE's list could not be refreshed right now; showing an older copy. Newer fires may be missing.")
+    expect(listHealth([[cal(), wf()]]).fetchedMs).toBe(NOW - 3 * 60_000)
+  })
+
+  it('a list that never loaded says "Could not load", never "Showing the last list" (panel SR-M2)', () => {
+    const errors = { live: null, season: 'The request timed out', historical: null }
+    expect(listErrorLines(['live', 'season'], errors, { live: NOW, season: null, historical: null }, NOW)).toEqual(['Could not load the 2026 list: The request timed out.'])
+    expect(listErrorLines(['live', 'season'], errors, { live: NOW, season: NOW - 10 * 60_000, historical: null }, NOW)).toEqual([
+      'Could not refresh the 2026 list: The request timed out. Showing the copy loaded 10 min ago.',
+    ])
+  })
+
+  it("Forensic's banner: the replay's own year, never 'no active fires' when the lists are down", () => {
+    expect(noLiveText(listHealth([[cal(), wf()]]), 2024)).toBe('No active fires listed by CAL FIRE or NIFC right now · showing a 2024 replay')
+    expect(noLiveText(listHealth([[cal(down), wf(down)]]), 2025)).toBe('The fire lists (CAL FIRE and NIFC) could not be reached right now · showing a 2025 replay')
+    expect(noLiveText(listHealth([[cal(), wf(down)]]), null)).toMatch(/unavailable right now.* · showing a replay$/)
+  })
+
+  it('the live count is unknown, never 0, when the lists cannot be reached (panel SR-m2)', () => {
+    expect(activeCountText(null)).toBe('unknown (fire lists unavailable)')
+    expect(activeCountText(0)).toBe('0 incidents')
+    expect(activeCountText(1)).toBe('1 incident')
+    expect(activeCountText(1234)).toBe('1,234 incidents')
   })
 })
 
@@ -247,5 +312,30 @@ describe('list windowing (W11)', () => {
     expect(scrollToRow(3, 50, 400, 600)).toBe(150)
     expect(scrollToRow(1333, 50, 0, 600)).toBe(1334 * 50 - 600)
     expect(scrollToRow(0, 50, 9000, 600)).toBe(0)
+  })
+})
+
+describe('freshness wording (final fixes R7)', () => {
+  const NOW = Date.UTC(2026, 9, 23, 17, 35)
+  it('the newest record is said as an age, never as "updated" next to an older check', () => {
+    expect(newestRecordText(NOW - 10 * 60_000, NOW)).toBe('newest record 10 min old')
+    expect(newestRecordText(NOW - 3 * 3_600_000, NOW)).toBe('newest record 3 h old')
+    expect(newestRecordText(NOW - 10_000, NOW)).toBe('newest record under a minute old')
+    expect(newestRecordText(NOW + 60_000, NOW)).toBe('newest record under a minute old') // a record clock slightly ahead
+  })
+  it('one list, several lists fetched at different times, and a copy that could not be refreshed', () => {
+    expect(listCheckedText(NOW - 30 * 60_000, NOW - 30 * 60_000, NOW, { lists: 1, stale: false })).toBe('list checked 30 min ago')
+    expect(listCheckedText(NOW - 30 * 60_000, NOW - 2 * 60_000, NOW, { lists: 2, stale: false })).toBe('lists checked in the last 30 min')
+    expect(listCheckedText(NOW - 30 * 60_000, NOW - 30 * 60_000 + 5_000, NOW, { lists: 2, stale: false })).toBe('lists checked 30 min ago')
+    expect(listCheckedText(NOW - 20_000, NOW, NOW, { lists: 2, stale: false })).toBe('lists checked just now')
+    // one list built from two sources fetched at different times (Active: CAL FIRE kept 10 min, WFIGS 5 min)
+    expect(listCheckedText(NOW - 8 * 60_000, NOW, NOW, { lists: 1, stale: false })).toBe('sources checked in the last 8 min')
+    expect(listCheckedText(NOW - 8 * 60_000, NOW - 8 * 60_000 + 30_000, NOW, { lists: 1, stale: false })).toBe('list checked 8 min ago')
+    expect(listCheckedText(NOW - 47 * 60_000, NOW, NOW, { lists: 2, stale: true })).toBe('copy fetched 47 min ago')
+  })
+  it('listHealth keeps the newest fetch time beside the oldest', () => {
+    const src = (t: number) => ({ id: 'wfigs' as const, name: 'NIFC WFIGS (IRWIN)', status: 'available' as const, retrieved_ms: t, reason: null, stale: false })
+    const h = listHealth([[src(NOW - 2 * 60_000)], [src(NOW - 30 * 60_000)]])
+    expect([h.fetchedMs, h.fetchedNewestMs]).toEqual([NOW - 30 * 60_000, NOW - 2 * 60_000])
   })
 })

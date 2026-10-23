@@ -6,6 +6,8 @@ import type { CalFireResponse, FireWeatherResponse, NwsAlert } from '../types'
 // Eaton Fire replay at Jan 8, 2025 12:00 PST: IEM archived copies (Red Flag Warning LOX FW.W #1 in effect, Fire Weather Watch FW.A #1 upcoming); 5 of the 10 zones
 export const FW_EATON_ARCHIVE: FireWeatherResponse = {
  "kind": "fire_weather",
+ "states_checked": ["CA"], // brief-2 recording; 14.6 fields added by the integration
+ "alert_states": ["CA"],
  "status": "available",
  "reason_code": null,
  "reason": null,
@@ -28,6 +30,7 @@ export const FW_EATON_ARCHIVE: FireWeatherResponse = {
  ],
  "alerts": [
   {
+   "time_zone": "America/Los_Angeles", // tz-ok: recorded California alert (NWS Los Angeles/Oxnard); added by the integration (14.6 field)
    "id": "2025-KLOX-FW-W-0001",
    "url": "https://mesonet.agron.iastate.edu/vtec/?year=2025&wfo=KLOX&phenomena=FW&significance=W&eventid=0001",
    "office_url": "https://www.weather.gov/lox",
@@ -87,6 +90,7 @@ export const FW_EATON_ARCHIVE: FireWeatherResponse = {
    "phase": "in_effect"
   },
   {
+   "time_zone": "America/Los_Angeles", // tz-ok: recorded California alert (NWS Los Angeles/Oxnard); added by the integration (14.6 field)
    "id": "2025-KLOX-FW-A-0001",
    "url": "https://mesonet.agron.iastate.edu/vtec/?year=2025&wfo=KLOX&phenomena=FW&significance=A&eventid=0001",
    "office_url": "https://www.weather.gov/lox",
@@ -503,6 +507,8 @@ export const FW_EATON_ARCHIVE: FireWeatherResponse = {
 // Cooley Fire, live: no Red Flag Warning or Fire Weather Watch in effect (Oct 18, 2026)
 export const FW_COOLEY_LIVE_QUIET: FireWeatherResponse = {
  "kind": "fire_weather",
+ "states_checked": ["CA"], // brief-2 recording (California-only request); 14.6 fields added by the integration
+ "alert_states": [],
  "status": "available",
  "reason_code": null,
  "reason": null,
@@ -542,6 +548,7 @@ export const FW_COOLEY_LIVE_QUIET: FireWeatherResponse = {
 // Live NWS Red Flag Warning LOX FW.W #5 (Oct 17, 2026): two CAP messages (segments) of one VTEC event, normalized by the backend's nws.normalize_alert; phase at Oct 17 11:00 PDT
 export const NWS_LIVE_LOX_RFW: NwsAlert[] = [
  {
+  "time_zone": "America/Los_Angeles", // tz-ok: recorded California alert (NWS Los Angeles/Oxnard); added by the integration (14.6 field)
   "id": "urn:oid:2.49.0.1.840.0.471a752cfb304d358eb27b2608f7c2c48c784049.002.1",
   "url": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.471a752cfb304d358eb27b2608f7c2c48c784049.002.1",
   "office_url": "https://www.weather.gov/lox",
@@ -586,6 +593,7 @@ export const NWS_LIVE_LOX_RFW: NwsAlert[] = [
   "nearest_km": null
  },
  {
+  "time_zone": "America/Los_Angeles", // tz-ok: recorded California alert (NWS Los Angeles/Oxnard); added by the integration (14.6 field)
   "id": "urn:oid:2.49.0.1.840.0.471a752cfb304d358eb27b2608f7c2c48c784049.001.1",
   "url": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.471a752cfb304d358eb27b2608f7c2c48c784049.001.1",
   "office_url": "https://www.weather.gov/lox",

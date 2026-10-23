@@ -22,6 +22,8 @@ export default defineConfig({
         main: resolve(root, 'index.html'),
         'scene-dev': resolve(root, 'scene-dev.html'),
         'fx-dev': resolve(root, 'fx-dev.html'),
+        // every page is type-checked and bundled by the build gate (integration review R4)
+        'extras-dev': resolve(root, 'extras-dev.html'),
       },
     },
   },

@@ -11,6 +11,9 @@
 import type { IncidentSummary } from '../api/types'
 import { LOWER48_BOX, parseLatLonDetailed, type ParsedLatLon } from '../lib/geodesy'
 import { stateCode, stateName, stateWords } from '../lib/usStates'
+import { area } from '../lib/plainLanguage'
+import { fireWhere } from '../state/overview'
+import type { Units } from '../state/workspace'
 import type { GeocodeMatch, GeocodeResponse } from './types'
 
 export interface IncidentHit {
@@ -28,7 +31,7 @@ export type SearchPlan =
   /** One exact incident name: open it (built), say "Showing" (current) or ask before preparing (not built). */
   | { kind: 'incident'; hit: IncidentHit; incidents: IncidentHit[] }
   /** Ask /api/geocode; `candidate` is opened when the lookup finds no exact town of that name. */
-  | { kind: 'lookup'; query: string; expect: 'address' | 'local'; incidents: IncidentHit[]; candidate: IncidentHit | null }
+  | { kind: 'lookup'; query: string; expect: 'address' | 'local'; incidents: IncidentHit[]; candidate: IncidentHit | null; listsPending?: boolean }
   /** Nothing to search for (digits that are not a ZIP code, punctuation). */
   | { kind: 'invalid'; message: string }
 
@@ -128,7 +131,9 @@ export function searchIncidents(text: string, pool: readonly IncidentSummary[], 
     .slice(0, limit)
 }
 
-export function planSearch(text: string, pool: readonly IncidentSummary[]): SearchPlan {
+/** `listsPending`: a fire list has not arrived yet (the first seconds after page load), so a search that finds nothing
+ *  says the fires were not all searched instead of "no listed fire matches" (integration part 2). */
+export function planSearch(text: string, pool: readonly IncidentSummary[], listsPending = false): SearchPlan {
   const q = text.trim().replace(/\s+/g, ' ')
   if (!q) return { kind: 'empty' }
   const parsed = parseLatLonDetailed(q)
@@ -137,11 +142,11 @@ export function planSearch(text: string, pool: readonly IncidentSummary[]): Sear
   const exact = incidents.filter((h) => h.exact)
   // one whole incident name: act on it; the same name in several years is listed instead
   if (exact.length === 1) return { kind: 'incident', hit: exact[0], incidents }
-  if (looksLikeAddress(q)) return { kind: 'lookup', query: q, expect: 'address', incidents, candidate: null }
+  if (looksLikeAddress(q)) return { kind: 'lookup', query: q, expect: 'address', incidents, candidate: null, listsPending }
   if (!looksLikeZip(q) && !/[A-Za-zÀ-ɏ]/.test(q))
     return { kind: 'invalid', message: 'Enter a street address with a house number, a US town ("Boise, ID") or a ZIP code, or paste coordinates.' }
   const bare = exact.length ? [] : incidents.filter((h) => h.bare)
-  return { kind: 'lookup', query: q, expect: 'local', incidents, candidate: bare.length === 1 ? bare[0] : null }
+  return { kind: 'lookup', query: q, expect: 'local', incidents, candidate: bare.length === 1 ? bare[0] : null, listsPending }
 }
 
 /** A positive (east) longitude that would be inside the lower-48 box if negated: the minus sign was probably dropped
@@ -154,8 +159,15 @@ export function likelyMissingWestSign(p: { lat: number; lon: number }): boolean 
 /** CONTRACT §14.10 / §14.14 search messages. */
 export const NOT_SUPPORTED_NOTE = 'Fire-3d does not support Alaska, Hawaii or US territories yet.'
 export const OUTSIDE_LOWER48_WARNING = 'This point is outside the area Fire-3d covers (the lower 48 states).'
-export const SEARCH_EXAMPLES = 'e.g. 600 E Mariposa St, Altadena; Boise, ID; 83702'
+export const SEARCH_EXAMPLES = 'e.g. 150 N Capitol Blvd, Boise, ID; Springfield, IL; 83702'
 export const noPlaceMessage = (q: string) => `No US city, town, county or ZIP code matches “${q}”.`
+/** Nothing matched at all: fire names are searched too (brief-3 integration review UX-m8). Only the listed fires are
+ *  searched (active fires, 2026 and 2025, and the open fire); a prepared fire of another year opens by its link. */
+export const noMatchMessage = (q: string) => `No listed fire, US city, town, county or ZIP code matches “${q}”.`
+/** A fire list was still loading when the search ran: fires were not all searched. */
+export const LISTS_PENDING_NOTE = 'The fire lists are still loading, so fires were not all searched: try again in a moment.'
+/** The geocoder's own no-match note (CONTRACT §14.10, places only) said for this search, which also looked at fires. */
+export const withFires = (note: string) => note.replace(/^No US city, town, county or ZIP code matches\b/, 'No listed fire, US city, town, county or ZIP code matches')
 
 // ------------------------------------------------------------------------------------------------- incidents
 /** Whether an incident's analysis can be opened now. Only 'ready' (or a build in progress) opens without asking. */
@@ -179,6 +191,21 @@ export const READINESS_LABEL: Record<Readiness, string> = {
   building: 'Being prepared',
   'not-prepared': 'Data not prepared',
   failed: 'Preparation failed',
+}
+
+/** The facts under a fire's search result: where (county and state, "Lincoln Co., NE", as the overview list says, so
+ *  same-name fires of different states can be told apart), the year, the area and the agency's status. */
+export function fireResultFacts(
+  s: Pick<IncidentSummary, 'year' | 'county' | 'location' | 'admin_unit' | 'state' | 'acres' | 'is_active' | 'percent_contained'>,
+  units: Units,
+): string[] {
+  const facts = [
+    fireWhere(s) || null,
+    String(s.year),
+    s.acres ? area(s.acres, units).text : null,
+    s.is_active ? 'active' : s.percent_contained != null ? `${Math.round(s.percent_contained)}% contained` : null,
+  ]
+  return facts.filter((f): f is string => !!f)
 }
 
 /** What to do with an incident the user picked (or typed exactly). Never a build: an unprepared fire asks first. */
@@ -231,7 +258,8 @@ export function decide(plan: Extract<SearchPlan, { kind: 'lookup' }>, res: Geoco
   }
   const exact = ms.filter((m) => m.exact)
   if (candidate && !exact.length) return { kind: 'incident', hit: candidate }
-  if (!ms.length && !incidents.length) return { kind: 'none', message: res.note ?? noPlaceMessage(plan.query) }
+  if (!ms.length && !incidents.length)
+    return { kind: 'none', message: plan.listsPending ? `${res.note ?? noPlaceMessage(plan.query)} ${LISTS_PENDING_NOTE}` : res.note ? withFires(res.note) : noMatchMessage(plan.query) }
   // one match, or one exact name whose other matches are only partial: go there and keep the rest listed
   const go = ms.length === 1 ? ms[0] : exact.length === 1 ? exact[0] : null
   if (go && (!incidents.length || !candidate)) return { kind: 'area', match: go, others: splitMatches(res, incidents, go) }

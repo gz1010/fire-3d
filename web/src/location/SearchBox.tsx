@@ -15,8 +15,8 @@ import { Building2, Flame, Hash, LoaderCircle, MapPin, Search, X } from 'lucide-
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { IncidentSummary } from '../api/types'
 import { distanceM, formatLat, formatLon, type ParsedLatLon } from '../lib/geodesy'
-import { area, distance } from '../lib/plainLanguage'
-import { fireFlyTo } from '../state/overview'
+import { distance } from '../lib/plainLanguage'
+import { showFireCard } from '../state/fireCard'
 import { useStore } from '../state/store'
 import { useWorkspace, type PanelKey } from '../state/workspace'
 import { addressDetails, addressRange, prettyAddress, useAddressDetails } from './addressStore'
@@ -34,6 +34,7 @@ import {
   placeName,
   cancelledLookup,
   decide,
+  fireResultFacts,
   incidentAction,
   likelyMissingWestSign,
   listCount,
@@ -226,15 +227,14 @@ export function SearchBox() {
       return
     }
     // not prepared: show it and open its card, which asks before preparing (1-3 min of public downloads)
-    showFireCard(s)
+    pickFireCard(s)
   }
 
-  /** Fly to a fire and open its card (I3), as the overview list does. */
-  const showFireCard = (s: IncidentSummary) => {
+  /** Fly to a fire and open its card (I3) the way the overview list does (state/fireCard.ts: an unprepared fire holds
+   *  the map's zoom focus, so a nearby prepared fire does not open instead), then close the popover. */
+  const pickFireCard = (s: IncidentSummary) => {
     dispatch({ type: 'close' })
-    const req = fireFlyTo(s)
-    if (req) useWorkspace.getState().requestMapFlyTo(req)
-    useWorkspace.getState().setFireCard(s.id)
+    showFireCard(s.id, s)
     afterPick()
   }
 
@@ -264,7 +264,10 @@ export function SearchBox() {
   }
 
   const submit = () => {
-    const plan = planSearch(text, incidentPool(useStore.getState()))
+    const st = useStore.getState()
+    // a fire list not arrived yet (first seconds after load): a search finding nothing says so (integration part 2)
+    const pending = (['live', 'season', 'historical'] as const).some((k) => st.catalog.updatedMs[k] == null && st.catalog.listLoading[k])
+    const plan = planSearch(text, incidentPool(st), pending)
     switch (plan.kind) {
       case 'empty':
         return dispatch({ type: 'close' })
@@ -340,7 +343,7 @@ export function SearchBox() {
             maxLength={200}
             aria-describedby={statusId}
             aria-controls={lists ? listId : undefined}
-            placeholder="e.g. 600 E Mariposa St, Altadena"
+            placeholder="e.g. 150 N Capitol Blvd, Boise, ID"
             value={text}
             onFocus={() => {
               setFocused(true)
@@ -383,8 +386,8 @@ export function SearchBox() {
       <div ref={belowRef} id={statusId} className="loc-search-below" aria-live="polite">
         {p.kind === 'hint' && (
           <p className="mw-panel loc-search-hint">
-            Enter a street address with a house number (<span className="mw-mono">600 E Mariposa St, Altadena</span>), a US town or ZIP code (
-            <span className="mw-mono">Boise, ID</span>; <span className="mw-mono">83702</span>), coordinates or a fire’s name, then press Enter. Or click the map.
+            Enter a street address with a house number (<span className="mw-mono">150 N Capitol Blvd, Boise, ID</span>), a US town or ZIP code (
+            <span className="mw-mono">Springfield, IL</span>; <span className="mw-mono">83702</span>), coordinates or a fire’s name, then press Enter. Or click the map.
           </p>
         )}
         {(p.kind === 'busy' || p.kind === 'message') && !lists && (
@@ -494,7 +497,7 @@ function Results({ lists, response, others, units, near, currentId, onAddress, o
               const s = h.summary
               const r = readiness(s)
               const current = s.id === currentId
-              const facts = [String(s.year), s.county ? `${s.county} County` : null, s.acres ? area(s.acres, units).text : null, s.is_active ? 'active' : s.percent_contained != null ? `${Math.round(s.percent_contained)}% contained` : null]
+              const facts = fireResultFacts(s, units)
               const opensCard = !current && (r === 'not-prepared' || r === 'failed')
               return (
                 <li key={s.id}>
@@ -506,7 +509,7 @@ function Results({ lists, response, others, units, near, currentId, onAddress, o
                         <span className={`loc-chip is-${current ? 'current' : r}`}>{current ? 'Showing' : READINESS_LABEL[r]}</span>
                       </span>
                       <span className="loc-result-sub">
-                        {facts.filter(Boolean).join(' · ')}
+                        {facts.join(' · ')}
                         {opensCard && ' · opens its card'}
                       </span>
                     </span>

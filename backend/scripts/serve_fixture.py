@@ -37,8 +37,10 @@ from fire3d.contracts import (  # noqa: E402
     HealthResponse,
     IncidentDetailResponse,
     IncidentListResponse,
+    IncidentListRow,
     IncidentSummary,
     JobStatus,
+    ListSource,
     LiveStatus,
     dump,
 )
@@ -50,6 +52,7 @@ CONTENT_TYPES = {".json": "application/json", ".bin": "application/octet-stream"
 NO_GZIP = {".jpg", ".jpeg", ".png", ".npz"}
 BUILD_STEPS = ["aoi", "terrain", "fuels", "imagery", "observed", "weather", "behavior"]
 FORECAST_STEPS = ["weather members", "spread", "quantiles", "write"]
+FIXTURE_LIST_REASON = "Fixture server: only the fire bundles on disk are listed (the CAL FIRE and NIFC lists are not fetched)."
 
 # Synthetic fire aircraft: (hex, callsign, registration, ICAO type, category, reason, orbit radius m, gs kt, AGL m, clockwise)
 FIRE_FLEET = [
@@ -126,6 +129,19 @@ def create_app(data_dir: Path) -> FastAPI:
         s["bundle_built_ms"] = m.get("built_ms")
         return dump(IncidentSummary.model_validate(s))
 
+    def row_of(m: dict) -> dict:
+        """A list row (``IncidentListRow``): the summary plus the ready bundle's analysis area (``bbox_lonlat``)."""
+        grid = m.get("grid") if isinstance(m.get("grid"), dict) else {}
+        bb = grid.get("bbox_lonlat")
+        ok = isinstance(bb, (list, tuple)) and len(bb) == 4 and all(isinstance(v, (int, float)) and math.isfinite(v) for v in bb)
+        ok = ok and bb[0] < bb[2] and bb[1] < bb[3]
+        return dump(IncidentListRow.model_validate({**summary_of(m), "bbox_lonlat": list(bb) if ok else None}))
+
+    def list_sources() -> list[ListSource]:
+        """The fixture server never reaches the source lists (CONTRACT 14.1 ``sources``): both are unavailable."""
+        return [ListSource(id=sid, name=name, status="unavailable", retrieved_ms=None, reason=FIXTURE_LIST_REASON)
+                for sid, name in (("calfire", "CAL FIRE"), ("wfigs", "NIFC WFIGS (IRWIN)"))]
+
     def load_ready(incident_id: str) -> dict:
         d = bdir(incident_id)
         m = bundle.load_manifest(d) if d.is_dir() else None
@@ -176,16 +192,22 @@ def create_app(data_dir: Path) -> FastAPI:
         return dump(HealthResponse(ok=True, version=config.VERSION))
 
     @app.get("/api/incidents")
-    def incidents(mode: str = Query("historical", pattern="^(live|historical)$"), min_acres: float | None = None) -> dict:
+    def incidents(mode: str = Query("historical", pattern="^(live|historical)$"), min_acres: float | None = None,
+                  year: int | None = None, state: str | None = None) -> dict:
         lo = min_acres if min_acres is not None else (300.0 if mode == "historical" else None)
-        rows = [summary_of(m) for m in manifests() if m.get("mode") == mode]
+        rows = [row_of(m) for m in manifests() if m.get("mode") == mode]
+        if mode == "historical" and year is not None:
+            rows = [r for r in rows if r["year"] == year]
+        if state:
+            rows = [r for r in rows if (r.get("state") or "").upper() == state.upper()]
         if lo is not None:
             rows = [r for r in rows if r["acres"] is None or r["acres"] >= lo]
         if mode == "historical":
             rows.sort(key=lambda r: -(r["acres"] or 0))
         else:
             rows.sort(key=lambda r: (-(r["detections_24h"] or 0), -(r["acres"] or 0)))
-        return dump(IncidentListResponse(mode=mode, updated_ms=int(time.time() * 1000), incidents=rows))
+        return dump(IncidentListResponse(mode=mode, updated_ms=int(time.time() * 1000), incidents=rows, sources=list_sources(),
+                                         year=year if mode == "historical" else None))
 
     @app.get("/api/incidents/{incident_id}")
     def incident(incident_id: str) -> dict:
@@ -217,7 +239,8 @@ def create_app(data_dir: Path) -> FastAPI:
         now = int(time.time() * 1000)
         last = now - (now - started) % (15 * 60_000)
         det = sum((m["summary"].get("detections_24h") or 0) for m in live)
-        return dump(LiveStatus(last_refresh_ms=last, next_refresh_ms=last + 15 * 60_000, active_incidents=len(live), detections_24h_ca=det, auto_build=False))
+        return dump(LiveStatus(last_refresh_ms=last, next_refresh_ms=last + 15 * 60_000, active_incidents=len(live), detections_24h_ca=det,
+                               auto_build=False, detections_24h=det))
 
     def fire_center(incident_id: str, m: dict) -> tuple[float, float, np.ndarray | None]:
         key = (incident_id, int(m.get("built_ms") or 0))

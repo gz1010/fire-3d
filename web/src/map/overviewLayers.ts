@@ -60,6 +60,11 @@ export const OVR = {
   otherChip: 'fx-overview-other-chip',
   activeChip: 'fx-overview-active-chip',
   pinnedChip: 'fx-overview-pinned-chip',
+  // the chips of the other fires near the view centre (chipTargets after the first): placed after the first fire's
+  // chip, never over it (final fixes R8)
+  otherChipNext: 'fx-overview-other-chip-next',
+  activeChipNext: 'fx-overview-active-chip-next',
+  pinnedChipNext: 'fx-overview-pinned-chip-next',
 } as const
 
 /** Layers whose features are single fires (a click or hover means that fire). */
@@ -79,8 +84,8 @@ export const OVERVIEW_FIRE_LAYERS: readonly string[] = [
 export const OVERVIEW_LABEL_LAYERS: readonly string[] = [OVR.pinnedLabel, OVR.activeLabel, OVR.otherLabel]
 /** Group bubbles (a click zooms in). */
 export const OVERVIEW_CLUSTER_LAYERS: readonly string[] = [OVR.activeCluster, OVR.otherCluster]
-/** The "Spread not prepared yet" chips. */
-export const OVERVIEW_CHIP_LAYERS: readonly string[] = [OVR.pinnedChip, OVR.activeChip, OVR.otherChip]
+/** The "Spread not prepared yet" chips: the first target's (the fire nearest the view centre) and the others'. */
+export const OVERVIEW_CHIP_LAYERS: readonly string[] = [OVR.pinnedChip, OVR.activeChip, OVR.otherChip, OVR.pinnedChipNext, OVR.activeChipNext, OVR.otherChipNext]
 /** Layers a click or hover may hit (markers, labels, groups). */
 export const OVERVIEW_HIT_LAYERS: readonly string[] = [...OVERVIEW_FIRE_LAYERS, ...OVERVIEW_CLUSTER_LAYERS]
 
@@ -139,7 +144,9 @@ export function overviewLabel(name: string, acres: number | null | undefined, un
   const short = name.replace(/\s+fire$/i, '').trim() || name
   if (typeof acres !== 'number' || !Number.isFinite(acres) || acres <= 0) return short
   const v = units === 'metric' ? acres * HA_PER_ACRE : acres
-  return `${short} · ${Math.round(v).toLocaleString('en-US')} ${units === 'metric' ? 'ha' : 'ac'}`
+  // small fires keep one decimal, as the fire card does ("Hulsey Bench · 0.1 ac", never "0 ac"; integration part 2)
+  const n = v < 0.1 ? 'under 0.1' : v < 10 ? Number(v.toFixed(1)).toLocaleString('en-US') : Math.round(v).toLocaleString('en-US')
+  return `${short} · ${n} ${units === 'metric' ? 'ha' : 'ac'}`
 }
 
 const acresOf = (s: Pick<IncidentSummary, 'acres'>) => (typeof s.acres === 'number' && Number.isFinite(s.acres) && s.acres > 0 ? s.acres : 0)
@@ -193,6 +200,55 @@ export function splitOverview(fires: readonly IncidentSummary[], o: { hidden?: R
   return out
 }
 
+/** Where a fire lies across the lower 48, for the label anchors of a narrow map at the national zoom: far west
+ *  (California, Oregon and Washington coasts), west, centre, east, far east. */
+export type LabelSide = 'ww' | 'w' | 'c' | 'e' | 'ee'
+export function labelSide(lon: number): LabelSide {
+  if (lon < -116) return 'ww'
+  if (lon < -105) return 'w'
+  if (lon > -76) return 'ee'
+  if (lon > -87) return 'e'
+  return 'c'
+}
+
+/** A narrow map (a phone, under NARROW_PX) below this zoom shows most of the lower 48 across its width. */
+export const NARROW_LABEL_MAX_ZOOM = 3
+type Anchor = 'top' | 'bottom' | 'left' | 'right'
+/** The label anchors tried, in order (MapLibre: 'left' puts the text to the right of the point). Everywhere but a
+ *  narrow map's national view: below, above, left, right of the marker. There, a label grows towards the middle of
+ *  the country, so a west-coast fire's label never runs off the screen's left edge (and an east-coast one off its
+ *  right edge): a label that does not fit that way is left out, as any colliding label is. */
+export const LABEL_ANCHORS: Readonly<Record<LabelSide, readonly Anchor[]>> = {
+  ww: ['left'],
+  w: ['left', 'top', 'bottom'],
+  c: ['top', 'bottom', 'right', 'left'],
+  e: ['right', 'top', 'bottom'],
+  ee: ['right'],
+}
+/** The label's distance from the marker centre (ems) for a marker radius `r` (px), as the radial offset gives it. */
+export const labelOffsetEm = (r: number): number => 0.45 + r / 12
+/** MapLibre's anchor-offset list ("top", [0, 1.2], …) for some anchors at one marker radius. */
+export function anchorOffsets(anchors: readonly Anchor[], r: number): (Anchor | [number, number])[] {
+  const d = Math.round(labelOffsetEm(r) * 1000) / 1000
+  const off: Record<Anchor, [number, number]> = { top: [0, d], bottom: [0, -d], left: [d, 0], right: [-d, 0] }
+  return anchors.flatMap((a) => [a, off[a]])
+}
+/** `text-variable-anchor-offset` of a narrow map's labels: below NARROW_LABEL_MAX_ZOOM by the fire's `side`, else the
+ *  default anchors; the offset follows the marker radius `r` as `text-radial-offset` does on wide maps. */
+export function narrowLabelAnchorOffset(): unknown {
+  const forSide = (side: LabelSide) => [
+    'interpolate',
+    ['linear'],
+    ['get', 'r'],
+    MARKER_MIN_PX,
+    ['literal', anchorOffsets(LABEL_ANCHORS[side], MARKER_MIN_PX)],
+    MARKER_MAX_PX,
+    ['literal', anchorOffsets(LABEL_ANCHORS[side], MARKER_MAX_PX)],
+  ]
+  const bySide = ['match', ['get', 'side'], 'ww', forSide('ww'), 'w', forSide('w'), 'e', forSide('e'), 'ee', forSide('ee'), forSide('c')]
+  return ['step', ['zoom'], bySide, NARROW_LABEL_MAX_ZOOM, forSide('c')]
+}
+
 /** One point feature per fire (agency coordinates); `pinned` features are labelled at every zoom. */
 export function overviewFeatures(fires: readonly IncidentSummary[], units: Units, o: { pinned?: boolean } = {}): FeatureCollection {
   const features: Feature<Geometry>[] = []
@@ -220,6 +276,7 @@ export function overviewFeatures(fires: readonly IncidentSummary[], units: Units
         chip: chipText(s.bundle_status),
         start: s.started_ms,
         state: s.state ?? '',
+        side: labelSide(s.lon),
       },
     })
   })
@@ -351,15 +408,26 @@ type Filter = unknown[]
 const CLUSTERED: Filter = ['has', 'point_count']
 const SINGLE: Filter = ['!', ['has', 'point_count']]
 
-/** The chip layers' filters: only `chips` (map/focus.ts chipTargets: unprepared fires zoomed in on). */
+/** The chip layers' filters: only `chips` (map/focus.ts chipTargets: unprepared fires zoomed in on, nearest the view
+ *  centre first). The first chip (the fire the user is looking at) is always drawn; the others' layers are placed
+ *  after it and give way (final fixes R8: two nearby chips overlapped and one read "…nalysis (1-3 min)"). */
 export function overviewFilters(chips: readonly string[] = []): Record<string, Filter> {
-  const only = ['all', ['!=', ['get', 'chip'], ''], ['in', ['get', 'id'], ['literal', [...chips]]]]
+  const only = (ids: readonly string[]) => ['all', ['!=', ['get', 'chip'], ''], ['in', ['get', 'id'], ['literal', [...ids]]]]
+  const first = only(chips.slice(0, 1))
+  const next = only(chips.slice(1))
   return {
-    [OVR.pinnedChip]: only,
-    [OVR.activeChip]: ['all', SINGLE, only],
-    [OVR.otherChip]: ['all', SINGLE, only],
+    [OVR.pinnedChip]: first,
+    [OVR.activeChip]: ['all', SINGLE, first],
+    [OVR.otherChip]: ['all', SINGLE, first],
+    [OVR.pinnedChipNext]: next,
+    [OVR.activeChipNext]: ['all', SINGLE, next],
+    [OVR.otherChipNext]: ['all', SINGLE, next],
   }
 }
+
+/** Where a chip of a fire after the first may go, in order: below its marker (as the first chip), above, right, left;
+ *  `text-variable-anchor-offset` in ems (the chip is two lines of about 13 ems). */
+export const CHIP_NEXT_ANCHORS: unknown[] = ['top', [0, 1.9], 'bottom', [0, -1.9], 'left', [1.4, 0], 'right', [-1.4, 0]]
 
 /** The selection ring's filter: the fire whose card is open (always in the pinned source). */
 export function selectedFilter(cardId: string | null): Filter {
@@ -397,7 +465,7 @@ const LABEL_TEXT: unknown = [
 ]
 
 /** The overview layers, bottom to top (added above the basemap labels, below the open fire's markers). */
-export function overviewLayers(theme: MapTheme): LayerSpecification[] {
+export function overviewLayers(theme: MapTheme, o: { narrow?: boolean } = {}): LayerSpecification[] {
   const p = theme === 'light' ? PALETTE.light : PALETTE.dark
   const tone = theme === 'light' ? 'light' : 'dark'
   const S = OVERVIEW_SOURCES
@@ -494,8 +562,10 @@ export function overviewLayers(theme: MapTheme): LayerSpecification[] {
         'text-field': LABEL_TEXT,
         'text-font': FONT,
         'text-size': 12,
-        'text-variable-anchor': ['top', 'bottom', 'right', 'left'],
+        'text-variable-anchor': [...LABEL_ANCHORS.c],
         'text-radial-offset': ['+', 0.45, ['/', ['get', 'r'], 12]],
+        // a narrow map's national view: labels grow towards the middle of the country (takes over the two above)
+        ...(o.narrow ? { 'text-variable-anchor-offset': narrowLabelAnchorOffset() } : {}),
         'text-justify': 'auto',
         'text-max-width': 14,
         'text-allow-overlap': false,
@@ -505,10 +575,11 @@ export function overviewLayers(theme: MapTheme): LayerSpecification[] {
       },
       paint: { 'text-color': p.ink, 'text-halo-color': p.halo, 'text-halo-width': 1.6, 'text-halo-blur': 0.3 },
     }) as unknown as LayerSpecification
-  const chip = (id: string, source: string, filter: Filter): LayerSpecification =>
+  const chip = (id: string, source: string, filter: Filter, next = false): LayerSpecification =>
     ({
       // zoomed in near an unprepared fire: the prompt (on top: the labels avoid it); the controller limits it to the
-      // fires near the view centre (chipTargets), none until then
+      // fires near the view centre (chipTargets), none until then. The first fire's chip is always drawn and still
+      // claims its place; a later fire's chip moves around its marker to a free place, else waits (final fixes R8)
       id,
       type: 'symbol',
       source,
@@ -521,13 +592,12 @@ export function overviewLayers(theme: MapTheme): LayerSpecification[] {
         'text-field': ['get', 'chip'],
         'text-font': FONT,
         'text-size': 11.5,
-        'text-anchor': 'top',
-        'text-offset': [0, 1.9],
+        ...(next ? { 'text-variable-anchor-offset': CHIP_NEXT_ANCHORS, 'text-padding': 4 } : { 'text-anchor': 'top', 'text-offset': [0, 1.9] }),
         // two short lines rather than one wide pill (it must fit beside a phone's edge)
         'text-max-width': 13,
         'text-line-height': 1.25,
-        'icon-allow-overlap': true,
-        'text-allow-overlap': true,
+        'icon-allow-overlap': !next,
+        'text-allow-overlap': !next,
       },
       paint: { 'text-color': tone === 'light' ? '#16202b' : '#f3f6f9' },
     }) as unknown as LayerSpecification
@@ -568,6 +638,11 @@ export function overviewLayers(theme: MapTheme): LayerSpecification[] {
     label(OVR.otherLabel, S.other, SINGLE),
     label(OVR.activeLabel, S.active, SINGLE),
     label(OVR.pinnedLabel, S.pinned, null),
+    // the chips of the fires after the first, then the first fire's on top: the top layers are placed first, so the
+    // first chip claims its place and the others give way to it
+    chip(OVR.otherChipNext, S.other, chips[OVR.otherChipNext], true),
+    chip(OVR.activeChipNext, S.active, chips[OVR.activeChipNext], true),
+    chip(OVR.pinnedChipNext, S.pinned, chips[OVR.pinnedChipNext], true),
     chip(OVR.otherChip, S.other, chips[OVR.otherChip]),
     chip(OVR.activeChip, S.active, chips[OVR.activeChip]),
     chip(OVR.pinnedChip, S.pinned, chips[OVR.pinnedChip]),

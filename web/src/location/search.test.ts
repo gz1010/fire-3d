@@ -11,9 +11,12 @@ import {
   areaSub,
   cancelledLookup,
   decide,
+  fireResultFacts,
   incidentAction,
   likelyMissingWestSign,
+  LISTS_PENDING_NOTE,
   looksLikeAddress,
+  noMatchMessage,
   noPlaceMessage,
   NOT_SUPPORTED_NOTE,
   OUTSIDE_LOWER48_WARNING,
@@ -150,6 +153,19 @@ describe('incidents: readiness and actions (never a build without asking)', () =
     expect(incidentAction({ id: 'x', bundle_status: 'building' }, null)).toBe('open')
     expect(incidentAction(POOL[6], null)).toBe('ask-prepare')
     expect(incidentAction({ id: 'y', bundle_status: 'error' }, null)).toBe('ask-prepare')
+  })
+})
+
+describe('a search while a fire list is still loading (integration part 2)', () => {
+  it('says the fires were not all searched, never "no listed fire matches"', () => {
+    const plan = planSearch('Black Cove', [], true)
+    expect(plan).toMatchObject({ kind: 'lookup', listsPending: true })
+    const d = decide(plan as Extract<SearchPlan, { kind: 'lookup' }>, res([]))
+    expect(d).toEqual({ kind: 'none', message: `No US city, town, county or ZIP code matches “Black Cove”. ${LISTS_PENDING_NOTE}` })
+    expect(d.kind === 'none' && d.message).not.toMatch(/No listed fire/)
+    // loaded lists: the usual sentence
+    const done = decide(planSearch('Black Cove', [], false) as Extract<SearchPlan, { kind: 'lookup' }>, res([]))
+    expect(done).toEqual({ kind: 'none', message: 'No listed fire, US city, town, county or ZIP code matches “Black Cove”.' })
   })
 })
 
@@ -316,6 +332,14 @@ describe('national search (brief 3, §14.10, W6)', () => {
     inc('2026-sandy-cccccc', 'Sandy', { year: 2026, county: 'Ada', state: 'ID', lat: 43.6, lon: -116.2 }),
   ]
   const plan = (t: string) => planSearch(t, NATIONAL)
+  it('the national examples in the placeholder and hints parse as what they show (address; town; ZIP)', async () => {
+    const { SEARCH_EXAMPLES } = await import('./search')
+    const [addr, town, zip] = SEARCH_EXAMPLES.replace(/^e\.g\. /, '').split('; ')
+    expect(lookupPlan(addr)).toMatchObject({ expect: 'address' })
+    expect(plan(town)).toMatchObject({ kind: 'lookup', expect: 'local' })
+    expect(looksLikeZip(zip)).toBeTruthy()
+    expect(SEARCH_EXAMPLES).not.toMatch(/Altadena/)
+  })
   it('"Town, ST" and "Town ST" go to the local (national Gazetteer) lookup as typed', () => {
     for (const t of ['Springfield, IL', 'Springfield IL', 'Boise, ID', 'Raleigh, North Carolina']) expect(plan(t)).toMatchObject({ kind: 'lookup', expect: 'local', query: t })
     expect(queryState('Springfield, IL')).toBe('IL')
@@ -336,6 +360,18 @@ describe('national search (brief 3, §14.10, W6)', () => {
     expect(stripStateWords('new mexico 87501')).toBe('87501')
     expect(looksLikeZip('Boise 83702')).toBe(false)
   })
+  it('fire results say where each fire is with its state, so same-name fires of different states differ (review UX-M2)', () => {
+    const ne = inc('2026-cottonwood-ne', 'Cottonwood', { year: 2026, county: 'Lincoln', state: 'NE', acres: 129253, is_active: true })
+    const nv = inc('2025-cottonwood-nv', 'Cottonwood Canyon', { year: 2025, county: 'Lincoln', state: 'NV', acres: 500, is_active: false, percent_contained: 100 })
+    const la = inc('2026-cottonwood-la', 'Cottonwood', { year: 2026, county: 'Calcasieu', state: 'LA', acres: null, is_active: false, percent_contained: null })
+    const noCounty = inc('2026-cottonwood-ut', 'Cottonwood', { year: 2026, county: null, location: null, admin_unit: null, state: 'UT', acres: 40 })
+    expect(fireResultFacts(ne, 'us')).toEqual(['Lincoln Co., NE', '2026', '129,253 acres', 'active'])
+    expect(fireResultFacts(nv, 'us')).toEqual(['Lincoln Co., NV', '2025', '500 acres', '100% contained'])
+    expect(fireResultFacts(la, 'us')).toEqual(['Calcasieu Parish, LA', '2026'])
+    expect(fireResultFacts(noCounty, 'us')[0]).toBe('UT')
+    // the two Lincoln County fires read differently
+    expect(fireResultFacts(ne, 'us')[0]).not.toBe(fireResultFacts(nv, 'us')[0])
+  })
   it('incident search matches the state ("Garfield, CO" is not "Garfield, MT")', () => {
     expect(searchIncidents('Garfield CO', NATIONAL).map((h) => h.summary.name)).toEqual(['Pine Gulch'])
     expect(searchIncidents('Garfield Montana', NATIONAL).map((h) => h.summary.name)).toEqual(['Big Dry'])
@@ -344,7 +380,13 @@ describe('national search (brief 3, §14.10, W6)', () => {
   it('US wording: no "California" in the messages', () => {
     expect(planSearch('9100', NATIONAL)).toMatchObject({ kind: 'invalid', message: 'Enter a street address with a house number, a US town ("Boise, ID") or a ZIP code, or paste coordinates.' })
     const none = decide(lookupPlan('Nowheresville'), res([]))
-    expect(none).toEqual({ kind: 'none', message: 'No US city, town, county or ZIP code matches “Nowheresville”.' })
+    // fire names are searched too (integration review UX-m8): the message says so when nothing matched at all
+    expect(none).toEqual({ kind: 'none', message: 'No listed fire, US city, town, county or ZIP code matches “Nowheresville”.' })
+    expect(noMatchMessage('x')).toBe('No listed fire, US city, town, county or ZIP code matches “x”.')
+    // the geocoder's own note (places only) keeps its hint and gains the fires
+    const noted = decide(lookupPlan('Horse Gulch'), { ...res([]), note: "No US city, town, county or ZIP code matches 'Horse Gulch'. Landmarks, businesses and street names without a house number are not searched (e.g. 83702)." })
+    expect(noted).toEqual({ kind: 'none', message: "No listed fire, US city, town, county or ZIP code matches 'Horse Gulch'. Landmarks, businesses and street names without a house number are not searched (e.g. 83702)." })
+    // fires matched but no place: the place sentence stays, and the fires are listed
     expect(noPlaceMessage('x')).toBe('No US city, town, county or ZIP code matches “x”.')
     expect(OUTSIDE_LOWER48_WARNING).toBe('This point is outside the area Fire-3d covers (the lower 48 states).')
   })

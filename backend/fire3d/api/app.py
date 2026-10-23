@@ -34,7 +34,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
 
-from .. import bundle, config
+from .. import bundle, catalog, config
+from .. import regions as regions_mod
 from ..build import pipeline
 from ..contracts import AircraftResponse, ForecastRequest, HealthResponse, IncidentSummary, dump
 from ..http import _MaskSecretsFilter
@@ -154,12 +155,14 @@ def _summary_dict(s: Any) -> dict:
 
 
 def _catalog_summary(incident_id: str) -> dict | None:
-    from .. import catalog
-
+    """The catalog's summary as a dict, or None. ``catalog.ListsUnavailable`` (the lists cannot be reached and no
+    bundle on disk knows the id) is raised: the API answers 503 (:func:`_lists_unavailable`), never "unknown"."""
     try:
         s = catalog.get_summary(incident_id)
     except NotImplementedError:
         return None
+    except catalog.ListsUnavailable:
+        raise
     except Exception as e:
         log.warning("catalog.get_summary(%s) failed: %s", incident_id, config.mask_secrets(e))
         return None
@@ -263,11 +266,17 @@ def _list_row(s: dict, m: dict | None = None) -> dict:
 
 def _bundle_rows(mode: str, min_acres: float | None, year: int | None = None) -> list[dict]:
     """Fallback incident list from bundles on disk (catalog unavailable). ``year`` (historical lists asked for one
-    year): the bundles of that year in either mode, since a year list also holds that year's active fires."""
+    year): the bundles of that year in either mode, since a year list also holds that year's active fires. Only
+    bundles of listed fires (an id of the form ``<year>-<name>-<uid6>``) that did not fail: synthetic and local bundles
+    such as ``fixture-live`` are never listed as an agency's fire (final verification, panel SR-B1)."""
     rows = []
     for m in bundle.list_bundles():
         if not isinstance(m.get("summary"), dict):
             continue
+        if catalog.parse_incident_id(str(m["summary"].get("id") or "")) is None:
+            continue
+        if m.get("status") == "error":
+            continue            # a failed build is not a prepared fire
         if year is None and m.get("mode") != mode:
             continue
         try:
@@ -405,6 +414,21 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Fire-3d API", version=config.VERSION, description="Wildfire Forensics & Forecast (SPEC 6)", lifespan=lifespan)
 app.add_middleware(MaskedErrorMiddleware)
+
+
+@app.exception_handler(catalog.ListsUnavailable)
+async def _lists_unavailable(request: Request, exc: catalog.ListsUnavailable) -> Response:
+    """CONTRACT 14.2: an id the source lists cannot decide right now (CAL FIRE or NIFC WFIGS unreachable, no bundle on
+    disk) is 503 "The fire lists could not be reached right now; try again later.", never 404 or a local bundle."""
+    return JSONResponse({"detail": catalog.LISTS_UNAVAILABLE_TEXT}, status_code=503)
+
+@app.exception_handler(regions_mod.RegionsUnavailable)
+async def _regions_unavailable(request: Request, exc: Exception) -> Response:
+    """A broken installation (a bundled region file missing or unreadable): 503 in plain words, never a 500."""
+    log.error("%s: %s", request.url.path, exc)
+    return JSONResponse({"detail": regions_mod.REGIONS_UNAVAILABLE_TEXT}, status_code=503)
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$",
@@ -440,8 +464,12 @@ def _maybe_gzip(body: bytes, request: Request | None, headers: dict[str, str] | 
     return Response(body, media_type="application/json", headers=h)
 
 
+LISTS_DOWN_FALLBACK = ("The fire lists (CAL FIRE and NIFC) could not be reached right now; only fires prepared on this "
+                       "server are listed, with their records as saved when each was prepared.")
+
+
 def _bundle_sources(reason: str) -> list[dict]:
-    return [{"id": sid, "name": name, "status": "unavailable", "retrieved_ms": None, "reason": reason}
+    return [{"id": sid, "name": name, "status": "unavailable", "retrieved_ms": None, "stale": False, "reason": reason}
             for sid, name in (("calfire", "CAL FIRE"), ("wfigs", "NIFC WFIGS (IRWIN)"))]
 
 
@@ -459,7 +487,6 @@ def list_incidents(
     Rows carry ``bbox_lonlat`` (the analysis area of a ready bundle, else null). ``sources`` says which source lists
     answered. gzip when accepted. Falls back to the bundles on disk when both source lists are unavailable."""
     lo = min_acres if min_acres is not None else (DEFAULT_HISTORICAL_MIN_ACRES if mode == "historical" else None)
-    from .. import catalog
 
     yr = year if mode == "historical" else None
     st = state.upper() if state else None
@@ -470,9 +497,9 @@ def list_incidents(
             raw = [x for x in raw if (getattr(x, "state", None) or "").upper() == st]
     except Exception as e:
         log.warning("catalog.list_incidents(%s) failed (%s); listing bundles on disk", mode, config.mask_secrets(e))
-        rows = [r for r in _bundle_rows(mode, lo, yr) if st is None or (r.get("state") or "").upper() == st]
-        sources = _bundle_sources("The fire lists (CAL FIRE and NIFC) are unavailable right now; only fires with a "
-                                  "bundle on this server are listed.")
+        fb_year = yr if yr is not None or mode != "historical" else catalog.default_year()
+        rows = [r for r in _bundle_rows(mode, lo, fb_year) if st is None or (r.get("state") or "").upper() == st]
+        sources = _bundle_sources(LISTS_DOWN_FALLBACK)
     else:
         rows = []
         for s in raw:
@@ -518,14 +545,15 @@ UNSUPPORTED_TEXT = "Fire-3d does not support Alaska, Hawaii or US territories ye
 def _not_buildable(incident_id: str, summary: dict) -> tuple[int, str]:
     """The build gate's answer for an id ``pipeline.is_catalog_incident`` refuses (CONTRACT 14.2): 422 for Alaska,
     Hawaii or a territory; 409 for a local or synthetic bundle (no CAL FIRE or NIFC WFIGS list knows the id) or an
-    alias of a listed fire; else 409 "cannot be built in this version"."""
-    from .. import catalog, regions
+    alias of a listed fire; 503 when the lists cannot be reached (never "a local or synthetic bundle"); else 409
+    "cannot be built in this version"."""
+    from .. import regions
 
-    listed = None
     try:
         listed = catalog.resolve_listed(incident_id)
-    except Exception as e:  # noqa: BLE001 - a lookup failure must not turn into a 500
+    except Exception as e:  # noqa: BLE001 - a lookup failure must not turn into a 500: the lists cannot tell now
         log.warning("build gate: resolve_listed(%s) failed: %s", incident_id, config.mask_secrets(e))
+        return 503, catalog.LISTS_UNAVAILABLE_TEXT
     st = (listed.state if listed is not None else summary.get("state")) or None
     if listed is not None and not regions.is_supported_state(st):
         return 422, UNSUPPORTED_TEXT

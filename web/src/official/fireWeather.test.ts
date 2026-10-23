@@ -17,6 +17,9 @@ import {
 } from './fireWeather'
 import { FW_COOLEY_LIVE_QUIET, FW_EATON_ARCHIVE, NWS_LIVE_LOX_RFW } from './__fixtures__/samples'
 import type { FireWeatherResponse, NwsAlert } from './types'
+import { timeFmt } from '../lib/time'
+
+const LA24 = timeFmt('America/Los_Angeles', '24h')
 
 const H = 3_600_000
 const REPLAY = 1736366400000 // Jan 8, 2025 12:00 PST
@@ -54,13 +57,13 @@ describe('NWS alert phases and wording', () => {
   })
 
   it('writes "until", "from … until", "Expired", "Cancelled" and "Replaced" in the NWS times', () => {
-    expect(alertTimeText(RFW, 'active', REPLAY)).toBe('until Jan 10, 14:48 PST')
-    expect(alertTimeText(FWW, 'upcoming', REPLAY)).toBe('from Jan 9, 18:00 PST (end time unclear in the archive)')
+    expect(alertTimeText(RFW, 'active', REPLAY, LA24)).toBe('until Jan 10, 14:48 PST')
+    expect(alertTimeText(FWW, 'upcoming', REPLAY, LA24)).toBe('from Jan 9, 18:00 PST (end time unclear in the archive)')
     const a = NWS_LIVE_LOX_RFW[0]
-    expect(alertTimeText(a, 'expired', LIVE_AT + 48 * H)).toBe('Expired Oct 17, 20:00 PDT')
-    expect(alertTimeText({ ...a, vtec: { ...a.vtec!, action: 'CAN' } }, 'cancelled', LIVE_AT)).toBe('Cancelled Oct 17, 09:11 PDT')
-    expect(alertTimeText({ ...a, vtec: { ...a.vtec!, action: 'UPG' } }, 'cancelled', LIVE_AT)).toBe('Replaced by a newer NWS alert Oct 17, 09:11 PDT')
-    expect(alertTimeText({ ...a, dropped_ms: LIVE_AT }, 'expired', LIVE_AT + H)).toBe('No longer in the NWS feed since Oct 17, 11:00 PDT')
+    expect(alertTimeText(a, 'expired', LIVE_AT + 48 * H, LA24)).toBe('Expired Oct 17, 20:00 PDT')
+    expect(alertTimeText({ ...a, vtec: { ...a.vtec!, action: 'CAN' } }, 'cancelled', LIVE_AT, LA24)).toBe('Cancelled Oct 17, 09:11 PDT')
+    expect(alertTimeText({ ...a, vtec: { ...a.vtec!, action: 'UPG' } }, 'cancelled', LIVE_AT, LA24)).toBe('Replaced by a newer NWS alert Oct 17, 09:11 PDT')
+    expect(alertTimeText({ ...a, dropped_ms: LIVE_AT }, 'expired', LIVE_AT + H, LA24)).toBe('No longer in the NWS feed since Oct 17, 11:00 PDT')
     expect(senderText(a)).toBe('NWS Los Angeles/Oxnard CA')
     expect(senderText({ sender_name: null, vtec: { office: 'KSGX', phenomena: 'FW', significance: 'W', etn: 1, action: 'NEW' } })).toBe('NWS KSGX')
   })
@@ -100,7 +103,7 @@ describe('NWS zones, feed rows, map, legend and credits', () => {
   })
 
   it('lists the archived Red Flag Warning verbatim, with its sender, link, archive label and area', () => {
-    const items = fireWeatherFeedItems(FW_EATON_ARCHIVE, { mode: 'historical', refMs: REPLAY, manifest: { grid: { utm_zone: 11, center_e: 399738, center_n: 3784875 }, time_range: { start_ms: 1736298000000, end_ms: 1736535600000, now_ms: 1736535600000 } } as never })
+    const items = fireWeatherFeedItems(FW_EATON_ARCHIVE, { mode: 'historical', refMs: REPLAY, tf: LA24, manifest: { grid: { utm_zone: 11, center_e: 399738, center_n: 3784875 }, time_range: { start_ms: 1736298000000, end_ms: 1736535600000, now_ms: 1736535600000 } } as never })
     const rfw = items.find((i) => i.title.startsWith('Red Flag Warning'))!
     expect(rfw).toMatchObject({ title: 'Red Flag Warning until Jan 10, 14:48 PST', kind: 'official', automated: false, key: true, archived: true, status: 'active', issuer: 'National Weather Service Los Angeles/Oxnard CA', distanceKm: 0 })
     expect(rfw.source).toBe('National Weather Service Los Angeles/Oxnard CA (archived copy via Iowa Environmental Mesonet)')
@@ -113,12 +116,12 @@ describe('NWS zones, feed rows, map, legend and credits', () => {
     const fww = items.find((i) => i.title.startsWith('Fire Weather Watch'))!
     expect(fww.title).toBe('Fire Weather Watch from Jan 9, 18:00 PST (end time unclear in the archive)')
     expect(fww.status).toBe('upcoming')
-    expect(fireWeatherFeedItems({ ...FW_EATON_ARCHIVE, status: 'not_available_for_past_dates' }, { mode: 'historical', refMs: REPLAY, manifest: null })).toEqual([])
+    expect(fireWeatherFeedItems({ ...FW_EATON_ARCHIVE, status: 'not_available_for_past_dates' }, { mode: 'historical', refMs: REPLAY, tf: LA24, manifest: null })).toEqual([])
   })
 
   it('shows the live NWS headline paragraph on demand and seeks only inside the record', () => {
     const r = liveResp(NWS_LIVE_LOX_RFW)
-    const [it] = fireWeatherFeedItems(r, { mode: 'live', refMs: LIVE_AT, manifest: { grid: null, time_range: { start_ms: 0, end_ms: LIVE_AT, now_ms: LIVE_AT - 5 * H } } as never })
+    const [it] = fireWeatherFeedItems(r, { mode: 'live', refMs: LIVE_AT, tf: LA24, manifest: { grid: null, time_range: { start_ms: 0, end_ms: LIVE_AT, now_ms: LIVE_AT - 5 * H } } as never })
     expect(it.title).toBe('Red Flag Warning until Oct 17, 20:00 PDT')
     // two CAP segments (areas) of one event: each part's verbatim headline and text, on demand
     const parts = it.sections!.filter((x) => /^Part \d of 2/.test(x.label))
@@ -129,7 +132,7 @@ describe('NWS zones, feed rows, map, legend and credits', () => {
     expect(it.sections!.filter((x) => x.label === 'Summary')).toHaveLength(2)
     expect(it.detail).toBe(NWS_LIVE_LOX_RFW[0].headline) // the event's own headline
     // one segment: its NWS headline paragraph when it differs from the event headline
-    const [one] = fireWeatherFeedItems(liveResp([NWS_LIVE_LOX_RFW[0]]), { mode: 'live', refMs: LIVE_AT, manifest: null })
+    const [one] = fireWeatherFeedItems(liveResp([NWS_LIVE_LOX_RFW[0]]), { mode: 'live', refMs: LIVE_AT, tf: LA24, manifest: null })
     expect(one.sections?.[0]).toEqual({ label: 'NWS headline', text: NWS_LIVE_LOX_RFW[0].nws_headline })
     expect(it.seekable).toBe(false) // sent after the latest observation
     expect(it.archived).toBe(false)
@@ -155,7 +158,7 @@ describe('NWS area lists', () => {
   it('shortens long zone lists in the facts and keeps the full verbatim list on demand', () => {
     expect(shortAreaList('A; B; C')).toBe('A; B; C')
     expect(shortAreaList('A; B; C; D; E; F')).toBe('A; B; C and 3 more zones')
-    const [rfw] = fireWeatherFeedItems(FW_EATON_ARCHIVE, { mode: 'historical', refMs: REPLAY, manifest: null }).filter((i) => i.title.startsWith('Red Flag'))
+    const [rfw] = fireWeatherFeedItems(FW_EATON_ARCHIVE, { mode: 'historical', refMs: REPLAY, tf: LA24, manifest: null }).filter((i) => i.title.startsWith('Red Flag'))
     expect(rfw.facts?.find((f) => f.label === 'Area (NWS)')?.text).toMatch(/ and \d+ more zones$/)
     expect(rfw.sections?.find((x) => x.label === 'All areas (NWS)')?.text).toBe(RFW.area_desc)
   })

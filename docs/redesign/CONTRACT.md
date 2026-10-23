@@ -956,7 +956,7 @@ Answers live in `useOfficialRuntime` (`calfire`, `fireWeather`, `statewide`, sam
 ```ts
 useOfficialAtPoint(lon: number | null, lat: number | null): OfficialInfo
 useOfficialNow(): OfficialInfo                      // the open fire, no point ("Official now")
-useOfficialBadge(): { count: number; level: 'order' | 'warning' | 'fire-weather' | null }
+useOfficialBadge(): { count: number; level: 'order' | 'warning' | 'local' | 'fire-weather' | null }   // 'local': brief 3 (14.15, part 1 review fixes)
 interface OfficialInfo { evacuation: EvacuationOfficial; fireWeather: FireWeatherOfficial; calfire: CalFireOfficial }
 interface EvacuationOfficial {
   state: 'listed' | 'none-listed' | 'not-checked' | 'past-date' | 'unavailable' | 'loading'
@@ -995,7 +995,8 @@ Rules the states follow (pure, tested in `official/model.test.ts`):
   - Normal / Training zones are never listed.
 - **Zone times.** `issuedMs` is always absent (Cal OES gives none). Show `updatedMs` as "Updated by the issuer …",
   else `listedMs` as "Issuer time not given; listed by Cal OES …". `checkedMs` is only "checked …", never an issue
-  time. `outsideAnalysisArea` → show "Cal OES does not say which fire this is for." (`NOT_FIRE_SPECIFIC`).
+  time. `outsideAnalysisArea` → show "Cal OES does not say which fire this is for." (`NOT_FIRE_SPECIFIC`, removed by
+  the brief-3 integration: the sentence now names each zone's aggregator, `notFireSpecific`; 14.0 as built).
 - **Fire weather at a point.** Alerts whose NWS zones contain the point and that are in effect (or upcoming) at the
   reference time (now, or the replay time). Inside the open fire's checked area (`area_bbox`: its analysis area + 15
   km) its answer decides, archived for past times. Elsewhere at the current time, and on the overview, the statewide
@@ -1087,7 +1088,8 @@ mountOfficialLayers(map, { beforeId?: string | string[]; topBeforeId?: string | 
 **Feed (U-R2, R5, R8, R10).**
 - `FeedItem` gains optional `url, issuer, issuedMs, updatedMs, expiresMs, checkedMs, bounds, status ('active' |
   'upcoming' | 'expired' | 'cancelled'), distanceKm, highlight, links, sections, archived, notes, timeNotGiven,
-  children`. `FeedTopic` adds `'calfire' | 'fire-weather' | 'quiet'`. `FeedFilter = 'official' | 'all' | 'key'`.
+  children`. `FeedTopic` adds `'calfire' | 'fire-weather' | 'quiet'` (`'calfire'` removed by the brief-3 integration:
+  the agency record's rows use the topic `'record'`; 14.0 as built). `FeedFilter = 'official' | 'all' | 'key'`.
   `FeedInput` adds `preset`, `groupPasses`, `wallMs`.
 - `useExtrasFeedItems()` (unchanged call in App.tsx) now also returns the evacuation rows whatever the toggle says, CAL
   FIRE change / final-record rows and NWS rows.
@@ -1408,7 +1410,7 @@ right after `bindExtrasLayers(map)`; `remove()` before `map.remove()`.
 - The official block uses `useOfficialAtPoint(sel.lon, sel.lat)` (I5) and is always present (phones, replay, layer
   off): zones verbatim with issuer and own times (and "Cal OES does not say which fire this is for" with the
   distance), "No evacuation order or warning listed here · Cal OES, checked … · not an all-clear" only where checked,
-  "not checked here", "not shown for past dates", "unavailable"; an NWS line only while an alert is in effect or
+  "not checked here", "not shown for past dates" (brief 3: "not available for past dates", 14.15), "unavailable"; an NWS line only while an alert is in effect or
   upcoming at the point ("Fire weather alert here: Red Flag Warning until …", sender, archived copy, and the caveat "a
   weather warning, not an evacuation order", kept on phones); then "Follow local officials." with CAL FIRE and Cal OES
   links (https only, + county maps). Phones (compact card, integration) keep a listed zone's issuer, its own time and,
@@ -1565,6 +1567,28 @@ Washington adapter, flag or certificate anywhere.
   reference demo's name is a bug to fix (the pattern `Fire[T]race` matches that name without writing it). The
   integration and final verification run the same scan over the whole brief.
 
+#### 14.0 as built (integration, part 1)
+
+- Wave 1 ran with the orchestrator's schedule change (first batch `us-catalog`, `us-web`, `us-pipeline`;
+  `us-official` in the first free slot); each role was reviewed in a clean worktree and fixed (reports
+  `docs/redesign/reports/review3-*.json`, fix rounds in each role's report). The integration's part 1 ran while
+  `validation` (wave 2) was still building; validation's own files and the build code it may fix were left to part 2
+  (`docs/redesign/reports/brief3-integration.json`, key `part2`).
+- **(R) fields** are required (Python: `LiveStatus.detections_24h`, `IncidentListResponse.sources`,
+  `FireWeatherResponse.states_checked` / `alert_states`, `FireWeatherAlert.time_zone`; TS: the same plus the five
+  `IncidentSummary` fields, and the official and extras types; details in 14.1, 14.6 and 14.8 as built).
+  `SkillEntry.growth_sorensen` stays optional (forecast manifests built before brief 3 lack it). The parity test now
+  also covers `web/src/official/types.ts` (`IncidentRecordResponse`, `IncidentRecordCurrent`, `LocalAlert`,
+  `LocalChannelStatus`, `LocalAlertsResponse` field for field; the brief-2 envelope fields `kind`, `incident_id` and
+  `caveats` may stay optional in TS; the 14.6 additions required in both).
+- **Deprecated exports removed** (no importer left): the 19 Pacific-bound names of `lib/time.ts`, `insideCalifornia`,
+  `NOT_FIRE_SPECIFIC`, `fmtStatusTime`, the feed topic `'calfire'`, `useCalfire`, `fill_from_calfire`,
+  `overpass.la_time`. Kept: `IncidentSummary.calfire_uid` and `LiveStatus.detections_24h_ca` (response fields, "one
+  release"), and in validation's files `firms.load_live_ca` / `load_year_ca`, `catalog.HISTORICAL_YEAR`,
+  `pipeline.spec_incident_id` (part 2 or later).
+- **Hand-off:** the `test_api.py` build-gate tests were updated by the integration (14.2 as built).
+- **Wording scan** (item 4a of PLAN-3) over the whole brief: see the integration report.
+
 ### 14.1 Incident summary, list rows and live status (`us-catalog`)
 
 **`IncidentSummary` additions** (Python `contracts.py` and TS `web/src/api/types.ts`; every existing field keeps its
@@ -1590,12 +1614,12 @@ export interface OtherRecord {          // another agency's record of the same f
 
 export interface IncidentSummary {
   // ... existing fields ...
-  uid?: string                          // (R) CAL FIRE UniqueId, or IRWIN id (upper case, no braces)
+  uid: string                           // (R) CAL FIRE UniqueId, or IRWIN id (upper case, no braces)
   calfire_uid: string                   // DEPRECATED: the CAL FIRE UniqueId, or '' when the row is not CAL FIRE's record
-  record_source?: RecordSource          // (R) whose record this row is; absent = 'calfire' (old fixtures)
-  record_issuer?: string                // (R) "CAL FIRE" | "USFS via NIFC WFIGS" | "NIFC WFIGS (IRWIN)" (14.2)
-  state?: string | null                 // (R) USPS code of the point of origin (48 states + "DC"); null only off-US fixtures
-  time_zone?: string                    // (R) IANA zone of the reported location (regions.time_zone_at), never assumed
+  record_source: RecordSource           // (R) whose record this row is; filled as 'calfire' on read when absent (old fixtures)
+  record_issuer: string                 // (R) "CAL FIRE" | "USFS via NIFC WFIGS" | "NIFC WFIGS (IRWIN)" (14.2)
+  state: string | null                  // (R) USPS code of the point of origin (48 states + "DC"); null only off-US fixtures
+  time_zone: string                     // (R) IANA zone of the reported location (regions.time_zone_at), never assumed
   agency?: string | null                // protecting agency, plain name: "USDA Forest Service"; "CAL FIRE" for CAL FIRE rows; null if unknown
   agency_code?: string | null           // protecting-agency code, verbatim ("USFS", "C&L"); null for CAL FIRE rows
   irwin_id?: string | null              // WFIGS rows; CAL FIRE rows matched to ONE WFIGS fire (rule 2 of 14.2); null on a CAL FIRE complex row
@@ -1611,12 +1635,14 @@ export interface IncidentSummary {
 }
 ```
 
-- **(R)** = required after the integration. In wave 1 every new TS field is optional, so no role's test fixtures break
-  while the roles work in parallel; the backend always sends every field. The integration makes the five (R) fields
+- **(R)** = required after the integration (the block above shows them as built: required since the brief-3
+  integration). In wave 1 every new TS field was optional, so no role's test fixtures broke while the roles worked in
+  parallel; the backend always sends every field. The integration makes the five (R) fields
   required once the fixtures carry them (`summaryFixture()` in `web/src/api/fixtures.testutil.ts` helps). Readers
   never fall back to Pacific time: a missing `time_zone` means the viewer's zone, labelled (14.9).
 - Python: every new field exists on `IncidentSummary` with a default, and responses always carry all of them. A
-  `model_validator(mode="before")` fills old manifests and fixtures: `uid ← calfire_uid`, `record_source ← "calfire"`,
+  model validator (as built: `mode="after"`, filling only the fields the input did not give; see "14.1 as built")
+  fills old manifests and fixtures: `uid ← calfire_uid`, `record_source ← "calfire"`,
   `record_issuer ← "CAL FIRE"`, `agency ← "CAL FIRE"`, `source_name ← name`, `state` / `time_zone` from
   `regions.state_at` / `regions.time_zone_at(lon, lat)` (fallback: the state's main zone, then `"UTC"`; never
   America/Los_Angeles by default; before `us-catalog` M2 lands both stay unset), `active_sources ← ["calfire"] if
@@ -1651,17 +1677,39 @@ export interface ListSource {
   name: string                          // "CAL FIRE" | "NIFC WFIGS (IRWIN)"
   status: 'available' | 'unavailable'
   retrieved_ms: number | null           // when Fire-3d fetched that list (never an issue time)
-  reason: string | null                 // plain words when unavailable
+  reason: string | null                 // plain words when unavailable, or when stale (14.16)
+  stale?: boolean                       // 14.16 (final verification): could not be refreshed; an older copy is shown
 }
-export interface IncidentListResponse { mode: Mode; updated_ms: number; incidents: IncidentSummary[]; year?: number; sources?: ListSource[] }   // sources: (R)
-// Python: IncidentListResponse.incidents stays list[IncidentListRow]; sources: list[ListSource] | None = Optional_() in wave 1
+export interface IncidentListResponse { mode: Mode; updated_ms: number; incidents: IncidentListRow[]; year?: number; sources: ListSource[] }   // sources: (R), required since the integration
+// Python: IncidentListResponse.incidents stays list[IncidentListRow]; sources: list[ListSource] (required since the integration; Optional_() in wave 1)
 ```
 
   WFIGS down: California fires are still listed from CAL FIRE (plus bundles on disk), `sources` says WFIGS is
   unavailable, and the web shows "The national fire list (NIFC) is unavailable right now; only California fires (CAL
   FIRE) are listed." (14.14). CAL FIRE down: California's WFIGS rows still list, with the same kind of notice.
-- **`LiveStatus`** gains `detections_24h?: number | null` ((R); Python `Optional_()` in wave 1; FIRMS feed rows of the last 24 h inside the lower-48 state
-  polygons); `detections_24h_ca` stays for one release. `active_incidents` = the live list length.
+- **`LiveStatus`** gains `detections_24h: number | null` ((R), required in both since the integration; Python
+  `Optional_()` in wave 1; FIRMS feed rows of the last 24 h inside the lower-48 state polygons); `detections_24h_ca`
+  stays for one release. `active_incidents` = the live list length (`number | null` since final verification: null
+  when the lists could not be read, never 0; 14.16).
+
+#### 14.1 as built
+
+From `docs/redesign/contract3/us-catalog.md` (M1, M3) and the integration.
+- `contracts.py`: the 14.1 "before-validator" is a `model_validator(mode="after")` that fills only the fields the
+  input did not give (`model_fields_set`), with the same effect: a `mode="before"` validator turned strict JSON checks
+  into strict Python checks and rejected every `bbox_lonlat` array. `state` / `time_zone` come from `fire3d.regions`.
+- **Integration:** the five (R) fields are required in `web/src/api/types.ts` (`uid: string`, `record_source`,
+  `record_issuer: string`, `state: string | null`, `time_zone: string`); in Python they keep a default because old
+  manifests and fixtures lack them, and are filled on read and always dumped (`state` null off the US; a NIFC WFIGS
+  summary without an issuer gets the 14.2 issuer text, never "CAL FIRE"). `IncidentListResponse.sources` and
+  `LiveStatus.detections_24h` are required in both. The parity test (`tests/test_us_catalog_contracts.py`) treats the
+  five as `FILLED_ON_READ` (Python default, TS required) and checks that every dump carries them.
+- `/api/incidents`: `state=` (two letters, else 422), `year` default `catalog.default_year()`, `sources[]` always
+  present, gzip in the handler when accepted and the body is at least 1 KB. Measured 2026-10-23 06:50 UTC (API 8715,
+  both sources available): live 227 rows, 2026 list 1,193 (the overview's "2026 season" filter, live plus 2026 without
+  duplicates, shows 1,388), 2025 list 856.
+- `LiveStatus.detections_24h` counts inside the state polygons (`regions.in_lower48`); `SUMMARY_SYNC_FIELDS` also
+  copies `active_sources`, `other_records`, `complex_members`, `irwin_id`, `gacc`, `accuracy_region`.
 
 ### 14.2 Ids, resolution, the California merge and switches (`us-catalog`; `us-pipeline` consumes)
 
@@ -1723,6 +1771,41 @@ export interface IncidentListResponse { mode: Mode; updated_ms: number; incident
   today). The CLI resolves the same way. Until `us-pipeline` lands the new `is_catalog_incident`, WFIGS ids are not
   buildable (nobody builds in wave 1 except `us-pipeline`).
 
+#### 14.2 as built
+
+From `us-catalog.md` (M3, cut-line f, review round 1) and `us-pipeline.md` (§14.2).
+- `catalog.py`: switches `CA_ACTIVE_RULE = "either"`, `CA_COMPLEX_ROWS = "calfire"`; `resolve_listed` searches the live
+  list, the id's year list, CAL FIRE's year list (any size), then one cached `IrwinID LIKE '{ABCDEF%'` query (never a
+  manifest). Alaska, Hawaii and territory ids **resolve** with their own state and zone although never listed, so the
+  build gate answers 422 rather than 404. A California WFIGS record folded into a CAL FIRE fire is not resolvable under
+  its WFIGS id unless a bundle pins it.
+- Rules decided while building: name tokens drop "fire", "the", "incident", "wildfire"; duplicates need both sizes
+  reported and over 1 ac and are removed before the California merge; WFIGS year lists are never fetched below 100 ac
+  (`WFIGS_YEAR_FLOOR_ACRES`); a CAL FIRE fire matched by two WFIGS records keeps both in `other_records` and takes the
+  `irwin_id` of the one with its name (null when there is no single one); `display_name` keeps a short run after an
+  apostrophe lower case ("Devil's Canyon", "O'Neil").
+- Id pinning (`catalog.pinned_id`, `wfigs_id`; tested on a synthetic before/after pair): the live loop's summary sync
+  copies `RECORD_IDENTITY_FIELDS` when the listed row is another record than the bundle's (`live.record_identity`), so
+  a pinned bundle never shows CAL FIRE's numbers under a NIFC WFIGS issuer.
+- Build gate (`pipeline.is_catalog_incident`, `pipeline.BuildRefused`, `gate_refusal`; `api/app.py` the same texts):
+  404 "unknown incident '<id>'"; 422 "Fire-3d does not support Alaska, Hawaii or US territories yet."; 409 "'<id>' is
+  a local or synthetic bundle; it cannot be rebuilt."; 409 "'<alias>' is listed as '<id>'."; plus `landfire_gate`
+  (14.12.3). The `test_api.py` hand-off was done by the integration: the API tests assert these texts.
+- **Source lists unreachable** (integration part 2; us-pipeline review R8): `resolve_listed` raises
+  `catalog.ListsUnavailable` (a `LookupError`) when no list that answered knows the id and at least one lookup failed
+  (CAL FIRE's live or year list, the WFIGS lists or the IRWIN prefix query); bundle-only ids never ask the lists and
+  stay None. `get_summary` still answers from a bundle on disk; without one it raises. Every API path answers **HTTP
+  503 "The fire lists could not be reached right now; try again later."** (`catalog.LISTS_UNAVAILABLE_TEXT`): the build
+  gate (`pipeline.gate_refusal`, `build_incident` as `BuildRefused(503, …)`, `api/app.py` `_not_buildable`), a 503
+  handler for `ListsUnavailable` in `api/app.py` (`GET /api/incidents/{id}` of an unbuilt listed fire), the incident
+  record (14.5) and `/api/extras/*` by incident. Never "a local or synthetic bundle" and never 404 for an outage. The
+  web's `describeError` reads a 503 as "Unavailable right now: <the server's sentence> (HTTP 503)".
+- **Same-name records** (integration part 2; us-catalog review N2): several WFIGS records matched to one CAL FIRE fire
+  that all carry its name (the Lucas Fire, 2026: LUCAS from CAL FIRE MEU, 1,099 ac, and from CAL FIRE LNU, 4,128 ac)
+  are one fire's records: `catalog.same_name_primary` picks the largest reported size, then the most recently
+  modified, as the row's `irwin_id` / `unique_fire_id`; every record stays in `other_records` with its own issuer,
+  numbers, status and time. Records with other names keep the Dale rule; none with the fire's name: `irwin_id` null.
+
 ### 14.3 Regions: state, county, time zone and coverage (`us-catalog`)
 
 `backend/fire3d/regions.py` (offline, shapely STRtree, lazy-loaded, no network):
@@ -1777,6 +1860,20 @@ export interface GeoLookup {
 export function getGeoLookup(lon: number, lat: number, opts?: FetchOptions): Promise<GeoLookup>
 ```
 
+#### 14.3 as built
+
+From `us-catalog.md` (M2).
+- `fire3d/regions.py` has exactly the listed API plus `is_supported_state`, `sources_meta`, `in_lower48`. Data built
+  by `backend/scripts/build_us_regions.py` (about 12 GETs, each file with a `meta` block): `us_states.geojson` (TIGERweb
+  `State_County/MapServer/0`, 0.005°), `us_counties.geojson` (3,109 counties), `us_timezones.geojson` (NTAD Time Zones
+  plus the Navajo Nation and Hopi Reservation from TIGERweb AIANNH; Hopi > Navajo > NTAD; an NTAD Mountain point in
+  Arizona outside the Navajo Nation is America/Phoenix). Terms checked 2026-10-23.
+- **Deviation:** `coverage_at` uses a 1 km tolerance, not 5 km (TIGERweb state polygons already include near-shore
+  water; 5 km would put central Tijuana and Windsor, ON in the US). `state_at` keeps 5 km, `time_zone_at` the 5 km
+  nearest-zone rule.
+- `GET /api/geo/lookup` (in `api/app.py`): 400 for a bad value, `Cache-Control: public, max-age=86400`; not supported →
+  `state`, `county`, `time_zone` null and `note` the 14.14 sentence.
+
 ### 14.4 Accuracy regions (`us-catalog` serves and seeds; `validation` writes; `us-web` shows)
 
 - **Regions** (V §5): the WFIGS GACC of the fire's record; the Southern Area is split by state: `SACC-SP` = SACC in
@@ -1796,10 +1893,11 @@ export function getGeoLookup(lon: number, lat: number, opts?: FetchOptions): Pro
 
 ```ts
 export type AccuracyStatus = 'tested' | 'limited' | 'untested'
-export interface AccuracyFire { id: string; name: string; state: string; n_leads: number; growth_sorensen: number; fuels_edition: string; lfm_method: string; era5_hours: number; gfs_fill_hours?: number; weather_source?: string; replaced?: string | null }
+export interface AccuracyFire { id: string; name: string; state: string; n_leads: number; growth_sorensen: number; fuels_edition: string; lfm_method: string; era5_hours: number; gfs_fill_hours?: number; weather_source?: string; replaced?: string | null; growth_ratio_median?: number | null }
 // gfs_fill_hours: hours of the model window where HRRR was missing and GFS filled it (0 for pure HRRR);
 // weather_source: the bundle's verbatim source ("open-meteo:historical-forecast:gfs_hrrr");
-// replaced: the V §3 fire this one replaced and the failed check, else null (validation step 3)
+// replaced: the V §3 fire this one replaced and the failed check, else null (validation step 3);
+// growth_ratio_median: this fire's own median forecast / observed growth ratio (integration part 2)
 export interface AccuracyRegion {
   id: AccuracyRegionId; name: string; status: AccuracyStatus; in_sample?: boolean; seed?: boolean
   n_fires: number; n_leads?: number
@@ -1866,6 +1964,70 @@ export const getAccuracyRegions: (opts?: FetchOptions) => Promise<AccuracyRegion
   `SkillEntry` gains `growth_sorensen: float | None = Optional_()`; in TS the `ForecastManifest.skill[]` items (an
   inline type in `web/src/api/types.ts`) gain `growth_sorensen?: number | null` (written by `us-pipeline`, 14.12.7).
 
+#### 14.4 as built
+
+From `us-catalog.md` (M4), `us-web.md` (M4, cut line a/f) and `validation.md` (folded in integration part 2, below).
+- Seed `backend/fire3d/data/regional_accuracy.json` (schema 1): OSCC `tested`, `in_sample`, `seed`, 3 fires, 32 leads,
+  `growth_sorensen` 0.433 (renders 0.43), `range` [0.395, 0.467]; no `fires` or `fuels_editions` (per-fire
+  `era5_hours` unknown, never guessed); the other nine `untested`. Validation replaces the file.
+- `/api/accuracy-regions` serves every region in the fixed order, recomputes each `status` from its counts and adds a
+  missing region as untested; `Cache-Control: no-cache`; 503 when the file is unreadable.
+- Web: `state/accuracy.ts` (`useAccuracyRegions`, `useOpenFireAccuracy`), templates `accuracyLabel(region, method)` in
+  `lib/plainLanguage.ts`; the label sits after `.fc-official` on the fire card (`AccuracyNote`), in the Analysis drawer
+  and the Forensic Analysis tab (`ui/RegionAccuracy.tsx`) and in the location card's model block. The "main growth"
+  clause is shown only when `method.starts` says so (the seed line has none). A load failure says "The accuracy of the
+  model in this region could not be loaded right now." (never "untested").
+- Per-run skill table (`ui/AnalysisTab.tsx`): "Growth" first when `growth_sorensen` is present, neutral bars, the total
+  column "Total-area overlap" with the note "Growth scores only the new spread after the start. Total-area overlap
+  includes the area already burned at the start." (review R3); without growth values the full header and "The growth
+  score (new spread only) is not stored for this run." `SkillEntry.growth_sorensen` stays optional (forecast manifests
+  built before brief 3 lack it).
+- **Validation's file** (folded from `contract3/validation.md`, integration part 2): `regional_accuracy.json` is written
+  by `python -m fire3d.spread.validate regional <fires.json> --out …` (`fires.json` from `backend/scripts/
+  validate_us_fires.py collect`); it never writes `seed`. All six test regions are `tested` (2 fires each, 24-32
+  leads); RMCC, EACC and ONCC `untested`; OSCC re-measured after GSI with the same values, `in_sample: true`, the others
+  `false`. Results (31-member p50 growth Sørensen, mean of the fire means): NWCC 0.255, NRCC 0.341, GBCC 0.247, SWCC
+  0.351, SACC-SP 0.394, SACC-SE 0.193, OSCC 0.433. `growth_ratio_median` is the median of the per-lead forecast /
+  observed growth ratios, **null** when the fires err in opposite directions (one ≤ 0.95 and one ≥ 1.05 by their own
+  median) and no majority errs the pooled way (`validate.growth_split`, which adds the caveat "The fires erred in
+  opposite directions: …"): NRCC is null; OSCC keeps 1.85 with that caveat (Palisades ×0.57). Each fire carries its own
+  `growth_ratio_median` (added in part 2; the file was regenerated from validation's `fires_review_fixes.json` with
+  only these 15 values added). `fuel_groups_tested`: the fires' fuel words (grass / shrub / timber whose LANDFIRE FBFM40
+  family shares reach 25 % of the fire's burnable burned area). `caveats`: "Two fires only: a rough value (the two
+  fires scored A and B)." per region, plus named problems (Windy Deuce's timing, Rush, Lower Sugarloaf); the Analysis
+  drawer and the Forensic Analysis tab list them verbatim under the Command line (Public: behind "How was it
+  tested?"; never on the fire card; `AccuracyLabel.notes`, review W-M3).
+- **Wording, amended by the integration (part 2; validation review W-M2, W-m1..m4, W-m7, m5).** Round 2 decision 7
+  is kept: Public shows words with the score one tap away; Command shows the score. Templates (`accuracyLabel`):
+  - Public line (tested): "Tested on {2} past fires in the {Northwest} region ({2025})." then one outcome sentence in
+    words, no number, from each fire's own `growth_ratio_median` (else the region's): "In those tests the forecast
+    showed {less | much less | more | much more | about as much} new spread than really happened." ("much" when the
+    region ratio is ≤ 0.5 or ≥ 2), or, when the fires erred both ways, "… showed too much new spread on one fire and too
+    little on the other." / "… on 2 of the 3 fires and too little on the other."; no ratio at all: no sentence. The
+    fuels are named once: in the caveat ("Tested on timber fires only; other fuels here are untested."), or, when the
+    fires span grass, shrub and timber, in the line ("(2025; grass, shrub and timber fires)") with the caveat "Only 2
+    fires were tested here: most fuel and weather conditions in this region are untested." In-sample adds the fixed
+    sentence as before.
+  - Public "How was it tested?": "When re-run on these fires, the predicted new spread matched the real new spread
+    with a score of about {0.26} out of 1 (1 = perfect, 0 = none). The test fires scored {Emigrant, OR 0.28 and Lower
+    Sugarloaf, WA 0.23}." (two decimals, as Command; without per-fire values "the fires ranged {lo-hi}", "both fires
+    {x}" when the ends are equal: never "0.2-0.2"), then the growth: "It usually predicted about {26%} of the real
+    growth ({Emigrant: about 20%; Lower Sugarloaf: about 40%})." ("Overall it predicted …" when a fire was about
+    right; "It predicted too much growth on {Horse Gulch (about 1.8 times the real growth)} and too little on {Island
+    Creek (about 63% of the real growth)}." when the region has no ratio; "Overall it predicted about 1.9 times as much
+    growth as really happened, but not on every fire: …" when the majority kept it), then "These re-runs started during
+    the fires' main growth and used the weather that really happened; live forecasts must use predicted weather and
+    usually do worse. Experimental: follow local officials."
+  - Command (tested): "Hindcast growth score {0.26} of 1 in the {Northwest} region (fires {0.23-0.28} | both fires
+    {0.35}; {2} fires, {24} leads, +12-72 h; forecast/real growth ×{0.26} [(×{0.57-2.2} by fire) when the fires split] |
+    forecast/real growth ×{0.63-1.78} by fire [no region ratio]; starts during main growth; live fuel moisture GSI
+    (NFDRS growing-season index); fuels {LF2024}[; in-sample: settings fitted on these fires])."
+  - Limited, untested, the always line and the banned words: unchanged.
+  - Fire card (W-m8): "Analysis ready: spread reconstruction and the experimental model" only when the open bundle
+    holds a model run; "Analysis ready: spread reconstruction (no model run yet)" without one (the 12 test fires,
+    Eaton); "Analysis ready: spread reconstruction" for a prepared fire that is not open (`state/overview.ts`
+    `analysisReadyText`).
+
 ### 14.5 Official fire records (`us-catalog` new endpoint; `us-pipeline` CAL FIRE endpoint; `us-official` web; `us-web` fire card)
 
 **`GET /api/official/incident-record?incident=<id>`** (new router `backend/fire3d/api/records.py`, included by
@@ -1898,7 +2060,12 @@ interface IncidentRecordResponse extends OfficialEnvelope {           // kind 'i
 ```
 
 - Works for any listed id with an IRWIN id: WFIGS rows and California rows matched to one WFIGS record. A California
-  row without one: `unavailable` + `not_covered`, reason "NIFC WFIGS has no record matched to this fire." A CAL FIRE
+  row without one: `unavailable` + `not_covered`, reason "NIFC WFIGS has no record matched to this fire." A California
+  row matched to two or more WFIGS records none of which has its name (`irwin_id` null, `other_records` non-empty;
+  added by the integration): `unavailable` + `not_covered`, reason "NIFC WFIGS lists this fire under several records
+  ({names}), so no single record is shown here." (the records' names verbatim, joined by ", "). Several records that
+  all carry the fire's name are one record (14.2 as built, "Same-name records"): the Lucas Fire shows its LUCAS
+  record, never "several records (LUCAS, LUCAS)". The source lists unreachable: HTTP 503 (14.2 as built). A CAL FIRE
   complex row (14.2, `complex_members` non-empty): `unavailable` + `not_covered`, reason "This is a CAL FIRE complex;
   NIFC WFIGS lists its member fires separately." (never one member's record). A bundle-only or synthetic id
   (`fixture-demo`, `fixture-east`, any id that `get_summary` answers only from a manifest): `unavailable` +
@@ -1944,6 +2111,29 @@ interface IncidentRecordResponse extends OfficialEnvelope {           // kind 'i
     FIRE's (a test: a complex row whose members carry other acres never shows a member's numbers as the complex's);
   - the id line "Incident ID (CAL FIRE)" or "Incident ID (NIFC WFIGS)" (also `MapHeader.tsx`, `IncidentOverview.tsx`).
 
+#### 14.5 as built
+
+From `us-catalog.md` (M4), `us-pipeline.md` (§14.5), `us-official.md` (M4) and `us-web.md` (M4, review round 1).
+- `/api/official/incident-record` (`api/records.py`): the record from `wfigs.record_by_irwin` (all-years layer, exact
+  IrwinID, cached 10 min); `dataset_url` the NIFC Open Data item page; WFIGS down → `upstream_error` "NIFC WFIGS could
+  not be reached; the agency record is not shown."; `Cache-Control: no-store`; the several-records reason above (review
+  R3, `records.several_reason`).
+- `/api/official/calfire` for a `wfigs` record answers `not_covered` with no CAL FIRE request; `fill_from_catalog`
+  replaced `fill_from_calfire` (the alias was removed by the integration).
+- Web (`official/record.ts`, new): `RecordStatus` (a superset of `CalFireStatus`; `OfficialInfo.calfire` keeps its
+  field name and holds it), `recordStatus`, `recordBlockText`, `partOfComplex` (never "Complex Complex"),
+  `wfigsRecordFeedItems` (topic `'record'`), synthetic and not-checked reasons; `useRecord()` replaced `useCalfire()`
+  (the alias and the feed topic `'calfire'` were removed by the integration). A WFIGS fire never asks
+  `/api/official/calfire`.
+- Fire card (review round 1, R1, round 3 item 2): `.fc-official` takes its status from the record's own agency
+  (`lib/recordText.ts` `recordStatus`, built on `ownRecordActive`): "Not listed as active" / "Contained" when the
+  record itself is not active, with "<issuer> record last edited …" instead of "Updated by …"; the ACTIVE title chip
+  (Fire-3d's listing, either agency) stays outside `.fc-official`. Map hovers (`map/hoverText.ts`) follow the same rule
+  and list each disagreeing record with its own issuer and time.
+- Credits (review R5 of us-web, and the integration): "Agency names: NWCG unit identifiers" under the fire card's
+  record when a plain agency name is shown (`agencyNameShown`), and in an open fire's "Data sources" note
+  (`bundleCredits(..., { place: { agencyNames } })`, linked to NWCG PMS 931).
+
 ### 14.6 NWS fire weather nationally (`us-pipeline` backend; `us-official` web)
 
 - `sources/nws.py`: one cached request per cycle (2 min) to `/alerts/active` with `area=` the 48 states + DC, and the
@@ -1981,6 +2171,23 @@ interface IncidentRecordResponse extends OfficialEnvelope {           // kind 'i
   line names California (the text follows `states_checked`, never a hard-coded scope). The code
   identifier `statewide` may stay (renaming it is deferred); its user-visible text changes.
 
+#### 14.6 as built
+
+From `us-pipeline.md` (§14.6) and `us-official.md` (M5).
+- `nws.national_active()` → `NationalAnswer(fire, local, fetched_ms, updated_ms, states, dropped_no_link)`: one cached
+  request with the 49 codes and the RFW/FWW plus local-officials' events; `in_states` (UGC prefix) is applied before
+  any zone outline loads; every placed alert gets `time_zone` (its first zone's outline, else its state's main zone).
+- Overview `states_checked` = the request's 49 codes; per fire = `states_in_area(area)` ∩ the request's states (IEM
+  archive answers: `states_in_area`); both `[]` when NWS could not be reached. **Integration:** `states_checked`,
+  `alert_states` and `FireWeatherAlert.time_zone` are required in Python and TS (the web still reads a cached answer
+  without `states_checked` as ["CA"]).
+- Web: "checked" is decided from `states_checked` and the point's state only (`statesChecked`, `coversLower48`,
+  `checkedScope`, `officialNowScope`); while the point's state is being looked up the line says "Checking NWS fire
+  weather alerts…" (review R2). Alert times are in each alert's own zone (`alertTimeFmt`) with the preset's clock;
+  the overview's block is headed "Official now · lower 48 states".
+- **Deviation (dev preset, §14.8.7):** the only recorded national answer has Mountain-time alerts only, so the preset
+  shows a second zone through local alerts (Pacific and Mountain) instead of merging another day's alert.
+
 ### 14.7 Local officials' messages relayed by NWS, and the FEMA archive (`us-pipeline` backend; `us-official` web)
 
 Round 2 item 5: no IPAWS registration. Live: the NWS-relayed messages. Past days: OpenFEMA, labelled archived.
@@ -2005,9 +2212,9 @@ interface LocalAlert {
   web: string | null                    // https only; the issuer's own link, present on only about 6 % of messages
   source_url: string                    // always set, https: where this copy of the message can be read (below)
   area_desc: string | null; same_codes: string[]; ugcs: string[]
-  polygon: GeoJsonPolygon | null
+  polygon: GeoJsonPolygon | GeoJsonMultiPolygon | null   // MultiPolygon when an archived message had several areas
   match: 'polygon' | 'county'           // how it was tied to this area
-  covers_reported_location: boolean | null; nearest_km: number | null
+  covers_reported_location: boolean | null; nearest_km: number | null   // null for a county match (says nothing of the point)
   time_zone: string | null              // IANA of its area (regions)
   phase: 'upcoming' | 'in_effect' | 'ended'   // relative to `at_ms` when given, else to now
 }
@@ -2064,6 +2271,92 @@ interface LocalAlertsResponse extends OfficialEnvelope {          // kind 'local
   local-alert lines into the existing `OfficialBlock.fireWeather` array of `location/official.ts`, in that order, each
   with its caveat in `sub` / `subCompact`; `us-web`'s `OfficialSection` (`location/CardParts.tsx`) already renders that
   array and only updates its doc comment. Renaming the field (for example to `lines`) is left to the integration.
+
+#### 14.7 as built
+
+From `us-pipeline.md` (§14.7, review round 1) and `us-official.md` (M5, review rounds 1 and 2).
+- Channels as specified, plus: the archive channel waits at most `openfema.REQUEST_WAIT_S` = 3 s before `pending`;
+  archive windows are one per incident (`[day(start − 1 d), day(end + 1 d)]`, at most 22 days, stored parsed under
+  `DATA_DIR/official/openfema/`); the server-side OpenFEMA filter is by date window and status only (event codes and
+  SAME counties are matched locally: nested `any()` filters failed or timed out); `references` come from a second
+  query for non-Alert messages.
+- After a successful build `pipeline.archive_prefetch` warms the fire's window: an API build job only starts the
+  deduplicated background fetch (`openfema.start`; `JobManager.drain` waits for it), a CLI build fetches synchronously,
+  each request capped at 15 s with no retry (review R2; a deviation from "a successful build also starts it").
+- County matches have `covers_reported_location` and `nearest_km` null; `polygon` may be a MultiPolygon (now in the
+  type above); `sender_name` is verbatim and can carry the sender's COG number ("200277,LA City Public Alerts,City of
+  Los Angeles"), shown as sent.
+- **Integration:** an area that touches no lower-48 state answers `unavailable` + `state_not_available`, both
+  channels `not_checked` with "Fire-3d checks local officials' alerts in the lower 48 states only." and the reason
+  that sentence plus the 14.14 coverage sentence, with no NWS request (before, a box at Tijuana or Anchorage answered
+  `available` with no alerts; review round 2, N2). The web reads it as "not checked", never "none" or an outage.
+- Web (`official/localAlerts.ts`, new): `localAlertsState` ("none" only when a channel answered; HTTP 404 → not
+  checked), quoted text = WEA text, else headline, else description, cut at 220 characters (a deviation from
+  "headline first"); every line has a link (`localAlertLink`: `web`, else `source_url`) named by
+  `OfficialLine.urlLabel` ("issuer's link", "source record (NWS)", "source record (FEMA archive)"), rendered by the
+  location card's `OfficialSection` (capitalised), else "Read it".
+- Relevance and place (review round 1, R1, deviation 9 of us-official): `localAlertOrder` (in effect, upcoming, ended;
+  within a phase the area covering the location, then the nearest, then the newest); every line, feed row and card
+  line says where its area lies (`localAlertPlace`: "area covers the fire's reported location" / "area 1.7 mi from the
+  fire's reported location · may be about another fire" / "matched by county, not by an exact area · may be about
+  another fire"). The feed shows it on its own unclamped line (`FeedItem.place`, round 2 N1).
+- At a point (location card): `localAlertsAtPoint` keeps the messages whose area reaches the point (covering it or
+  within 1 km; a county match in the point's county) and counts the rest: the fire's own answer (a past time inside
+  its area) in `elsewhere` ("N of the fire's local alerts are for other places in its area (see Updates).") and the
+  live `?bbox=` answer in `nearby` ("N nearby local alert(s) … neighbouring county / an area that does not reach this
+  point."; round 2 N3). **Integration:** the point's own box answer lists every message that reaches the point (they
+  are not in Updates), so the card never says "+N more (see Updates)" for it (`pointSource: 'box'`). Local alerts at a
+  point wait for the point's state like NWS fire weather (round 2 N2).
+- Credits (review R4): `localAlertCredits` in the map attribution: "Local officials' alerts: National Weather Service
+  (relayed local officials' messages)" and, when the archive answered, "Local officials' alerts: FEMA IPAWS archive
+  via OpenFEMA. This product uses the Federal Emergency Management Agency's OpenFEMA API, but is not endorsed by
+  FEMA." (no logo).
+- `OfficialBlock.fireWeather` keeps its name (it carries the NWS status line and the local alert lines); renaming it
+  to `lines` is left for a later brief.
+- **Integration, review round 3 (N4): a message is never in effect before its own sent time.** An issuer can give an
+  onset or effective time earlier than the sent time (Horse Gulch, MT: MTHelenaPoliceDepartment's "Urgent! Evacuation
+  for Horse Gulch Fire …" sent 5:45 PM MDT, effective and onset 5:00 PM). `nws.local_phase` starts a message at
+  max(sent, onset else effective), so at 5:00 PM it is `upcoming`, from 5:45 PM `in_effect`; `onset_ms` /
+  `effective_ms` stay as the issuer gave them. The web says "sent 45 min after this time" whenever `sent_ms` is later
+  than the panel's time, whatever the phase (`localPhaseText`), reads an `in_effect` message sent after the answer's
+  `requested_at_ms` as not yet in effect (`toLocalAlertItem`, for an older backend), and the phone badge counts only
+  messages sent by the answer's time (`LocalAlertsOfficial.refMs`, `officialBadge`): at 5:00 PM Public's short line
+  quotes the 3:53 PM Cave Gulch message, the badge says 2, and the 5:45 PM message is listed last in Details with
+  "sent 45 min after this time".
+- **Integration, review round 4: the web decides at the panel's own time, from each message's own times.** Round 3
+  judged "in effect" at the answer's `requested_at_ms`, which is the start of the hour (the query's `at_ms` is
+  hour-quantised, `fireWeatherAtMs`), so at 5:50 PM MDT the 5:45 PM evacuation read "not yet in effect", Public's
+  short line quoted the 3:53 PM message and the badge said 2 (at 2:50 PM the 2:45 PM Fire Warning read "not yet in
+  effect" and there was no badge). The rule now (`localPhaseAt`): at the panel's time `refMs` (the replay minute on
+  screen, or now for a live fire) a message is **in effect** when `sent_ms <= refMs`, max(sent, onset else effective)
+  `<= refMs` and `expires_ms` is null or later than `refMs`; it is **"sent N min after this time"** when `sent_ms >
+  refMs` (never quoted as current, never counted); it is "not yet in effect" only when it was sent and its own onset
+  (else effective) time is still ahead; it has **ended** from its expiry, or when it is a Cancel. Every panel decides
+  at its own time: `localAlertsState(q, { refMs })` (the hooks: `useOfficialNow` at `useOfficialPanelTime()`,
+  `useOfficialAtPoint` and the feed at the official context's `refMs`) and `localAlertsAt(l, refMs)` (re-decides the
+  phases and the order at another time; used by Official now's `LocalAlertsRow`, Public's `localAlertsLine`, the
+  location card's `localAlertLines` and `officialBadge(evac, fw, local, refMs)`). `useOfficialBadge` passes
+  `useOfficialPanelTime()`: now for a live fire (or no fire), else the replay minute, the rule of Official now, the
+  short summary and the location card, so the badge counts what the panel it opens lists. `LocalAlertItem` carries
+  `onsetMs` (onset, else effective) and `cancelled`; `LocalAlertsOfficial.refMs` is the time the phases were decided at
+  (the panel's, else `requested_at_ms`, else `now_ms`). The backend's hour-level `phase` stays as a hint (used only for
+  an answer without any time); `nws.local_phase` is unchanged. **Why the query stays hour-quantised:** the answer at an
+  hour lists every message sent in [hour − 24 h, hour + 1 h], so it already holds every message any minute of that
+  hour needs; deciding at the minute on the web needs no refetch while the timeline is scrubbed or played, and the
+  web's per-URL cache and the backend's archive cache stay keyed by the hour (an exact-time query would be a new
+  request every minute of scrubbing). Horse Gulch: 5:50 PM all three in effect, the short line quotes the 5:45 PM
+  evacuation, badge 3; 2:50 PM the Fire Warning in effect, badge 1; 5:00 PM and 6:00 PM as in round 3 (badge 2 and
+  3); 7:50 PM the 5:45 PM message has ended (its expiry 7:45 PM), badge 2.
+- **One time for the feed and the panels** (integration part 2, the orchestrator's carry-over of round 4): the panels
+  decide at the replay minute while the feed split its list at the exact timeline time, so for up to 59 s after a
+  message's sent second the feed listed it as "Not yet in effect" (Horse Gulch: sent 5:45:12 PM MDT). A replay now
+  lists a local message from the minute after it was sent (`localFeedMs(sent_ms)`, its `FeedItem.seekMs`; these rows
+  are not seekable, so only the split uses it), exactly when the panels' minute reaches it; until then it sits with
+  the later updates as "Sent after this time". `FeedItem.sentAfterRef` keeps that chip where the feed lists
+  everything (a live fire seen at a past time). The rest of the feed keeps the exact time. "sent N min after this
+  time" counts from both times cut to the minute as they are shown ("sent 2:45 PM" at 2:20 PM: 25 min, before a
+  rounded 26) and says "sent less than a minute after this time" in the same minute (`afterSpan(sentMs, refMs)`).
+  Tested at 5:45:12 and 5:45:30 PM MDT (later, "Sent after this time", badge 2) and 5:46 PM (listed, in effect).
 
 ### 14.8 Evacuations and cameras (`us-official`, both ends)
 
@@ -2158,13 +2451,40 @@ integration checklist.
 state." The panel shows that sentence instead of "No public cameras are listed in this area." GOES-East imagery
 (B-R15) is deferred; image labels come from each product's `platform` (W13).
 
+#### 14.8 as built
+
+From `us-official.md` (M2, M3, review round 1).
+- Registry: `EvacAdapter` as specified plus three derived properties (`upstream_name`, `layer_what`, `none_caveat`,
+  and since review R6 `none_caveat_named`); `ADAPTERS` = `caloes_evacuations` and `or_oem_evacuations` only;
+  `STATE_AVAILABILITY` derives from `ADAPTERS` (no flag); one ArcGIS limiter (60/min). Washington is not built (round 3).
+- Rules in this order: the bbox's states; no available state → `state_not_available`, `sources: []`, no upstream
+  request (also for past dates: **deviation**, the state check comes before the past-date check); then past dates;
+  then each adapter. Several states without a feed: "Official evacuation zones are not available in these states
+  (Nevada, Utah). Follow local officials." (**deviation**: plural form). In an answer covering several states Cal
+  OES's "none" names its source ("Cal OES lists no evacuation zone here right now. …"); a California-only answer keeps
+  brief 2's sentence, and four California answers equal brief 2's key by key
+  (`tests/data/evacuations/caloes_brief2_expected.json`).
+- Response: `sources[]` entries also carry `aggregator` ("Cal OES" / "Oregon OEM"; **deviation**, additive).
+  **Integration:** the 14.8.2 additions are required in `web/src/extras/types.ts` (`EvacSource extends ExtrasSource`
+  with the per-source fields and `aggregator`; `EvacuationsResponse.sources: EvacSource[]`, `states`, the ten zone
+  props); the recorded brief-2 web sample carries them as the brief-3 backend adds them.
+- Oregon: `normalize_oregon` as specified; standing caveats (no issue time; levels are Fire-3d's rendering with OEM's
+  definitions); OEM's "If there are no records … no evacuations" sentence is never repeated. The live Oregon layer is
+  empty off-season; zones with content come from the recorded 2026-08-15 history snapshot (tests, dev preset).
+- Cameras outside California: `state_not_available` with `sources: []` (review R5) and the 14.14 sentence.
+- Web: `official/model.ts` `EvacuationState 'not-available'` ("Not available in this state (Nevada)"), sources per
+  answer, `checkedBy`; the zone hover names the state source from `sources[]` (us-web review R2). `insideCalifornia`
+  was removed by the integration. **Integration:** at a past time, a point inside the open fire's area in a state
+  without a feed reads "Evacuation zones: not available in this state" (the fire's own answer is
+  `state_not_available`), as the fire's panel says, instead of "not shown for past dates" (Horse Gulch, MT).
+
 ### 14.9 Time zones and the mixed clock (`us-web` owns `lib/time.ts` and `state/timeZone.ts`; backend `timeutil.py` is `us-pipeline`'s)
 
 **14.9.1 Rules** (round 2 item 8; brief rule "never assume Pacific time"):
 - Clock: `'12h'` in the map workspace's Public preset ("3:40 PM MDT"); `'24h'` in Command and Forensic ("15:40 MDT").
 - Zone: a fire's own times (timeline, feed, charts, cards, its official items, scene labels, notes) use the fire's
   `summary.time_zone`. Overview rows and hovers use each row's `time_zone`. Times about many fires are relative
-  ("records updated 5 min ago"). A point without a fire uses `/api/geo/lookup`'s `time_zone`. Fallback: the viewer's
+  ("newest record 5 min old", 14.17). A point without a fire uses `/api/geo/lookup`'s `time_zone`. Fallback: the viewer's
   zone with its abbreviation, labelled; **never** Pacific.
 - Panel line: "Times: Mountain Time (MDT), the fire's local time" / "…, local time at this place" / "Times: your
   device's time (CDT)". A source time without a zone is shown as given with "time zone not stated".
@@ -2182,7 +2502,7 @@ export function viewerZone(): string                                   // Intl r
 export function isValidZone(tz: string): boolean
 export function zoneAbbr(ms: number, tz: string): string               // "PDT", "MST" (Intl short, en-US); fallback "UTC−7"
 export function zoneName(tz: string, ms?: number): string              // "Mountain Time" (Intl longGeneric)
-export function zoneLine(tf: TimeFmt, ms: number, whose: 'fire' | 'place' | 'viewer'): string   // 14.9.1 panel line
+export function zoneLine(tf: TimeFmt, ms: number, whose: 'fire' | 'place' | 'viewer', alsoMs?: number | null): string   // 14.9.1 panel line (alsoMs: 14.15)
 export interface WallParts { year: number; month: number; day: number; hour: number; minute: number; weekday: number }
 export function wallParts(ms: number, tz: string): WallParts
 export function zoneOffsetMinutes(ms: number, tz: string): number
@@ -2262,6 +2582,28 @@ stops importing `fmtStatusTime` (it uses `fmtAt`); `us-official` keeps `fmtStatu
 `BuildContext.time_zone` = `summary.time_zone`. Every `ZoneInfo("America/Los_Angeles")` in `build/`, `spread/` and
 `sources/overpass.py` goes; the live fuel moisture month uses the fire's zone.
 
+#### 14.9 as built
+
+From `us-web.md` (M1, M3, late changes), `us-official.md` (M1, M6) and `us-pipeline.md` (§14.9.7).
+- `lib/time.ts` exactly as 14.9.2; `timeFmt` returns a frozen shared instance per (zone, clock); `fmtAt` /
+  `fmtDayDate` default to `year: 'never'`; `zoneName('America/Phoenix')` is Intl's "Mountain Standard Time".
+  `state/timeZone.ts` adds `usePlaceZone` (the overview location card's zone from `/api/geo/lookup`), `getZoneSource`,
+  `zoneOf`, `zoneSourceOf`.
+- **Integration (14.9.3, 14.9.6):** `node web/scripts/check-time-api.mjs web/src` reported 0 deprecated uses and 0
+  `America/Los_Angeles` literals, so the 19 deprecated names were deleted from `lib/time.ts` (their tests became tests
+  of the new API in Pacific 24-hour, the brief-2 California strings) and the checker no longer skips `lib/time.test.ts`
+  (it keeps the list, so a reintroduced name is counted). The shims' `tf` is required: `FeedInput.tf`,
+  `OfficialContext.tf` (`officialBlock`), `officialFireWeatherNote(fw, tf)`, `zoneDetail(zone, nowMs, tf)`,
+  `cameraViewText(cam, tf)`; `fmtStatusTime` was deleted (`fmtStatusTimeAt(ms, nowMs, tf)` stays). Other pure helpers
+  keep an optional `tf` defaulting to `getTimeFormat()` (the open fire's zone, else the place's, else the viewer's;
+  never Pacific). Opt-outs still listed: the dev preset's Oregon point and the recorded zones of
+  `official/__fixtures__/localAlerts.ts`.
+- Panel zone lines on the data status, the fire's Official now block, the location cards and the timeline tooltips;
+  the overview's Official now says "Times: each alert in its own area's local time."
+- Backend (`timeutil.py`): `zone`, `local_dt`, `fmt_local`, `fmt_local_short`, `local_month`, `zone_of`; no
+  `ZoneInfo("America/Los_Angeles")` in `build/`, `spread/` or `sources/overpass.py` (`overpass.la_time` alias removed
+  by the integration).
+
 ### 14.10 Search (`us-catalog` backend; `us-web` web)
 
 - **Gazetteer** (B-R12): `backend/fire3d/data/gazetteer_us.json`, built by `backend/scripts/build_gazetteer.py` from
@@ -2283,6 +2625,21 @@ stops importing `fmtStatusTime` (it uses `fmtAt`); `us-official` keeps `fmtStatu
   (coverage comes from `/api/geo/lookup`). Tests: Atlanta "-84.39, 33.75", Miami, Boston, Houston, Los Angeles,
   Seattle.
 
+#### 14.10 as built
+
+From `us-catalog.md` (M5) and `us-web.md` (M5, late changes).
+- `gazetteer_us.json` (3.7 MB, 1.1 MB gzipped): 35,585 places and counties and 33,791 ZIP areas, every state, DC and
+  Puerto Rico (Alaska, Hawaii and territory rows kept and flagged); `gazetteer_ca.json` removed. Census names are kept:
+  "Boise, ID" finds "Boise City, ID" (alias "Boise").
+- `/api/geocode` local matches as specified; parsing (`geocode.split_query`) also takes "Springfield, Illinois", "ID
+  83702", "Ada County, ID", "Washington, DC"; a state word alone is a name. National examples:
+  "e.g. 150 N Capitol Blvd, Boise, ID; Springfield, IL; 83702" (`SEARCH_EXAMPLES`); ZIP matches are titled "ZIP 83702,
+  ID"; `noPlaceMessage` uses curly quotes.
+- Coverage at a point from `/api/geo/lookup` only (`location/geoLookup.ts`); Alaska, Hawaii and territories replace
+  the nearest-fires rows with "Fire-3d lists fires in the lower 48 states only, so fires here are not listed. Follow
+  local officials." (new wording); the overview location card credits "Boundaries: U.S. Census Bureau TIGERweb · Time
+  zones: USDOT BTS NTAD" when the lookup answered, and (integration) an open fire's "Data sources" note credits both.
+
 ### 14.11 Overview map and list (`us-web`; others only read)
 
 - Frame `LOWER48_BOUNDS = [-124.85, 24.40, -66.89, 49.38]`, start [-98.6, 39.8] about z3, header "United States · all
@@ -2299,11 +2656,54 @@ stops importing `fmtStatusTime` (it uses `fmtAt`); `us-official` keeps `fmtStatu
   or size not reported)", "Fires (CAL FIRE in California, NIFC WFIGS elsewhere; official records)", followed by the
   list-absence line of 14.14.
 - Panel list: "{312} fires in this view · Show all {1,334}" (round 2 default); rows "Garfield Co., CO"; counts
-  memoised; the phone peek "{244} active fires · records updated {5 min} ago". The list's footer carries the 14.14
+  memoised; the phone peek "{244} active fires · newest record {5 min} old" (14.17). The list's footer carries the 14.14
   list-absence line and the phone peek its short form; a view with no listed fire says "No listed fires in this
   view." followed by the same line (never "no fires"). Windowing the list (W11) is P1 (cut line). The "Include 2025
   fires of 100-300 acres" switch stays in every state.
 - Coverage at a point (W9): `/api/geo/lookup` `supported: false` → the 14.14 sentences; no client boxes.
+
+#### 14.11 as built
+
+From `us-web.md` (M2, cut line b/c, review round 1).
+- As specified, with these values: `LOWER48_START` [-98.6, 39.8] z3 (`CALIFORNIA_BOUNDS` removed); small active fires
+  are 2.5 px dots (**deviation**: the text says 4 px); 21 layers; labels by `labelMinZoom` (pinned 0; active >= 300 ac
+  or any >= 20,000 ac from z5; >= 10 ac / >= 1,000 ac from z7; the rest from z9).
+- Phone labels (review R7): below z3 on a map narrower than 500 px a western label grows east and an eastern one west
+  (`narrowLabelAnchorOffset`); a label that cannot grow inward is left out.
+- List windowing above 150 rows (W11, `ui/useListWindow.ts`) with `aria-posinset` / `aria-setsize` and roving focus
+  (Home, End, arrows over the whole list); W15 phone fixes (the search message never pushes the map controls; framing
+  keeps the last usable padding while the list sheet covers the map).
+- The empty view or empty filter carries the list-absence line itself, so the footer is not repeated.
+- **Integration:** a flight to an unprepared fire's card carries `MapFlyTo.source: 'fire-card'`, which holds the
+  zoom focus like an official flight (`map/focus.ts` `FocusHold`) until the user moves the map: picking Little Giant
+  (WA) opened the prepared Lower Sugarloaf Fire, whose analysis area the card's view covered, instead of Little
+  Giant's card. A prepared fire is still opened by the zoom.
+- **Part 1 review fixes (R1, R3):** every path that shows a fire's card and flies to it goes through one function,
+  `state/fireCard.ts` `showFireCard(id, row?)`: the overview list row and the header picker (`ui/shell/fireActions`
+  re-exports it), a click on a fire's map marker or label (`mapController.openFireFromOverview`), the search box's
+  fire result (`location/SearchBox`, which then closes its popover) and the location card's nearest-fire rows
+  (`location/OverviewCard`). When the map is shown and the picked fire has no ready analysis, another fire that is
+  open closes first (an ordinary history step: Back returns to it), so the header, the updates and the coordinate
+  strip never describe a fire other than the one the map shows with its card; the close comes before the flight,
+  because the map releases the hold whenever the open fire changes. Forensic only opens the card.
+- **Part 1 review fixes, round 2 (R1, the map marker):** the hold also survives the marker click itself
+  (`map/userInput.ts` `MapInput`). The map tells the user's moves from Fire-3d's own by input on the map within 400 ms
+  of a move's end; the card's own layout change restarted the flight with the new safe-area padding within that time
+  after the click, and that restart's moveend counted as the user's move and ended the hold (the zoom focus then
+  opened Lower Sugarloaf at both the national view and regional zoom). Now a click handled as a request (a fire's
+  marker or label) is not a camera gesture (`consumeClick`), and a move that one of our own camera commands ends (the
+  padding restart, an explicit flight, an instant flight with reduced motion) is ours (`ours`). The user's next drag,
+  wheel zoom or zoom button still ends the hold.
+- **Part 1 review fixes, round 3 (the wheel):** one wheel notch did not end the hold. MapLibre 5.24 starts and ends a
+  lone notch's zoom without an originalEvent and ends it 400-450 ms after the wheel (2.6 s with swiftshader), at or
+  past `USER_INPUT_MS`. Now `MapInput` also judges a move by its start: the controller reports every movestart
+  (`moveStart(gesture)`) and moveend (`moveEnd(gesture)`); a move that starts outside our own commands while the
+  pointer is down, within `USER_INPUT_MS` of an input, or as the first move after a wheel or key input
+  (`INPUT_MOVE_START_MS` = 3 s, for slow renderers) is the user's at its moveend, however late that comes. Every camera
+  command of the controller runs in `ours` (fits, explicit flights, padding eases, the 2D/3D pitch, the compass,
+  tilt and zoom buttons, a group's zoom), so the app's own flight after a marker click still keeps the hold; the zoom
+  buttons end it themselves. Little Giant's card, then Lower Sugarloaf at the centre at zoom 8.42 and one real notch:
+  Lower Sugarloaf opens (before: the card stayed).
 
 ### 14.12 Pipeline interfaces (`us-pipeline` unless noted)
 
@@ -2327,7 +2727,11 @@ stops importing `fmtStatusTime` (it uses `fmtAt`); `us-official` keeps `fmtStatu
    - The limit is per host (on 2026-10-22 only historical-forecast and archive were refused). After a daily-limit
      answer, `sources/weather.py` marks that host blocked until 00:00 UTC (an hourly or minutely limit: until the next
      hour or minute; in memory, per process); a request to a blocked host raises `WeatherQuotaExceeded` at once,
-     without a network call.
+     without a network call. **Integration decision (2026-10-23):** a *daily* block is re-checked with one tiny
+     uncached probe request at most once an hour and lifted when the host answers (us-pipeline review round 1, R3:
+     on a shared IP the daily refusal was transient, and one such answer would otherwise stop every build and live
+     refresh of a long-running API for up to 24 h; cost at most 24 tiny requests a day per blocked host). Hourly and
+     per-minute blocks are never re-checked.
    - `probe_open_meteo() -> dict` = `{"overall": status, "live": status, "hosts": {"forecast": status,
      "historical-forecast": status, "archive": status, "ensemble": status}}` with `status ∈ {'ok', 'daily_limit',
      'unreachable'}`: one uncached tiny request to each host. `overall` (what historical and validation builds need)
@@ -2431,6 +2835,67 @@ stops importing `fmtStatusTime` (it uses `fmtAt`); `us-official` keeps `fmtStatu
 12. **Live loop** (`us-catalog`, `api/live.py`; round 2 item 4): `AUTO_BUILD_MAX = 4`, 100 ac and 48 h detections
     unchanged, candidates from the whole lower-48 live list with today's scoring and the national feed.
 
+#### 14.12 as built
+
+From `us-pipeline.md` and `us-catalog.md` (FIRMS, UTM, fixture-east, live loop).
+- 14.12.1 FIRMS: `load_live_us`, `load_year_us` as specified; the deprecated `load_live_ca` / `load_year_ca` were
+  removed in integration part 2 (their tests moved to the national loaders), with `catalog.HISTORICAL_YEAR` and
+  `pipeline.spec_incident_id`; `observed.la_time` is now `fire_local_time` (it always took the fire's zone). The KD-tree was not
+  done: the dense matching, first cut to the fires' box, takes about 0.5 s on the national feed.
+- 14.12.2 Weather quota: as specified, plus the decision recorded in item 2 above (hourly re-check of a daily block,
+  `weather.recheck_daily_block`, `DAILY_RECHECK_S = 3600`) and two **deviations**: `probe_open_meteo()` returns an extra
+  `detail` key and reports every request-limit period as `daily_limit`; a per-minute refusal is waited out once (at
+  most 65 s; other tenants of the shared IP pushed the archive host over its per-minute limit). Cut-line (b): the
+  weighted counter `open_meteo_usage()` (`data/cache/open_meteo_usage.json`), `OPEN_METEO_DAILY_SOFT_CAP = 6000`,
+  hourly live weather refetch (`LIVE_WEATHER_REFETCH_S = 3600`).
+- 14.12.3 LANDFIRE: `EDITIONS` LF2023-LF2025, `edition_for`, `landfire_gate` (a fire before October 2023 needs force),
+  the 2 % NoData land switch to the next older edition only, "outside fuel data coverage: not modeled (unknown, not
+  low)"; LF2025 has no data at Black Cove, NC (checked 2026-10-23).
+- 14.12.4 UTM: `grid.utm_epsg_for(lon)` / `utm_zone_for`; California zones unchanged; `check_bundle.py` checks
+  `utm_zone` against `crs`. Bundles on disk: Horse Gulch EPSG:32612, Black Cove and fixture-east EPSG:32617, Emigrant
+  (Oregon) EPSG:32610, Eaton and Palisades EPSG:32611.
+- 14.12.5 / 14.12.6: `types.record_issuer_of(summary)` drives every bundle text ("Reported by USFS via NIFC WFIGS Jul
+  09, 13:32 MDT"); WFIGS records add the data source "NIFC WFIGS incident record (IRWIN)" (**deviation**:
+  `observed.SOURCE_PREFIXES` gained it so the observed step keeps it).
+- 14.12.7: `validate.skill_entry` writes `growth_sorensen` on every skill entry (cut-line d).
+- 14.12.8 Perimeters: California records keep brief 2's queries exactly (identical OBJECTID sets for Eaton,
+  Palisades, Madre, TCU); WFIGS records match by IRWIN id, else by name in `US-<state>`.
+- 14.12.9 `fixture-east`: `make_fixture.py --only east`, NC, America/New_York, EPSG:32617, record "NIFC WFIGS (IRWIN)".
+- 14.12.10 GSI live fuel moisture outside California (folded from `contract3/validation.md`, integration part 2):
+  - Switch `is_california(summary)` (`state == "CA"`, else a CAL FIRE uid when the state is unset) keeps the month
+    table and drought rule exactly (`_california_moisture`, compared in `tests/test_gsi.py` with a frozen pre-GSI copy
+    on Eaton, Palisades, Madre and `fixture-demo`); everything else uses `gsi_nfdrs2016`.
+  - Method `spread/moisture.py` (`config.GSI_*`, NFDRS4's defaults, nothing fitted): daily GSI = iTmin · iVPD · iDayl;
+    VPD = es(Tmax) · (1 − max(RHmin, 5 %)/100); day length NFDRS4 `CalcDayl` (**deviation**: not the archive host's
+    `daylight_duration`, which is stored for audit only); the mean of the 21 local days before the start's day (all 21
+    required), scaled by `GSI_MAX` 1.0; green-up 0.5: herb 0.30 → 2.50, woody 0.60 → 2.00, linear above it.
+  - Inputs `sources/weather.py` `gsi_inputs`: hourly 2 m temperature and humidity aggregated to the fire's local days
+    (**deviation**: not daily aggregates), ERA5 on the archive host (`models=era5`, historical: start − 28 d through
+    the end of the weather window, **deviation**: not to the start) or the forecast host's `past_days=28` (live, TTL
+    6 h). Stored in the backend-only `sim/lfm_gsi.json`; builds and live forecasts fetch it, hindcasts never do.
+  - `live_moisture_detail(bdir, manifest, start_ms, gw=None, *, fetch=True, fetch_gsi=None)`, `gsi_at(doc, t_ms, *,
+    hold_last=False)` (the behaviour charts hold the latest 21-day value after the series ends; gaps are never bridged).
+  - Never silent: no series or fewer than 21 days → California's values with the note "Live fuel moisture:
+    California's seasonal values (GSI series unavailable); experimental." and the manifest warnings "Weather: GSI live
+    fuel moisture series unavailable: …" and `INTERIM_LFM_WARNING`, whose text the integration changed in part 2 to
+    "Live fuel moisture outside California uses California's seasonal values because the regional (GSI) series is
+    unavailable; experimental." (validation review R2: the GSI method is tested now; the wave-1 text "… until a regional
+    method is tested; experimental." is removed on rebuild, `LEGACY_INTERIM_LFM_WARNINGS`). The behaviour charts'
+    fallback hours: "Fire behaviour charts (<dates>, <n> h): live fuel moisture uses California's seasonal values (GSI
+    series unavailable); experimental." (not added when the bundle already carries the interim warning, either text).
+    `build --require-hrrr` fails instead (`WeatherError`).
+  - Outside California the water-year request is still made best-effort (the fallback and the ablation;
+    **deviation**), herb treated as perennial, no snow-day flag. Ablation switch `config.LFM_FORCE_CALIFORNIA`.
+  - Results: docs/validation.md section 10 (12 fires; California unchanged to |Δ| < 0.001 after GSI).
+- 14.12.11 Smoke builds: Horse Gulch (MT) ready (UTM 12, LF2023, 346 h HRRR, 2,937 FIRMS detections, observed/record
+  acres 1.01, 0 "CAL FIRE"). Black Cove (NC), built by validation, checked in integration part 2: UTM 17 (EPSG:32617),
+  LF2024, America/New_York, 339 h HRRR (`open-meteo:historical-forecast:gfs_hrrr`), 1,308 FIRMS detections (1,290 of
+  this fire), final WFIGS perimeter 3,772 ac vs record 3,502 ac (1.08), 0 "CAL FIRE" in the manifest.
+- 14.12.13 Validation's build-code bug fix (`catalog._estimate`, validation's permission): AOI sizing passes the WFIGS
+  identity to the perimeter query, so fires outside California are sized by their own perimeter (Windy Deuce 36 → 60
+  km); seven bundles rebuilt; regression test `test_firedata_catalog.py::test_estimate_fire_bbox_matches_a_wfigs_fire_by_irwin_id`.
+- 14.12.12 Live loop: national candidates, `AUTO_BUILD_MAX = 4`.
+
 ### 14.13 Sources and credits (exact lines; SPEC §2 rows by `us-catalog`, README by final verification)
 
 | Source | Use | Terms (checked) | Credit line | Owner |
@@ -2450,6 +2915,19 @@ Not used (and why): FEMA IPAWS public feed (needs registration, round 2 item 5);
 planning zones (not maintained); NIFC GACC polygons (terms unverified); GOES-East imagery (deferred); county and
 vendor evacuation systems (out of scope).
 
+#### 14.13 as built
+
+- Terms checked by the roles: NWCG PMS 931 (public domain, credit NWCG; `nwcg_agency_codes.json` `meta`), NTAD Time
+  Zones (`copyrightText`: unrestricted public use), TIGERweb ("Source: U.S. Census Bureau"), Census Gazetteer (public
+  domain), Oregon OEM item (`licenseInfo` "Public", re-read 2026-10-23), OpenFEMA terms (notice, no logos). SPEC §2
+  carries a row per source.
+- In the app: "NIFC WFIGS (IRWIN)" (data sources, record links), "Agency names: NWCG unit identifiers" (fire card;
+  integration: also an open fire's data sources), "Boundaries: U.S. Census Bureau TIGERweb · Time zones: USDOT BTS
+  NTAD" (overview location card; integration: also an open fire's data sources, linked to the services named in the
+  backend's data files), evacuation credits per answered source ("Evacuation zones: local officials via Oregon
+  Department of Emergency Management"), local alerts' NWS and OpenFEMA credits (14.7). README rows are written by
+  final verification.
+
 ### 14.14 Fixed wording (exact strings shared across roles)
 
 - No evacuation feed: "Official evacuation zones are not available in this state ({State}). Follow local officials."
@@ -2467,9 +2945,211 @@ vendor evacuation systems (out of scope).
   instruction. Follow local officials."; never "safe" or "low risk"; absence of official information is never an
   all-clear.
 
+#### 14.14 as built
+
+- Used as written, plus: the plural not-available sentence ("… not available in these states (Nevada, Utah). Follow
+  local officials."); the cameras sentence as the backend's `CAMERAS_NOT_AVAILABLE`; "Fire-3d lists fires in the lower
+  48 states only, so fires here are not listed. Follow local officials." (Alaska, Hawaii and territories on the
+  overview location card); "Fire-3d checks local officials' alerts in the lower 48 states only." (local alerts outside
+  the lower 48).
+
 ### 14.15 As-built notes
 
 Reviewers write `docs/redesign/reports/review3-<label>.json` and `docs/screenshots/review3-<label>-*.png` and never
 overwrite a role's own evidence. Each wave-1 role writes `docs/redesign/contract3/<label>.md` (what was built against each sub-section above, deviations,
 file list) and keeps it current; `validation` writes `docs/redesign/contract3/validation.md`. The integration folds
 them into this section as "14.x as built" sub-headings.
+
+**Integration part 1 review fixes (2026-10-23).** What changed after the review of integration part 1 (report:
+`docs/redesign/reports/brief3-integration.json`, key `part1_review_fixes`):
+- 14.1: the fixture server (`backend/scripts/serve_fixture.py`, `./dev.sh --fixture`) answers with every required
+  field again: list rows carry `bbox_lonlat`, the list carries `sources` (both lists "unavailable": "Fixture server:
+  only the fire bundles on disk are listed …") and honours `year` / `state`; `LiveStatus.detections_24h` is the sum
+  of the live bundles' detections (`tests/test_serve_fixture.py`).
+- 14.4: the Analysis drawer follows decision 7: Public shows the words with the score behind "How was it tested?"
+  (`RegionAccuracy words`); Command and the Forensic Analysis tab show the score line.
+- 14.5: agency record times on the fire card and in Official now carry their year whenever any of them differs from
+  the fire's year, the replay's or today's (`lib/time.ts` `recordYearMode`): "record last edited May 14, 2026" for a
+  2025 fire, "Updated … Sep 6, 2026 14:18 PDT · contained Dec 16, 2025 14:30 PST".
+- 14.6: the overview's national count says "N alerts upcoming" / "in effect or upcoming" when any alert starts later
+  (`official/model.ts` `statewideCountText`).
+- 14.7: local officials' messages reach the places a non-expert sees first. Public's compact "Official now" gains a
+  "Local officials' alerts" line while a message is in effect or was sent within the replay's next hour
+  (`officialSummary.ts` `localAlertsLine`): the lead ("Archived alert from <issuer>"), the verbatim text in quotes,
+  its own sent time in its area's zone, "FEMA archive" / "relayed by NWS", "+N more in Details" and its link; it sits
+  after the Evacuations line and is never merged with it or with model output. The phone Updates badge counts those
+  messages (`officialBadge(evac, fw, local)`); its level is `'order'` for a verbatim "Evacuation Immediate" or
+  "Shelter In Place Warning", else the new `'local'` ("local officials' alert"), above fire weather and below an
+  evacuation warning. A message sent after the reference time reads "sent 32 min after this time" (one whose onset is
+  later "not yet in effect"), never "upcoming", in Official now, the location card and the feed chip ("Sent after
+  this time"; `localPhaseText`, `feedStatusLabel`); the link is separated from the phase words. "None here" lines and
+  the row's source name the channels that answered (`answeredChannelsText`): "relayed by NWS", "FEMA archive" (a past
+  time older than NWS keeps), "NWS, FEMA archive"; "1 of the fire's local alerts is …".
+- 14.8 / 14.14: Public's compact Evacuations line names the states like the full panel ("Not available in this state
+  (Montana).", "Not available in these states (North Carolina, South Carolina)."); the location card's past-date line
+  reads "Evacuation zones: not available for past dates" (was "Evacuation orders: not shown for past dates").
+- 14.9: the fire-start text the build writes ("Reported by DFR via NIFC WFIGS Mar 19, 15:00 EDT") is shown in the
+  panel's clock and the fire's zone (`feedModel.ts` `localizeDetailTimes`: Public "Mar 19, 3:00 PM EDT"); the
+  `original` wording keeps the producer's words, its times in the panel's clock too (round 2, N2).
+  `zoneLine(tf, ms, whose, alsoMs?)`: a replay's panel names the abbreviation at the replay time first and today's
+  too when it differs ("Times: Pacific Time (PST/PDT), the fire's local time" for the Eaton replay read in October).
+- 14.10: fire results in the search say where each fire is with its state (`fireResultFacts`, the overview's
+  `fireWhere`: "Lincoln Co., NE · 2026 · 129,253 acres · 100% contained"); when nothing matches, the message covers
+  fires ("No listed fire, US city, town, county or ZIP code matches …", the geocoder's hint kept). Only the listed
+  fires are searched (active, 2026, 2025 and the open fire): a prepared fire of another year (Horse Gulch, 2024) still
+  opens by its link only.
+- 14.11: see "14.11 as built" (one `showFireCard` for every path; another open fire closes first).
+- Build: `vite.config.ts` also bundles `extras-dev.html`, so the build gate covers every page.
+
+**Integration part 1 review fixes, round 2 (2026-10-23; report key `part1_review_fixes_round2`).**
+- 14.11: a click on an unprepared fire's map marker keeps its card and the zoom focus hold (see "14.11 as built").
+- 14.7: Public's short "Local officials' alerts" line says where the quoted message's area lies, in the full block's
+  words and the viewer's units (`localAlertPlace`): "… · FEMA archive · area covers the fire's reported location ·
+  +2 more in Details", "… · matched by county, not by an exact area · may be about another fire".
+- 14.9: the expanded feed row's "Original" line (`FeedItem.original`, the producer's wording) shows the times the
+  build wrote into it in the panel's clock (Public "Mar 19, 3:00 PM EDT", Command "Mar 19, 15:00 EDT").
+- Shell store (CONTRACT §13 shell): leaving a fire (close, zoom-out, the not-found fallback) returns the store to the
+  overview's clock, live mode at the current time, as at start. Before, a closed past fire's replay mode and minute
+  stayed: the next fire opened kept them until its own data arrived (one without a ready analysis kept them for
+  good, so its official answers were for the closed fire's replay time), and `/api/live/status` stopped refreshing on
+  the overview.
+
+**Integration part 1 review fixes, round 3 (2026-10-23; report key `part1_review_fixes_round3`).**
+- 14.7: a local officials' message is never in effect, quoted as current or counted by the phone badge before its own
+  sent time (see "14.7 as built", N4). This narrows the round-1 note above: the badge counts the messages in effect or
+  announced with a later onset, not those sent after the replay time; the short line may still quote one of those
+  (when nothing else is in effect) with "sent N min after this time". The badge's screen-reader words read "the most
+  urgent an evacuation order" (was "a evacuation order").
+- 14.11: one wheel notch ends a fire card's or an official area's focus hold (see "14.11 as built", round 3).
+
+**Integration part 1 review fixes, round 4 (2026-10-23; report key `part1_review_fixes_round4`).**
+- 14.7: round 3 decided whether a local message was in effect at the start of the hour (the answer's
+  `requested_at_ms`), so a message sent between the hour and the replay time read "not yet in effect" and was left
+  out of the badge. The web now decides "in effect", the order, the short line and the badge count at the panel's own
+  time from each message's own times (see "14.7 as built", round 4); the query stays hour-quantised (why: same
+  sub-heading). No backend change (a docstring in `nws.local_phase`).
+
+**Integration part 2 (2026-10-23; report key `part2_done`).** Every item of part 1's `part2` list, the orchestrator's
+round-4 carry-over and the validation review's web leftovers:
+- 14.2: an outage of the source lists is HTTP 503 "The fire lists could not be reached right now; try again later."
+  (never "a local or synthetic bundle"); same-name WFIGS records are one record (both: "14.2 as built").
+- 14.4: validation's results folded; `AccuracyFire.growth_ratio_median`; the amended wording ("14.4 as built").
+- 14.7: one time for the feed and the panels; "less than a minute" ("14.7 as built").
+- 14.12: deprecated FIRMS loaders and names removed; GSI folded; `INTERIM_LFM_WARNING` text; Black Cove's acceptance
+  numbers ("14.12 as built").
+
+- 14.10: a search sent while a fire list is still loading (the first seconds after page load) that finds nothing says
+  "No US city, town, county or ZIP code matches “…”. The fire lists are still loading, so fires were not all searched:
+  try again in a moment." instead of "No listed fire … matches" (`search.ts` `LISTS_PENDING_NOTE`).
+- 14.11: a map flight requested moments before the map exists is still flown (`pendingMapFlyTo`, 5 s); overview labels
+  of fires under 10 acres keep one decimal ("Hulsey Bench · 0.1 ac", never "0 ac").
+- 14.8: while an evacuation check is pending, no source is named (brief 2's "Cal OES" default stays only for a brief-2
+  answer without `sources`); official lines wrap long verbatim sender names.
+
+**Folded (integration part 1, 2026-10-23):** `us-catalog.md`, `us-official.md`, `us-pipeline.md` and `us-web.md` are
+summarised in the "14.0 as built" to "14.14 as built" sub-headings above (what differs from the text, the deviations
+and the integration's own changes). The role notes stay in `docs/redesign/contract3/` as the detailed record (file
+lists, measurements, review fixes). `validation.md` (GSI, the regional results, `regional_accuracy.json`) was folded
+in part 2 ("14.4 as built", "14.12 as built" 14.12.10 and 14.12.13).
+
+### 14.16 Final verification (as built 2026-10-23)
+
+The final check's fixes, from an independent review panel's findings (report
+`docs/redesign/reports/final-verification-3.json`). Shapes are additive; texts are exact.
+
+- **Request-path budget for the source lists** (panel F1, SR-M2). `fire3d.http.DownMemo` (`DOWN_HOLD_S` 60 s): a
+  failed list request is remembered, per list key after an HTTP error, per source (CAL FIRE, NIFC WFIGS, the FIRMS
+  live feeds) after a connection error or timeout; until then the list answers from its cached copy (any age), or
+  fails, without a request. A success clears it; a 2xx body that is not usable is not remembered (it answers fast).
+  List requests use a 5 s connect timeout, a 12 s read timeout (answers take about 1 s) and one retry when no copy
+  is cached (none when one is), so even a host that accepts and never answers costs about 25 s once, under the web's
+  30 s. CAL FIRE's and WFIGS's lists and the FIRMS live feeds (same bounds) are fetched side by side
+  (`catalog._side_by_side`). A base list built while a
+  source failed or was stale is rebuilt after 60 s (`DEGRADED_CACHE_S`), not 5-60 min. Measured with every host
+  refusing and an empty cache: a prepared fire's `GET /api/incidents/{id}` 2.1 s (then 0.01 s), a listed fire without
+  a bundle 503 in 0.01 s, every list 0.01-0.4 s (before: 45-273 s).
+- **`fire3d.http.request(expect_json=True)`** (the lists): a 2xx body that is not JSON (an HTML maintenance page) is
+  returned but never cached, and `evict_bad_answer` evicts only an unusable answer that is the cached one, so the last
+  good copy survives for stale-if-error.
+- **`ListSource.stale`** (Python `stale: bool = False`, TS `stale?: boolean`; panel SR-M1, F2): true when the list
+  could not be refreshed and an older cached copy was used; `retrieved_ms` is that copy's fetch time; `reason`
+  "The national fire list (NIFC) could not be refreshed right now; the copy shown was fetched earlier." or "CAL
+  FIRE's list could not be refreshed right now; the copy shown was fetched earlier." (`catalog.WFIGS_STALE`,
+  `CALFIRE_STALE`). A copy within its normal cache time (5 min live, 30 min this year, 24 h past years) is not stale.
+- **Both lists down** (panel SR-B1, F4, F6): `GET /api/incidents` answers 200 with the bundles on disk of listed
+  fires only (an id of the form `<year>-<name>-<uid6>`, not a failed build): never `fixture-*` or other synthetic
+  bundles. A historical list without `year` uses the default year. Both sources carry status `unavailable` and the
+  reason "The fire lists (CAL FIRE and NIFC) could not be reached right now; only fires prepared on this server are
+  listed, with their records as saved when each was prepared." (`api/app.py` `LISTS_DOWN_FALLBACK`).
+- **Web list states** (`state/overview.ts`): `listHealth(sources)` (`allDown`, `down`, `stale`, `fetchedMs`). Every
+  source of the lists shown unavailable: one notice `ALL_LISTS_DOWN` "The fire lists (CAL FIRE and NIFC) could not be
+  reached right now. Only fires prepared on this server are listed, with their records as saved when each was
+  prepared. Not an all-clear: follow local officials." (never the two per-source 14.14 notices); the source line
+  "Fire lists unavailable · prepared fires' saved records"; the empty list "No fires prepared on this server to show
+  while the fire lists are unavailable." (one source down: "No fires listed by the lists that could be reached; the
+  others are unavailable right now."); the phone peek `ALL_LISTS_DOWN_SHORT` "Fire lists unavailable right now"
+  (with "· N prepared fires"); Forensic's banner `noLiveText` names the open replay's own year. A stale source:
+  "The national fire list (NIFC) could not be refreshed right now; showing the copy fetched 47 min ago. Newer fires
+  may be missing." (`staleListText`); the source line says "fetched <age>" instead of "checked"; the peek "<N> active
+  fires · not refreshed (47 min ago)". "Checked" is always the oldest `retrieved_ms` of the available sources shown
+  (overview, picker, location card), never the answer's `updated_ms`. A list that never loaded says "Could not load
+  the 2026 list: <error>."; one with an earlier copy "Could not refresh the 2026 list: <error>. Showing the copy
+  loaded <age>." (`listErrorLines`).
+- **`LiveStatus.active_incidents: int | null`** (panel SR-m2): null when the live list could not be read (a failed
+  cycle or count); Settings → Service shows "unknown (fire lists unavailable)" (`activeCountText`).
+- **Query bounds** (panel F5): every `at_ms` query parameter is `0 <= at_ms <= timeutil.MAX_QUERY_MS`
+  (4,102,444,800,000 = 2100-01-01T00:00Z); larger values answer 422, never 500.
+- **Region files missing or unreadable** (panel SR-m3): `regions.RegionsUnavailable`, answered by the API as HTTP 503
+  "Fire-3d's region files (states, counties and time zones) could not be read on this server, so the state, county
+  and time zone are unknown here. Reinstall Fire-3d." (`regions.REGIONS_UNAVAILABLE_TEXT`), never a 500; `zone_of`
+  still falls back to UTC, labelled, never Pacific.
+- **Official wording** (panel SR-m1): local officials' alerts with status `unavailable` read "Unavailable right now."
+  (Official now) and "Local officials' alerts: unavailable right now" (location card); fire weather answered
+  `not_available_for_past_dates` with `reason_code` `upstream_error` (the IEM archive could not be reached) reads
+  "Unavailable right now." (compact line, panel and legend status), not "Not available for this time"; the sentence
+  "That does not mean there were none" is said once (a reason that already ends with it is trimmed).
+- **Units** (panel SR-m4): `fmtAcresShort(acres, units)`; the overview list and the picker show hectares in metric
+  ("70.0k ha"), as the map's labels do; the picker's column reads "Hectares".
+- **Wording** (panel F7): "Unknown, not low." (location card, legend), never "not low risk".
+- **Live summary sync**: `live.sync_live_summaries` skips synthetic and local bundles (an id that is not a listed
+  fire's, such as `fixture-live`): they have no agency record to follow.
+
+### 14.17 Final fixes (as built 2026-10-23)
+
+The clean re-check after 14.16 found nine minor problems (R1-R9, report `docs/redesign/reports/final-verification-3.json`
+`final_fixes`). Shapes are additive; texts are exact.
+
+- **Which time `contained_ms` is** (R1). `IncidentSummary.contained_kind?: "contained" | "controlled" | "out" | null`
+  (Python `ContainedKind | None = None`): a NIFC WFIGS row's `contained_ms` is ContainmentDateTime ("contained"), else
+  ControlDateTime ("controlled"), else FireOutDateTime ("out") (`catalog.contained_kind`); CAL FIRE rows "contained"
+  (filled on read for old CAL FIRE manifests); null without a time, and on an older NIFC WFIGS manifest (never
+  assumed). It is synced into live bundle summaries like `contained_ms`. The web labels each time with its own
+  meaning: `recordText.containedLabel(summary)` "contained" / "controlled" / "declared out", or null (no date shown;
+  the overview card says "see the agency record"); the fire card "… record last edited … · declared out Mar 19, 2026";
+  the incident overview's row title "Contained" / "Controlled" / "Declared out". The NIFC WFIGS record endpoint's
+  three times stay apart: `RecordStatus.containedMs` is ContainmentDateTime only, `controlledMs` and `outMs` the others;
+  Official now and the record's feed facts list each one present (`record.recordEndTimes`: "contained …",
+  "controlled …", "declared out …"). A build's "Containment" event is added only at a containment time
+  (`observed.containment_event_ok`): never at a NIFC WFIGS control or fire-out time (the replay may still end there).
+- **Agency names** (R4). `backend/fire3d/data/nwcg_agency_codes.json` now names every PMS 931 Tier 2 code (71 codes,
+  checked against the PMS 931 PDF, Sep 2022, public domain, credited "Agency names: NWCG unit identifiers"), including
+  the ones NIFC WFIGS sends that were missing: FWS, DNRF, FFP, NNSA, OES, DOC. Codes PMS 931 does not name or names
+  twice stay verbatim (`meta.not_named`: ARNG, DEC, DFFM, INTER, SHP, SP, TRIBE, USMC).
+- **Freshness wording** (R7). The overview's source line and the phone peek say the newest record's age, never
+  "updated" beside an older check: "newest record 10 min old" (`overview.newestRecordText`), then when Fire-3d
+  fetched the lists: "list checked 2 min ago"; sources fetched at different times (1 min or more apart, whatever
+  the list count) "lists checked in the last 30 min", or "sources checked in the last 8 min" for the Active list built
+  from CAL FIRE and NIFC WFIGS copies kept for different times (orchestrator follow-up after the final re-check); a
+  copy that could not be refreshed "copy fetched 47 min ago" (`overview.listCheckedText`;
+  `ListHealth.fetchedNewestMs` added beside `fetchedMs`). The peek: "<N> active fires · newest record 5 min old".
+- **Chips of nearby fires** (R8). The "Spread not prepared yet" chip layers are split in two: `OVR.pinnedChip` /
+  `activeChip` / `otherChip` hold the first `chipTargets` fire (nearest the view centre; always drawn, allow-overlap
+  true, still claims its place) and sit above `OVR.*ChipNext`, which hold the others (allow-overlap false,
+  `text-variable-anchor-offset` `CHIP_NEXT_ANCHORS`: below, above, right, left of the marker). MapLibre places the top
+  layers first, so a nearby fire's chip moves to a free side or waits; it never covers the first one.
+  `OVERVIEW_CHIP_LAYERS` lists all six. Screenshots `docs/screenshots/final3-fix-chips-before.png`, `-after.png`,
+  `-after-nd.png`.
+- **README** (R2, R3, R5, R6, R9): `make_fixture.py --only east` for fixture-east; the perimeter-coverage figure for
+  the lower 48 (2026: 356 of 1,178 fires of 300 acres or more without a NIFC perimeter); the hourly re-check of a
+  daily weather block; the 12 test fires' real build times (30-539 s, 18 and 22 min while a weather host did not
+  answer); about 32,400 towns and places besides the 3,222 counties.

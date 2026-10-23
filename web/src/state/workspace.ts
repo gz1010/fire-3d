@@ -52,7 +52,7 @@ export interface GeoView {
 
 /** Who asked for a map flight (brief 2, decision 10): 'official' = showing an official area (an evacuation zone, an NWS
  *  alert's zones); the map's zoom focus skips the move it causes, so showing an area never opens another fire. */
-export type MapFlySource = 'official'
+export type MapFlySource = 'official' | 'fire-card'
 
 /** One-shot request for the map camera (geographic). The map reacts to `nonce` changes only. */
 export interface MapFlyTo {
@@ -65,6 +65,20 @@ export interface MapFlyTo {
   /** Optional origin of the request (see MapFlySource); absent = an ordinary flight. */
   source?: MapFlySource
   nonce: number
+  /** When it was requested (epoch ms): a map created just after the request still flies it (`pendingMapFlyTo`). */
+  requestedMs?: number
+}
+
+/** A flight requested this recently before the map exists is still flown when the map is created (a search sent in
+ *  the first second after page load; integration part 2). Older requests are never replayed (a remounted map, e.g.
+ *  back from Forensic, keeps its own view). */
+export const PENDING_FLY_MS = 5000
+
+/** The request a newly created map should still fly, or null. */
+export function pendingMapFlyTo(req: MapFlyTo | null | undefined, nowMs: number): MapFlyTo | null {
+  if (!req || req.requestedMs == null || !Number.isFinite(req.requestedMs)) return null
+  const age = nowMs - req.requestedMs
+  return age >= 0 && age <= PENDING_FLY_MS ? req : null
 }
 
 export type PanelKey = 'updates' | 'analysis' | 'layers'
@@ -295,7 +309,7 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
     set((s) => (s.selection && validLat(lat) && validLon(lon) ? { selection: { ...s.selection, lat, lon, adjusted: true, approximate: false } } : {})),
   clearSelection: () => set({ selection: null }),
   setView: (view) => set({ view }),
-  requestMapFlyTo: (req) => set((s) => ({ mapFlyTo: { ...req, nonce: (s.mapFlyTo?.nonce ?? 0) + 1 } })),
+  requestMapFlyTo: (req) => set((s) => ({ mapFlyTo: { ...req, nonce: (s.mapFlyTo?.nonce ?? 0) + 1, requestedMs: Date.now() } })),
   returnToIncident: () => {
     // the mounted map frames the fire itself (burned area, perimeter, P90 reach); without it, the analysis area
     const actions = useMapRuntime.getState().actions

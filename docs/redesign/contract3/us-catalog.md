@@ -130,7 +130,8 @@ milestone commit; other roles read it instead of guessing. Kept current at every
   `is_supported(summary)`; `record_issuer(summary)`; `issuer_for(code)`; `active_sources(summary)`;
   `accuracy_region_for(gacc, state)` (SACC split TX/OK -> SACC-SP, else SACC-SE; unknown codes -> None);
   `summary_from_wfigs(rec, mode, current_irwins, state)`; `merge_california(wf_rows, cal_pool)`;
-  `display_name` (ALL CAPS -> title case word by word); `name_tokens`; `norm_name`;
+  `display_name` (ALL CAPS -> title case word by word; since review round 1 a short run after an apostrophe stays
+  lower case: "DEVIL'S CANYON" -> "Devil's Canyon", "O'NEIL" -> "O'Neil"); `name_tokens`; `norm_name`;
   `live_detections_24h_us_total()` (new) next to `live_detections_24h_total()` (California, kept).
 - Merge as §14.2, measured live on 2026-10-23 01:00 UTC: live 235 rows in 23 states (CAL FIRE rows 6: Timber
   (active by NIFC only), Rocky, Lost (NIFC only), Norte, Cooley, Soda; 62 WFIGS-only California rows); 2026 list 1,192
@@ -170,6 +171,12 @@ milestone commit; other roles read it instead of guessing. Kept current at every
   `detections_24h_us(dets_7d=None)` new.
 - `SUMMARY_SYNC_FIELDS` also copies `active_sources`, `other_records`, `complex_members`, `irwin_id`, `gacc`,
   `accuracy_region` into ready live bundles' summaries.
+- Review round 1 (R1): when the listed row is another record than the bundle summary's (`live.record_identity`:
+  `(record_source, uid)`, uid upper case without braces; old manifests default to `("calfire", calfire_uid)`), the
+  sync also copies `RECORD_IDENTITY_FIELDS` (`name`, `source_name`, `record_source`, `record_issuer`, `uid`,
+  `calfire_uid`, `agency`, `agency_code`, `unique_fire_id`, `aliases`, `complex_name`, `state`, `time_zone`,
+  `started_ms`, `year`): a pinned bundle's summary becomes CAL FIRE's record whole (what the next refresh writes
+  anyway); the id, `time_origin_ms` and `built_ms` stay.
 
 - A CAL FIRE fire matched by two WFIGS records (CAL FIRE's Dale Fire: DALE and BRADFORD BRANCH) keeps both in
   `other_records` and takes the `irwin_id` of the one with the same name tokens (null when there is no single one).
@@ -192,7 +199,10 @@ milestone commit; other roles read it instead of guessing. Kept current at every
   `not_covered` "This is synthetic or local data; it has no agency record."); unknown id 404; invalid id 400.
 - A CAL FIRE complex row (`complex_members` non-empty): `not_covered` "This is a CAL FIRE complex; NIFC WFIGS lists its
   member fires separately." (`irwin_id` and `current` null). A California row without `irwin_id`: `not_covered`
-  "NIFC WFIGS has no record matched to this fire.".
+  "NIFC WFIGS has no record matched to this fire."; since review round 1 (R3), one matched to two or more WFIGS
+  records none of which has its name (`irwin_id` null, `other_records` non-empty): `not_covered` "NIFC WFIGS lists
+  this fire under several records ({names}), so no single record is shown here." with the records' names verbatim,
+  joined by ", " (`records.several_reason`); see Deviations.
 - The record: `wfigs.record_by_irwin(irwin)` (all-years layer, exact `IrwinID='{...}'`, cached 10 min).
   `current.is_active` = in the Current layer with `PercentContained` null or < 100. `source.url` = the record page;
   `incident_url` = the all-years `f=html` query; `dataset_url` =
@@ -272,3 +282,7 @@ milestone commit; other roles read it instead of guessing. Kept current at every
   `outside_us`) and Windsor, ON (2.8 km from Detroit) in the United States. `state_at` keeps `max_km=5.0` (filling a
   missing `POOState`), and `time_zone_at` keeps the 5 km nearest-zone rule.
 - §14.1 "before-validator" is an after-validator with the same effect (reason above).
+- §14.5 (review round 1, R3): a California row matched to several WFIGS records with no single same-name one answers
+  `not_covered` with "NIFC WFIGS lists this fire under several records ({names}), so no single record is shown
+  here." instead of "NIFC WFIGS has no record matched to this fire." (true only when nothing matched). The
+  integration should add this case and its wording to §14.5.

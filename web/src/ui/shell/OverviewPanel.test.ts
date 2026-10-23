@@ -7,7 +7,7 @@ import { summaryFixture, wfigsSummaryFixture } from '../../api/fixtures.testutil
 import { MapLegend } from '../../map/MapLegend'
 import { useMapRuntime } from '../../map/mapStore'
 import { EMPTY_CATALOG } from '../../state/catalog'
-import { EMPTY_VIEW, LIST_ABSENCE, LIST_ABSENCE_SHORT, NIFC_LIST_DOWN } from '../../state/overview'
+import { ALL_LISTS_DOWN, ALL_LISTS_DOWN_SHORT, CALFIRE_LIST_DOWN, EMPTY_VIEW, LIST_ABSENCE, LIST_ABSENCE_SHORT, NIFC_LIST_DOWN } from '../../state/overview'
 import { useStore } from '../../state/store'
 import { useWorkspace } from '../../state/workspace'
 import { restoreSsrState, ssrState } from '../ssr.testutil'
@@ -15,6 +15,7 @@ import { OverviewList, PeekBar } from './OverviewPanel'
 
 const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/'/g, '&#x27;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 const has = (html: string, text: string) => html.includes(esc(text)) || html.includes(text)
+const text = (html: string) => html.replace(/<[^>]+>/g, '').replace(/&#x27;/g, "'").replace(/&amp;/g, '&')
 
 const garfieldCO = wfigsSummaryFixture({ id: '2026-garfield-co-111111', name: 'Pine Gulch', county: 'Garfield', state: 'CO', lon: -108.5, lat: 39.5, mode: 'live', is_active: true, year: 2026, updated_ms: Date.now() - 5 * 60_000 })
 const garfieldMT = wfigsSummaryFixture({ id: '2026-garfield-mt-222222', name: 'Big Dry', county: 'Garfield', state: 'MT', lon: -106.9, lat: 47.3, mode: 'live', is_active: true, year: 2026 })
@@ -28,7 +29,7 @@ afterEach(() => {
   restoreSsrState()
   useStore.setState({ incidentId: null, catalog: EMPTY_CATALOG })
   useMapRuntime.setState({ viewBox: null })
-  useWorkspace.setState({ overviewFilter: 'season', overviewShowAll: false })
+  useWorkspace.setState({ overviewFilter: 'season', overviewShowAll: false, units: 'us' })
 })
 
 describe('overview list (§14.11)', () => {
@@ -111,18 +112,110 @@ describe('overview list (§14.11)', () => {
   it('a list source reported unavailable shows the §14.14 notice', () => {
     setLists()
     ssrState(useStore, {
-      catalog: { ...useStore.getState().catalog, sources: { live: [{ id: 'wfigs', name: 'NIFC WFIGS (IRWIN)', status: 'unavailable', retrieved_ms: null, reason: 'down' }], season: null, historical: null } },
+      catalog: {
+        ...useStore.getState().catalog,
+        sources: {
+          live: [
+            { id: 'calfire', name: 'CAL FIRE', status: 'available', retrieved_ms: Date.now(), reason: null },
+            { id: 'wfigs', name: 'NIFC WFIGS (IRWIN)', status: 'unavailable', retrieved_ms: null, reason: 'down' },
+          ],
+          season: null,
+          historical: null,
+        },
+      },
     })
     const html = renderToStaticMarkup(createElement(OverviewList, { onPick: () => undefined }))
     expect(has(html, NIFC_LIST_DOWN)).toBe(true)
   })
+
+  it('both lists down (final verification, panel SR-B1): one notice, no "list no active fires", the source line says so', () => {
+    const reason = 'The fire lists (CAL FIRE and NIFC) could not be reached right now; only fires prepared on this server are listed.'
+    const downSources = [
+      { id: 'calfire' as const, name: 'CAL FIRE', status: 'unavailable' as const, retrieved_ms: null, reason },
+      { id: 'wfigs' as const, name: 'NIFC WFIGS (IRWIN)', status: 'unavailable' as const, retrieved_ms: null, reason },
+    ]
+    setLists([], [])
+    ssrState(useWorkspace, { overviewFilter: 'active' })
+    ssrState(useStore, { catalog: { ...useStore.getState().catalog, sources: { live: downSources, season: null, historical: null } } })
+    const html = renderToStaticMarkup(createElement(OverviewList, { onPick: () => undefined }))
+    expect(has(html, ALL_LISTS_DOWN)).toBe(true)
+    expect(has(html, NIFC_LIST_DOWN)).toBe(false)
+    expect(has(html, CALFIRE_LIST_DOWN)).toBe(false)
+    expect(html).not.toMatch(/list no active fires/)
+    expect(has(html, 'Fire lists unavailable')).toBe(true)
+    expect(html).not.toMatch(/checked just now/)
+    const peek = renderToStaticMarkup(createElement(PeekBar))
+    expect(has(peek, ALL_LISTS_DOWN_SHORT)).toBe(true)
+    expect(peek).not.toMatch(/No active fires/)
+  })
+
+  it('an old copy of a list: the peek and the source line say when it was fetched (panel SR-M1, F2)', () => {
+    setLists()
+    const old = Date.now() - 47 * 60_000
+    ssrState(useWorkspace, { overviewFilter: 'active' })
+    ssrState(useStore, {
+      catalog: {
+        ...useStore.getState().catalog,
+        sources: {
+          live: [
+            { id: 'calfire', name: 'CAL FIRE', status: 'available', retrieved_ms: Date.now(), reason: null, stale: false },
+            { id: 'wfigs', name: 'NIFC WFIGS (IRWIN)', status: 'available', retrieved_ms: old, reason: 'could not be refreshed', stale: true },
+          ],
+          season: null,
+          historical: null,
+        },
+      },
+    })
+    const html = renderToStaticMarkup(createElement(OverviewList, { onPick: () => undefined }))
+    expect(has(html, 'The national fire list (NIFC) could not be refreshed right now; showing the copy fetched 47 min ago.')).toBe(true)
+    expect(html).toMatch(/copy fetched 47 min ago/)
+    expect(html).not.toMatch(/checked just now/)
+    const peek = renderToStaticMarkup(createElement(PeekBar))
+    expect(peek).toMatch(/active fires<\/b> · not refreshed \(47 min ago\)/)
+  })
+
+  it('the 2026 season: the newest record\'s age and when the lists were checked never read as a contradiction (final fixes R7)', () => {
+    setLists()
+    const now = Date.now()
+    ssrState(useWorkspace, { overviewFilter: 'season' })
+    ssrState(useStore, {
+      catalog: {
+        ...useStore.getState().catalog,
+        sources: {
+          live: [
+            { id: 'calfire', name: 'CAL FIRE', status: 'available', retrieved_ms: now - 2 * 60_000, reason: null, stale: false },
+            { id: 'wfigs', name: 'NIFC WFIGS (IRWIN)', status: 'available', retrieved_ms: now - 2 * 60_000, reason: null, stale: false },
+          ],
+          season: [
+            { id: 'calfire', name: 'CAL FIRE', status: 'available', retrieved_ms: now - 30 * 60_000, reason: null, stale: false },
+            { id: 'wfigs', name: 'NIFC WFIGS (IRWIN)', status: 'available', retrieved_ms: now - 30 * 60_000, reason: null, stale: false },
+          ],
+          historical: null,
+        },
+      },
+    })
+    const line = text(renderToStaticMarkup(createElement(OverviewList, { onPick: () => undefined })))
+    expect(line).toMatch(/newest record \d+ min old · lists checked in the last 30 min/)
+    expect(line).not.toMatch(/updated \d+ min ago · checked/)
+    ssrState(useWorkspace, { overviewFilter: 'active' })
+    expect(text(renderToStaticMarkup(createElement(OverviewList, { onPick: () => undefined })))).toMatch(/newest record \d+ min old · list checked 2 min ago/)
+  })
+
+  it('metric units: the rows show hectares, as the map labels do (panel SR-m4)', () => {
+    setLists([wfigsSummaryFixture({ id: '2026-big-000001', name: 'Big', mode: 'live', is_active: true, year: 2026, acres: 173_000 })], [])
+    ssrState(useWorkspace, { overviewFilter: 'active', units: 'metric' })
+    const html = renderToStaticMarkup(createElement(OverviewList, { onPick: () => undefined }))
+    expect(html).toMatch(/70\.0k ha/)
+    expect(html).not.toMatch(/173k ac/)
+  })
 })
 
 describe('phone peek and legend', () => {
-  it('the peek: "N active fires · records updated 5 min ago" and the short absence line', () => {
+  it('the peek: "N active fires · newest record 5 min old" and the short absence line', () => {
     setLists()
     const html = renderToStaticMarkup(createElement(PeekBar))
-    expect(html).toMatch(/2 active fires<\/b> · records updated \d+ min ago/)
+    expect(html).toMatch(/2 active fires<\/b> · newest record \d+ min old/)
+    expect(html).not.toMatch(/records updated/)
     expect(has(html, LIST_ABSENCE_SHORT)).toBe(true)
     expect(html).not.toMatch(/\d\d:\d\d/) // relative, never a bare clock time in some zone
   })

@@ -33,8 +33,20 @@ national search). Ports API 8711, Vite 5181. Started 2026-10-23 ~00:20 UTC.
 
 - Final gates (backend 829 passed; web gates ok), wording scan (5 justified hits), key scan (0), report written.
 
+## Review fixes round 1 (2026-10-23)
+- I reviewed the interrupted fixer's work, which was already in the orchestrator checkpoint c1a71bb, and kept all of it.
+- R1 fixed. When a pinned id changes records, the live sync now also copies the record identity (api/live.py
+  RECORD_IDENTITY_FIELDS, including started_ms and year). The id and time_origin_ms stay.
+- R2 fixed. A possessive keeps a lower-case "s" ("Devil's Canyon"). Ids do not change.
+- R3 fixed. The reason now names the matched records ("NIFC WFIGS lists this fire under several records (...)").
+  Recorded as a §14.5 deviation.
+- SPEC: us-pipeline's text applied after checking each part against the code. The OpenFEMA prefetch is described
+  as "prefetched once", because HEAD runs it at the end of the build.
+- Gates: backend 872 passed, 1 failed (test_openfema_parse.py, us-pipeline's file); role set 351 passed. Web:
+  typecheck 0, lint 55 (all in src/scene), vitest 67 files / 1078 passed, build ok. API 8711: 0 non-GET requests.
+
 ## Next
-- Done; waiting for review.
+- Done; waiting for re-review.
 
 ## Decisions
 - §14.1 before-validator implemented as an after-validator using model_fields_set (a before-validator breaks strict

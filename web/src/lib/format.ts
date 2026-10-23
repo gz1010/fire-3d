@@ -121,12 +121,18 @@ export function fmtAxis(v: number): string {
   return fmtNumber(v)
 }
 
-/** "12.5k ac" style for tight spaces (exact below 10,000). */
-export function fmtAcresShort(acres: number | null | undefined): string {
+/** Hectares per acre (the map's overview labels and the plain-language areas use the same factor). */
+const HA_PER_ACRE_FMT = 0.40468564224
+
+/** "12.5k ac" style for tight spaces (exact below 10,000); `units` 'metric' gives hectares ("5.1k ha"), as the map's
+ *  overview labels do (final verification, panel SR-m4). */
+export function fmtAcresShort(acres: number | null | undefined, units: 'us' | 'metric' = 'us'): string {
   if (!isNum(acres)) return '—'
-  if (acres >= 1e5) return `${fmtNumber(acres / 1e3)}k ac`
-  if (acres >= 1e4) return `${fmtNumber(acres / 1e3, 1)}k ac`
-  return fmtAcres(acres)
+  const v = units === 'metric' ? acres * HA_PER_ACRE_FMT : acres
+  const u = units === 'metric' ? 'ha' : 'ac'
+  if (v >= 1e5) return `${fmtNumber(v / 1e3)}k ${u}`
+  if (v >= 1e4) return `${fmtNumber(v / 1e3, 1)}k ${u}`
+  return `${fmtAcres(v, false)} ${u}`
 }
 
 /** "145 kt" */

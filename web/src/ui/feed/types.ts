@@ -17,9 +17,11 @@ export type FeedTopic =
   | 'imagery'
   | 'camera'
   // brief 2 (official-web): CAL FIRE record changes, NWS fire weather alerts, the live "no new heat" quiet row
-  | 'calfire'
   | 'fire-weather'
   | 'quiet'
+  // brief 3 (us-official): an agency record (CAL FIRE or NIFC WFIGS), local officials' alerts relayed by NWS / archived by FEMA
+  | 'record'
+  | 'local-alert'
 
 /** One plain-language fact with the original scientific value kept next to it. */
 export interface FeedFact {
@@ -57,7 +59,8 @@ export interface FeedItem {
   eventId: string | null
 
   // ---- additions (timeline-feed)
-  /** Timeline target when it differs from tMs (a live forecast is listed when issued but starts earlier). */
+  /** Timeline target when it differs from tMs (a live forecast is listed when issued but starts earlier); also the time
+   *  a replay lists it from (a local officials' message: the minute after it was sent, `localFeedMs`). */
   seekMs?: number
   /** The producer's own wording (scientific units) for details and Forensic. */
   original?: { title: string; detail: string | null; source: string } | null
@@ -94,8 +97,14 @@ export interface FeedItem {
   archived?: boolean
   /** Short notes for the details, e.g. "Oregon OEM does not say which fire this is for." */
   notes?: string[]
+  /** Where the item's area lies, e.g. "area 18 mi from the fire's reported location · may be about another fire" (brief
+   *  3, local officials' alerts). Shown in full on the collapsed row, never clamped like `detail` (review round 2, N1). */
+  place?: string | null
   /** No issuer or source time exists: the time column says so (tMs only orders the list). */
   timeNotGiven?: boolean
+  /** A local officials' message sent after the time the panels are for (their phase was decided at it): "Sent after
+   *  this time", also where the feed lists everything (a live fire seen at a past time). */
+  sentAfterRef?: boolean
   /** A day's satellite passes grouped into one row: the passes it holds (each selectable in the details). */
   children?: FeedItem[]
 }

@@ -277,7 +277,7 @@ export function MapLegend({ inline }: { inline?: boolean } = {}) {
           <h3>
             <Swatch kind="aoi" /> Modeled area
           </h3>
-          <p>The fire model covers only the area inside the dashed line. Outside it, model results are unknown, not low risk.</p>
+          <p>The fire model covers only the area inside the dashed line. Outside it, model results are unknown, not low.</p>
         </section>
       )}
       {hasIncident && (

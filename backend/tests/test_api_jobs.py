@@ -164,3 +164,40 @@ def test_unknown_kind_and_global_manager():
     assert get_manager() is not g                                          # recreated after shutdown
     get_manager().shutdown()
     set_manager(None)
+
+
+def test_build_job_only_starts_the_archive_fetch_and_drain_waits_for_it(jm, monkeypatch):
+    """Review round 1 R2: a build job ("Prepare analysis") ends when its bundle is ready; the OpenFEMA archive fetch
+    after it runs in the background (CONTRACT 14.7 "a successful build also starts it"), and drain waits for it. A
+    build outside a job (the CLI) fetches synchronously."""
+    from types import SimpleNamespace
+
+    from fire3d.build import pipeline
+    from fire3d.sources import openfema
+
+    gate = threading.Event()
+    seen: list[bool] = []
+
+    def fake_prefetch(started_ms, end_ms, *, background=False, threads=None, **kw):
+        seen.append(background)
+        if not background:
+            return "stored"
+        th = threading.Thread(target=gate.wait, args=(10,), daemon=True)
+        th.start()
+        if threads is not None:
+            threads.append(th)
+        return "started"
+
+    monkeypatch.setattr(openfema, "prefetch", fake_prefetch)
+    summary = SimpleNamespace(id="2025-test-fire-abc123", mode="historical", started_ms=1_742_000_000_000)
+    manifest = SimpleNamespace(time_range=SimpleNamespace(end_ms=1_742_500_000_000))
+    st = jm.submit("build", "inc-a", lambda p: {"archive": pipeline.archive_prefetch(summary, manifest)},
+                   progress_mode="overall")
+    done = jm.wait(st.id, 5)
+    assert done.status == "done" and done.result == {"archive": "started"} and seen == [True]
+    assert jm.drain(0.2) is False                                  # the follow-up is still running
+    gate.set()
+    assert jm.drain(5) is True
+    assert pipeline.archive_prefetch(summary, manifest) == "stored" and seen == [True, False]   # CLI: synchronous
+    assert pipeline.archive_prefetch(summary, manifest, background=True) == "started"
+    gate.set()

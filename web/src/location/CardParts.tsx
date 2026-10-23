@@ -4,7 +4,7 @@ import { Crosshair, ExternalLink, MapPin, X } from 'lucide-react'
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react'
 import { useWorkspace, type SelectedLocation } from '../state/workspace'
 import type { LineKind } from './describe'
-import type { OfficialBlock } from './official'
+import type { OfficialBlock, OfficialLine } from './official'
 import { cardYield, useSearchUi } from './searchUi'
 import { useNarrow } from './useNarrow'
 
@@ -75,7 +75,17 @@ export function CoverageNotice({ text }: { text: string }) {
   )
 }
 
-/** Block 2: official information. Always at least one evacuation line; NWS only while an alert applies here. */
+/** "Issuer's link" from a line's `urlLabel` ("issuer's link", "source record (NWS)", "source record (FEMA archive)"),
+ *  else "Read it". */
+function officialLinkLabel(l: Pick<OfficialLine, 'urlLabel'>): string {
+  const t = l.urlLabel?.trim()
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : 'Read it'
+}
+
+/** Block 2: official information. Always at least one evacuation line; then `block.fireWeather` as it is, which since
+ *  brief 3 (CONTRACT §14.7) carries the NWS status line at every point (alerts in effect here, "none in effect here" or
+ *  "not checked here") followed by the local officials' alert lines (relayed by NWS or archived by FEMA). Each line
+ *  keeps its issuer, its own time and its link, labelled by what it is (`urlLabel`). */
 export function OfficialSection({ block, compact }: { block: OfficialBlock; compact: boolean }) {
   const evac = compact ? block.evacuation.slice(0, 1) : block.evacuation
   return (
@@ -95,7 +105,7 @@ export function OfficialSection({ block, compact }: { block: OfficialBlock; comp
                   <>
                     {(compact ? l.subCompact : l.sub) ? ' · ' : ''}
                     <a className="loc-link" href={l.url} target="_blank" rel="noopener noreferrer">
-                      Read it <ExternalLink size={11} aria-hidden="true" />
+                      {officialLinkLabel(l)} <ExternalLink size={11} aria-hidden="true" />
                     </a>
                   </>
                 )}

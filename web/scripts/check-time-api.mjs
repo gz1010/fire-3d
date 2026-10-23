@@ -6,11 +6,10 @@
 //   (both forms can be combined; add --quiet to print only files with a count above 0 and the totals)
 //
 // Two counts per file:
-//   deprecated  uses of the Pacific-bound names of web/src/lib/time.ts (TZ, laParts, fmtDateTime, …): only names that the
-//               file imports from lib/time (directly, renamed, or through a namespace import) and then uses. Comments
-//               and strings never count (the file is parsed with the TypeScript compiler). lib/time.ts itself (where the
-//               names are defined) and its own unit test lib/time.test.ts (which checks the deprecated shims until the
-//               integration deletes both) are skipped.
+//   deprecated  uses of the Pacific-bound names that web/src/lib/time.ts had before brief 3 (TZ, laParts, fmtDateTime,
+//               …; deleted by the brief-3 integration, so a use also fails typecheck): only names that the file imports
+//               from lib/time (directly, renamed, or through a namespace import) and then uses. Comments and strings
+//               never count (the file is parsed with the TypeScript compiler). lib/time.ts itself is skipped.
 //   la          'America/Los_Angeles' literals outside comments, in non-test files. A line can opt out with a
 //               `// tz-ok: <reason>` comment; opt-outs are listed with their reasons and do not count.
 // Exit code 1 when either total is above 0, else 0.
@@ -23,14 +22,12 @@ const here = dirname(fileURLToPath(import.meta.url))
 export const WEB = resolve(here, '..')
 const ROOT = resolve(WEB, '..')
 export const TIME_MODULE = join(WEB, 'src', 'lib', 'time.ts')
-/** The definitions' own test (it tests the deprecated shims; deleted with them by the integration). */
-export const TIME_TEST = join(WEB, 'src', 'lib', 'time.test.ts')
 const ROLES_FILE = join(ROOT, 'docs', 'redesign', 'plan3-roles.json')
 const CODE_EXT = new Set(['.ts', '.tsx', '.mts', '.mjs', '.js', '.jsx'])
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.git', '.vite'])
 const LA = 'America/Los_Angeles' // tz-ok: the checker's own search string
 
-/** The deprecated (Pacific-bound) exports of lib/time.ts (§14.9.3). */
+/** The deprecated (Pacific-bound) exports lib/time.ts had before brief 3 (§14.9.3; deleted by the integration). */
 export const DEPRECATED = new Set([
   'TZ',
   'tzLabel',
@@ -227,7 +224,6 @@ function main(argv) {
   }
   if (!files.size) throw new Error('no files: pass --role <label> and/or paths')
   files.delete(TIME_MODULE)
-  files.delete(TIME_TEST)
   let totalDep = 0
   let totalLa = 0
   const allOptOuts = []

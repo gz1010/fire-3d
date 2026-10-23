@@ -33,9 +33,15 @@ Every request goes through :mod:`fire3d.http` (disk cache, retries, 4 concurrent
 Quota (CONTRACT 14.12.2). Open-Meteo's free API has a daily, hourly and per-minute request limit per IP, counted per
 host. Its "Daily API request limit exceeded" answer (HTTP 429) raises :class:`WeatherQuotaExceeded` with no retries
 and blocks that host in this process until the reset (00:00 UTC; the next hour or minute for the shorter limits):
-a later request to a blocked host is answered from the disk cache or raises at once, without a network call.
+a later request to a blocked host is answered from the disk cache or raises at once, without a network call, except
+that a daily block is re-checked with one tiny probe request at most once an hour (:func:`recheck_daily_block`;
+a shared IP's daily-limit answer can be transient) and lifted when the host answers.
 A refused HRRR / forecast request fails :meth:`OpenMeteoSource.deterministic` (no silent ERA5 fill);
 :func:`probe_open_meteo` asks each host once, uncached, for ``fire3d.cli weather-probe``.
+
+:func:`gsi_inputs` fetches the daily inputs of the NFDRS 2016 Growing Season Index (live fuel moisture outside
+California, CONTRACT 14.12.10): hourly 2 m temperature and humidity at the fire, aggregated to local days, from the ERA5
+archive (``models=era5``; historical builds) or the forecast host's past days (live builds).
 """
 
 from __future__ import annotations
@@ -134,6 +140,11 @@ class WeatherQuotaExceeded(WeatherError):
 
 _blocks: dict[str, tuple[int, str]] = {}     # host label -> (blocked until epoch ms, period); per process
 _blocks_lock = threading.Lock()
+_checked: dict[str, int] = {}                 # host label -> when its block was set or last re-checked (epoch ms)
+# A daily block is re-checked with one tiny probe request at most this often (deviation from CONTRACT 14.12.2,
+# review round 1 R3): on a shared IP Open-Meteo's "daily limit" answer was transient (02:04Z refused, 02:13Z
+# answered on 2026-10-23), and a long-running API must not refuse every build on that host until 00:00 UTC.
+DAILY_RECHECK_S = 3600.0
 
 
 def host_label(url: str) -> str:
@@ -156,11 +167,13 @@ def quota_reset_ms(period: str, now: int) -> int:
 
 def block_host(label: str, period: str = "daily", now: int | None = None) -> int:
     """Mark ``label`` refused until its reset; returns that time (epoch ms)."""
-    until = quota_reset_ms(period, now_ms() if now is None else int(now))
+    t = now_ms() if now is None else int(now)
+    until = quota_reset_ms(period, t)
     with _blocks_lock:
         cur = _blocks.get(label)
         if cur is None or cur[0] < until:
             _blocks[label] = (until, period)
+        _checked[label] = t
     log.warning("weather: %s refused by Open-Meteo (%s limit); no requests to it until %s", label, period, ms_to_iso(until))
     return until
 
@@ -185,13 +198,52 @@ def clear_host_blocks() -> None:
     """Forget every block (tests, or after a successful probe)."""
     with _blocks_lock:
         _blocks.clear()
+        _checked.clear()
+
+
+def _lift(label: str) -> None:
+    with _blocks_lock:
+        _blocks.pop(label, None)
+        _checked.pop(label, None)
+
+
+def recheck_daily_block(label: str, now: int | None = None) -> bool:
+    """For a host under a *daily* block: at most once per :data:`DAILY_RECHECK_S` since the block was set or last
+    re-checked, send one tiny uncached probe request (one location, one variable, one day; no retries). An answer
+    lifts the block (True); a limit answer renews it; anything else keeps it. Without a due re-check, no network
+    call (False)."""
+    t = now_ms() if now is None else int(now)
+    url = HOSTS.get(label)
+    with _blocks_lock:
+        cur = _blocks.get(label)
+        if url is None or cur is None or cur[1] != "daily" or cur[0] <= t:
+            return False
+        if t - _checked.get(label, t) < DAILY_RECHECK_S * 1000.0:
+            return False
+        _checked[label] = t                   # one re-check per period, even with concurrent callers
+    try:
+        record_usage(1.0, t)
+        resp = http.request("GET", url, params=_probe_params(label, t), ttl_s=0, timeout=PROBE_TIMEOUT_S, retries=0)
+    except http.HttpError as e:
+        period = http.quota_period(e.message) if e.status == 429 else None
+        if period is not None:
+            block_host(label, period, t)
+        else:
+            log.info("weather: re-check of %s failed (%s); block kept", label, e.status or "no response")
+        return False
+    if http.is_error_body(resp.content, resp.content_type):
+        return False
+    _lift(label)
+    log.warning("weather: %s answers again (hourly re-check); block lifted", label)
+    return True
 
 
 def raise_if_blocked(labels: Sequence[str], now: int | None = None) -> None:
-    """Raise :class:`WeatherQuotaExceeded` (no network call) when one of ``labels`` is blocked."""
+    """Raise :class:`WeatherQuotaExceeded` when one of ``labels`` is blocked (no network call, except the hourly
+    re-check of a daily block, :func:`recheck_daily_block`)."""
     for lab in labels:
         blk = host_block(lab, now)
-        if blk is not None:
+        if blk is not None and not recheck_daily_block(lab, now):
             raise WeatherQuotaExceeded(lab, blk[1], blk[0])
 
 
@@ -289,8 +341,9 @@ def _sleep(seconds: float) -> None:          # tests replace this
 def om_request(url: str, params: dict, ttl_s: float | None, timeout: float = 120.0, *,
                wait_minutely: bool = True) -> http.Response:
     """GET an Open-Meteo URL through :mod:`fire3d.http`, honouring the per-host block: a blocked host answers from
-    the disk cache or raises :class:`WeatherQuotaExceeded` without a network call; a daily or hourly limit answer
-    blocks the host and raises it (never retried). A per-minute limit answer (other tenants of a shared IP can use up
+    the disk cache or raises :class:`WeatherQuotaExceeded` without a network call (a daily block is re-checked at
+    most once an hour, :func:`recheck_daily_block`, and the request goes ahead when the host answers again); a daily
+    or hourly limit answer blocks the host and raises it (never retried). A per-minute limit answer (other tenants of a shared IP can use up
     the 600 calls a minute) is waited out once, until the next minute, then asked again; a second refusal raises."""
     label = host_label(url)
     for attempt in (0, 1):
@@ -302,7 +355,8 @@ def om_request(url: str, params: dict, ttl_s: float | None, timeout: float = 120
             if blk[1] == "minutely" and wait_minutely and attempt == 0:
                 _sleep(min(MINUTELY_WAIT_MAX_S, max(0.0, (blk[0] - now_ms()) / 1000.0) + 1.0))
                 continue
-            raise WeatherQuotaExceeded(label, blk[1], blk[0])
+            if not recheck_daily_block(label):
+                raise WeatherQuotaExceeded(label, blk[1], blk[0])
         try:
             resp = http.request("GET", url, params=params, ttl_s=ttl_s, timeout=timeout)
         except http.HttpError as e:
@@ -360,8 +414,7 @@ def probe_open_meteo(timeout: float = PROBE_TIMEOUT_S) -> dict:
                 hosts[label], detail[label] = "unreachable", "error body: " + resp.text[:120]
                 continue
             hosts[label], detail[label] = "ok", f"HTTP {resp.status}"
-            with _blocks_lock:
-                _blocks.pop(label, None)
+            _lift(label)
         except http.HttpError as e:
             period = http.quota_period(e.message) if e.status == 429 else None
             if period is not None:
@@ -856,4 +909,103 @@ def water_year_precip(lat: float, lon: float, start_ms: int) -> dict:
     if days and not failed:
         out.update(precip_mm=round(total, 1), days=days, source="open-meteo:" + "+".join(sources),
                    fetched_ms=max(fetched))
+    return out
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Daily inputs of the NFDRS 2016 Growing Season Index (live fuel moisture outside California, CONTRACT 14.12.10)
+# ---------------------------------------------------------------------------------------------------------------
+GSI_HOURLY = ("temperature_2m", "relative_humidity_2m")
+GSI_DAILY = ("daylight_duration",)
+GSI_MIN_HOURS = 20          # a local day counts only with at least this many hourly values
+GSI_LIVE_TTL_S = 6 * 3600.0  # live GSI inputs (daily values) are re-asked at most every 6 h
+
+
+def gsi_daily_rows(payload: dict, tz: str | None) -> list[dict]:
+    """Local-day rows ``{date, tmin_c, tmax_c, rhmin_pct, hours, daylight_s}`` from one Open-Meteo answer with hourly
+    ``temperature_2m`` / ``relative_humidity_2m`` (``timeformat=unixtime``) and daily ``daylight_duration``; days are
+    the fire's local calendar days (``tz``; the request asks for the same ``timezone``). Days with fewer than
+    :data:`GSI_MIN_HOURS` values of either variable are left out."""
+    from ..timeutil import local_dt
+
+    hourly = (payload or {}).get("hourly") or {}
+    times = hourly.get("time") or []
+    temp = hourly.get("temperature_2m") or []
+    rh = hourly.get("relative_humidity_2m") or []
+    days: dict[str, dict[str, list[float]]] = {}
+    for i, t in enumerate(times):
+        try:
+            d = local_dt(int(t) * 1000, tz).date().isoformat()
+        except (TypeError, ValueError, OverflowError):
+            continue
+        slot = days.setdefault(d, {"t": [], "rh": []})
+        if i < len(temp) and temp[i] is not None:
+            slot["t"].append(float(temp[i]))
+        if i < len(rh) and rh[i] is not None:
+            slot["rh"].append(float(rh[i]))
+    daylight: dict[str, float] = {}
+    daily = (payload or {}).get("daily") or {}
+    for t, v in zip(daily.get("time") or [], daily.get("daylight_duration") or []):
+        try:
+            if v is not None:
+                daylight[local_dt(int(t) * 1000, tz).date().isoformat()] = float(v)
+        except (TypeError, ValueError, OverflowError):
+            continue
+    rows = []
+    for d in sorted(days):
+        s = days[d]
+        if len(s["t"]) < GSI_MIN_HOURS or len(s["rh"]) < GSI_MIN_HOURS:
+            continue
+        rows.append({"date": d, "tmin_c": round(min(s["t"]), 2), "tmax_c": round(max(s["t"]), 2),
+                     "rhmin_pct": round(min(s["rh"]), 1), "hours": min(len(s["t"]), len(s["rh"])),
+                     "daylight_s": daylight.get(d)})
+    return rows
+
+
+def gsi_inputs(lat: float, lon: float, start_ms: int, end_ms: int, tz: str | None, *, live: bool = False,
+               past_days: int = 28) -> dict:
+    """Daily GSI inputs at (lat, lon) in the fire's local days (pre-registered, docs/validation.md section 10.1).
+
+    * historical (``live=False``): one request to the ERA5 archive (``ARCHIVE_URL``, ``models=era5``) for the local
+      days ``start_ms - past_days`` .. ``end_ms`` (cut at ``now - ERA5_DELAY_DAYS``);
+    * live: the forecast host (``FORECAST_URL``) with ``past_days`` (ERA5 lags about 6 days) and one forecast day.
+
+    Returns ``{rows, source, url, params, from, to, fetched_ms, warnings, refused}``; ``rows`` is None when the request
+    failed (``refused`` True for Open-Meteo's request limit; the reason in ``warnings``). Never raises for provider
+    failures."""
+    from ..timeutil import local_dt
+
+    now = now_ms()
+    out: dict[str, Any] = {"rows": None, "source": "", "url": "", "params": {}, "from": None, "to": None,
+                           "fetched_ms": now, "warnings": [], "refused": False}
+    base = {"latitude": f"{lat:.4f}", "longitude": f"{lon:.4f}", "hourly": ",".join(GSI_HOURLY),
+            "daily": ",".join(GSI_DAILY), "timezone": tz or "GMT", "timeformat": "unixtime"}
+    if live:
+        url, ttl = FORECAST_URL, GSI_LIVE_TTL_S
+        params = {**base, "past_days": str(int(past_days)), "forecast_days": "1"}
+        source = "open-meteo:forecast (past days)"
+    else:
+        a = local_dt(int(start_ms) - int(past_days) * DAY_MS, tz).date()
+        b = local_dt(min(int(end_ms), now - ERA5_DELAY_DAYS * DAY_MS), tz).date()
+        if b < a:
+            out["warnings"].append(f"GSI inputs: the ERA5 archive has no days for {a.isoformat()} yet")
+            return out
+        url, ttl = ARCHIVE_URL, HISTORICAL_TTL_S
+        params = {**base, "models": "era5", "start_date": a.isoformat(), "end_date": b.isoformat()}
+        source = "open-meteo:archive:era5"
+    out.update(url=url, params=params, source=source)
+    try:
+        resp = om_request(url, params, ttl, REQUEST_TIMEOUT_S)
+        rows = gsi_daily_rows(resp.json(), tz)
+    except WeatherQuotaExceeded as e:
+        out["refused"] = True
+        out["warnings"].append(f"GSI inputs refused ({e})")
+        return out
+    except (http.HttpError, WeatherError, ValueError, TypeError, AttributeError, RuntimeError) as e:
+        out["warnings"].append(f"GSI inputs unavailable ({getattr(e, 'message', str(e))[:160]})")
+        return out
+    if not rows:
+        out["warnings"].append("GSI inputs: the answer had no complete local day")
+        return out
+    out.update(rows=rows, fetched_ms=int(resp.fetched_ms or now), **{"from": rows[0]["date"], "to": rows[-1]["date"]})
     return out

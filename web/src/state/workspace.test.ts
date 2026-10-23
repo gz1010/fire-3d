@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useMapRuntime } from '../map/mapStore'
 import { useStore } from './store'
-import { DEFAULT_MAP_LAYERS, defaultBasemap, effectiveBasemap, incidentFlyTo, isDemoBundle, parseWorkspaceParams, useWorkspace, writeWorkspaceParams } from './workspace'
+import { DEFAULT_MAP_LAYERS, defaultBasemap, effectiveBasemap, incidentFlyTo, isDemoBundle, parseWorkspaceParams, PENDING_FLY_MS, pendingMapFlyTo, useWorkspace, writeWorkspaceParams } from './workspace'
 
 describe('workspace URL params', () => {
   it('parses valid values and ignores invalid ones', () => {
@@ -174,3 +174,20 @@ describe('workspace store', () => {
     expect(isDemoBundle('x', { data_sources: [{ name: 'Terrain (synthetic)', detail: '', fetched_ms: 0 }] })).toBe(true)
   })
 })
+
+describe('a flight requested just before the map exists (integration part 2)', () => {
+  it('requestMapFlyTo stamps the request; a map created within PENDING_FLY_MS still flies it, never an older one', () => {
+    const before = useWorkspace.getState().mapFlyTo
+    const t0 = Date.now()
+    useWorkspace.getState().requestMapFlyTo({ lon: -112.0, lat: 46.6, zoom: 11 })
+    const req = useWorkspace.getState().mapFlyTo!
+    expect(req.requestedMs).toBeGreaterThanOrEqual(t0)
+    expect(pendingMapFlyTo(req, req.requestedMs! + 1000)).toBe(req)
+    expect(pendingMapFlyTo(req, req.requestedMs! + PENDING_FLY_MS)).toBe(req)
+    expect(pendingMapFlyTo(req, req.requestedMs! + PENDING_FLY_MS + 1)).toBeNull()
+    expect(pendingMapFlyTo({ ...req, requestedMs: undefined }, t0)).toBeNull()
+    expect(pendingMapFlyTo(null, t0)).toBeNull()
+    useWorkspace.setState({ mapFlyTo: before })
+  })
+})
+

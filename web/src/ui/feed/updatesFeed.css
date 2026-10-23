@@ -253,6 +253,17 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+/* where an item's official area lies (local officials' alerts: "area 18 mi from the fire's reported location · may be
+   about another fire"): always in full, never clamped like the detail (review round 2, N1) */
+.uf-place {
+  color: var(--m-text);
+  line-height: 1.35;
+}
+.uf-place svg {
+  margin-right: 3px;
+  vertical-align: -1px;
+  color: var(--m-text-2);
+}
 .uf-item.is-selected .uf-detail {
   -webkit-line-clamp: unset;
   line-clamp: unset;
@@ -693,6 +704,7 @@
   margin: 0;
   line-height: 1.35;
   color: var(--m-text);
+  overflow-wrap: anywhere; /* verbatim sender names can be one long word ("AZApacheCountyEmergencyManagement…") */
 }
 .on-line strong {
   font-weight: 600;
@@ -702,6 +714,7 @@
   font-size: var(--m-fs-xs);
   line-height: 1.35;
   color: var(--m-text-2);
+  overflow-wrap: anywhere;
 }
 .on-quote {
   margin: 2px 0 0;
@@ -811,4 +824,9 @@
   font-size: var(--m-fs-xs);
   line-height: 1.35;
   color: var(--m-text-2);
+}
+
+/* data status zone line ("Times: Mountain Time (MDT), the fire's local time"; CONTRACT §14.9.1) */
+.mw-status-zone {
+  padding: 0 14px 10px;
 }

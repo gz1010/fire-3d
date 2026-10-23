@@ -168,6 +168,10 @@ the relayed message below leaves NWS's 7-day list, so a later run will fail ther
   Station 7"), plus one FFW, one TOR, one LEW and one Cancel to test the scope filter. 16 of the window's records.
 - **Set by hand:** `sender` replaced by `redacted@example.invalid`; `originalMessage` cut to its `<references>`
   element with the sender addresses inside it replaced the same way; polygons rounded to 4 decimals;
-  `metadata.count` set to the number kept and `metadata.rundate` removed.
+  `metadata.count` set to the number kept and `metadata.rundate` removed. The LEW (Law Enforcement Warning) record
+  is kept only for its event code: its WEA texts (`CMAMtext`, `CMAMlongtext`; its `description` is empty and it has
+  no `headline` or `instruction`) are replaced by "Text removed by hand: a Law Enforcement Warning kept only for its
+  event code (scope-filter test)." because the original named a private person (2026-10-23, review round 1). The
+  recorder does the same (`TEXT_REMOVED_CODES`).
 - **Terms:** OpenFEMA terms (https://www.fema.gov/about/openfema/terms-conditions): "This product uses the Federal
   Emergency Management Agency's OpenFEMA API, but is not endorsed by FEMA".

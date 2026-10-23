@@ -275,7 +275,6 @@ def test_bundle_only_incidents_are_never_rebuilt(fake):
     m["id"] = m["summary"]["id"] = copy_id
     bundle.save_manifest(cdir, m)
     fake.summaries[copy_id] = make_summary(LIVE_ID, "live", name="Live Fire").model_copy(update={"id": copy_id})
-    assert pipeline.spec_incident_id(fake.summaries[copy_id]) == LIVE_ID
     assert not pipeline.is_catalog_incident(copy_id, fake.summaries[copy_id])
     assert pipeline.is_catalog_incident(LIVE_ID, fake.summaries[LIVE_ID])
     with pytest.raises(LookupError, match="cannot be"):

@@ -37,6 +37,21 @@ export function officialPast(mode: Mode, minuteTimeMs: number, nowMs: number, ma
   return isPastForCurrentSources(mode, minuteTimeMs, nowMs, marker)
 }
 
+/**
+ * The time the official panels are for (review round 4): now for a live fire (or with no fire open), else the replay
+ * minute on screen, the same rule as Official now, Public's short summary and the location card. Local officials'
+ * messages are decided at it (`localAlertsAt`), and so is the phone Updates badge, so the badge counts what the
+ * panel it opens lists as in effect.
+ */
+export function useOfficialPanelTime(): number {
+  const now = useNow(30_000)
+  const minute = useStore((s) => {
+    const live = (s.manifest?.status === 'ready' ? s.manifest.mode : (s.summary?.mode ?? s.mode)) === 'live'
+    return live || s.incidentId == null ? null : Math.floor(s.timeMs / 60_000)
+  })
+  return minute == null ? now : minute * 60_000
+}
+
 export function useOfficialContext(): OfficialContext {
   const now = useNow(30_000)
   const s = useStore(

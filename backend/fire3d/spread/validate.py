@@ -7,6 +7,8 @@
   pool for every run); :func:`summarize_hindcast` / :func:`hindcast_markdown` report it. Besides the contract's
   total-area Sørensen, rows carry ``sorensen_growth`` (new growth only, the initial burned area excluded), which is
   the discriminating score for calibration.
+* :func:`region_accuracy` / :func:`regional_accuracy` - per-fire and per-region accuracy (mean of fire means, CONTRACT
+  14.4) for ``fire3d/data/regional_accuracy.json``.
 * :func:`live_start_check` - pseudo-live re-issue of forecasts on past fires: at fixed issue times, the old live
   start (last detection) against the latest satellite pass (with and without the decay counted from the last
   activity), scored at the same valid times (docs/validation.md section 6); :func:`summarize_live_check`.
@@ -18,6 +20,8 @@ CLI (from backend/)::
     uv run python -m fire3d.spread.validate bench <bundle-or-id> [--sizes 256 384 512] [--horizon 72]
     uv run python -m fire3d.spread.validate live-start <bundle-or-id> [...] [--every 6] [--first 6] [--latency 1]
         [--leads 12 24 48] [--json rows.json]
+    uv run python -m fire3d.spread.validate hindcast '<id>@2025-08-25T19:30Z,2025-08-26T19:30Z' ...   (absolute starts)
+    uv run python -m fire3d.spread.validate regional fires.json --out fire3d/data/regional_accuracy.json
 """
 
 from __future__ import annotations
@@ -171,9 +175,11 @@ def batch_hindcast(
     workers: int | None = None,
     progress: ProgressFn | None = None,
     settings: SpreadSettings | None = None,
+    start_times_ms: Sequence[int] | None = None,
 ) -> list[dict]:
     """Hindcasts for every (bundle, start offset after ignition, spread_adjustment); nothing is written to the
-    bundles. ``settings`` holds the other spread settings (WUI, spotting, ...; its spread_adjustment is replaced). Returns one row per verifiable lead: ``{incident_id, start_offset_h, start_ms, spread_adjustment,
+    bundles. ``start_times_ms`` (absolute UTC epoch ms, the pre-registered starts of docs/validation.md section 10.1)
+    replaces the offsets; ``start_offset_h`` is then the start's offset after the bundle's ignition, for reference. ``settings`` holds the other spread settings (WUI, spotting, ...; its spread_adjustment is replaced). Returns one row per verifiable lead: ``{incident_id, start_offset_h, start_ms, spread_adjustment,
     ensemble, members, lead_h, sorensen, sorensen_growth, observed_acres, forecast_acres_p50,
     observed_growth_acres, forecast_growth_acres, area_ratio}`` (``area_ratio`` = forecast / observed growth).
     Runs that cannot be set up produce a row with an ``error`` and no lead."""
@@ -188,11 +194,16 @@ def batch_hindcast(
         man = fbundle.load_manifest(bdir) or {}
         iid = str(man.get("id") or bdir.name)
         t_ign = (man.get("ignition") or {}).get("t_ms") or (man.get("summary") or {}).get("started_ms")
-        for off in start_offsets_h:
-            if t_ign is None:
+        if start_times_ms is not None:
+            starts = [(round((int(t) - int(t_ign)) / config.MS_PER_H, 3) if t_ign is not None else 0.0, int(t))
+                      for t in start_times_ms]
+        else:
+            starts = [(float(off), None) for off in start_offsets_h]
+        for off, abs_start in starts:
+            if abs_start is None and t_ign is None:
                 rows.append({"incident_id": iid, "start_offset_h": float(off), "error": "no ignition time"})
                 continue
-            start = int(t_ign + float(off) * config.MS_PER_H)
+            start = int(abs_start) if abs_start is not None else int(t_ign + float(off) * config.MS_PER_H)
             try:
                 setup = ens.prepare_forecast(bdir, start, horizon_h, ensemble, members)
             except Exception as e:  # noqa: BLE001 - report and continue with the other runs
@@ -284,6 +295,197 @@ def hindcast_markdown(rows: Sequence[dict], summary: Sequence[dict] | None = Non
 
 
 # ----------------------------------------------------------------------------------------------------------------
+# Per-fire and per-region accuracy (CONTRACT 14.4; docs/validation.md section 10; audit V-R9)
+# ----------------------------------------------------------------------------------------------------------------
+ACCURACY_REGIONS: tuple[tuple[str, str], ...] = (
+    ("NWCC", "Northwest"), ("NRCC", "Northern Rockies"), ("GBCC", "Great Basin"), ("SWCC", "Southwest"),
+    ("SACC-SP", "Southern Plains"), ("SACC-SE", "Southeast"), ("RMCC", "Rocky Mountain"), ("EACC", "Eastern"),
+    ("ONCC", "Northern California"), ("OSCC", "Southern California"),
+)
+MIN_FIRES = 2                 # CONTRACT 14.4: a regional score needs >= 2 fires and >= 16 scored leads
+MIN_LEADS = 16
+FIRE_KEYS = ("id", "name", "state", "n_leads", "growth_sorensen", "fuels_edition", "lfm_method", "era5_hours",
+             "gfs_fill_hours", "weather_source", "replaced")
+
+
+def region_status(n_fires: int, n_leads: int) -> str:
+    """``tested`` with >= 2 fires and >= 16 scored leads; otherwise ``limited`` with at least 1 fire; else
+    ``untested`` (CONTRACT 14.4: 2 fires with 12 leads are ``limited``)."""
+    if int(n_fires) >= MIN_FIRES and int(n_leads) >= MIN_LEADS:
+        return "tested"
+    return "limited" if int(n_fires) >= 1 else "untested"
+
+
+def _scored(rows: Sequence[dict] | None) -> list[dict]:
+    return [r for r in rows or [] if "lead_h" in r and r.get("sorensen_growth") is not None]
+
+
+def _r(v: float | None, nd: int = 3) -> float | None:
+    return None if v is None else round(float(v), nd)
+
+
+def fire_score(rows: Sequence[dict]) -> dict:
+    """One fire's score from its hindcast rows (one row per scored lead): ``n_leads``, ``growth_sorensen`` (mean over
+    its leads), ``total_sorensen``, ``by_lead`` means, ``growth_ratios`` (forecast / observed growth, per lead),
+    observed / forecast growth means (ac)."""
+    rs = _scored(rows)
+    if not rs:
+        return {"n_leads": 0, "growth_sorensen": None, "total_sorensen": None, "by_lead": {}, "growth_ratios": []}
+    by: dict[str, list[float]] = {}
+    for r in rs:
+        by.setdefault(str(int(round(float(r["lead_h"])))), []).append(float(r["sorensen_growth"]))
+    return {
+        "n_leads": len(rs),
+        "growth_sorensen": float(np.mean([float(r["sorensen_growth"]) for r in rs])),
+        "total_sorensen": float(np.mean([float(r["sorensen"]) for r in rs])) if all("sorensen" in r for r in rs) else None,
+        "by_lead": {k: float(np.mean(v)) for k, v in sorted(by.items(), key=lambda kv: float(kv[0]))},
+        "growth_ratios": [float(r["area_ratio"]) for r in rs if r.get("area_ratio") is not None],
+        "observed_growth_mean_ac": float(np.mean([float(r.get("observed_growth_acres") or 0.0) for r in rs])),
+        "forecast_growth_mean_ac": float(np.mean([float(r.get("forecast_growth_acres") or 0.0) for r in rs])),
+    }
+
+
+GROWTH_OVER = 1.05             # a growth ratio >= 1.05 is "too much growth", <= 0.95 "too little" (the web's words)
+GROWTH_UNDER = 0.95
+
+
+def growth_direction(ratio: float) -> str:
+    """``"over"`` (too much growth), ``"under"`` (too little) or ``"about"`` (about right) for a growth ratio."""
+    return "over" if ratio >= GROWTH_OVER else "under" if ratio <= GROWTH_UNDER else "about"
+
+
+def _ratio_words(x: float) -> str:
+    return f"×{float(f'{x:.2f}'):g}"
+
+
+def growth_split(fire_ratios: Sequence[tuple[str, float]], pooled: float | None) -> tuple[bool, str | None]:
+    """``(keep, caveat)`` for a region's growth ratio from its fires' median growth ratios ``(name, ratio)``.
+
+    When some fires forecast too much growth and others too little, the pooled median hides it (review W-M1: the
+    Northern Rockies' x0.73 pooled Horse Gulch x1.78 with Island Creek x0.63). Then the caveat names each fire's ratio,
+    and ``keep`` is False (the file gives no region ratio) unless more than half of the fires err the same way as
+    the pooled median. Otherwise ``(True, None)``."""
+    over = [(n, x) for n, x in fire_ratios if growth_direction(x) == "over"]
+    under = [(n, x) for n, x in fire_ratios if growth_direction(x) == "under"]
+    if not over or not under:
+        return True, None
+
+    def names(fs: list[tuple[str, float]]) -> str:
+        parts = [f"{n} ({_ratio_words(x)})" for n, x in fs]
+        return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
+
+    same = {"over": len(over), "under": len(under)}.get(growth_direction(pooled), 0) if pooled is not None else 0
+    keep = same * 2 > len(fire_ratios)
+    tail = (f"; the region's growth ratio ({_ratio_words(pooled)}, the median over all leads) follows most of them"
+            if keep and pooled is not None else "; no single growth ratio is given for this region")
+    return keep, (f"The fires erred in opposite directions: too much growth on {names(over)}, too little on "
+                  f"{names(under)}{tail}.")
+
+
+def region_accuracy(region_id: str, name: str, fires: Sequence[dict], *, in_sample: bool = False,
+                    caveats: Sequence[str] = ()) -> dict:
+    """One region of ``regional_accuracy.json`` from its fires.
+
+    Each fire is ``{id, name, state, year, rows, ignition_rows?, fuels_edition, lfm_method, era5_hours,
+    gfs_fill_hours?, weather_source?, replaced?, fuel_groups?, caveats?}`` with ``rows`` the label rows (31-member p50,
+    pre-registered starts) and ``ignition_rows`` the ignition + 6/12/24 h rows. The region value is the **mean of the
+    fire means** (one fire with more starts cannot dominate); ``pooled_leads`` is the mean over all leads,
+    ``by_lead`` the per-lead means over all leads ("12"/"24"/"48"/"72"), ``ignition_relative`` the mean of the fire
+    means of the ignition rows, ``range`` the min-max of the fire means, ``growth_ratio_median`` the median of the
+    per-lead forecast / observed growth ratios, or None when the fires err in opposite directions and no majority
+    errs the pooled way (:func:`growth_split`, which then adds a caveat naming each fire's median ratio); each fire
+    carries its own ``growth_ratio_median``. Fires without a scored lead are not counted."""
+    scored = []
+    for f in fires:
+        sc = fire_score(f.get("rows") or [])
+        if sc["n_leads"] > 0:
+            scored.append((f, sc))
+    out: dict[str, Any] = {"id": region_id, "name": name}
+    n_fires = len(scored)
+    n_leads = int(sum(sc["n_leads"] for _, sc in scored))
+    out["status"] = region_status(n_fires, n_leads)
+    if in_sample:
+        out["in_sample"] = True
+    elif n_fires:
+        out["in_sample"] = False
+    out["n_fires"] = n_fires
+    if not n_fires:
+        return out
+    means = [sc["growth_sorensen"] for _, sc in scored]
+    all_rows = [r for f, _ in scored for r in _scored(f.get("rows"))]
+    by: dict[str, list[float]] = {}
+    for r in all_rows:
+        by.setdefault(str(int(round(float(r["lead_h"])))), []).append(float(r["sorensen_growth"]))
+    ratios = [x for _, sc in scored for x in sc["growth_ratios"]]
+    pooled_ratio = float(np.median(ratios)) if ratios else None
+    keep_ratio, split_caveat = growth_split(
+        [(str(f.get("name") or f.get("id")), float(np.median(sc["growth_ratios"]))) for f, sc in scored if sc["growth_ratios"]],
+        pooled_ratio)
+    ign = [fire_score(f.get("ignition_rows") or []) for f, _ in scored]
+    ign_means = [s["growth_sorensen"] for s in ign if s["n_leads"] > 0]
+    methods = sorted({str(f.get("lfm_method")) for f, _ in scored if f.get("lfm_method")})
+    out.update({
+        "n_leads": n_leads,
+        "growth_sorensen": _r(np.mean(means)),
+        "range": [_r(min(means)), _r(max(means))],
+        "pooled_leads": _r(np.mean([float(r["sorensen_growth"]) for r in all_rows])),
+        "ignition_relative": _r(np.mean(ign_means)) if ign_means else None,
+        "by_lead": {k: _r(np.mean(v)) for k, v in sorted(by.items(), key=lambda kv: float(kv[0]))},
+        "growth_ratio_median": _r(pooled_ratio, 2) if pooled_ratio is not None and keep_ratio else None,
+        "years": sorted({int(f["year"]) for f, _ in scored if f.get("year") is not None}),
+        "lfm_method": methods[0] if len(methods) == 1 else "+".join(methods) if methods else None,
+        "fuels_editions": sorted({str(f["fuels_edition"]) for f, _ in scored if f.get("fuels_edition")}),
+        "fuel_groups_tested": sorted({str(g) for f, _ in scored for g in (f.get("fuel_groups") or [])}),
+        "caveats": list(caveats) + ([split_caveat] if split_caveat else [])
+        + [c for f, _ in scored for c in (f.get("caveats") or [])],
+        "fires": [],
+    })
+    for f, sc in scored:
+        fire = {"id": f["id"], "name": f["name"], "state": f["state"], "n_leads": sc["n_leads"],
+                "growth_sorensen": _r(sc["growth_sorensen"]), "fuels_edition": f.get("fuels_edition") or "",
+                "lfm_method": f.get("lfm_method") or "", "era5_hours": float(f.get("era5_hours") or 0.0),
+                # this fire's own median forecast / observed growth ratio (null without a ratio): lets a reader see a
+                # region whose fires erred in opposite directions (integration part 2, review W-M1)
+                "growth_ratio_median": _r(float(np.median(sc["growth_ratios"])), 2) if sc["growth_ratios"] else None}
+        for k in ("gfs_fill_hours", "weather_source", "replaced"):
+            if k in f:
+                fire[k] = f[k]
+        out["fires"].append(fire)
+    return out
+
+
+def regional_accuracy(fires: Sequence[dict], *, generated_ms: int, engine: str, settings: str,
+                      in_sample_regions: Sequence[str] = ("OSCC",), region_caveats: dict[str, Sequence[str]] | None = None,
+                      starts: str = "", secondary: str = "") -> dict:
+    """The whole ``regional_accuracy.json`` (schema 1, CONTRACT 14.4): every one of the ten regions, from the fires
+    (each with its ``region``); regions without a fire are ``untested``. Never writes ``seed``."""
+    region_caveats = region_caveats or {}
+    by: dict[str, list[dict]] = {}
+    for f in fires:
+        by.setdefault(str(f["region"]), []).append(f)
+    unknown = sorted(set(by) - {rid for rid, _ in ACCURACY_REGIONS})
+    if unknown:
+        raise ValueError(f"unknown accuracy region(s): {unknown}")
+    regions = [region_accuracy(rid, name, by.get(rid, []), in_sample=rid in set(in_sample_regions),
+                               caveats=region_caveats.get(rid, ())) for rid, name in ACCURACY_REGIONS]
+    return {
+        "schema_version": 1,
+        "generated_ms": int(generated_ms),
+        "model": {"engine": engine, "settings": settings},
+        "method": {"metric": "growth_sorensen", "forecast": "p50 of 31 perturbed members", "leads_h": list(LEAD_HOURS),
+                   "aggregate": "mean_of_fire_means", "min_fires": MIN_FIRES, "min_leads": MIN_LEADS,
+                   "weather": "archived HRRR (hindcast), no ERA5 fill",
+                   "starts": starts or "pre-registered, during main growth",
+                   "secondary": secondary or "ignition + 6/12/24 h"},
+        "assignment": {"by": "WFIGS GACC of the fire's record (CAL FIRE fires: the matched WFIGS record)",
+                       "split": {"SACC-SP": ["TX", "OK"], "SACC-SE": ["the rest of SACC"]},
+                       "fallback": "California county table (ca_county_gacc.json) when present, else none: accuracy "
+                                   "not yet tested here"},
+        "regions": regions,
+    }
+
+
+# ----------------------------------------------------------------------------------------------------------------
 # Pseudo-live check of the live forecast start (docs/validation.md section 6)
 # ----------------------------------------------------------------------------------------------------------------
 LIVE_CHECK_VARIANTS = ("last_detection", "latest_pass", "latest_pass_decay")
@@ -313,8 +515,10 @@ def live_start_check(
     workers: int | None = None,
     progress: ProgressFn | None = None,
     passes_fn: Callable[..., Any] | None = None,
+    until_h: float | None = None,
 ) -> list[dict]:
     """Re-issue forecasts on historical bundles as if they were live, to test the live start rule.
+    ``until_h`` (optional) stops the issue times that many hours after ignition (long-lived fires).
 
     Issue times run every ``every_h`` from ignition + ``first_h`` to the bundle's ``end_ms`` (detections are
     complete up to there). At issue time tau the system knows the polar detections and the satellite passes (NASA
@@ -370,7 +574,8 @@ def live_start_check(
             continue
         pass_t = np.asarray(sorted(int(q.t_ms) for q in found), dtype=np.int64)
         tau = t_ign + int(first_h * config.MS_PER_H)
-        while tau <= end:
+        last_issue = end if until_h is None else min(end, t_ign + int(float(until_h) * config.MS_PER_H))
+        while tau <= last_issue:
             known_t = det_xzt[:, 2][det_xzt[:, 2] <= tau - lat_ms]
             if not len(known_t):
                 tau += int(every_h * config.MS_PER_H)
@@ -524,6 +729,16 @@ def _bundle_path(ref: str) -> Path:
     return b
 
 
+def _iso_ms(text: str) -> int:
+    """'2025-08-25T19:30Z' / '...:00Z' / '+00:00' -> epoch ms (UTC)."""
+    from datetime import datetime, timezone
+
+    d = datetime.fromisoformat(text.strip().replace("Z", "+00:00"))
+    if d.tzinfo is None:
+        d = d.replace(tzinfo=timezone.utc)
+    return int(d.timestamp() * 1000)
+
+
 def _print_progress(step: str, fraction: float, message: str) -> None:
     print(f"[{step:>10}] {fraction * 100:5.1f}%  {config.mask_secrets(message)}", flush=True)
 
@@ -546,7 +761,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     h.add_argument("--hold", action=argparse.BooleanOptionalAction, default=None, help="hold the inactive perimeter")
     h.add_argument("--decay-h", type=float, default=None, help="e-folding lead time of the multiplier (0 = constant)")
     h.add_argument("--floor", type=float, default=None, help="long-lead fraction of the multiplier")
-    h.add_argument("--lfm", choices=("drought", "table"), default=None, help="live fuel moisture: drought-adjusted or month table")
+    h.add_argument("--lfm", choices=("drought", "table", "california"), default=None,
+                   help="live fuel moisture: drought-adjusted or month table (California's rule); 'california' "
+                        "forces California's rule outside California too (the GSI ablation)")
     h.add_argument("--edge-m", type=float, default=None, help="ignore activity deeper than this inside the burned area (0 = off)")
     h.add_argument("--radius-m", type=float, default=None, help="perimeter within this distance of activity stays active (default 1000)")
     h.add_argument("--growth-only", action=argparse.BooleanOptionalAction, default=None,
@@ -564,13 +781,31 @@ def main(argv: Sequence[str] | None = None) -> int:
     lv.add_argument("--latency", type=float, default=1.0, help="hours before data are known (FIRMS / CMR latency)")
     lv.add_argument("--leads", nargs="+", type=float, default=[12.0, 24.0, 48.0], help="valid times after the issue (h)")
     lv.add_argument("--workers", type=int, default=None)
+    lv.add_argument("--until", type=float, default=None, help="last issue time, hours after ignition (default: end_ms)")
     lv.add_argument("--edge-m", type=float, default=None, help="ignore activity deeper than this inside the burned area (0 = off)")
     lv.add_argument("--radius-m", type=float, default=None, help="perimeter within this distance of activity stays active (default 1000)")
     lv.add_argument("--growth-only", action=argparse.BooleanOptionalAction, default=None,
                     help="detections count as activity only where they coincide with growth")
     lv.add_argument("--json", help="write rows + summary as JSON here")
+    rg = sub.add_parser("regional", help="per-region accuracy file (CONTRACT 14.4) from per-fire hindcast rows")
+    rg.add_argument("fires", help="JSON {fires: [...], region_caveats?, in_sample_regions?, starts?, secondary?, settings?}")
+    rg.add_argument("--out", required=True, help="regional_accuracy.json to write")
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    if args.command == "regional":
+        import json
+
+        spec = json.loads(Path(args.fires).read_text(encoding="utf-8"))
+        doc = regional_accuracy(spec["fires"], generated_ms=int(spec.get("generated_ms") or time.time() * 1000),
+                                engine=spec.get("engine") or "pyretechnics", settings=spec.get("settings") or "config.FORECAST_*",
+                                in_sample_regions=spec.get("in_sample_regions") or ("OSCC",),
+                                region_caveats=spec.get("region_caveats") or {}, starts=spec.get("starts") or "",
+                                secondary=spec.get("secondary") or "")
+        fbundle.write_json(Path(args.out), doc, indent=True)
+        for r in doc["regions"]:
+            print(f"{r['id']:8s} {r['status']:9s} fires {r['n_fires']} leads {r.get('n_leads', 0)} "
+                  f"growth {r.get('growth_sorensen')} range {r.get('range')}")
+        return 0
     if args.command == "live-start":
         if args.edge_m is not None:
             config.FORECAST_ACTIVE_EDGE_M = float(args.edge_m)
@@ -579,7 +814,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.radius_m is not None:
             config.FORECAST_ACTIVE_RADIUS_M = float(args.radius_m)
         rows = live_start_check([_bundle_path(b) for b in args.bundles], every_h=args.every, first_h=args.first,
-                                latency_h=args.latency, leads=args.leads, workers=args.workers, progress=_print_progress)
+                                latency_h=args.latency, leads=args.leads, workers=args.workers, progress=_print_progress,
+                                until_h=args.until)
         summary = summarize_live_check(rows)
         import json
 
@@ -603,10 +839,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                       ("active_edge_m", args.edge_m), ("active_growth_only", args.growth_only), ("active_radius_m", args.radius_m)):
         if val is not None:
             base = dataclasses.replace(base, **{name: val})
-    if args.lfm is not None:
+    if args.lfm == "california":
+        config.LFM_FORCE_CALIFORNIA = True
+    elif args.lfm is not None:
         config.DROUGHT_ADJUSTED_LFM = args.lfm == "drought"
     groups: dict[tuple[float, ...], list[Path]] = {}
+    absolute: list[tuple[Path, list[int]]] = []
     for spec in args.bundles:
+        if "@" in spec and not Path(spec).exists():      # 'id@2025-08-25T19:30Z,...': absolute UTC starts
+            name, _, times = spec.partition("@")
+            absolute.append((_bundle_path(name), [_iso_ms(t) for t in times.split(",") if t.strip()]))
+            continue
         name, sep, offs = spec.rpartition(":") if ":" in spec and not Path(spec).exists() else (spec, "", "")
         key = tuple(float(o) for o in offs.split(",")) if sep else tuple(args.offsets)
         groups.setdefault(key, []).append(_bundle_path(name))
@@ -614,6 +857,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     for offsets, dirs in groups.items():
         rows += batch_hindcast(dirs, list(offsets), args.adjustments, ensemble=args.ensemble, members=args.members,
                                horizon_h=args.horizon, workers=args.workers, progress=_print_progress, settings=base)
+    for bdir, times in absolute:
+        rows += batch_hindcast([bdir], (), args.adjustments, ensemble=args.ensemble, members=args.members,
+                               horizon_h=args.horizon, workers=args.workers, progress=_print_progress, settings=base,
+                               start_times_ms=times)
     rows.sort(key=lambda r: (r["incident_id"], r.get("start_offset_h", 0.0), r.get("spread_adjustment", 0.0), r.get("lead_h", 0.0)))
     summary = summarize_hindcast(rows)
     md = hindcast_markdown(rows, summary)

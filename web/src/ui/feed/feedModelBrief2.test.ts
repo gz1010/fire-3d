@@ -31,7 +31,7 @@ const item = (id: string, tMs: number, extra: Partial<FeedItem> = {}): FeedItem 
 
 describe('filters', () => {
   it('Official keeps only official items; Key events keeps key items; All keeps everything', () => {
-    const items = [item('a', 1), item('b', 2, { kind: 'official', key: true, topic: 'calfire' }), item('c', 3, { key: true, kind: 'estimate', topic: 'rapid_growth' })]
+    const items = [item('a', 1), item('b', 2, { kind: 'official', key: true, topic: 'record' }), item('c', 3, { key: true, kind: 'estimate', topic: 'rapid_growth' })]
     expect(filterFeed(items, 'official').map((i) => i.id)).toEqual(['b'])
     expect(filterFeed(items, 'key').map((i) => i.id)).toEqual(['b', 'c'])
     expect(filterFeed(items, 'all')).toHaveLength(3)

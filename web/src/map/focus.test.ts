@@ -182,6 +182,11 @@ describe('focus candidates follow every list, not the overview filter', () => {
     bundle_status: 'none',
     bundle_built_ms: null,
     bbox_lonlat: null,
+    uid: 'u',
+    record_source: 'calfire',
+    record_issuer: 'CAL FIRE',
+    state: 'CA',
+    time_zone: 'America/Los_Angeles',
     ...over,
   })
   // the real Eaton row: a prepared 2025 fire (only in the 2025 list)
@@ -229,6 +234,16 @@ describe('official areas hold the focus', () => {
     expect(focusUnlessHeld(view(-119.5, 37, 5.5), fires, cur(HENDERSON), hold)).toBe(HENDERSON.id)
     // on the overview, a zone fit over a prepared fire does not open it
     expect(focusUnlessHeld(view(ZONE_CENTER[0], ZONE_CENTER[1], 14.5), fires, null, hold)).toBe(null)
+  })
+
+  it("a flight to an unprepared fire's card holds too (integration: Little Giant must not open Lower Sugarloaf)", () => {
+    const hold = new FocusHold()
+    hold.flight('fire-card')
+    expect(hold.active).toBe(true)
+    // on the overview, flying to the card of a fire next to a prepared one keeps the overview (the card stays)
+    expect(focusUnlessHeld(view(ZONE_CENTER[0], ZONE_CENTER[1], 10), fires, null, hold)).toBe(null)
+    hold.release() // the user's next move: the zoom focus applies again
+    expect(focusUnlessHeld(view(ZONE_CENTER[0], ZONE_CENTER[1], 10), fires, null, hold)).toBe(NORTE.id)
   })
 
   it('the next user move, another flight or a release ends the hold', () => {

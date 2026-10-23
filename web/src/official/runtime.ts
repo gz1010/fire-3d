@@ -1,6 +1,6 @@
 // Shared runtime of the official sources (owner: official-web; CONTRACT §13 I5 / I6). `useOfficialSync()` runs once in
-// the map workspace (from extras/ExtrasSync.tsx, which is always mounted there) and publishes the incident's CAL FIRE
-// record and NWS fire weather alerts here, whatever the map layers show. The hooks (hooks.ts), the "Official now"
+// the map workspace (from extras/ExtrasSync.tsx, which is always mounted there) and publishes the incident's agency
+// record (CAL FIRE's or NIFC WFIGS's, CONTRACT §14.5) and NWS fire weather alerts here, whatever the map layers show. The hooks (hooks.ts), the "Official now"
 // block, the feed producers and the official map layer read this store, so each source is fetched once.
 // Evacuation zones stay in useExtrasRuntime().evac (fetched for the incident whatever the layer toggle says).
 import { useLayoutEffect, useMemo, useState } from 'react'
@@ -10,16 +10,23 @@ import { nowMarkerMs, useStore } from '../state/store'
 import { isDemoBundle } from '../state/workspace'
 import { useNow } from '../ui/hooks'
 import { IDLE_QUERY, sameQueryState } from '../extras/hooks'
-import { calfireUrl, fireWeatherAtMs, fireWeatherStatewideUrl, fireWeatherUrl, OFFICIAL_REFRESH_MS } from './client'
+import { fireWeatherAtMs, fireWeatherStatewideUrl, fireWeatherUrl, localAlertsUrl, OFFICIAL_REFRESH_MS, recordUrl, secondaryRecordUrl } from './client'
 import { alertEndMs, EXPIRED_KEEP_MS, isFireWeatherAlert, vtecKey } from './fireWeather'
 import { forIncident } from './guard'
 import { useJsonQuery, type QueryState } from './query'
-import type { CalFireResponse, FireWeatherResponse, NwsAlert, OfficialHighlight } from './types'
+import type { CalFireResponse, FireWeatherResponse, IncidentRecordResponse, LocalAlertsResponse, NwsAlert, OfficialHighlight } from './types'
 
 export interface OfficialRuntimeState {
+  /** CAL FIRE's record (fires whose `record_source` is 'calfire'). */
   calfire: QueryState<CalFireResponse>
+  /** NIFC WFIGS (IRWIN) record (brief 3, CONTRACT §14.5): a WFIGS fire's own record, or a California fire's matched
+   *  record when the agencies disagree on whether it is active. Never fetched for a CAL FIRE complex row. */
+  record: QueryState<IncidentRecordResponse>
+  /** Local officials' messages for the open fire's area (CONTRACT §14.7), at the same time as its fire weather. */
+  local: QueryState<LocalAlertsResponse>
   fireWeather: QueryState<FireWeatherResponse>
-  /** Every current NWS fire weather alert in California, fetched only on the overview (no fire open). */
+  /** Every current NWS fire weather alert the overview answer covers (`states_checked`; all of the lower 48 once the
+   *  national request is live), fetched only on the overview (no fire open). */
   statewide: QueryState<FireWeatherResponse>
   /** Live NWS alerts seen earlier in this session for `incidentId`: kept so an alert that has left the live feed
    *  stays listed as "Expired <time>" for 48 h (NWS's active feed drops it at once). */
@@ -32,6 +39,8 @@ export interface OfficialRuntimeState {
 
 export const useOfficialRuntime = create<OfficialRuntimeState>()((set) => ({
   calfire: IDLE_QUERY,
+  record: IDLE_QUERY,
+  local: IDLE_QUERY,
   fireWeather: IDLE_QUERY,
   statewide: IDLE_QUERY,
   seen: { incidentId: null, alerts: [] },
@@ -71,6 +80,9 @@ export function withRememberedAlerts(d: FireWeatherResponse | null, seen: readon
   return { ...d, alerts: [...d.alerts, ...ended] }
 }
 
+/** A live answer, or one whose archive channel is still being fetched (both are asked again on the cadence). */
+const isCurrentLocal = (d: LocalAlertsResponse) => d.requested_at_ms == null || (d.channels ?? []).some((c) => c.status === 'pending')
+
 const isCurrentFw = (d: FireWeatherResponse) => d.status === 'available' && d.requested_at_ms == null && !d.alerts.some((a) => a.archived)
 
 /**
@@ -103,13 +115,27 @@ export function useOfficialSync(): void {
   if (!playing && held !== at) setHeld(at)
   const atMs = playing ? held : at
 
-  const calfire = useJsonQuery<CalFireResponse>(incidentId && !demo ? calfireUrl(incidentId) : null, { refreshMs: live ? OFFICIAL_REFRESH_MS.calfire : 0 })
+  // the fire's own record decides which endpoint answers (CONTRACT §14.5); wait for the summary
+  const rec = useStore(
+    useShallow((s) => {
+      const sum = s.summary && s.summary.id === s.incidentId ? s.summary : null
+      return sum ? { primary: recordUrl(sum), secondary: secondaryRecordUrl(sum), wfigs: (sum.record_source ?? 'calfire') === 'wfigs' } : null
+    }),
+  )
+  const calfire = useJsonQuery<CalFireResponse>(incidentId && !demo && rec && !rec.wfigs ? rec.primary : null, { refreshMs: live ? OFFICIAL_REFRESH_MS.calfire : 0 })
+  const record = useJsonQuery<IncidentRecordResponse>(incidentId && !demo && rec ? (rec.wfigs ? rec.primary : rec.secondary) : null, { refreshMs: live ? OFFICIAL_REFRESH_MS.calfire : 0 })
   const fireWeather = useJsonQuery<FireWeatherResponse>(incidentId && !demo && timeReady ? fireWeatherUrl(incidentId, timeReady === 'present' ? null : atMs) : null, {
     refreshMs: OFFICIAL_REFRESH_MS.fireWeather,
     timeoutMs: 45_000,
     isCurrent: isCurrentFw,
   })
-  // the overview: California's current alerts (statewide outlines and "Official now · California")
+  // local officials' messages: live (refreshed like NWS), or the archive at a past time (refetched while pending)
+  const local = useJsonQuery<LocalAlertsResponse>(incidentId && !demo && timeReady ? localAlertsUrl(incidentId, timeReady === 'present' ? null : atMs) : null, {
+    refreshMs: OFFICIAL_REFRESH_MS.local,
+    timeoutMs: 45_000,
+    isCurrent: isCurrentLocal,
+  })
+  // the overview: the national answer (outlines and "Official now · lower 48 states"; the scope follows states_checked)
   const statewide = useJsonQuery<FireWeatherResponse>(incidentId == null ? fireWeatherStatewideUrl() : null, {
     refreshMs: OFFICIAL_REFRESH_MS.fireWeather,
     timeoutMs: 45_000,
@@ -120,6 +146,8 @@ export function useOfficialSync(): void {
     const cur = useOfficialRuntime.getState()
     const patch: Partial<OfficialRuntimeState> = {}
     if (!sameQueryState(cur.calfire, calfire)) patch.calfire = calfire
+    if (!sameQueryState(cur.record, record)) patch.record = record
+    if (!sameQueryState(cur.local, local)) patch.local = local
     if (!sameQueryState(cur.fireWeather, fireWeather)) patch.fireWeather = fireWeather
     if (!sameQueryState(cur.statewide, statewide)) patch.statewide = statewide
     const d = fireWeather.data
@@ -149,7 +177,8 @@ export function fireWeatherDataNow(): FireWeatherResponse | null {
 }
 
 /** The open fire's answer (never another fire's), with the alerts remembered for it this session; on the overview
- *  (no fire open) California's current alerts. */
+ *  (no fire open) the national answer's current alerts, for the states its `states_checked` lists (all 49 lower-48
+ *  codes with today's backend; an older backend: California only; CONTRACT §14.6). */
 export function fireWeatherFor(
   current: string | null,
   data: FireWeatherResponse | null,

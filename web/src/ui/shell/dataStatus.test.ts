@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { Detection, Perimeter } from '../../api/types'
 import { timeFmt } from '../../lib/time'
-import { buildDataStatus, fmtAge, fmtStatusTime, fmtStatusTimeAt, freshnessLine, weatherSourceLabel, type DataStatusInput } from './dataStatus'
+import { buildDataStatus, fmtAge, fmtStatusTimeAt, freshnessLine, weatherSourceLabel, type DataStatusInput } from './dataStatus'
+import { setCaliforniaCommandClock } from '../../extras/__fixtures__/clock.testutil'
+
+setCaliforniaCommandClock()
 
 const H = 3_600_000
 const T0 = Date.UTC(2025, 0, 8, 12, 0) // Jan 8 2025 04:00 PST
@@ -67,10 +70,11 @@ describe('buildDataStatus', () => {
   })
 })
 
-describe('fmtStatusTime', () => {
+describe('fmtStatusTimeAt', () => {
   it('adds the year only when it is not the current one', () => {
-    expect(fmtStatusTime(T0, T0 + 24 * H)).toBe('Jan 8, 04:00 PST')
-    expect(fmtStatusTime(T0, Date.UTC(2026, 9, 17, 20))).toBe('Jan 8, 2025 04:00 PST')
+    const la = timeFmt('America/Los_Angeles', '24h') // tz-ok: a California fire's own zone
+    expect(fmtStatusTimeAt(T0, T0 + 24 * H, la)).toBe('Jan 8, 04:00 PST')
+    expect(fmtStatusTimeAt(T0, Date.UTC(2026, 9, 17, 20), la)).toBe('Jan 8, 2025 04:00 PST')
     const r = buildDataStatus(input('historical'), Date.UTC(2026, 9, 17, 20))
     expect(r.find((x) => x.key === 'bundle')?.value).toBe('Jan 8, 2025 06:00 PST')
   })
@@ -167,5 +171,30 @@ describe('official rows and freshness (brief 2, U-R9)', () => {
     expect(freshnessLine(rows, true, T0 + 16 * H, null).text).toBe('satellite data 16 h old')
     expect(freshnessLine(buildDataStatus(input('historical'), T0), false, T0, null).text).toBe('Archived replay to Jan 8, 2025')
     expect([fmtAge(30_000), fmtAge(40 * 60_000), fmtAge(50 * H)]).toEqual(['1 min', '40 min', '2 d'])
+  })
+})
+
+describe('evacuation row outside California (brief 3)', () => {
+  const oem = { id: 'or_oem_evacuations', aggregator: 'Oregon OEM', credit: 'Oregon Department of Emergency Management', url: 'https://www.arcgis.com/home/item.html?id=dd2bee51e3004dc4b1004df34fbd9e29', homeState: 'OR', answered: true, checkedMs: T0 - 60_000, updatedMs: T0 - 2 * H, reason: null }
+  it('names Oregon OEM with its own time; a state without a feed says so', () => {
+    const or = byKey(buildDataStatus({ ...input('live'), official: { evacuation: { state: 'none-listed', checkedMs: T0 - 60_000, sourceUpdatedMs: T0 - 2 * H, sources: [oem], checkedBy: 'Oregon OEM', zones: [] } } }, T0))
+    expect(or.evacuation.value).toMatch(/^Oregon OEM /)
+    expect(or.evacuation.tip).toMatch(/^Oregon OEM recalculates its statewide evacuation layer every 15 minutes/)
+    const na = byKey(buildDataStatus({ ...input('live'), official: { evacuation: { state: 'not-available', reason: 'Not available in this state (Montana)', sources: [] } } }, T0))
+    expect(na.evacuation).toMatchObject({ value: 'Not available in this state', detail: 'Not available in this state (Montana); follow local officials' })
+    expect(JSON.stringify(na.evacuation)).not.toMatch(/Cal OES/)
+  })
+})
+
+describe('fire-local times (brief 3, CONTRACT §14.9)', () => {
+  it("a Montana fire's rows read Mountain time, never PDT; Public uses the 12-hour clock", () => {
+    const den24 = timeFmt('America/Denver', '24h')
+    const rows = buildDataStatus({ ...input('historical'), tf: den24 }, Date.UTC(2026, 9, 17, 20))
+    const bundle = rows.find((x) => x.key === 'bundle')!
+    expect(bundle.value).toBe('Jan 8, 2025 07:00 MST')
+    expect(JSON.stringify(rows)).not.toMatch(/P[DS]T/)
+    const den12 = byKey(buildDataStatus({ ...input('live'), tf: timeFmt('America/Denver', '12h') }, T0 + H))
+    expect(den12.observations.value).toMatch(/ (AM|PM) MST$/)
+    expect(freshnessLine(rows, false, Date.UTC(2026, 9, 17, 20), null, den24).text).toMatch(/^Archived replay to /)
   })
 })

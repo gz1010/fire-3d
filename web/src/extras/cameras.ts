@@ -207,6 +207,12 @@ export function mountCameraLayer(map: MapLibreMap, opts: LayerHandleOptions & { 
   }
 }
 
+/** The source lines under the cameras panel: none for an area outside California (no camera source was used there;
+ *  an older backend still listed the California sources: review R5). */
+export function cameraSourcesShown(data: Pick<CamerasResponse, 'reason_code' | 'sources'> | null): CamerasResponse['sources'] {
+  return data && data.reason_code !== 'state_not_available' ? data.sources : []
+}
+
 export function cameraLegend(data: CamerasResponse | null): ExtrasLegendEntry[] {
   if (!data || data.status !== 'available') return []
   const out: ExtrasLegendEntry[] = []
@@ -219,7 +225,7 @@ export function cameraLegend(data: CamerasResponse | null): ExtrasLegendEntry[] 
 }
 
 /** One summary item (cameras are a resource, not an event): at the fetch time, not seekable. */
-export function cameraFeedItems(data: CamerasResponse | null): FeedItem[] {
+export function cameraFeedItems(data: CamerasResponse | null, tf?: TimeFmt): FeedItem[] {
   if (!data || data.status !== 'available' || data.cameras.features.length === 0) return []
   const w = data.counts.wildfire ?? 0
   const t = data.counts.traffic ?? 0
@@ -233,7 +239,7 @@ export function cameraFeedItems(data: CamerasResponse | null): FeedItem[] {
       kind: 'observation',
       tMs: own ?? data.retrieved_ms ?? data.now_ms,
       title: 'Public cameras near the fire',
-      detail: `${parts.join(' and ')} in this area${own != null ? ` (Cal OES list updated ${fmtWhen(own)})` : ''}. Images open only when you ask for one.`,
+      detail: `${parts.join(' and ')} in this area${own != null ? ` (Cal OES list updated ${fmtWhen(own, undefined, tf)})` : ''}. Images open only when you ask for one.`,
       source: 'Cal OES California Webcams',
       automated: true,
       key: false,
@@ -248,14 +254,14 @@ export function cameraFeedItems(data: CamerasResponse | null): FeedItem[] {
 }
 
 /** "Image file time 13:28 PDT (3 min ago)" with what the time means; never presented as an exact capture time. */
-export function frameTimeText(frame: Pick<CameraFrameResponse, 'image_time_ms' | 'retrieved_ms'>, nowMs: number): string {
+export function frameTimeText(frame: Pick<CameraFrameResponse, 'image_time_ms' | 'retrieved_ms'>, nowMs: number, tf?: TimeFmt): string {
   if (frame.image_time_ms == null) return `Image time not reported by the camera server (fetched ${agoText(frame.retrieved_ms, nowMs)})`
-  return `Image updated ${fmtWhen(frame.image_time_ms, nowMs)} (${agoText(frame.image_time_ms, nowMs)}) by the camera server's clock`
+  return `Image updated ${fmtWhen(frame.image_time_ms, nowMs, tf)} (${agoText(frame.image_time_ms, nowMs)}) by the camera server's clock`
 }
 
-/** Plain description of a camera's direction / view. `tf` (CONTRACT §14.9.6) is accepted for the shared signature;
- *  the text has no time in it today. */
-export function cameraViewText(f: CameraFeature, _tf?: TimeFmt): string {
+/** Plain description of a camera's direction / view. `tf` (CONTRACT §14.9.6, required since the integration) is part
+ *  of the shared signature; the text has no time in it today. */
+export function cameraViewText(f: CameraFeature, _tf: TimeFmt): string {
   const p = f.properties
   if (p.azimuth_deg != null) return `Pan-tilt-zoom; pointing ${compassWord(p.azimuth_deg)} (${Math.round(p.azimuth_deg)}°) as last reported`
   if (p.view && p.kind === 'traffic') return `Fixed view looking ${p.view.toLowerCase()}`

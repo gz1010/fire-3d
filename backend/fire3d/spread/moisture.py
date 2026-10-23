@@ -5,6 +5,8 @@
   (exponential) lags of EMC with τ = 10 h / 100 h. Optional precipitation wets the fuels while it rains.
 * :func:`live_fuel_moisture` - California monthly defaults from ``config.LIVE_FUEL_MOISTURE_BY_MONTH``, optionally
   drought-adjusted by the water-year precipitation (:func:`greenup_fraction`).
+* :func:`daily_gsi` / :func:`gsi_mean` / :func:`gsi_live_fuel_moisture` - outside California, the NFDRS 2016 Growing
+  Season Index (Jolly et al. 2005; NFDRS4 default parameters in ``config.GSI_*``) and its herb / woody mapping.
 * :func:`ffwi` - Fosberg (1978) Fire Weather Index from EMC (%) and wind speed (mph).
 
 All functions broadcast like numpy; time runs along axis 0 and any trailing shape (e.g. ``(T, 4, 4)``) works.
@@ -123,6 +125,88 @@ def live_fuel_moisture(month: int, precip_wy_mm: float | None = None) -> tuple[f
         herb = min(herb, dry_h + g * max(herb - dry_h, 0.0))
         woody = min(woody, dry_w + g * max(woody - dry_w, 0.0))
     return float(herb), float(woody)
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# NFDRS 2016 Growing Season Index (outside California; CONTRACT 14.12.10, docs/validation.md section 10.1)
+# ---------------------------------------------------------------------------------------------------------------
+# MT-CLIM day-length constants as in NFDRS4 (lib/NFDRS4/include/livefuelmoisture.h)
+_SECPERRAD = 13750.9871        # seconds of day length per radian of hour angle
+_RADPERDAY = 0.017214          # radians of Earth orbit per day
+_RADPERDEG = 0.01745329
+_MINDECL = -0.4092797          # declination at the winter solstice (rad)
+_DAYSOFF = 10.25               # day-of-year offset of the winter solstice
+
+
+def _ramp(x, lo: float, hi: float):
+    """0 at ``lo`` .. 1 at ``hi``, linear and clamped (``lo > hi`` gives a falling ramp)."""
+    x = np.asarray(x, dtype=np.float64)
+    return np.clip((x - lo) / (hi - lo), 0.0, 1.0)
+
+
+def saturation_vp_pa(temp_c):
+    """Saturation vapour pressure (Pa) as in NFDRS4 ``CalcVP``: 610.7 · exp(17.38 · T / (239 + T)), T in °C."""
+    t = np.asarray(temp_c, dtype=np.float64)
+    return _scalar_out(610.7 * np.exp(17.38 * t / (239.0 + t)), temp_c)
+
+
+def gsi_vpd_pa(tmax_c, rhmin_pct):
+    """Daily vapour pressure deficit (Pa) of NFDRS4's default GSI (``CalcGSI``): es(Tmax) · (1 − RH / 100) with
+    RH = max(daily minimum RH, 5 %), floored at 0."""
+    rh = np.maximum(np.asarray(rhmin_pct, dtype=np.float64), config.GSI_RH_FLOOR_PCT)
+    es = np.asarray(saturation_vp_pa(tmax_c), dtype=np.float64)
+    return _scalar_out(np.maximum(es * (1.0 - rh / 100.0), 0.0), tmax_c, rhmin_pct)
+
+
+def daylength_s(lat_deg, yday):
+    """Day length (s) by the MT-CLIM formula NFDRS4 uses (``CalcDayl``): declination −0.4092797 · cos((yday + 10.25)
+    · 0.017214) rad, sunset hour angle acos(−tan(lat) · tan(decl)), day length 2 · angle · 13750.9871 s."""
+    lat = np.clip(np.asarray(lat_deg, dtype=np.float64) * _RADPERDEG, -1.5707, 1.5707)
+    decl = _MINDECL * np.cos((np.asarray(yday, dtype=np.float64) + _DAYSOFF) * _RADPERDAY)
+    coshss = np.clip(-(np.sin(lat) * np.sin(decl)) / (np.cos(lat) * np.cos(decl)), -1.0, 1.0)
+    return _scalar_out(2.0 * np.arccos(coshss) * _SECPERRAD, lat_deg, yday)
+
+
+def gsi_indicators(tmin_c, vpd_pa, dayl_s) -> tuple:
+    """``(iTmin, iVPD, iDayl)`` of Jolly et al. (2005) with the NFDRS4 limits (``config.GSI_*``)."""
+    t_lo, t_hi = config.GSI_TMIN_C
+    v_lo, v_hi = config.GSI_VPD_PA
+    d_lo, d_hi = config.GSI_DAYL_S
+    it = _ramp(tmin_c, t_lo, t_hi)
+    iv = 1.0 - _ramp(vpd_pa, v_lo, v_hi)
+    idl = _ramp(dayl_s, d_lo, d_hi)
+    return tuple(_scalar_out(a, tmin_c, vpd_pa, dayl_s) for a in (it, iv, idl))
+
+
+def daily_gsi(tmin_c, tmax_c, rhmin_pct, lat_deg, yday):
+    """Daily Growing Season Index iTmin · iVPD · iDayl (0..1) from the day's minimum and maximum temperature (°C),
+    minimum relative humidity (%), the latitude and the day of year (1-366)."""
+    it, iv, idl = gsi_indicators(tmin_c, gsi_vpd_pa(tmax_c, rhmin_pct), daylength_s(lat_deg, yday))
+    out = np.asarray(it) * np.asarray(iv) * np.asarray(idl)
+    return _scalar_out(out, tmin_c, tmax_c, rhmin_pct, lat_deg, yday)
+
+
+def gsi_mean(daily_values) -> float | None:
+    """The moving-average GSI: the mean of the given daily values (the caller passes the 21 days before a start),
+    scaled by ``config.GSI_MAX`` and clamped to 0..1; None when any value is missing or the list is short."""
+    raw = list(daily_values)
+    v = [float(x) for x in raw if x is not None and np.isfinite(float(x))]
+    if len(v) < int(config.GSI_MA_DAYS) or len(v) != len(raw):
+        return None
+    return float(np.clip(np.mean(v) / float(config.GSI_MAX), 0.0, 1.0))
+
+
+def gsi_live_fuel_moisture(gsi: float) -> tuple[float, float]:
+    """``(herb, woody)`` live fuel moisture fractions from the scaled GSI (NFDRS4 ``SetLFMParameters`` defaults):
+    below the green-up threshold (0.5) the minimum (herb 30 %, woody 60 %); at or above it, linear up to the maximum at
+    GSI 1 (herb 250 %, woody 200 %). The herb is treated as perennial (no annual curing state, no snow-day flag)."""
+    g = float(np.clip(gsi, 0.0, 1.0))
+    thr = float(config.GSI_GREENUP)
+    out = []
+    for lo, hi in (config.GSI_HERB_LFM, config.GSI_WOODY_LFM):
+        lo, hi = float(lo), float(hi)
+        out.append(lo if g < thr else lo + (g - thr) / (1.0 - thr) * (hi - lo))
+    return float(out[0]), float(out[1])
 
 
 def ffwi(temp_c, rh_pct, wind_ms):

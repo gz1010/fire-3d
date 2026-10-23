@@ -62,6 +62,7 @@ SELECT = "identifier,sent,msgType,status,info"
 REFS_SELECT = "identifier,originalMessage"      # only for updates and cancellations (their <references>)
 TIMEOUT_S = 60.0
 RETRIES = 1
+PREFETCH_TIMEOUT_S = 15.0              # a CLI build waits at most this long per archive request, with no retry
 RECENT_TTL_S = 3600.0                  # a window that ended less than 3 days ago may still be filling
 PAST_TTL_S = 30 * 86400.0
 OPENFEMA_LIMITER = fhttp.RateLimiter(20, 60.0, "official: OpenFEMA")
@@ -103,13 +104,14 @@ def window_ttl_s(end_ms: int, now: int) -> float:
     return RECENT_TTL_S if end_ms > now - 3 * DAY_MS else PAST_TTL_S
 
 
-def fetch_window(start_ms: int, end_ms: int, *, now: int | None = None, timeout: float = TIMEOUT_S) -> tuple[list[dict], int, bool]:
+def fetch_window(start_ms: int, end_ms: int, *, now: int | None = None, timeout: float = TIMEOUT_S,
+                 retries: int = RETRIES) -> tuple[list[dict], int, bool]:
     """Every actual IPAWS message sent in ``[start_ms, end_ms)``: ``(records, fetched_ms, truncated)``; updates and
     cancellations also carry their ``originalMessage`` (a second, smaller query) so their references can be read.
     Raises ``nws.SourceError`` (unreachable, unreadable) or ``nws.SourceBusy`` (Fire-3d's own limit)."""
-    recs, fetched, truncated = _fetch_pages(start_ms, end_ms, now=now, timeout=timeout, refs=False)
+    recs, fetched, truncated = _fetch_pages(start_ms, end_ms, now=now, timeout=timeout, retries=retries, refs=False)
     try:
-        xml, _, _ = _fetch_pages(start_ms, end_ms, now=now, timeout=timeout, refs=True)
+        xml, _, _ = _fetch_pages(start_ms, end_ms, now=now, timeout=timeout, retries=retries, refs=True)
         by_id = {str(r.get("identifier")): r.get("originalMessage") for r in xml}
         for r in recs:
             if r.get("msgType") != "Alert" and str(r.get("identifier")) in by_id:
@@ -119,7 +121,8 @@ def fetch_window(start_ms: int, end_ms: int, *, now: int | None = None, timeout:
     return recs, fetched, truncated
 
 
-def _fetch_pages(start_ms: int, end_ms: int, *, now: int | None, timeout: float, refs: bool) -> tuple[list[dict], int, bool]:
+def _fetch_pages(start_ms: int, end_ms: int, *, now: int | None, timeout: float, refs: bool,
+                 retries: int = RETRIES) -> tuple[list[dict], int, bool]:
     t_now = now if now is not None else now_ms()
     ttl = window_ttl_s(end_ms, t_now)
     out: list[dict] = []
@@ -131,7 +134,7 @@ def _fetch_pages(start_ms: int, end_ms: int, *, now: int | None, timeout: float,
         if hit is None and not OPENFEMA_LIMITER.try_acquire():
             raise nws.SourceBusy(f"{_NAME}: Fire-3d's request limit is reached; try again in a minute")
         try:
-            resp = hit or fhttp.request("GET", API_URL, params=params, ttl_s=ttl, timeout=timeout, retries=RETRIES)
+            resp = hit or fhttp.request("GET", API_URL, params=params, ttl_s=ttl, timeout=timeout, retries=retries)
             data = resp.json()
         except fhttp.HttpError as e:
             code = f"HTTP {e.status}" if e.status is not None else "no response"
@@ -347,9 +350,10 @@ def store(window: tuple[int, int], alerts: list[dict], fetched_ms: int, truncate
     return doc
 
 
-def fetch_and_store(window: tuple[int, int], *, now: int | None = None, timeout: float = TIMEOUT_S) -> dict:
+def fetch_and_store(window: tuple[int, int], *, now: int | None = None, timeout: float = TIMEOUT_S,
+                    retries: int = RETRIES) -> dict:
     """Fetch, parse and store one window (raises ``nws.SourceError`` / ``nws.SourceBusy``)."""
-    recs, fetched, truncated = fetch_window(window[0], window[1], now=now, timeout=timeout)
+    recs, fetched, truncated = fetch_window(window[0], window[1], now=now, timeout=timeout, retries=retries)
     return store(window, parse_records(recs), fetched, truncated)
 
 
@@ -402,21 +406,37 @@ def ensure(window: tuple[int, int], *, wait_s: float | None = None, now: int | N
     return "pending", None, None
 
 
-def prefetch(started_ms: int | None, end_ms: int | None, *, now: int | None = None, timeout: float = TIMEOUT_S) -> bool:
-    """Fetch an incident's archive now (after a successful build), when part of its record is older than the 24 h
-    publication delay and the window is not stored yet. True when the window is stored. Never raises."""
+def prefetch(started_ms: int | None, end_ms: int | None, *, now: int | None = None, background: bool = False,
+             threads: list[threading.Thread] | None = None, timeout: float = PREFETCH_TIMEOUT_S,
+             retries: int = 0) -> str:
+    """Warm an incident's archive after a successful build, when part of its record is older than the 24 h
+    publication delay. ``background`` (a build in the API's job worker; CONTRACT 14.7 "a successful build also starts
+    it"): start (or join) the one deduplicated background fetch of :func:`start` and return at once, adding its
+    thread to ``threads``. Otherwise (a CLI build, whose process ends with the build) fetch now, each request capped
+    at ``timeout`` with ``retries`` (15 s, none by default). Never raises. Returns ``"stored"`` (already stored, or
+    fetched now), ``"started"``, ``"skipped"`` (the fire began less than 24 h ago) or ``"failed"`` (this fetch
+    failed, or the window failed less than 10 min ago)."""
     t = now if now is not None else now_ms()
     if not started_ms or int(started_ms) > t - ARCHIVE_DELAY_MS:
-        return False
+        return "skipped"
     window = incident_window(started_ms, end_ms, int(started_ms) + DAY_MS, t)
     if load_cached(window, t) is not None:
-        return True
+        return "stored"
+    if background:
+        with _lock:
+            fail = _failed.get(window)
+        if fail is not None and time.monotonic() - fail[0] < RETRY_AFTER_S:
+            return "failed"
+        th = start(window)
+        if threads is not None:
+            threads.append(th)
+        return "started"
     try:
-        fetch_and_store(window, now=t, timeout=timeout)
-        return True
+        fetch_and_store(window, now=t, timeout=timeout, retries=retries)
+        return "stored"
     except Exception as e:  # noqa: BLE001 - a build never fails over the archive
         log.info("openfema: prefetch %s failed: %s", window, config.mask_secrets(e))
-        return False
+        return "failed"
 
 
 def answer(window: tuple[int, int], at_ms: int, doc: dict) -> list[dict]:

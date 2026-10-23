@@ -52,6 +52,39 @@ def test_sync_live_summaries(tmp_data_dir) -> None:
     assert live.sync_live_summaries([], lookup=lambda i: (_ for _ in ()).throw(RuntimeError("down"))) == []
 
 
+def test_sync_never_touches_a_synthetic_bundle(tmp_data_dir) -> None:
+    """Final verification: a synthetic or local live bundle (``fixture-live``) has no agency record to follow, so the
+    sync neither looks it up nor rewrites its manifest (it used to log "CAL FIRE summary updated for fixture-live")."""
+    d = make_bundle(tmp_data_dir / "incidents", iid="fixture-live", mode="live")
+    mtime = os.stat(bundle.manifest_path(d)).st_mtime_ns
+    looked: list[str] = []
+    assert live.sync_live_summaries([], lookup=lambda i: looked.append(i) or _summary(i, acres=1.0)) == []
+    assert looked == [] and os.stat(bundle.manifest_path(d)).st_mtime_ns == mtime
+
+
+def test_summary_changes_copy_the_record_identity_only_when_the_record_changes() -> None:
+    """Review R1 (brief 3): numbers, link and issuer always come from one record."""
+    fresh = _summary("2026-alpha-fire-aaa111", acres=4000.0)                  # a CAL FIRE row (defaults: uid <- calfire_uid)
+    old = {k: v for k, v in fresh.model_dump(mode="json").items()
+           if k not in {"uid", "record_source", "record_issuer", "agency", "source_name"}}   # a pre-brief-3 manifest
+    old["acres"] = 3160.0
+    assert live.record_identity(old) == live.record_identity(fresh.model_dump(mode="json")) == ("calfire", "ABC")
+    assert live.summary_changes(old, fresh) == {"acres": 4000.0}            # same record: identity fields stay
+    wf = dict(fresh.model_dump(mode="json"), record_source="wfigs", record_issuer="USFS via NIFC WFIGS", calfire_uid="",
+              uid="51374D2C-D96B-40F7-940B-6CB8E0A483A2", agency=None, agency_code="USFS", name="Alpha",
+              source_name="ALPHA", unique_fire_id="2026-CASQF-000123", started_ms=5)
+    upd = live.summary_changes(wf, fresh)                                     # pinned: a WFIGS bundle, CAL FIRE's row now
+    assert upd["record_source"] == "calfire" and upd["record_issuer"] == "CAL FIRE" and upd["uid"] == "abc"
+    assert upd["calfire_uid"] == "abc" and upd["agency"] == "CAL FIRE" and upd["agency_code"] is None
+    assert upd["name"] == "Spread Test Fire" and upd["unique_fire_id"] is None and "id" not in upd and "mode" not in upd
+    assert upd["started_ms"] == 1 and "year" not in upd and "bundle_built_ms" not in upd   # the record's start; same year
+    assert "started_ms" not in live.summary_changes(dict(old, started_ms=5), fresh)          # same record: kept
+    back = live.summary_changes(fresh.model_dump(mode="json"), IncidentSummary.model_validate(wf))   # and the way back
+    assert back["record_source"] == "wfigs" and back["uid"] == wf["uid"] and back["record_issuer"] == "USFS via NIFC WFIGS"
+    braces = dict(wf, uid="{51374d2c-d96b-40f7-940b-6cb8e0a483a2}")
+    assert "record_source" not in live.summary_changes(braces, IncidentSummary.model_validate(wf))   # one IRWIN id
+
+
 def _add_run(bdir, run_id: str, issued: int, status: str = "ready") -> None:
     d = bdir / bundle.FORECASTS_DIR / run_id
     d.mkdir(parents=True, exist_ok=True)

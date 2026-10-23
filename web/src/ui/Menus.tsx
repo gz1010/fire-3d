@@ -23,6 +23,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { getHealth } from '../api/client'
 import type { HealthResponse } from '../api/types'
 import { fmtNumber } from '../lib/format'
+import { activeCountText } from '../state/overview'
 import { fmtRelative, zoneLine } from '../lib/time'
 import { shareUrl } from '../state/runtime'
 import { peakGrowth } from '../state/selectors'
@@ -333,9 +334,7 @@ function SettingsBody() {
           <dd className="mono">{liveStatus?.next_refresh_ms ? fmtRelative(liveStatus.next_refresh_ms, now) : '—'}</dd>
           <dt>Active (lower 48)</dt>
           <dd className="mono">
-            {liveStatus
-              ? `${fmtNumber(liveStatus.active_incidents)} incident${liveStatus.active_incidents === 1 ? '' : 's'} · ${fmtNumber(liveStatus.detections_24h)} det/24 h`
-              : '—'}
+            {liveStatus ? `${activeCountText(liveStatus.active_incidents)} · ${fmtNumber(liveStatus.detections_24h)} det/24 h` : '—'}
           </dd>
           <dt>Auto-build</dt>
           <dd className="mono">{liveStatus ? (liveStatus.auto_build ? 'on' : 'off') : '—'}</dd>

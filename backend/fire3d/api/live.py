@@ -6,7 +6,9 @@
    48, CAL FIRE the record in California, NIFC WFIGS elsewhere; brief 3) and the national FIRMS 7-day feeds
    (``firms.load_live_us(days=7)``);
 2. copy each record's current acres, containment, update time and status into every ready live bundle's manifest
-   summary (:func:`sync_live_summaries`: local writes only, no extra request for listed incidents);
+   summary, and the whole record identity when the listed row is now another agency's record (an id pinned to a
+   bundle built under the fire's NIFC WFIGS id; :func:`sync_live_summaries`: local writes only, no extra request for
+   listed incidents);
 3. for every ready live bundle of a still-active incident with detections newer than its ``now_ms`` (or a bundle
    older than :data:`STALE_REFRESH_H`), queue a ``refresh`` job: ``pipeline.refresh_live`` re-runs
    build_observed + build_weather, then a forecast job is queued when the newest forecast is older than 3 h or the
@@ -51,9 +53,16 @@ COUNTS_TTL_S = 10 * 60.0
 COUNTS_WAIT_S = 2.0
 # Record fields copied into live bundle summaries each cycle (identity, mode and bundle fields stay); brief 3 adds
 # the other agencies' records and the active sources (a California fire's records can disagree, round 3 item 2)
-SUMMARY_SYNC_FIELDS = ("acres", "percent_contained", "updated_ms", "contained_ms", "is_active", "county", "location",
+SUMMARY_SYNC_FIELDS = ("acres", "percent_contained", "updated_ms", "contained_ms", "contained_kind", "is_active", "county", "location",
                        "admin_unit", "url", "lat", "lon", "detections_24h", "active_sources", "other_records",
                        "complex_members", "irwin_id", "gacc", "accuracy_region")
+# Whose record the row is. Copied as well when the fresh row is another agency's record than the bundle summary's
+# (CONTRACT 14.2 "Id pinning": a bundle built under a fire's NIFC WFIGS id that CAL FIRE lists later keeps its id, and
+# its summary becomes CAL FIRE's record whole; never CAL FIRE's numbers and link under the WFIGS issuer). The id stays;
+# the start time and year are the record's too (what the next refresh writes; the bundle keeps its time_origin_ms).
+RECORD_IDENTITY_FIELDS = ("name", "source_name", "record_source", "record_issuer", "uid", "calfire_uid", "agency",
+                          "agency_code", "unique_fire_id", "aliases", "complex_name", "state", "time_zone",
+                          "started_ms", "year")
 KEEP_LIVE_FORECASTS = 4            # newest ready runs kept per live bundle by the live loop ...
 PRUNE_MIN_AGE_H = 6.0              # ... and every run issued in the last 6 h
 PRUNE_GRACE_S = 3600.0             # unlisted run directories are deleted only after this (open views keep working)
@@ -87,7 +96,7 @@ def live_status() -> LiveStatus:
     return LiveStatus(
         last_refresh_ms=st.last_refresh_ms,
         next_refresh_ms=st.next_refresh_ms if st.running else None,
-        active_incidents=int(st.active_incidents or 0),
+        active_incidents=st.active_incidents,      # None: unknown (the fire lists could not be reached)
         detections_24h_ca=st.detections_24h_ca,
         auto_build=bool(st.running and config.AUTO_BUILD_LIVE),
         detections_24h=st.detections_24h,
@@ -117,6 +126,7 @@ def _refresh_counts() -> None:
     try:
         STATE.active_incidents = len(catalog.get_catalog("live"))
     except Exception as e:
+        STATE.active_incidents = None          # unknown, never 0 (final verification, panel SR-m2)
         log.info("live counts: catalog unavailable: %s", config.mask_secrets(e))
     try:
         n = detections_24h_ca()
@@ -220,10 +230,24 @@ def _live_bundles() -> list[dict]:
     return [m for m in bundle.list_bundles() if m.get("mode") == "live" and m.get("status") == "ready"]
 
 
+def record_identity(summary: dict) -> tuple[str, str]:
+    """``(record_source, uid)`` of a summary dict, with the CONTRACT 14.1 defaults of old manifests (no
+    ``record_source``: "calfire"; no ``uid``: ``calfire_uid``); the uid upper case without braces."""
+    src = summary.get("record_source") or "calfire"
+    uid = summary.get("uid") if "uid" in summary else summary.get("calfire_uid")
+    return str(src), str(uid or "").strip().strip("{}").upper()
+
+
 def summary_changes(current: dict, fresh: IncidentSummary | dict) -> dict:
-    """The :data:`SUMMARY_SYNC_FIELDS` whose CAL FIRE value differs from the bundle summary's."""
+    """The :data:`SUMMARY_SYNC_FIELDS` whose fresh value (the record's: CAL FIRE or NIFC WFIGS) differs from the bundle
+    summary's. When the fresh row is another record than the summary's (:func:`record_identity` differs: an id pinned
+    to a bundle built under the fire's WFIGS id, CONTRACT 14.2), the :data:`RECORD_IDENTITY_FIELDS` are added, so the
+    numbers, the link and the issuer always come from one record."""
     f = fresh.model_dump(mode="json") if isinstance(fresh, IncidentSummary) else dict(fresh)
-    return {k: f.get(k) for k in SUMMARY_SYNC_FIELDS if k in f and f.get(k) != current.get(k)}
+    keys = SUMMARY_SYNC_FIELDS
+    if record_identity(f) != record_identity(current):
+        keys = SUMMARY_SYNC_FIELDS + RECORD_IDENTITY_FIELDS
+    return {k: f.get(k) for k in keys if k in f and f.get(k) != current.get(k)}
 
 
 def sync_live_summaries(summaries: list[IncidentSummary], lookup: Any = None) -> list[str]:
@@ -242,6 +266,8 @@ def sync_live_summaries(summaries: list[IncidentSummary], lookup: Any = None) ->
         cur = m.get("summary")
         if not iid or not isinstance(cur, dict):
             continue
+        if catalog.parse_incident_id(str(iid)) is None:
+            continue            # a synthetic or local bundle (fixture-live): no agency record to follow
         fresh = by_id.get(iid)
         if fresh is None:
             try:
@@ -463,7 +489,7 @@ async def run_cycle(jobs: JobManager) -> tuple[list[IncidentSummary], Any]:
     try:
         synced = await asyncio.to_thread(sync_live_summaries, summaries)
         if synced:
-            log.info("live refresh: CAL FIRE summary updated for %s", ", ".join(synced))
+            log.info("live refresh: summaries updated from their records (CAL FIRE or NIFC WFIGS) for %s", ", ".join(synced))
     except Exception as e:  # noqa: BLE001 - never stop the cycle for this
         log.warning("live refresh: summary sync failed: %s", config.mask_secrets(e))
     queued = await asyncio.to_thread(schedule_refreshes, jobs, summaries, dets)
@@ -492,6 +518,7 @@ async def live_refresh_loop(jobs: JobManager | None = None, interval_s: float | 
             except asyncio.CancelledError:
                 raise
             except Exception as e:  # keep looping; the next cycle retries
+                STATE.active_incidents = None      # the lists could not be read: the count is unknown, never 0
                 STATE.last_error = config.mask_secrets(f"{type(e).__name__}: {e}")[:300]
                 log.warning("live refresh cycle failed: %s", STATE.last_error)
             STATE.last_refresh_ms = now_ms()

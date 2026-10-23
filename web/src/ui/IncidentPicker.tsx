@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { IncidentSummary } from '../api/types'
 import { fmtAcresShort, fmtNumber } from '../lib/format'
 import { fmtDayDate, fmtRelative, timeFmt } from '../lib/time'
-import { analysisState, emptyListText, fireStatus, isActiveFire, pickerMatches, pickerWhere, OVERVIEW_FILTERS, overviewFires, PAST_YEAR, SEASON_MIN_ACRES, SEASON_YEAR, type OverviewFilter } from '../state/overview'
+import { analysisState, emptyListText, fireStatus, isActiveFire, listHealth, listSourceNotices, pickerMatches, pickerWhere, OVERVIEW_FILTERS, overviewFires, PAST_YEAR, SEASON_MIN_ACRES, SEASON_YEAR, type OverviewFilter } from '../state/overview'
 import { useStore } from '../state/store'
 import { useWorkspace } from '../state/workspace'
 import { Popover, Segmented, Spinner, Switch } from './controls'
@@ -156,6 +156,11 @@ function PickerBody({ initial, onPicked }: { initial: OverviewFilter; onPicked: 
 
   const checked = tab === 'active' ? catalog.updatedMs.live : tab === 'season' ? catalog.updatedMs.season : catalog.updatedMs.historical
   const minAcres = catalog.minAcres
+  const units = useWorkspace((s) => s.units)
+  // the lists behind this tab: an unreachable list never reads as "no fires" (§14.16)
+  const tabSources = (tab === 'active' ? [catalog.sources?.live] : tab === 'season' ? [catalog.sources?.live, catalog.sources?.season] : [catalog.sources?.historical])
+  const health = listHealth(tabSources)
+  const notices = listSourceNotices(tabSources)
   const counts: Record<OverviewFilter, number> = { active: catalog.live.length, season: overviewFires(catalog, 'season').length, past: catalog.historical.length }
   return (
     <div className="picker" onKeyDown={onKey}>
@@ -200,12 +205,17 @@ function PickerBody({ initial, onPicked }: { initial: OverviewFilter; onPicked: 
       </div>
       <div className="picker-head" aria-hidden>
         <span>Incident</span>
-        <span className="r">Acres</span>
+        <span className="r">{units === 'metric' ? 'Hectares' : 'Acres'}</span>
         <span>Contained</span>
         <span>Started</span>
         <span>Status</span>
         <span>Analysis</span>
       </div>
+      {notices.map((n) => (
+        <p key={n} className="ov-warn picker-warn" role="status">
+          {n}
+        </p>
+      ))}
       <div className="picker-list" ref={listRef} role="listbox" aria-label="Incidents" data-size={rows.length}>
         {catalog.loading && rows.length === 0 && (
           <div className="picker-empty">
@@ -218,7 +228,7 @@ function PickerBody({ initial, onPicked }: { initial: OverviewFilter; onPicked: 
               <>No incidents match “{query}”.</>
             ) : tab === 'active' ? (
               <>
-                <strong>{emptyListText('active', minAcres)} That is not an all-clear: follow local officials.</strong>
+                <strong>{emptyListText('active', minAcres, health)} That is not an all-clear: follow local officials.</strong>
                 <button
                   type="button"
                   className="btn btn-sm btn-gold"
@@ -231,9 +241,9 @@ function PickerBody({ initial, onPicked }: { initial: OverviewFilter; onPicked: 
                 </button>
               </>
             ) : tab === 'season' ? (
-              <>{emptyListText('season', minAcres)} That is not an all-clear: follow local officials.</>
+              <>{emptyListText('season', minAcres, health)} That is not an all-clear: follow local officials.</>
             ) : (
-              <>{emptyListText('past', minAcres)}</>
+              <>{emptyListText('past', minAcres, health)}</>
             )}
           </div>
         )}
@@ -262,7 +272,7 @@ function PickerBody({ initial, onPicked }: { initial: OverviewFilter; onPicked: 
                   {s.mode === 'live' && s.detections_24h != null && <span className="pr-det mono"> · {fmtNumber(s.detections_24h)} det/24 h</span>}
                 </span>
               </span>
-              <span className="mono r">{fmtAcresShort(s.acres).replace(' ac', '')}</span>
+              <span className="mono r">{fmtAcresShort(s.acres, units).replace(/ (ac|ha)$/, '')}</span>
               <ContainmentBar pct={s.percent_contained} />
               <span className="mono secondary">{fmtDayDate(s.started_ms, timeFmt(s.time_zone, '24h').tz)}</span>
               <span>

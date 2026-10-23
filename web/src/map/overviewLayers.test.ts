@@ -1,9 +1,10 @@
-import { validateStyleMin } from '@maplibre/maplibre-gl-style-spec'
+import { createPropertyExpression, latest, validateStyleMin } from '@maplibre/maplibre-gl-style-spec'
 import { describe, expect, it } from 'vitest'
 import type { IncidentSummary } from '../api/types'
 import { overviewFires } from '../state/overview'
 import {
   CHIP_IMAGE,
+  CHIP_NEXT_ANCHORS,
   CHIP_TEXT,
   chipImage,
   chipText,
@@ -12,9 +13,14 @@ import {
   clusterClickZoom,
   clusterHoverText,
   DIM_OPACITY,
+  anchorOffsets,
   isPinned,
   isSmallActive,
+  LABEL_ANCHORS,
   labelMinZoom,
+  labelSide,
+  NARROW_LABEL_MAX_ZOOM,
+  narrowLabelAnchorOffset,
   markerRadius,
   OVERVIEW_CHIP_LAYERS,
   OVERVIEW_CLUSTER_LAYERS,
@@ -58,6 +64,11 @@ function fire(over: Partial<IncidentSummary>): IncidentSummary {
     detections_24h: null,
     bundle_status: 'none',
     bundle_built_ms: null,
+    uid: 'u',
+    record_source: 'calfire',
+    record_issuer: 'CAL FIRE',
+    state: null,
+    time_zone: 'America/Los_Angeles',
     ...over,
   }
 }
@@ -87,6 +98,12 @@ describe('overview markers', () => {
     expect(overviewLabel('Unknown Fire', null, 'us')).toBe('Unknown')
     expect(overviewLabel('Fire', 10, 'us')).toBe('Fire · 10 ac')
     expect(overviewLabel('Fd140011', 3, 'us')).toBe('Fd140011 · 3 ac')
+    // small fires: one decimal, never "0 ac" (Hulsey Bench, AZ, 0.1 ac)
+    expect(overviewLabel('Hulsey Bench', 0.1, 'us')).toBe('Hulsey Bench · 0.1 ac')
+    expect(overviewLabel('Pines 1', 6.04, 'us')).toBe('Pines 1 · 6 ac')
+    expect(overviewLabel('Roper', 2.5, 'us')).toBe('Roper · 2.5 ac')
+    expect(overviewLabel('Tiny', 0.01, 'us')).toBe('Tiny · under 0.1 ac')
+    expect(overviewLabel('Tiny', 0.5, 'metric')).toBe('Tiny · 0.2 ha')
   })
 })
 
@@ -252,8 +269,40 @@ describe('layers', () => {
     expect(Object.keys(f).sort()).toEqual([...OVERVIEW_CHIP_LAYERS].sort())
     expect(f[OVR.pinnedChip]).toEqual(['all', ['!=', ['get', 'chip'], ''], ['in', ['get', 'id'], ['literal', ['near']]]])
     expect(f[OVR.activeChip]).toEqual(['all', ['!', ['has', 'point_count']], ['all', ['!=', ['get', 'chip'], ''], ['in', ['get', 'id'], ['literal', ['near']]]]])
+    expect(f[OVR.pinnedChipNext]).toEqual(['all', ['!=', ['get', 'chip'], ''], ['in', ['get', 'id'], ['literal', []]]])
     expect(selectedFilter('a')).toEqual(['==', ['get', 'id'], 'a'])
     expect(selectedFilter(null)).toEqual(['==', ['get', 'id'], ''])
+  })
+
+  it('two nearby chips never overlap, and the chip of the fire nearest the view centre always shows (final fixes R8)', () => {
+    // chipTargets lists the nearest fire first: its chip is in the "first" layers, the next fire's in the "next" ones
+    const f = overviewFilters(['near', 'next'])
+    const ids = (filter: unknown) => JSON.stringify(filter).match(/"literal",(\[[^\]]*\])/)?.[1]
+    for (const id of [OVR.pinnedChip, OVR.activeChip, OVR.otherChip]) expect(ids(f[id])).toBe('["near"]')
+    for (const id of [OVR.pinnedChipNext, OVR.activeChipNext, OVR.otherChipNext]) expect(ids(f[id])).toBe('["next"]')
+    const layers = overviewLayers('dark')
+    const layout = (id: string) => (layers.find((l) => l.id === id) as unknown as { layout: Record<string, unknown> }).layout
+    // the first chip is always drawn (and still claims its place); the next ones give way and may move around their marker
+    for (const id of [OVR.pinnedChip, OVR.activeChip, OVR.otherChip]) {
+      expect(layout(id)['text-allow-overlap']).toBe(true)
+      expect(layout(id)['text-ignore-placement']).toBeUndefined()
+      expect(layout(id)['text-anchor']).toBe('top')
+    }
+    for (const id of [OVR.pinnedChipNext, OVR.activeChipNext, OVR.otherChipNext]) {
+      expect(layout(id)['text-allow-overlap']).toBe(false)
+      expect(layout(id)['icon-allow-overlap']).toBe(false)
+      expect(layout(id)['text-variable-anchor-offset']).toEqual(CHIP_NEXT_ANCHORS)
+      expect(layout(id)['icon-image']).toBe(CHIP_IMAGE.dark)
+    }
+    // MapLibre places the top symbol layers first: every "first" chip layer sits above every "next" one
+    const order = layers.map((l) => l.id)
+    const lowestFirst = Math.min(...[OVR.pinnedChip, OVR.activeChip, OVR.otherChip].map((id) => order.indexOf(id)))
+    const highestNext = Math.max(...[OVR.pinnedChipNext, OVR.activeChipNext, OVR.otherChipNext].map((id) => order.indexOf(id)))
+    expect(lowestFirst).toBeGreaterThan(highestNext)
+    // and both sit above the labels, which give way to them
+    expect(highestNext).toBeGreaterThan(order.indexOf(OVR.pinnedLabel))
+    // a valid style (the variable anchors with their offsets included)
+    expect(validateStyleMin(style(layers.map((l) => (l.id in f ? { ...l, filter: f[l.id] } : l))) as never)).toEqual([])
   })
 
   it('markers are lighter while a fire is open', () => {
@@ -293,6 +342,35 @@ describe('layers', () => {
       }
       expect(new Set(ids).size).toBe(ids.length)
     }
+  })
+
+  it('narrow maps (phones): the labels grow towards the middle of the country at the national zoom (R7)', () => {
+    // sides across the lower 48: the coasts of CA/OR/WA, the interior West, the middle, the East, the Atlantic coast
+    expect([-122.4, -112, -98.6, -84.4, -71.1].map(labelSide)).toEqual(['ww', 'w', 'c', 'e', 'ee'])
+    // a west-coast label is never placed to the left of its fire ('right' anchor), an east-coast one never to its right
+    for (const side of ['ww', 'w'] as const) expect(LABEL_ANCHORS[side]).not.toContain('right')
+    for (const side of ['e', 'ee'] as const) expect(LABEL_ANCHORS[side]).not.toContain('left')
+    expect(anchorOffsets(['left', 'top'], 6)).toEqual(['left', [0.95, 0], 'top', [0, 0.95]])
+    // only narrow maps carry the per-side anchors; wide maps keep the radial offset
+    const label = (narrow: boolean) => (overviewLayers('dark', { narrow }).find((l) => l.id === OVR.pinnedLabel) as unknown as { layout: Record<string, unknown> }).layout
+    expect(label(false)['text-variable-anchor-offset']).toBeUndefined()
+    expect(label(false)['text-variable-anchor']).toEqual(['top', 'bottom', 'right', 'left'])
+    expect(label(true)['text-variable-anchor-offset']).toEqual(narrowLabelAnchorOffset())
+    for (const theme of ['dark', 'light', 'aerial'] as const) expect(validateStyleMin(style(overviewLayers(theme, { narrow: true })) as never)).toEqual([])
+    // evaluated as MapLibre does: by side below z3, the default anchors from z3, the offset following the marker radius
+    const spec = (latest as unknown as { layout_symbol: Record<string, never> }).layout_symbol['text-variable-anchor-offset']
+    const parsed = createPropertyExpression(narrowLabelAnchorOffset() as never, spec)
+    expect(parsed.result).toBe('success')
+    const expr = parsed.value as unknown as { evaluate: (g: { zoom: number }, f: unknown) => { values: unknown[] } }
+    const at = (zoom: number, side: string, r: number) => expr.evaluate({ zoom }, { type: 'Point', properties: { side, r }, geometry: { type: 'Point', coordinates: [0, 0] } }).values
+    expect(at(2.1, 'ww', 13)).toEqual(anchorOffsets(['left'], 13))
+    expect(at(2.1, 'ee', 4)).toEqual(anchorOffsets(['right'], 4))
+    expect(at(2.1, 'w', 13)).toEqual(anchorOffsets(LABEL_ANCHORS.w, 13))
+    expect(at(2.1, 'c', 13)).toEqual(anchorOffsets(LABEL_ANCHORS.c, 13))
+    expect(at(NARROW_LABEL_MAX_ZOOM, 'ww', 13)).toEqual(anchorOffsets(LABEL_ANCHORS.c, 13))
+    // features carry their side
+    const fc = overviewFeatures([fire({ id: 'a', lon: -121.5, lat: 40 })], 'us')
+    expect(fc.features[0].properties?.side).toBe('ww')
   })
 
   it('draw order: active marks above other fires, pinned above both; labels above markers, pinned labels placed first', () => {

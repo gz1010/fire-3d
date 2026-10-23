@@ -118,7 +118,9 @@ function LocationCardBody({ sel, official }: { sel: SelectedLocation; official: 
   const coverage = coverageText(lookup.status === 'ok' ? lookup.data : null)
   const card = useMemo(() => describeLocation(report, { units, preset, mode: st.mode, nowMs, fireWeatherNote, tf }), [report, units, preset, st.mode, nowMs, fireWeatherNote, tf])
   const fireName = st.summary ? (/\bfire$/i.test(st.summary.name) ? `the ${st.summary.name}` : st.summary.name) : null
-  const block = useMemo(() => officialBlock(official, { nowMs, units, fireName, incidentUrl: st.summary?.url ?? null, tf }), [official, nowMs, units, fireName, st.summary?.url, tf])
+  // official answers are for the replay time at a past time (a local message sent after it says so)
+  const refMs = st.mode === 'live' ? nowMs : Math.floor(timeMs / 60_000) * 60_000
+  const block = useMemo(() => officialBlock(official, { nowMs, units, fireName, incidentUrl: st.summary?.url ?? null, tf, refMs }), [official, nowMs, units, fireName, st.summary?.url, tf, refMs])
   const command = preset === 'command'
   const detailsOpen = useCardPrefs((s) => s.detailsOpen[preset])
   const narrow = useNarrow()

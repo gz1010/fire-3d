@@ -145,7 +145,8 @@ def test_get_summary_fallbacks(services, tmp_data_dir: Path) -> None:
     assert catalog.get_summary("2025-catlett-fire-01fa37") is not None          # below 300 ac still resolves
     assert catalog.get_summary("2024-timber-fire-b7e4a3") is not None           # other year -> CAL FIRE year list
     assert catalog.get_summary("2024-timber-fire-b7e4a3").mode == "historical"
-    assert catalog.get_summary("2025-nothing-fire-abcdef") is None
+    with pytest.raises(catalog.ListsUnavailable):                             # NIFC WFIGS is not served here (404):
+        catalog.get_summary("2025-nothing-fire-abcdef")                       # an id CAL FIRE lacks cannot be decided
     # a bundle on disk that no catalog lists (e.g. the fixture): the manifest's summary
     summ = _summary(id="fixture-demo", name="Fixture Fire")
     d = tmp_data_dir / "incidents" / "fixture-demo"
@@ -228,6 +229,30 @@ def test_estimate_fire_bbox_perimeter_and_connected_cluster(monkeypatch: pytest.
     assert end_ms == iso_to_ms("2025-01-21T00:00:00Z")                 # containment + 1 d
     assert kw == {"instruments": ("VIIRS",), "families": ("SNPP", "NOAA20")}
     assert bbox[0] < -118.07 < bbox[2]
+
+
+def test_estimate_fire_bbox_matches_a_wfigs_fire_by_irwin_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression (brief 3 validation): outside California the AOI must be sized with the fire's own WFIGS perimeters
+    (by IRWIN id); the California-only default found none, so Windy Deuce's AOI (36 km) clipped the fire."""
+    s = _summary(name="Windy Deuce", calfire_uid="", record_source="wfigs", state="TX", irwin_id="B972CFFD-155A",
+                 lat=35.63, lon=-101.85, acres=143302.0)
+    seen = {}
+    big = perimeters.PerimeterList([{"t_ms": s.started_ms + DAY_MS, "acres": 143000.0,
+                                     "geometry": box(-102.10, 35.45, -101.60, 35.80)}])
+
+    def fake_perims(name, lat, lon, start_ms, end_ms, **kw):
+        seen.update(kw)
+        return big if kw.get("record_source") == "wfigs" else perimeters.PerimeterList([])
+
+    monkeypatch.setattr(perimeters, "fetch_perimeters", fake_perims)
+    monkeypatch.setattr(firms, "detections_for", lambda *a, **k: _dets([(35.63, -101.85, s.started_ms + HOUR_MS)]))
+    w, so, e, n = catalog.estimate_fire_bbox(s)
+    assert seen == {"acres": 143302.0, "contained_ms": s.contained_ms, "record_source": "wfigs", "state": "TX",
+                    "irwin_id": "B972CFFD-155A"}
+    assert w <= -102.10 and e >= -101.60 and so <= 35.45 and n >= 35.80      # the whole perimeter is inside
+    seen.clear()
+    catalog.estimate_fire_bbox(_summary())                                    # a CAL FIRE row: today's call exactly
+    assert seen == {"acres": 5000.0, "contained_ms": _summary().contained_ms}
 
 
 def test_estimate_fire_bbox_fallback_circle(monkeypatch: pytest.MonkeyPatch) -> None:

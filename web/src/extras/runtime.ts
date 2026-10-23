@@ -9,6 +9,9 @@ import { useMemo } from 'react'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import { calfireFeedItems } from '../official/calfire'
+import { wfigsRecordFeedItems } from '../official/record'
+import { localAlertCredits, localAlertFeedItems, localAlertsState } from '../official/localAlerts'
+import { useTimeFormat } from '../state/timeZone'
 import { forIncident } from '../official/guard'
 import { useOfficialContext } from '../official/context'
 import { fireWeatherCredits, fireWeatherFeedItems, fireWeatherLegend } from '../official/fireWeather'
@@ -99,29 +102,42 @@ export function useExtrasLegend(nowMs: number): ExtrasLegendEntry[] {
   )
 }
 
-/** Credits of the visible optional layers and of drawn NWS outlines, as text (CONTRACT §4.4, §12.5). */
+/** Credits of the visible optional layers, of drawn NWS outlines and of the open fire's local officials' alerts
+ *  (NWS; FEMA's archive with the OpenFEMA notice), as text (CONTRACT §4.4, §12.5, §14.7). */
 export function useExtrasCredits(): ExtrasCredit[] {
   const v = useVisibleExtras()
   const fw = useFireWeatherData()
-  const fwRef = useOfficialContext().refMs
+  const ctx = useOfficialContext()
+  const fwRef = ctx.refMs
+  const localData = useOfficialRuntime((s) => forIncident(s.local.data, ctx.incidentId))
+  const demo = ctx.demo
   return useMemo(
-    () => [...evacuationCredits(v.evac), ...fireWeatherCredits(fw, fwRef), ...cameraCredits(v.cams), ...imageryCredits(v.product, v.imgs)],
-    [v.evac, v.cams, v.imgs, v.product, fw, fwRef],
+    () => [
+      ...evacuationCredits(v.evac),
+      ...fireWeatherCredits(fw, fwRef),
+      ...(demo ? [] : localAlertCredits(localAlertsState({ data: localData, loading: false, error: null }))),
+      ...cameraCredits(v.cams),
+      ...imageryCredits(v.product, v.imgs),
+    ],
+    [v.evac, v.cams, v.imgs, v.product, fw, fwRef, localData, demo],
   )
 }
 
 const NO_ITEMS: FeedItem[] = []
 
 /**
- * Feed items for UpdatesFeed `extraItems` (memoised; CONTRACT §12.3 item 5, §13): official evacuation status (whatever
- * the layer toggle says), CAL FIRE record changes, NWS fire weather alerts, and the camera / imagery items of their
- * visible layers.
+ * Feed items for UpdatesFeed `extraItems` (memoised; CONTRACT §12.3 item 5, §13, §14.5): official evacuation status
+ * (whatever the layer toggle says), the agency record (CAL FIRE's changes, or a NIFC WFIGS fire's record), NWS fire
+ * weather alerts, and the camera / imagery items of their visible layers.
  */
 export function useExtrasFeedItems(): FeedItem[] {
   const v = useVisibleExtras()
   const ctx = useOfficialContext()
   const evac = useExtrasRuntime((s) => forIncident(s.evac.data, ctx.incidentId))
   const calfire = useOfficialRuntime((s) => forIncident(s.calfire.data, ctx.incidentId))
+  const record = useOfficialRuntime((s) => forIncident(s.record.data, ctx.incidentId))
+  const localData = useOfficialRuntime((s) => forIncident(s.local.data, ctx.incidentId))
+  const tf = useTimeFormat()
   const fw = useFireWeatherData()
   const metric = useWorkspace((s) => s.units === 'metric')
   const { manifest, summary, startMs, endMs, startedMs } = useStore(
@@ -135,14 +151,18 @@ export function useExtrasFeedItems(): FeedItem[] {
     const range: [number, number] | null = startMs != null && endMs != null ? [startMs, endMs] : null
     const mode = manifest?.mode ?? summary?.mode ?? 'live'
     const items = [
-      ...evacuationFeedItems(evac, manifest, { fire: ctx.fire, metric }),
-      ...(ctx.demo ? [] : calfireFeedItems(calfire, { mode, manifest, summary })),
-      ...(ctx.demo ? [] : fireWeatherFeedItems(fw, { mode, refMs: ctx.refMs, manifest, metric })),
-      ...cameraFeedItems(v.cams),
+      ...evacuationFeedItems(evac, manifest, { fire: ctx.fire, metric, tf }),
+      ...(ctx.demo ? [] : calfireFeedItems(calfire, { mode, manifest, summary, tf })),
+      // a NIFC WFIGS fire's own record (a California fire's matched record stays on the card, not in the feed)
+      ...(ctx.demo || (summary?.record_source ?? 'calfire') !== 'wfigs' ? [] : wfigsRecordFeedItems(record, { mode, manifest, summary, tf })),
+      ...(ctx.demo ? [] : fireWeatherFeedItems(fw, { mode, refMs: ctx.refMs, manifest, metric, tf })),
+      // local officials' messages relayed by NWS / archived by FEMA (CONTRACT §14.7)
+      ...(ctx.demo ? [] : localAlertFeedItems(localAlertsState({ data: localData, loading: false, error: null }, { refMs: ctx.refMs }), { manifest, tf, metric })),
+      ...cameraFeedItems(v.cams, tf),
       ...imageryFeedItems(v.imgs, range, startedMs),
     ]
     return items.length ? items : NO_ITEMS
-  }, [evac, calfire, fw, ctx, metric, v.cams, v.imgs, manifest, summary, startMs, endMs, startedMs])
+  }, [evac, calfire, record, localData, tf, fw, ctx, metric, v.cams, v.imgs, manifest, summary, startMs, endMs, startedMs])
 }
 
 /** The optional layers, in legend order ('fireWeather' = the NWS outlines, which have no toggle). */
@@ -197,10 +217,12 @@ export function extrasStatusLines(
 
 /** Why NWS outlines cannot be drawn for the open fire (past dates without the archive, outages); null otherwise
  *  (no alert in effect is said in "Official now", not as a legend line). */
-export function fireWeatherStatusLine(d: { status: string; reason: string | null } | null, error: string | null, opts: { hasIncident: boolean; demo: boolean }): StatusLine | null {
+export function fireWeatherStatusLine(d: { status: string; reason: string | null; reason_code?: string | null } | null, error: string | null, opts: { hasIncident: boolean; demo: boolean }): StatusLine | null {
   if (!opts.hasIncident || opts.demo) return null
   if (error && !d) return { tone: 'error', title: `${SOURCE_NAME.fireWeather}: could not load`, detail: error }
   if (!d) return null
+  // the archive of past alerts could not be reached: unavailable, never "not available for this time" (panel SR-m1)
+  if (d.status === 'not_available_for_past_dates' && d.reason_code === 'upstream_error') return { tone: 'warn', title: `${SOURCE_NAME.fireWeather}: unavailable right now`, detail: d.reason }
   if (d.status === 'not_available_for_past_dates') return { tone: 'muted', title: `${SOURCE_NAME.fireWeather}: not available for this time`, detail: d.reason }
   if (d.status === 'unavailable') return { tone: 'warn', title: `${SOURCE_NAME.fireWeather}: unavailable`, detail: d.reason }
   return null

@@ -12,6 +12,7 @@ import { EMPTY_CATALOG } from '../../state/catalog'
 import { useStore } from '../../state/store'
 import { useWorkspace } from '../../state/workspace'
 import { restoreSsrState, ssrState } from '../ssr.testutil'
+import { analysisReadyText } from '../../state/overview'
 import { FireCard } from './FireCard'
 
 const regions = JSON.parse(fixtureText) as AccuracyRegionsResponse
@@ -57,6 +58,24 @@ describe('fire card record (§14.5)', () => {
     expect(r.official).toContain('Incident ID (CAL FIRE): abc12345-0000-0000-0000-000000000000')
   })
 
+  it("a past year's record edited this year carries its year (the Dragon Bravo Fire, 2025; review UX-m1)", () => {
+    const r = render(wfigsSummaryFixture({ id: '2025-dragon-bravo-x', name: 'Dragon Bravo', year: 2025, state: 'AZ', time_zone: 'America/Phoenix', started_ms: Date.UTC(2025, 6, 4, 18), updated_ms: Date.UTC(2026, 4, 14, 23, 56), is_active: false }))
+    expect(r.official).toContain('record last edited May 14, 2026 4:56 PM MST')
+  })
+
+  it('a NIFC WFIGS end date is labelled with its own meaning; a fire-out date is never "contained" (final fixes R1)', () => {
+    // Table Rock (SC, 2025): its record gives only a fire-out time (Mar 19, 2026)
+    const base = { id: '2025-table-rock-20616f', name: 'Table Rock', year: 2025, state: 'SC', time_zone: 'America/New_York', agency_code: 'FC', agency: 'Forestry Commission', record_issuer: 'FC via NIFC WFIGS', started_ms: Date.UTC(2025, 2, 1, 18), updated_ms: Date.UTC(2026, 2, 20, 14), contained_ms: Date.UTC(2026, 2, 19, 16), is_active: false }
+    const out = render(wfigsSummaryFixture({ ...base, contained_kind: 'out' }))
+    expect(out.official).toContain('declared out Mar 19, 2026')
+    expect(out.official).not.toMatch(/contained Mar/)
+    expect(render(wfigsSummaryFixture({ ...base, contained_kind: 'controlled' })).official).toContain('controlled Mar 19, 2026')
+    // an older summary that does not say which time it is: no date rather than a wrong label
+    const unknown = render(wfigsSummaryFixture({ ...base, contained_kind: null }))
+    expect(unknown.official).not.toContain('Mar 19, 2026')
+    expect(render(wfigsSummaryFixture({ ...base, contained_kind: 'contained' })).official).toContain('contained Mar 19, 2026')
+  })
+
   it('agencies that disagree: each record with its own issuer, status and time (the Timber Fire)', () => {
     const timber = summaryFixture({
       id: '2026-timber-fire-51374d',
@@ -73,9 +92,38 @@ describe('fire card record (§14.5)', () => {
     expect(r.official).toContain("The agencies' records differ on whether the fire is active")
     expect(r.official).toContain('Not listed as active (CAL FIRE, updated Oct 20, 10:00 AM PDT)')
     expect(r.official).toContain('Active (USFS via NIFC WFIGS, updated Oct 22, 9:05 AM PDT)')
-    // agreeing agencies: one record, no split
+    // CAL FIRE's own section speaks for CAL FIRE only: its status and its time wording are never NIFC's
+    expect(r.official).not.toContain('StatusActive')
+    expect(r.official).toContain('StatusNot listed as active')
+    expect(r.official).not.toContain('Updated by CAL FIRE')
+    expect(r.official).toMatch(/CAL FIRE record last edited Oct 20,( 2026)? 10:00 AM PDT/)
+    // the title chip is Fire-3d's listing (active when either agency says so), outside the record
+    expect(r.outside).toContain('Active')
+    // agreeing agencies: one record, no split, "Active" and "Updated by CAL FIRE"
     const agree = render({ ...timber, active_sources: ['calfire', 'wfigs'] })
     expect(agree.official).not.toContain('records differ')
+    expect(agree.official).toContain('StatusActive')
+    expect(agree.official).toContain('Updated by CAL FIRE')
+  })
+
+  it('a contained CAL FIRE record that NIFC still lists as active reads "Contained" (the Rocky Fire)', () => {
+    const rocky = summaryFixture({
+      id: '2026-rocky-fire-f65c7d',
+      name: 'Rocky Fire',
+      mode: 'live',
+      year: 2026,
+      is_active: true,
+      acres: 1,
+      percent_contained: 100,
+      updated_ms: Date.UTC(2026, 8, 14, 13, 22),
+      active_sources: ['wfigs'],
+      other_records: [otherRecordFixture({ name: 'Rocky', is_active: true })],
+    })
+    const r = render(rocky)
+    expect(r.official).toContain('StatusContained')
+    expect(r.official).not.toContain('StatusActive')
+    expect(r.official).not.toContain('Updated by CAL FIRE')
+    expect(r.official).toContain('Not listed as active (CAL FIRE')
   })
 
   it('a CAL FIRE complex: heading, acres and containment stay CAL FIRE’s; members named and linked under "Includes"', () => {
@@ -101,6 +149,19 @@ describe('fire card record (§14.5)', () => {
     expect(r.html).toContain('href="https://example.org/2-7"')
   })
 
+  it('a plain agency name added after a NIFC WFIGS code is credited to the NWCG unit identifiers (§14.13)', () => {
+    expect(render(wfigsSummaryFixture()).official).toContain('Agency names: NWCG unit identifiers')
+    // the code alone (name unknown): nothing added, no credit
+    expect(render(wfigsSummaryFixture({ agency: null })).official).not.toContain('NWCG')
+    // a CAL FIRE record alone: no credit
+    expect(render(summaryFixture({ year: 2026 })).official).not.toContain('NWCG')
+    // a disagreeing NIFC WFIGS record shown with its agency name: credited
+    const timber = summaryFixture({ mode: 'live', year: 2026, is_active: true, active_sources: ['wfigs'], other_records: [otherRecordFixture({ agency: 'USDA Forest Service' })] })
+    const r = render(timber)
+    expect(r.official).toContain('USFS (USDA Forest Service) via NIFC WFIGS')
+    expect(r.official).toContain('Agency names: NWCG unit identifiers')
+  })
+
   it('a member fire outside California says which complex it is part of (the name verbatim, "Complex" never twice)', () => {
     expect(render(wfigsSummaryFixture({ complex_name: 'Montana Lightning Complex' })).outside).toContain('Part of the Montana Lightning Complex')
     expect(render(wfigsSummaryFixture({ complex_name: 'Montana Lightning Complex' })).outside).not.toContain('Complex Complex')
@@ -123,11 +184,13 @@ describe('fire card accuracy label (§14.4)', () => {
 
   it('Public: the words and "How was it tested?"; Command: the score line', () => {
     const pub = render(summaryFixture({ year: 2026 }))
-    expect(pub.outside).toContain("Tested on 3 past fires in this region (2025; chaparral and grass fires). The model's settings were tuned on these same fires, so this is a best case.")
+    expect(pub.outside).toContain(
+      "Tested on 3 past fires in the Southern California region (2025). In those tests the forecast showed more new spread than really happened. The model's settings were tuned on these same fires, so this is a best case.",
+    )
     expect(pub.outside).toContain('How was it tested?')
     expect(pub.outside).not.toContain('Hindcast growth score')
     const cmd = render(summaryFixture({ year: 2026 }), 'command')
-    expect(cmd.outside).toContain('Hindcast growth score 0.43 (fires 0.40-0.47; 3 fires, 32 leads, +12-72 h;')
+    expect(cmd.outside).toContain('Hindcast growth score 0.43 of 1 in the Southern California region (fires 0.40-0.47; 3 fires, 32 leads, +12-72 h;')
     expect(cmd.outside).not.toContain('How was it tested?')
   })
 
@@ -137,3 +200,18 @@ describe('fire card accuracy label (§14.4)', () => {
     expect(render(wfigsSummaryFixture({ accuracy_region: 'NRCC' }), 'command').outside).toContain('No past fires in the Northern Rockies region have been re-run.')
   })
 })
+
+describe('fire card analysis line (validation review W-m8)', () => {
+  it('names the experimental model only when the open bundle holds a model run', () => {
+    expect(analysisReadyText(2)).toBe('Analysis ready: spread reconstruction and the experimental model')
+    expect(analysisReadyText(0)).toBe('Analysis ready: spread reconstruction (no model run yet)')
+    expect(analysisReadyText(null)).toBe('Analysis ready: spread reconstruction')
+  })
+
+  it('a prepared fire that is not open: no claim about a model run', () => {
+    const r = render(summaryFixture({ year: 2026, bundle_status: 'ready', bundle_built_ms: 1_700_000_000_000 }))
+    expect(r.outside).toContain('Analysis ready: spread reconstruction')
+    expect(r.outside).not.toContain('experimental model')
+  })
+})
+

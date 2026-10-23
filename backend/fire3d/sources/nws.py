@@ -843,10 +843,16 @@ def split_local(features: Iterable[Any]) -> tuple[list[dict], int]:
 
 
 def local_phase(a: dict, at_ms: int) -> str:
-    """``upcoming`` | ``in_effect`` | ``ended`` of a local message at ``at_ms`` (a Cancel is ended)."""
+    """``upcoming`` | ``in_effect`` | ``ended`` of a local message at ``at_ms`` (a Cancel is ended). A message is never
+    in effect before it was sent (integration review round 3, N4): its issuer may give an onset or effective time
+    earlier than its sent time (Horse Gulch, MT: an evacuation sent at 5:45 PM MDT, effective 5:00 PM), so a replay
+    at 5:00 PM has it ``upcoming`` (sent after that time); its own onset / effective fields are left as the issuer
+    gave them. The web asks for the hour and decides again at the panel's own minute from the same times (review
+    round 4), so this phase is the hour's hint."""
     if a.get("message_type") == "Cancel":
         return "ended"
-    start = a.get("onset_ms") or a.get("effective_ms") or a.get("sent_ms")
+    starts = [t for t in (a.get("onset_ms") or a.get("effective_ms"), a.get("sent_ms")) if t is not None]
+    start = max(starts) if starts else None
     if start is not None and at_ms < start:
         return "upcoming"
     exp = a.get("expires_ms")

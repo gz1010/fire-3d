@@ -40,6 +40,7 @@ import math
 import re
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -63,11 +64,11 @@ def default_year() -> int:
     return time.gmtime().tm_year
 
 
-HISTORICAL_YEAR = default_year()    # DEPRECATED alias (the default year when the module was imported): use default_year()
 DEFAULT_MIN_ACRES = 300.0
 WFIGS_YEAR_FLOOR_ACRES = 100.0      # WFIGS year lists are never fetched below this size (a year has ~40,000 wildfires)
 FIRE_TYPES = frozenset({"wildfire", "fire"})
 LIVE_CACHE_S = 300.0
+DEGRADED_CACHE_S = 60.0        # a list built while a source failed is rebuilt after this long (CONTRACT 14.16)
 HISTORICAL_CACHE_S = 3600.0
 CURRENT_YEAR_CACHE_S = 600.0
 DET_RADIUS_MIN_M = 5000.0
@@ -106,6 +107,8 @@ CALFIRE_NAME = "CAL FIRE"
 WFIGS_NAME = "NIFC WFIGS (IRWIN)"
 WFIGS_DOWN = "The national fire list (NIFC) is unavailable right now; only California fires (CAL FIRE) are listed."
 CALFIRE_DOWN = "CAL FIRE's list is unavailable right now; California fires are listed from NIFC WFIGS."
+WFIGS_STALE = "The national fire list (NIFC) could not be refreshed right now; the copy shown was fetched earlier."
+CALFIRE_STALE = "CAL FIRE's list could not be refreshed right now; the copy shown was fetched earlier."
 ACCURACY_REGIONS = frozenset({"NWCC", "NRCC", "GBCC", "SWCC", "RMCC", "EACC", "ONCC", "OSCC"})
 SOUTHERN_PLAINS = frozenset({"TX", "OK"})
 
@@ -137,17 +140,24 @@ def parse_incident_id(incident_id: str) -> tuple[int, str, str] | None:
     return (int(m.group(1)), m.group(2), m.group(3)) if m else None
 
 
+_APOSTROPHES = "'\u2019"
+_CONTRACTION_TAILS = frozenset({"s", "t", "d", "ll", "re", "ve"})
+
+
 def display_name(raw: Any) -> str:
     """A WFIGS name for display: ALL CAPS names are title-cased word by word ("BIG CLIFF" -> "Big Cliff", "O'NEIL" ->
-    "O'Neil", "FD140011" -> "Fd140011", "2ND" -> "2nd"); any other name is kept as it is (spaces collapsed)."""
+    "O'Neil", "FD140011" -> "Fd140011", "2ND" -> "2nd"); a short run after an apostrophe stays lower case ("DEVIL'S
+    CANYON" -> "Devil's Canyon", "DON'T" -> "Don't"); any other name is kept as it is (spaces collapsed)."""
     s = " ".join(str(raw or "").split())
     letters = [c for c in s if c.isalpha()]
     if not letters or not all(c.isupper() for c in letters):
         return s
 
     def cap(m: re.Match) -> str:
-        w = m.group(0)
-        return w.capitalize() if m.start() == 0 or not s[m.start() - 1].isalnum() else w.lower()
+        w, i = m.group(0), m.start()
+        if i >= 2 and s[i - 1] in _APOSTROPHES and s[i - 2].isalpha() and w.lower() in _CONTRACTION_TAILS:
+            return w.lower()
+        return w.capitalize() if i == 0 or not s[i - 1].isalnum() else w.lower()
 
     return re.sub(r"[A-Za-z]+", cap, s)
 
@@ -297,6 +307,15 @@ def wfigs_active(rec: dict, current_irwins: set[str]) -> bool:
     return rec.get("irwin_id") in current_irwins
 
 
+def contained_kind(rec: dict) -> str | None:
+    """Which WFIGS time a row's ``contained_ms`` is (CONTRACT 14.17): ContainmentDateTime ("contained"), else
+    ControlDateTime ("controlled"), else FireOutDateTime ("out"); None when the record gives none of them."""
+    for key, kind in (("contained_ms", "contained"), ("controlled_ms", "controlled"), ("out_ms", "out")):
+        if rec.get(key):
+            return kind
+    return None
+
+
 def active_irwin_ids(current_rows: list[dict]) -> set[str]:
     """IRWIN ids of the Current rows that count as active (wildfires, ``PercentContained`` null or < 100)."""
     return {r["irwin_id"] for r in current_rows
@@ -375,6 +394,7 @@ def summary_from_wfigs(rec: dict, mode: Mode, current_irwins: set[str], state: s
         started_ms=int(rec["started_ms"]),
         updated_ms=rec.get("updated_ms"),
         contained_ms=rec.get("contained_ms") or rec.get("controlled_ms") or rec.get("out_ms"),
+        contained_kind=contained_kind(rec),
         acres=rec.get("acres"),
         percent_contained=rec.get("percent_contained"),
         is_active=active,
@@ -600,7 +620,9 @@ def enrich_calfire(s: IncidentSummary, matched: list[dict], members: list[dict],
     """What a CAL FIRE row carries from the WFIGS rows dropped into it (CONTRACT 14.2): rule (2), one fire: its
     ``irwin_id``, ``unique_fire_id``, ``gacc``, one ``other_records`` entry and "wfigs" in ``active_sources`` when that
     record is active (two records of one fire, e.g. DALE and BRADFORD BRANCH for CAL FIRE's Dale Fire: both in
-    ``other_records``, the ``irwin_id`` of the one with the same name, else null); rule (1), a complex: ``irwin_id`` null, ``complex_members`` (every member name verbatim), one
+    ``other_records``, the ``irwin_id`` of the one with the same name; several with the same name, e.g. LUCAS twice:
+    :func:`same_name_primary`; none with the same name: null); rule (1), a complex: ``irwin_id`` null,
+    ``complex_members`` (every member name verbatim), one
     named ``other_records`` entry per member, the members' GACC when they all agree, and "wfigs" when any member is
     active. ``is_active`` follows :data:`CA_ACTIVE_RULE`. CAL FIRE's own name, acres, containment and times stay."""
     recs = members + matched
@@ -618,7 +640,7 @@ def enrich_calfire(s: IncidentSummary, matched: list[dict], members: list[dict],
     primary = None
     if not (members or is_complex):
         same_name = [r for r in matched if name_tokens(r.get("source_name")) == name_tokens(s.name)]
-        primary = matched[0] if len(matched) == 1 else (same_name[0] if len(same_name) == 1 else None)
+        primary = matched[0] if len(matched) == 1 else (same_name_primary(same_name) if same_name else None)
     if primary is None:
         upd.update(irwin_id=None, unique_fire_id=None)       # a complex, or several records with no single same-name one
         if members:
@@ -629,6 +651,13 @@ def enrich_calfire(s: IncidentSummary, matched: list[dict], members: list[dict],
         if pinned is not None and pinned != s.id:
             upd.update(id=pinned, aliases=sorted({*(s.aliases or []), s.id}))
     return s.model_copy(update=upd)
+
+
+def same_name_primary(recs: list[dict]) -> dict:
+    """One record for several WFIGS records that all carry the fire's own name (the Lucas Fire: LUCAS from two CAL FIRE
+    units, 1,099 ac and 4,128 ac): they are one fire's records, so the largest reported size is its record, then the
+    most recently modified (CONTRACT 14.2). Every record stays in ``other_records`` with its own issuer and status."""
+    return max(recs, key=lambda r: (r.get("acres") if r.get("acres") is not None else -1.0, r.get("updated_ms") or 0))
 
 
 def wfigs_id(rec: dict) -> str:
@@ -675,9 +704,28 @@ def _is_duplicate(a: dict, b: dict) -> bool:
 # ------------------------------------------------------------------------------------------------------------------
 # The lists
 # ------------------------------------------------------------------------------------------------------------------
-def _source(sid: str, ok: bool, retrieved_ms: int | None, reason: str | None) -> dict:
+def _source(sid: str, ok: bool, retrieved_ms: int | None, reason: str | None, stale: bool = False) -> dict:
+    """One ``ListSource`` (CONTRACT 14.1): ``stale`` when the list could not be refreshed and an older cached copy was
+    used (``retrieved_ms`` is that copy's fetch time; CONTRACT 14.16)."""
+    stale = bool(ok and stale)
+    stale_reason = CALFIRE_STALE if sid == "calfire" else WFIGS_STALE
     return {"id": sid, "name": CALFIRE_NAME if sid == "calfire" else WFIGS_NAME, "status": "available" if ok else "unavailable",
-            "retrieved_ms": retrieved_ms if ok else (retrieved_ms or None), "reason": None if ok else reason}
+            "retrieved_ms": retrieved_ms if ok else (retrieved_ms or None), "stale": stale,
+            "reason": (stale_reason if stale else None) if ok else reason}
+
+
+def _side_by_side(*fns) -> list[tuple[Any, BaseException | None]]:
+    """Run the source fetches (CAL FIRE, NIFC WFIGS, the FIRMS feeds) at the same time, so an outage of one never adds
+    its wait to the others': ``[(value, error), ...]`` in the order given (CONTRACT 14.16)."""
+    def outcome(fut):
+        try:
+            return fut.result(), None
+        except Exception as e:  # noqa: BLE001 - the caller decides what each failure means
+            return None, e
+
+    with ThreadPoolExecutor(max_workers=len(fns), thread_name_prefix="fire-lists") as ex:
+        futs = [ex.submit(f) for f in fns]
+        return [outcome(f) for f in futs]
 
 
 def _wfigs_rows(rows: list[dict]) -> list[tuple[dict, str]]:
@@ -696,20 +744,17 @@ def _live_base(refresh: bool) -> tuple[list[IncidentSummary], list[dict]]:
     from . import regions
     from .sources import calfire, firms, wfigs
 
-    cal_err = wf_err = None
     cal_live: list[dict] = []
-    try:
-        raw = calfire.list_live(refresh=refresh)
+    (raw, cal_err), (current, wf_err), (det_live, det_err) = _side_by_side(
+        lambda: calfire.list_live(refresh=refresh), lambda: wfigs.list_current(refresh=refresh),
+        lambda: firms.load_live_us(1, refresh=refresh))
+    if cal_err is not None and not isinstance(cal_err, calfire.CalFireError):
+        raise cal_err
+    if cal_err is None:
         record_history(raw, "live")
         _record_left_live(raw)
         cal_live = [r for r in _fire_records(raw) if r.get("is_active")]
-    except calfire.CalFireError as e:
-        cal_err = e
-    current: list[dict] = []
-    try:
-        current = wfigs.list_current(refresh=refresh)
-    except Exception as e:  # noqa: BLE001 - any failure of the national list degrades to California only
-        wf_err = e
+    current = current if wf_err is None else []      # any failure of the national list degrades to California only
     if cal_err is not None and wf_err is not None:
         raise calfire.CalFireError(f"CAL FIRE and NIFC WFIGS lists unavailable: {cal_err}; {config.mask_secrets(wf_err)}")
     if wf_err is not None:
@@ -749,7 +794,9 @@ def _live_base(refresh: bool) -> tuple[list[IncidentSummary], list[dict]]:
         summaries.append(summary_from_wfigs(r, "live", active, st))
     counts: list[int | None] = [None] * len(summaries)
     try:
-        det = firms.load_live_us(1, refresh=refresh)
+        if det_err is not None:
+            raise det_err
+        det = det_live
         t0 = time.monotonic()
         lat, lon = det["lat"].to_numpy(), det["lon"].to_numpy()
         w, s_, e, n = config.CA_BBOX
@@ -766,8 +813,9 @@ def _live_base(refresh: bool) -> tuple[list[IncidentSummary], list[dict]]:
         log.warning("live catalog: FIRMS 24h feeds unavailable, detections_24h = None (%s)", e)
     out = [x.model_copy(update={"detections_24h": k}) for x, k in zip(summaries, counts)]
     out.sort(key=lambda x: (-(x.detections_24h if x.detections_24h is not None else -1), -(x.acres or 0.0), x.name))
-    sources = [_source("calfire", cal_err is None, calfire.fetched_ms("live"), CALFIRE_DOWN),
-               _source("wfigs", wf_err is None, wfigs.fetched_ms(wfigs.list_key(wfigs.CURRENT_URL, wfigs.current_where())), WFIGS_DOWN)]
+    wf_key = wfigs.list_key(wfigs.CURRENT_URL, wfigs.current_where())
+    sources = [_source("calfire", cal_err is None, calfire.fetched_ms("live"), CALFIRE_DOWN, calfire.is_stale("live")),
+               _source("wfigs", wf_err is None, wfigs.fetched_ms(wf_key), WFIGS_DOWN, wfigs.is_stale(wf_key))]
     return out, sources
 
 
@@ -775,17 +823,12 @@ def _historical_base(refresh: bool, year: int, wf_min: float) -> tuple[list[Inci
     from .sources import calfire, wfigs
 
     year = int(year)
-    cal_err = wf_err = None
-    cal: list[dict] = []
-    try:
-        cal = _fire_records(year_records(year, refresh=refresh))
-    except calfire.CalFireError as e:
-        cal_err = e
-    rows: list[dict] = []
-    try:
-        rows = wfigs.list_year(year, wf_min, refresh=refresh)
-    except Exception as e:  # noqa: BLE001 - any failure of the national list degrades to California only
-        wf_err = e
+    (cal, cal_err), (rows, wf_err) = _side_by_side(lambda: _fire_records(year_records(year, refresh=refresh)),
+                                                   lambda: wfigs.list_year(year, wf_min, refresh=refresh))
+    if cal_err is not None and not isinstance(cal_err, calfire.CalFireError):
+        raise cal_err
+    cal = cal if cal_err is None else []
+    rows = rows if wf_err is None else []            # any failure of the national list degrades to California only
     if cal_err is not None and wf_err is not None:
         raise calfire.CalFireError(f"CAL FIRE and NIFC WFIGS {year} lists unavailable: {cal_err}; {config.mask_secrets(wf_err)}")
     active: set[str] = set()
@@ -817,9 +860,10 @@ def _historical_base(refresh: bool, year: int, wf_min: float) -> tuple[list[Inci
     for r, st in wf_rows:
         out.append(summary_from_wfigs(r, "historical", active, st))
     out.sort(key=lambda x: (-(x.acres or 0.0), x.name))
-    sources = [_source("calfire", cal_err is None, calfire.fetched_ms(calfire.list_key({"inactive": "true", "year": year})), CALFIRE_DOWN),
-               _source("wfigs", wf_err is None, wfigs.fetched_ms(wfigs.list_key(wfigs.YTD_URL if year >= time.gmtime().tm_year else wfigs.ALL_YEARS_URL,
-                                                                                    wfigs.year_where(year, wf_min))), WFIGS_DOWN)]
+    cal_key = calfire.list_key({"inactive": "true", "year": year})
+    wf_key = wfigs.list_key(wfigs.YTD_URL if year >= time.gmtime().tm_year else wfigs.ALL_YEARS_URL, wfigs.year_where(year, wf_min))
+    sources = [_source("calfire", cal_err is None, calfire.fetched_ms(cal_key), CALFIRE_DOWN, calfire.is_stale(cal_key)),
+               _source("wfigs", wf_err is None, wfigs.fetched_ms(wf_key), WFIGS_DOWN, wfigs.is_stale(wf_key))]
     return out, sources
 
 
@@ -837,7 +881,9 @@ def _base(mode: Mode, refresh: bool, year: int | None = None, wf_min: float = DE
         ttl = CURRENT_YEAR_CACHE_S if yr >= time.gmtime().tm_year else HISTORICAL_CACHE_S
     with _lock:
         hit = _cache.get(key)
-        if hit is not None and not refresh and time.monotonic() - hit[0] < ttl:
+        # a list built while a source failed (unavailable, or an old copy) is rebuilt after a minute, not 5-60 min
+        degraded = hit is not None and any(x.get("status") != "available" or x.get("stale") for x in hit[2])
+        if hit is not None and not refresh and time.monotonic() - hit[0] < (min(ttl, DEGRADED_CACHE_S) if degraded else ttl):
             return hit[1], hit[2]
     rows, sources = _live_base(refresh) if mode == "live" else _historical_base(refresh, yr, wf_min)
     with _lock:
@@ -910,23 +956,41 @@ def _find(rows: list[IncidentSummary], incident_id: str) -> IncidentSummary | No
     return None
 
 
+class ListsUnavailable(LookupError):
+    """:func:`resolve_listed` could not decide an id: no list that answered knows it and at least one source list
+    (CAL FIRE or NIFC WFIGS) could not be reached. The API answers 503 with :data:`LISTS_UNAVAILABLE_TEXT` (CONTRACT
+    14.2), never "a local or synthetic bundle"."""
+
+    def __init__(self, message: str = "", *, failed: tuple[str, ...] = ()):
+        super().__init__(message or LISTS_UNAVAILABLE_TEXT)
+        self.failed = failed
+
+
+LISTS_UNAVAILABLE_TEXT = "The fire lists could not be reached right now; try again later."
+
+
 def resolve_listed(incident_id: str) -> IncidentSummary | None:
     """The summary of an id that a source list knows (never a bundle manifest): the live list, the year list of the
     id's year, CAL FIRE's year list (any size), then one cached ``IrwinID LIKE '{ABCDEF%'`` query on the WFIGS
     all-years layer; the id's year and slug are checked. A California WFIGS record that the merge folds into a CAL FIRE
-    fire is not listed under its WFIGS id (None). Bundle-only ids (``fixture-demo``, ``fixture-east``) -> None."""
+    fire is not listed under its WFIGS id (None). Bundle-only ids (``fixture-demo``, ``fixture-east``) -> None.
+
+    Raises :class:`ListsUnavailable` when no list that answered knows the id and at least one lookup failed (an outage
+    is "cannot tell now", never "unknown" or "a local bundle")."""
     from .sources import calfire, wfigs
 
     parsed = parse_incident_id(incident_id)
     if parsed is None:
         return None
     year, slug, uid6 = parsed
+    failed: list[str] = []
     try:
         hit = _find(_base("live", False)[0], incident_id)
         if hit is not None:
             return _with_bundle(hit)
     except calfire.CalFireError as e:
         log.warning("resolve_listed(%s): live catalog unavailable: %s", incident_id, e)
+        failed.append("live list")
     if 2000 <= year <= default_year():
         try:
             hit = _find(_base("historical", False, year)[0], incident_id)
@@ -934,6 +998,7 @@ def resolve_listed(incident_id: str) -> IncidentSummary | None:
                 return _with_bundle(hit)
         except calfire.CalFireError as e:
             log.warning("resolve_listed(%s): %d catalog unavailable: %s", incident_id, year, e)
+            failed.append(f"{year} list")
         try:
             for r in year_records(year):
                 if r.get("uid", "").startswith(uid6) and slugify(r.get("name", "")) == slug and (r.get("type") or "").lower() in FIRE_TYPES:
@@ -942,12 +1007,14 @@ def resolve_listed(incident_id: str) -> IncidentSummary | None:
                         return _with_bundle(s)
         except calfire.CalFireError as e:
             log.warning("resolve_listed(%s): CAL FIRE %d list unavailable: %s", incident_id, year, e)
+            failed.append(f"CAL FIRE {year} list")
     try:
         cands = [r for r in wfigs.find_irwin_prefix(uid6) if r["irwin_id"].lower().startswith(uid6)
                  and int(r.get("year") or 0) == year and slugify(display_name(r.get("source_name"))) == slug]
     except Exception as e:  # noqa: BLE001
         log.warning("resolve_listed(%s): WFIGS lookup unavailable: %s", incident_id, config.mask_secrets(e))
-        return None
+        failed.append("NIFC WFIGS lookup")
+        cands = []
     for r in cands:
         # Alaska, Hawaii and territories are never listed, but their ids resolve (with their own state), so the build
         # gate can answer "not supported yet" (422) instead of "unknown"
@@ -960,6 +1027,8 @@ def resolve_listed(incident_id: str) -> IncidentSummary | None:
         except Exception:  # noqa: BLE001
             pass
         return _with_bundle(summary_from_wfigs(r, "live" if r["irwin_id"] in active else "historical", active, st))
+    if failed:
+        raise ListsUnavailable(failed=tuple(failed))
     return None
 
 
@@ -977,8 +1046,15 @@ def _folded_into_calfire(rec: dict) -> bool:
 
 def get_summary(incident_id: str) -> IncidentSummary | None:
     """The summary for one incident id (either mode), or None: :func:`resolve_listed`, else a bundle manifest on disk
-    (e.g. ``fixture-demo``, ``fixture-east``: the manifest's summary, served read-only)."""
-    s = resolve_listed(incident_id)
+    (e.g. ``fixture-demo``, ``fixture-east``: the manifest's summary, served read-only). When the lists cannot be
+    reached a bundle on disk still answers; without one :class:`ListsUnavailable` is raised."""
+    try:
+        s = resolve_listed(incident_id)
+    except ListsUnavailable:
+        m = manifest_summary(incident_id)
+        if m is not None:
+            return m
+        raise
     if s is not None:
         return s
     return manifest_summary(incident_id)
@@ -1002,8 +1078,11 @@ def manifest_summary(incident_id: str) -> IncidentSummary | None:
 
 def is_bundle_only(incident_id: str) -> bool:
     """True when only a bundle manifest knows this id (``fixture-demo``, ``fixture-east``, any local or synthetic
-    bundle): no CAL FIRE or WFIGS list does."""
-    return resolve_listed(incident_id) is None and manifest_summary(incident_id) is not None
+    bundle): no CAL FIRE or WFIGS list does. False when the lists cannot be reached (cannot tell)."""
+    try:
+        return resolve_listed(incident_id) is None and manifest_summary(incident_id) is not None
+    except ListsUnavailable:
+        return False
 
 
 def find_by_irwin(irwin_id: str) -> IncidentSummary | None:
@@ -1028,8 +1107,10 @@ def find_by_irwin(irwin_id: str) -> IncidentSummary | None:
     if not rows:
         return None
     r = rows[0]
-    s = resolve_listed(make_incident_id(int(r["year"]), display_name(r.get("source_name")), r["irwin_id"]))
-    return s
+    try:
+        return resolve_listed(make_incident_id(int(r["year"]), display_name(r.get("source_name")), r["irwin_id"]))
+    except ListsUnavailable:
+        return None
 
 
 # ------------------------------------------------------------------------------------------------------------------
@@ -1126,8 +1207,13 @@ def _estimate(summary: IncidentSummary, lat: float, lon: float) -> tuple[float, 
     t0, t1, perim_end = _fire_window(summary)
     live = summary.mode == "live" or summary.is_active
     geom = None
+    # A NIFC WFIGS record is matched by its IRWIN id (else name + its own state), as build/observed.py does
+    # (CONTRACT 14.12.8); without this the California-only default found no perimeter outside California and the AOI
+    # was sized from the VIIRS cluster alone (brief 3 validation: Windy Deuce's AOI 36 km clipped the fire).
+    ident = ({"record_source": "wfigs", "state": getattr(summary, "state", None), "irwin_id": getattr(summary, "irwin_id", None)}
+             if getattr(summary, "record_source", None) == "wfigs" else {})
     perims = perimeters.fetch_perimeters(summary.name, lat, lon, int(summary.started_ms), perim_end,
-                                         acres=summary.acres, contained_ms=summary.contained_ms)
+                                         acres=summary.acres, contained_ms=summary.contained_ms, **ident)
     for w in perims.warnings:
         log.info("estimate_fire_bbox(%s): %s", summary.id, w)
     if perims:

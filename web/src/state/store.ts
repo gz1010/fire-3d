@@ -407,6 +407,9 @@ const perIncidentReset = {
   incidentError: null,
 }
 
+/** The overview's mode and time: live, now (as at start; leaving a fire returns to them, review round 2, N3). */
+const overviewClock = (): { mode: Mode; timeMs: number } => ({ mode: 'live', timeMs: Date.now() })
+
 /** Fetch a bundle JSON file; on failure log it, record its name in `failed` and return null. */
 async function bundleJson<T>(url: string, name: string, failed: string[]): Promise<T | null> {
   try {
@@ -537,14 +540,18 @@ export const useStore = create<AppState>()((set, get) => {
     }
   }
 
-  /** Leave the shown fire for the overview (explicit close: source null; zoom-out: 'zoom'). */
+  /** Leave the shown fire for the overview (explicit close: source null; zoom-out: 'zoom'). The overview is "now", as
+   *  at start: live mode at the current time (review round 2, N3). A past fire's replay time and mode never carry over
+   *  to the overview or to the next fire while its own data load (its location card measured "sent N min after this
+   *  time" against the closed fire's replay minute, a fire without a ready analysis kept it, and /api/live/status
+   *  stopped refreshing). Opening a fire sets its own mode and time; re-opening a closed one starts at its default. */
   function leaveIncident(source: IncidentSource | null) {
     stashCurrent()
     selectToken++
     aircraftSeq++
     stopPolling()
     stopWatch()
-    set({ ...perIncidentReset, incidentId: null, incidentSource: source, incidentLoading: false, profilePath: [], headerTab: 'incident' })
+    set({ ...perIncidentReset, ...overviewClock(), incidentId: null, incidentSource: source, incidentLoading: false, profilePath: [], headerTab: 'incident' })
   }
 
   /** Show fire `id` (selectIncident and zoom focus): a cached fire at once, then revalidated; else the summary, the
@@ -603,6 +610,7 @@ export const useStore = create<AppState>()((set, get) => {
         stopWatch()
         set({
           ...perIncidentReset,
+          ...overviewClock(),
           incidentId: null,
           incidentSource: latest ? 'zoom' : null,
           incidentLoading: false,

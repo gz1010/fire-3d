@@ -50,13 +50,14 @@ export interface IncidentSummary {
   /** List rows only (brief 2, I2): the built bundle's analysis-area box [w, s, e, n] in lon/lat; null or absent when the
    *  fire has no ready bundle. */
   bbox_lonlat?: [number, number, number, number] | null
-  // Brief 3 additions (CONTRACT 14.1). Optional in wave 1; the five (R) fields become required at the integration.
-  // The backend always sends every field. A missing time_zone means the viewer's zone, labelled: never Pacific.
-  uid?: string // (R) CAL FIRE UniqueId, or IRWIN id (upper case, no braces)
-  record_source?: RecordSource // (R) whose record this row is; absent = 'calfire' (old fixtures)
-  record_issuer?: string // (R) "CAL FIRE" | "USFS via NIFC WFIGS" | "NIFC WFIGS (IRWIN)" (14.2)
-  state?: string | null // (R) USPS code of the point of origin (48 states + "DC"); null only off-US fixtures
-  time_zone?: string // (R) IANA zone of the reported location (regions.time_zone_at), never assumed
+  // Brief 3 additions (CONTRACT 14.1). The five (R) fields are required since the integration (the backend fills them
+  // for old manifests on read); the others stay optional. An invalid time_zone means the viewer's zone, labelled:
+  // never Pacific.
+  uid: string // (R) CAL FIRE UniqueId, or IRWIN id (upper case, no braces)
+  record_source: RecordSource // (R) whose record this row is
+  record_issuer: string // (R) "CAL FIRE" | "USFS via NIFC WFIGS" | "NIFC WFIGS (IRWIN)" (14.2)
+  state: string | null // (R) USPS code of the point of origin (48 states + "DC"); null only off-US fixtures
+  time_zone: string // (R) IANA zone of the reported location (regions.time_zone_at), never assumed
   agency?: string | null // protecting agency, plain name: "USDA Forest Service"; "CAL FIRE" for CAL FIRE rows; null if unknown
   agency_code?: string | null // protecting-agency code, verbatim ("USFS", "C&L"); null for CAL FIRE rows
   irwin_id?: string | null // WFIGS rows; CAL FIRE rows matched to ONE WFIGS fire; null on a CAL FIRE complex row
@@ -69,7 +70,13 @@ export interface IncidentSummary {
   complex_name?: string | null // a member fire outside California: "Part of the X Complex"
   complex_members?: string[] // a CAL FIRE complex row: its WFIGS member names, verbatim; [] otherwise
   aliases?: string[] // other ids that resolve to this row (14.2 "Id pinning"); [] otherwise
+  /** Which agency time `contained_ms` is (14.17): a NIFC WFIGS row's ContainmentDateTime ('contained'), else its
+   *  ControlDateTime ('controlled'), else its FireOutDateTime ('out'); CAL FIRE rows 'contained'. Null or absent: no
+   *  time, or an older NIFC WFIGS manifest (no containment date is shown then). Use `containedLabel`. */
+  contained_kind?: ContainedKind | null
 }
+
+export type ContainedKind = 'contained' | 'controlled' | 'out'
 
 export type LayerGrid = 'render' | 'fire' | 'image' | 'points'
 export type LayerDtype = 'float32' | 'uint8' | 'uint16' | 'int16' | 'jpeg'
@@ -362,7 +369,9 @@ export interface ListSource {
   name: string // "CAL FIRE" | "NIFC WFIGS (IRWIN)"
   status: 'available' | 'unavailable'
   retrieved_ms: number | null // when Fire-3d fetched that list (never an issue time)
-  reason: string | null // plain words when unavailable
+  reason: string | null // plain words when unavailable, or when stale
+  /** CONTRACT 14.16: the list could not be refreshed and an older copy is shown (`retrieved_ms` is that copy's time). */
+  stale?: boolean
 }
 
 export interface IncidentListResponse {
@@ -371,8 +380,9 @@ export interface IncidentListResponse {
   incidents: IncidentSummary[]
   /** Historical lists: the year served (`?year=`; brief 3: the server default is the current UTC year). */
   year?: number
-  /** (R) Brief 3: which source lists answered; a WFIGS or CAL FIRE outage shows here (14.1, 14.14). */
-  sources?: ListSource[]
+  /** Brief 3 (required since the integration): which source lists answered; a WFIGS or CAL FIRE outage shows here
+   *  (14.1, 14.14). */
+  sources: ListSource[]
 }
 
 export interface IncidentDetailResponse {
@@ -401,12 +411,13 @@ export interface AircraftResponse {
 export interface LiveStatus {
   last_refresh_ms: number | null
   next_refresh_ms: number | null
-  active_incidents: number
+  /** null: unknown (the fire lists could not be reached; CONTRACT 14.16), never 0. */
+  active_incidents: number | null
   /** @deprecated Brief 3: kept for one release; use `detections_24h` (lower 48). */
   detections_24h_ca: number | null
   auto_build: boolean
-  /** (R) Brief 3: FIRMS feed rows of the last 24 h inside the lower-48 state polygons. */
-  detections_24h?: number | null
+  /** Brief 3 (required since the integration): FIRMS feed rows of the last 24 h inside the lower-48 state polygons. */
+  detections_24h: number | null
 }
 
 // ---------------------------------------------------------------------------------------------- Brief 3 (CONTRACT 14.3, 14.4)
@@ -441,6 +452,7 @@ export interface AccuracyFire {
   gfs_fill_hours?: number // hours of the model window where HRRR was missing and GFS filled it (0 for pure HRRR)
   weather_source?: string // the bundle's verbatim source ("open-meteo:historical-forecast:gfs_hrrr")
   replaced?: string | null // the V §3 fire this one replaced and the failed check, else null
+  growth_ratio_median?: number | null // this fire's own median forecast / observed growth ratio (null: no ratio)
 }
 
 export interface AccuracyRegion {

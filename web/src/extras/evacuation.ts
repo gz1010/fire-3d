@@ -30,7 +30,7 @@ import {
   EXTRAS_COLORS,
   type EvacStyleGroup,
 } from './style'
-import type { EvacStatusKey, EvacuationsResponse, EvacZoneFeature, EvacZoneProps, ExtrasSource } from './types'
+import type { EvacSource, EvacStatusKey, EvacuationsResponse, EvacZoneFeature, EvacZoneProps } from './types'
 
 export const EVAC_SOURCE = 'fx-extras-evac'
 export const EVAC_LAYERS = {
@@ -61,7 +61,7 @@ const HOME_STATE_BY_ID: Readonly<Record<string, string>> = { caloes_evacuations:
 const ZONE_LAYERS = new Set(['caloes_evacuations', 'or_oem_evacuations'])
 
 /** The source that listed a zone (brief-2 answers: Cal OES). */
-export function zoneSourceId(p: Pick<EvacZoneProps, 'source_id'>): string {
+export function zoneSourceId(p: Partial<Pick<EvacZoneProps, 'source_id'>>): string {
   return p.source_id || 'caloes_evacuations'
 }
 
@@ -79,7 +79,7 @@ export function sourceHomeState(data: Pick<EvacuationsResponse, 'sources'> | nul
 
 /** The zone layers that answered for this area (the inventory is not a zone layer). An older backend without
  *  per-source status: every listed zone layer of an available answer. */
-export function answeredSources(data: Pick<EvacuationsResponse, 'sources' | 'status'> | null): ExtrasSource[] {
+export function answeredSources(data: Pick<EvacuationsResponse, 'sources' | 'status'> | null): EvacSource[] {
   if (!data) return []
   return data.sources.filter((s) => ZONE_LAYERS.has(s.id) && (s.status ?? (data.status === 'available' ? 'available' : 'unavailable')) === 'available')
 }
@@ -318,7 +318,7 @@ export function zoneTimes(p: Pick<EvacZoneProps, 'status_updated_ms' | 'aggregat
 }
 
 /** What the state layer's time of a zone means: "listed by Cal OES", "added to the Oregon state layer", "added". */
-export function zoneListedPhrase(p: Pick<EvacZoneProps, 'source_id'> & Partial<Pick<EvacZoneProps, 'time_basis' | 'state'>>): string {
+export function zoneListedPhrase(p: Partial<Pick<EvacZoneProps, 'source_id' | 'time_basis' | 'state'>>): string {
   const id = zoneSourceId(p)
   if (p.time_basis === 'state_layer_added') return `added to the ${stateName(HOME_STATE_BY_ID[id] ?? p.state ?? null) ?? 'state'} state layer`
   if (p.time_basis === 'date_only') return 'added'
@@ -348,10 +348,6 @@ export function zoneNearFire(zone: EvacZoneFeature, fire: FireReference | null):
   const outside = fire?.aoi ? !polygonOverlapsRing(g, fire.aoi) : false
   return { zone, distanceKm: d, outsideAnalysisArea: outside }
 }
-
-/** "Cal OES does not say which fire this is for": shown for zones outside the fire's analysis area.
- *  @deprecated California-only wording: use `notFireSpecific(aggregatorOf(data, zoneSourceId(p)))`. */
-export const NOT_FIRE_SPECIFIC = notFireSpecific('Cal OES')
 
 /** [w, s, e, n] around a set of zones (outer rings), for "Show on map" (fitBounds); null when empty. */
 export function zonesBounds(features: EvacZoneFeature[]): [number, number, number, number] | null {
@@ -399,8 +395,8 @@ export function zoneTimeText(p: Pick<EvacZoneProps, 'status_updated_ms' | 'aggre
 }
 
 /** Text for one zone in the panel (official wording verbatim; times labelled by who set them). `tf` (CONTRACT
- *  §14.9.6): the zone and clock of the times, default `getTimeFormat()`. */
-export function zoneDetail(f: EvacZoneFeature, nowMs: number, tf: TimeFmt = getTimeFormat()): ZoneDetail {
+ *  §14.9.6, required since the integration): the zone and clock of the times. */
+export function zoneDetail(f: EvacZoneFeature, nowMs: number, tf: TimeFmt): ZoneDetail {
   const p = f.properties
   const extra: string[] = []
   if (p.critical_info) extra.push(p.critical_info)

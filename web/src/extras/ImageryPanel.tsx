@@ -11,6 +11,7 @@ import { useId, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { forIncident } from '../official/guard'
 import { useStore } from '../state/store'
+import { useTimeFormat } from '../state/timeZone'
 import { useNow } from '../ui/hooks'
 import { ExtrasNotice, SourceFooter } from './ExtrasCommon'
 import { envelopeStatusLine, freshnessText } from './format'
@@ -32,6 +33,7 @@ export interface ImageryPanelProps {
 
 export function ImageryPanel({ state, selectedId, onSelect, opacity, onOpacity, startedMs = null }: ImageryPanelProps) {
   const now = useNow(60_000)
+  const tf = useTimeFormat()
   const [all, setAll] = useState(false)
   // one radio group per list: the chip's popover and the phone drawer each have their own
   const group = useId()
@@ -58,7 +60,7 @@ export function ImageryPanel({ state, selectedId, onSelect, opacity, onOpacity, 
       {data?.status === 'available' && !state.error ? (
         <p className="xs-meta">
           Images acquired up to {live ? 'now' : 'the selected time'}, newest first
-          {freshnessText(data, now, 'newest listing') ? ` · ${freshnessText(data, now, 'newest listing')}` : ''}
+          {freshnessText(data, now, 'newest listing', tf) ? ` · ${freshnessText(data, now, 'newest listing', tf)}` : ''}
         </p>
       ) : (
         <ExtrasNotice line={line} onRetry={state.error ? state.refresh : undefined} />

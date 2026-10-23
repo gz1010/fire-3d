@@ -271,7 +271,8 @@ describe('unknown states are said as such', () => {
   it('outside the modeled area = unknown, not low', () => {
     const c = card({ forecast: f, rasters: makeRasters(fc(0.5, 30, 40, 50)), perimeters: [perimeter(ORIGIN + 20 * HOUR, [square(0, 0, 1000)])] }, US, [9000, 0])
     expect(c.areaNote).toMatch(/^Outside the modeled area/)
-    expect(c.areaNote).toMatch(/Unknown, not low risk/)
+    expect(c.areaNote).toMatch(/Unknown, not low\.$/)
+    expect(c.areaNote).not.toMatch(/low risk/)
     expect(line(c, 'forecast-gap')!.text).toBe('Not covered by the forecast: outside the modeled area, so unknown (not low).')
     expect(c.headline.text).toBe(`${distance(8000.0, 'us').text} east of the mapped fire edge`)
     expect(c.caveats[0]).toMatch(/unknown, not low/)

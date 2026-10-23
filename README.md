@@ -1,25 +1,32 @@
 # Fire-3d
 
-**Wildfire forensics and forecast for California, built on real data.**
+**Wildfire forensics and forecast for the lower 48 US states, built on real data.**
 
-Fire-3d is a map-first web app that helps you understand a California wildfire: where it is, how it spread, which
-nearby places it may reach, and how current and reliable that information is. It combines public data (satellite heat
-detections, agency-mapped fire perimeters, elevation, vegetation "fuels" and weather) and runs a physics-based
-fire-spread model many times with slightly different weather (an *ensemble*), so it can show how many of those model
-runs reached each spot. It opens on a map of California with the fires CAL FIRE lists as active and this year's (2026)
-fires of 300 acres or more; the 2025 fires of 300 acres or more are one filter away. Past fires can be replayed hour by
-hour and re-forecast from any past moment to see how well the model would have done (a *hindcast*). Official
-information (evacuation orders and warnings from local officials, CAL FIRE's own record and National Weather Service
-fire-weather alerts) is shown with its issuer and its own times, always separate from the model. Fire-3d is a
-**research prototype, not for operational use**.
+Fire-3d is a map-first web app that helps you understand a wildfire anywhere in the 48 contiguous states (and
+Washington, DC): where it is, how it spread, which nearby places it may reach, and how current and reliable that
+information is. It combines public data (satellite heat detections, agency-mapped fire perimeters, elevation,
+vegetation "fuels" and weather) and runs a physics-based fire-spread model many times with slightly different weather
+(an *ensemble*), so it can show how many of those model runs reached each spot. It opens on a map of the lower 48 with
+every fire the agencies list as active right now, whatever its size, and this year's (2026) fires of 300 acres or
+more; the 2025 fires of 300 acres or more are one filter away. In California the fire list and each fire's record come
+from CAL FIRE; everywhere else (and for California fires CAL FIRE does not list) they come from the national
+interagency list, NIFC WFIGS. Past fires can be replayed hour by hour and re-forecast from any past moment to see how
+well the model would have done (a *hindcast*). Official information (evacuation orders and warnings, the agencies' own
+fire records, National Weather Service fire-weather alerts and the local officials' messages the NWS relays) is shown
+with its issuer and its own times, always separate from the model. Every time is shown in the fire's own time zone.
+Alaska and Hawaii are not supported yet. Fire-3d is a **research prototype, not for operational use**.
 
 > [!IMPORTANT]
 > Fire-3d's forecasts are experimental model output. They are not evacuation instructions and they are not official
-> information. Always follow the orders of local officials and CAL FIRE.
+> information. Always follow the orders of local officials.
 
 ## Screenshots
 
-![Public view on aerial photos with road and place labels: zooming in on the 2025 Eaton Fire shows its spread without a click, with the burned area, satellite heat detections, the hatched modeled spread, the archived NWS Red Flag Warning outline, the "Official now" block (evacuations, CAL FIRE's record, fire weather), the timeline and the coordinate strip](docs/screenshots/brief2-final-zoom-focus-eaton-1440.png)
+![The national overview in Public: every active fire of the lower 48, grouped where they crowd (the number is how many), this year's large fires as outlined markers, the NWS Red Flag Warning outlines, "Official now · lower 48 states" and the list of fires in the map view with each one's county and state](docs/screenshots/brief3-final-overview-public-desktop.png)
+
+| A fire outside California: Horse Gulch, Montana (2024) | A California fire: the 2025 Eaton Fire |
+|---|---|
+| ![Horse Gulch on aerial photos: the burned area reconstructed from satellite detections and perimeters, the fire card with the Forest Service's record via NIFC WFIGS, the accuracy label for the Northern Rockies region, Official now ("Evacuations: not available in this state (Montana)", an archived local officials' alert from the FEMA archive, the NWS line) and the timeline in Mountain time](docs/screenshots/brief3-final-horse-gulch-public-desktop.png) | ![Public view on aerial photos with road and place labels: zooming in on the 2025 Eaton Fire shows its spread without a click, with the burned area, satellite heat detections, the hatched modeled spread, the archived NWS Red Flag Warning outline, the "Official now" block (evacuations, CAL FIRE's record, fire weather), the timeline and the coordinate strip](docs/screenshots/brief2-final-zoom-focus-eaton-1440.png) |
 
 | Command preset: the location card of an address | Forensic workspace: the 3D analysis scene |
 |---|---|
@@ -27,35 +34,59 @@ fire-weather alerts) is shown with its issuer and its own times, always separate
 
 ## What you can do
 
-Fire-3d has two workspaces. **Public / Command** is one map of California with the fires drawn on top; its two
-presets, Public and Command, share the same map and data. **Forensic** is a 3D analysis scene with the scientific
-detail. The header switch reads "Public · Command · Forensic". Switching keeps the fire, the timeline time, the forecast
-and your selected point.
+Fire-3d has two workspaces. **Public / Command** is one map of the lower 48 states with the fires drawn on top; its
+two presets, Public and Command, share the same map and data. **Forensic** is a 3D analysis scene with the scientific
+detail. The header switch reads "Public · Command · Forensic". Switching keeps the fire, the timeline time, the
+forecast and your selected point.
 
-### Start on the California map
+### Start on the national map
 
-- **The California overview.** With no fire in the link, the app opens on a map of California with one marker per
-  fire at CAL FIRE's reported location, sized by its acreage (filled orange: CAL FIRE lists it as active). The filters
-  are Active, 2026 season (the default: active fires plus 2026 fires of 300 acres or more) and 2025. A panel lists the
-  fires with CAL FIRE's official record, plus "Official now · California" (the National Weather Service's fire-weather
-  alerts statewide). Nothing is opened or built by itself.
+- **The national overview.** With no fire in the link, the app opens on a map of the lower 48 states with one marker
+  per fire at the agency's reported location, sized by its acreage (filled orange: an agency lists it as active).
+  Where fires crowd, they are grouped into a circle with a number; zooming in splits the groups. Active fires group
+  only with other active fires, so they are never hidden among contained ones. The filters are Active (every fire
+  listed as active right now, whatever its size: about 230 on Oct 23, 2026), 2026 season (the default: active fires
+  plus 2026 fires of 300 acres or more, about 1,390) and 2025 (about 860). Prescribed burns are never listed. The
+  panel lists the fires in the current map view ("1,070 fires in this view · Show all 1,388"), each with its county and
+  state, and starts with "Official now · lower 48 states" (the National Weather Service's Red Flag Warnings and Fire
+  Weather Watches). Under the list: "Only fires reported to CAL FIRE or NIFC are listed; a place with no marker is not
+  an all-clear." Nothing is opened or built by itself. On phones the overview opens on the whole lower 48.
+- **Where each fire's record comes from.** In California, CAL FIRE's list is the record; NIFC WFIGS (the national
+  interagency list, which carries each protecting agency's own numbers) adds the California fires CAL FIRE does not
+  list, such as some federal fires. A California fire counts as active if either agency says so, and its card shows
+  each agency's record with its own issuer, status and time when they differ. A California complex is one marker with
+  its member fires named on the card; in other states the member fires of a complex are listed on their own, with
+  "part of the X Complex". Outside California every record is the protecting agency's (for example "USFS (USDA Forest
+  Service) via NIFC WFIGS"), with a link to the record and the agency's plain name where NWCG's unit-identifier
+  standard names its code; the few codes it does not name (for example "TRIBE", "SHP" or "DFFM") are shown as NIFC
+  sends them.
 - **Zoom in to see the spread.** Zooming in on a fire whose analysis is prepared (from about zoom 8.5) shows it without
   a click and without moving the camera: the burned area colored by when it burned, perimeters, satellite detections
   and the selected forecast appear, and the timeline, the updates panel and the location card switch to that fire.
   Panning to a neighboring prepared fire switches to it; zooming out (below about zoom 7) returns to the overview.
   Other prepared fires in view show their latest perimeter as a dashed outline. Opening a fire explicitly (its card, a
   search result or a link) frames it and adds a browser history step, so Back returns to the overview.
-- **The fire card.** Clicking a marker opens the fire's card: CAL FIRE's record (acres, containment, status, CAL
-  FIRE's own update time and incident page), Play spread, Check a location and Open in 3D. For a fire that is not
-  prepared yet (zoomed in, a chip under its marker reads "Spread not prepared yet"), the card offers **Prepare analysis
-  (1-3 min)**: the only way the Public and Command views start a build. A progress card shows each step (terrain,
-  observations, weather, forecast).
+- **The fire card.** Clicking a marker opens the fire's card: the agency's record (acres, containment, status, the
+  record's own update time and a link to it), the fire's region accuracy label, Play spread, Check a location and Open
+  in 3D. For a fire that is not prepared yet (zoomed in, a chip under its marker reads "Spread not prepared yet"), the
+  card offers **Prepare analysis (1-3 min)**: the only way the Public and Command views start a build. A progress card
+  shows each step (terrain, observations, weather, forecast).
+- **Times in the fire's own zone.** Every time is shown in the fire's local time zone with its abbreviation, for
+  example "3:40 PM MDT" in Public (12-hour clock) and "15:40 MDT" in Command and Forensic (24-hour clock). Arizona's
+  fires use Arizona's time (no daylight saving), and the Idaho panhandle uses Pacific time. A place you check uses the
+  local time there.
+- **How good is the model here?** Each fire and each checked place carries an accuracy label for its region, from the
+  test on past fires (see [the forecast section](#outside-california-12-past-fires-in-six-regions)). Public says it in
+  words, for example "Tested on 2 past fires in the Northern Rockies region (2024-2025; grass, shrub and timber
+  fires). In those tests the forecast showed too much new spread on one fire and too little on the other.", with the
+  score one tap away ("How was it tested?"); Command shows the score directly. Where no fire was tested (the Rocky
+  Mountain and Eastern regions, and Northern California) it says "Accuracy not yet tested here."
 
 ### Public (the default view)
 
 - **See where the fire is** on a continuous map with roads, towns and landmarks: the burned area reconstructed from
   satellite detections and perimeters, agency-mapped perimeters (with the time they were mapped), satellite heat
-  detections, and the incident's reported location (CAL FIRE's point, not the exact ignition point).
+  detections, and the incident's reported location (the agency's point, not the exact ignition point).
 - **Aerial photos by default.** Public opens on aerial photos with road and place labels (USDA/USGS orthoimagery).
   The legend says when they were taken: "Photos: June 2024 or earlier", so they show the land *before* recent fires,
   and they are not live satellite images. Dark and roads maps are one click away, and a map you pick wins. If the USGS
@@ -66,22 +97,26 @@ and your selected point.
   be missing; not a damage assessment". If the terrain service is down, the map stays usable as a flat map and says so.
 - **Read the forecast in plain words.** The modeled spread is shaded by the share of model runs that reached each spot
   ("at least 10 %, 50 % or 90 % of model runs had reached this spot by this time"). The chance of burning is always
-  stated for the forecast's whole period, for example "by Jan 11, 00:18 PST (72 h)", never as "the next 24 hours".
-  Forecasts show their start and issue times, and the time zone. Public calls a past fire's re-forecast a "model re-run
+  stated for the forecast's whole period, for example "by Jan 11, 12:18 AM PST (72 h)", never as "the next 24 hours".
+  Forecasts show their start and issue times, in the fire's own time zone. Public calls a past fire's re-forecast a "model re-run
   on past weather" and never shows run IDs; Command and Forensic keep the run IDs and the word hindcast.
-- **Check a location.** The "Check an address" box takes a US street address, a California town or ZIP code, pasted
-  coordinates (decimal, degrees-minutes-seconds or a map link) or a fire's exact name (which opens that fire); you can
-  also click the map. A town or ZIP code moves the map to that area and asks for an address or a map click; it never
-  opens or builds a fire (zooming there can still show a prepared fire's spread, as any zoom does). On the California
-  overview a point lists the nearest fires and their distance, with the reminder "Distance alone does not tell you the
-  risk", and "Zoom to the Eaton Fire" when it lies in a prepared fire's area. Inside a fire, the location card starts
-  with four short parts, details one tap away:
+- **Check a location.** The "Check an address" box takes a US street address, any US town, county or ZIP code
+  ("Boise, ID", "83702"; a bare name such as "Springfield" lists the matches in several states), pasted coordinates
+  (decimal, degrees-minutes-seconds or a map link) or a fire's exact name (which opens that fire); you can also click
+  the map. A town or ZIP code moves the map to that area and asks for an address or a map click; it never opens or
+  builds a fire (zooming there can still show a prepared fire's spread, as any zoom does). On the national overview a
+  point lists the nearest fires and their distance, with the reminder "Distance alone does not tell you the risk",
+  plus the place's state, county and time zone, and "Zoom to the Eaton Fire" when it lies in a prepared fire's area.
+  A point in Alaska, Hawaii or a territory says "Fire-3d does not support Alaska, Hawaii or US territories yet."
+  Inside a fire, the location card starts with four short parts, details one tap away:
   1. **Near here:** inside the latest mapped perimeter or the satellite-based estimate, or the distance and direction
      to its edge, tagged Mapped or Estimate, with its age (STALE when old).
-  2. **Official information:** evacuation orders and warnings at that spot from local officials via Cal OES (verbatim
-     status, issuer and the issuer's own time), an NWS fire-weather alert line, or exactly why nothing is shown:
-     "No evacuation order or warning listed here · not an all-clear", "not checked here", "not shown for past dates"
-     or "unavailable". Then "Follow local officials." with links.
+  2. **Official information:** evacuation orders and warnings at that spot from local officials (via Cal OES in
+     California, Oregon's Department of Emergency Management in Oregon; verbatim status, issuer and the issuer's own
+     time), the NWS fire-weather alert line, the local officials' messages the NWS relays (for example a Fire Warning
+     or an Evacuation Immediate, quoted word for word), or exactly why nothing is shown: "No evacuation order or
+     warning listed here · not an all-clear", "Evacuation zones: not available in this state", "not checked here",
+     "not shown for past dates" or "unavailable right now". Then "Follow local officials." with links.
   3. **What could bring fire here:** in Public a dated sentence, for example "In the experimental model, 0 of 31
      simulated fires reached here by Oct 21, 10:00 PDT (72 h). Not a safety guarantee." (Command shows the figure,
      the model run and the arrival times.) Up to three reasons, each tagged: the wind blowing from the fire toward or
@@ -90,24 +125,33 @@ and your selected point.
   4. **Updated and reliability:** the latest fire observation, the model's issue time and "Research prototype, not an
      evacuation order".
 
-  Outside the area the model covers, the card says "Unknown, not low risk". Street-address pins are approximate
+  Outside the area the model covers, the card says "Unknown, not low." Street-address pins are approximate
   (placed along a range of house numbers, not on the rooftop) and you can drag them.
 - **Follow the timeline:** past observations (solid line), NOW for live fires, and +24 h / +48 h / +72 h where the
   selected forecast covers them (dashed). Periods without data are disabled, with the reason. Live data older than
   6 hours is flagged STALE, and the current time is shown separately from the latest observation.
 - **Official now.** The top of the updates panel (and of the phone's "Updates" sheet, whose button shows a badge)
-  has three official rows, each with its issuer, its own times and a link, kept apart from the model:
-  - **Evacuations:** orders and warnings from local officials via Cal OES within 15 km of the fire, with their
-    distance, and "Cal OES does not say which fire this is for" when a zone lies outside the fire's area;
-  - **CAL FIRE:** its record of the fire and every change Fire-3d has recorded since it started checking, for
-    example "CAL FIRE: 50 % contained (was 25 %)" with CAL FIRE's own update time (past fires: CAL FIRE's final
-    record);
-  - **Fire weather:** National Weather Service Red Flag Warnings and Fire Weather Watches, in the NWS's own words,
-    drawn as outlines on the map. For a past fire's replay they come from an archived copy (Iowa Environmental
-    Mesonet) and are labelled so.
+  has the official rows, each with its issuer, its own times and a link, kept apart from the model:
+  - **Evacuations:** orders and warnings from local officials within 15 km of the fire, with their distance: via Cal
+    OES in California and Oregon's Department of Emergency Management (OEM) in Oregon. In every other state the row
+    says "Not available in this state (Montana)": Fire-3d found no free, official, machine-readable state feed there
+    (Washington's feed exists but its terms require users to indemnify the state, so it is not used). Zones are
+    current status only;
+  - **The fire's record:** CAL FIRE's record in California, with every change Fire-3d has recorded since it started
+    checking, for example "CAL FIRE: 50 % contained (was 25 %)" with CAL FIRE's own update time; elsewhere the
+    protecting agency's record via NIFC WFIGS, with the record's own update time (changes to these records are not
+    recorded yet);
+  - **Fire weather:** National Weather Service Red Flag Warnings and Fire Weather Watches in every lower-48 state, in
+    the NWS's own words, drawn as outlines on the map. For a past fire's replay they come from an archived copy (Iowa
+    Environmental Mesonet) and are labelled so;
+  - **Local officials' alerts:** the local officials' messages the NWS relays (Fire Warning, Evacuation Immediate,
+    Shelter In Place Warning and similar), quoted word for word with the sender's name, the time it was sent and a
+    link. For past days (the NWS keeps about a week) they come from FEMA's public IPAWS archive (OpenFEMA, about a day
+    late), labelled "FEMA archive". Most local alerts are never relayed by the NWS, so "none here" is never an
+    all-clear.
 
-  A quiet row says so and adds "Not an all-clear". In Public on a wide screen the block starts as three short lines;
-  "Details" shows everything.
+  A quiet row says so and adds "Not an all-clear"; a source that did not answer says "Unavailable right now", never a
+  quiet state. In Public on a wide screen the block starts as short lines; "Details" shows everything.
 - **Read the updates feed:** fire start, rapid growth, ridge crossings, possible spot fires, peak wind, perimeter
   updates, containment, satellite passes (a day's passes grouped in one row) and the official rows, each with its time,
   source and kind (observation, estimate, model output, official update or your own note), filtered by Official · All
@@ -120,13 +164,16 @@ and your selected point.
 - **Copy coordinates at any time.** The coordinate strip is always visible (compact in Public, one line on phones):
   the incident's reported location and your selected point in WGS84 latitude and longitude, with copy buttons.
 - **Turn on official and public sources** in the Layers panel:
-  - evacuation orders and warnings from local officials via Cal OES, with the official wording, the issuing authority
-    and the update time; the location card lists any zone your point is in (current status only, never shown for
-    past dates, and "no zones listed" is never an all-clear);
-  - public wildfire and traffic cameras (an image loads only when you ask for it);
+  - evacuation orders and warnings from local officials (California via Cal OES, Oregon via Oregon OEM; "not
+    available in this state" elsewhere), with the official wording, the issuing authority and the update time; the
+    location card lists any zone your point is in (current status only, never shown for past dates, and "no zones
+    listed" is never an all-clear);
+  - public wildfire and traffic cameras, California only (an image loads only when you ask for it); elsewhere
+    "Public cameras: California only (ALERTCalifornia, Caltrans). Not available in this state.";
   - recently acquired satellite images (Sentinel-2, Landsat, VIIRS and GOES-West) with their acquisition time, cloud
     cover and resolution.
-- **Use everyday units:** mph, feet, miles, °F and acres by default, metric on request. The three analysis charts (fire
+- **Use everyday units:** mph, feet, miles, °F and acres by default, metric (including hectares in the fire lists)
+  on request. The three analysis charts (fire
   area, rate of spread and elevation profile) open in an Analysis drawer.
 - **Keyboard and phone friendly:** `/` focuses the search box, `H` hides the panels, `Space` plays the timeline and the
   arrow keys step it (Shift: 6 hours). On the map, the arrow keys pan, `+` and `-` zoom and Shift + arrows rotate.
@@ -137,8 +184,9 @@ and your selected point.
 
 The same map and data, but denser, on the dark map by default: coordinates also in degrees-minutes-seconds and UTM, the
 incident ID, timestamps with years, the location card's model percentage, run ID, issue time and P10 / P50 / P90 arrival
-times, the full Official now block, and a data-status block that lists the newest time of each source (observations,
-perimeter, last detection, forecast issue, weather, Cal OES, NWS and the CAL FIRE record).
+times, the full Official now block, the region's accuracy score and the scores of its test fires, and a data-status
+block that lists the newest time of each source (observations, perimeter, last detection, forecast issue, weather,
+the evacuation source, NWS and the fire's record). Times use the 24-hour clock in the fire's own zone.
 
 ### Forensic (the 3D analysis scene)
 
@@ -209,7 +257,7 @@ Open <http://localhost:5173>. `Ctrl-C` stops both servers.
 
 | Command | What it starts |
 |---|---|
-| `./dev.sh` | the API with the live loop: every 15 minutes it checks CAL FIRE (recording each change of acres, containment and status), refreshes the prepared live fires and re-forecasts them when needed; right after startup it also prepares up to 4 active live fires (at least 100 acres, with detections in the last 48 h), one at a time |
+| `./dev.sh` | the API with the live loop: every 15 minutes it checks CAL FIRE and NIFC WFIGS (recording each change of a CAL FIRE fire's acres, containment and status), refreshes the prepared live fires and re-forecasts them when needed; right after startup it also prepares up to 4 active fires from anywhere in the lower 48 (at least 100 acres, with detections in the last 48 h, the most active first), one at a time |
 | `./dev.sh --no-live` | the API without the live loop or auto-builds (best for a first look) |
 | `./dev.sh --reload` | the API restarts when backend code changes; live auto-build is off, because a restart would kill builds in progress |
 | `./dev.sh --fixture` | a small fixture server (`backend/scripts/serve_fixture.py`) that lists and serves only the bundles already on disk, with fake build and forecast jobs and synthetic aircraft; address search and the optional sources need the real API |
@@ -227,33 +275,46 @@ fire, outside the incident bundles). CAL FIRE's lists keep only the latest recor
 Fire-3d recorded it whenever it checked CAL FIRE (since Oct 18, 2026). Keep it when you clean up `data/`; the bundles in
 `data/incidents/` and the download cache in `data/cache/` can be rebuilt.
 
-**Town and ZIP search index.** `backend/fire3d/data/gazetteer_ca.json` (131 KB) is built from the U.S. Census Bureau
-Gazetteer Files. To rebuild it: `cd backend && uv run python scripts/build_gazetteer.py [--year 2026]` (downloads two
-files once), or `--source DIR` to use files already downloaded. Without it, street addresses still work, but town and
-ZIP searches fail (the API answers 503).
+**Town and ZIP search index.** `backend/fire3d/data/gazetteer_us.json` (3.8 MB: about 32,400 towns and places,
+every county (3,222) and about 33,800 ZIP areas of every state) is built from the U.S. Census Bureau 2026 Gazetteer Files. To
+rebuild it: `cd backend && uv run python scripts/build_gazetteer.py [--year 2026]` (downloads three files once), or
+`--source DIR` to use files already downloaded. Without it, street addresses still work, but town and ZIP searches fail
+(the API answers 503).
+
+**Region files.** `backend/fire3d/data/us_states.geojson`, `us_counties.geojson` and `us_timezones.geojson` (about
+2 MB together, simplified) tell Fire-3d the state, county and time zone at any point without a network request. They
+are built from Census TIGERweb and the USDOT time-zone layer by `uv run python scripts/build_us_regions.py`. If they
+are missing, the place lookups answer "unavailable" (HTTP 503) and times fall back to UTC (labelled), never to Pacific
+time.
 
 ### The first run: what to expect
 
-- **The app opens on the California overview** with the fires from CAL FIRE's lists. Nothing is selected and nothing
-  is built by itself. A fresh clone has no incident data (`data/` is gitignored), so every fire's card offers
+- **The app opens on the national overview** with the fires from CAL FIRE's and NIFC's lists. Nothing is selected and
+  nothing is built by itself. A fresh clone has no incident data (`data/` is gitignored), so every fire's card offers
   **Prepare analysis (1-3 min)**, the only way the Public and Command views start a build. Fires open from the map
   (click a marker, or zoom in on a prepared fire), the list, the search box or a link, and Back returns to the
-  overview. With `./dev.sh` (live loop on), the backend also prepares up to 4 active live fires by itself after
-  startup, so they usually show their spread when you zoom in.
+  overview. With `./dev.sh` (live loop on), the backend also prepares up to 4 active fires by itself after startup
+  (chosen from the whole country), so they usually show their spread when you zoom in.
 - **In Forensic**, the setting "Prepare analysis when I pick an unprepared fire" (off by default) lets Forensic's own
   incident picker start the build directly; otherwise its card offers **Prepare analysis (1-3 min)** too.
 - **A first build takes about 1–3 minutes per fire**, mostly downloads. Measured during development: Eaton 69 s,
   Palisades 75 s, Madre 87 s and Camino 192 s; the live Henderson and Norte fires 57 s and 47 s, and the live Cyrus
-  Fire (543 acres, Oct 18, 2026) 159 s, each including its first forecast. The 4,000-pixel aerial photo alone takes
+  Fire (543 acres, Oct 18, 2026) 159 s, each including its first forecast. The final builds of the 12 test fires
+  outside California took 30 s (Black Cove, North Carolina, warm cache) to 539 s, about 9 minutes (Emigrant, Oregon),
+  when every weather host answered; Island Creek (Idaho) took 18 minutes and France Canyon (Utah) 22 minutes while one
+  weather host did not answer (docs/validation.md, section 10.3). The 4,000-pixel aerial photo alone takes
   about 30 s on a cold cache, and the satellite detections of a long fire can take 1–2 minutes. Rebuilds with a warm
   cache are much faster.
 - **A forecast takes about 2–30 seconds** (31–51 model runs over 72 h, measured on a 12-core laptop).
 - **To try it without downloads**, create the two synthetic demo incidents (about 30 s), then open one of them
-  directly by its address (they are not in CAL FIRE's lists, so the overview does not show them):
+  directly by its address (they are in no agency's list, so the overview does not show them):
 
   ```bash
   (cd backend && uv run python scripts/make_fixture.py)
   # then open http://localhost:5173/?incident=fixture-demo   (or ?incident=fixture-live)
+  (cd backend && uv run python scripts/make_fixture.py --only east)   # optional third one: fixture-east
+  # http://localhost:5173/?incident=fixture-east is a small synthetic fire in North Carolina, for checking Eastern
+  # time and the "not available in this state" lines
   ```
 
   The app labels them "Demo · simulated data".
@@ -261,7 +322,7 @@ ZIP searches fail (the API answers 503).
 Useful address-bar options: `?incident=2025-eaton-fire-dbfa57`, `&preset=command`, `&persp=3d`,
 `&basemap=dark`, `&basemap=roads` or `&basemap=aerial`, `&units=metric`, `&ws=forensic` for the Forensic workspace,
 `&view=<lon>,<lat>,<zoom>[,<bearing>,<pitch>]` for a map view and `&sel=<lat>,<lon>` for a selected point. With no
-`incident`, the app opens on the California overview; a link to an unknown fire falls back to the overview with a
+`incident`, the app opens on the national overview; a link to an unknown fire falls back to the overview with a
 notice.
 
 ### Checks
@@ -276,7 +337,7 @@ notice.
 
 ```mermaid
 flowchart LR
-  S["Public sources<br/>CAL FIRE · NASA FIRMS and CMR · NIFC perimeters<br/>USGS 3DEP · LANDFIRE · NAIP · Sentinel-2<br/>Open-Meteo weather"]
+  S["Public sources<br/>CAL FIRE · NIFC WFIGS · NASA FIRMS and CMR · NIFC perimeters<br/>USGS 3DEP · LANDFIRE · NAIP · Sentinel-2<br/>Open-Meteo weather"]
   B["Build pipeline<br/>fire3d.build"]
   D[("Incident bundle<br/>data/incidents/{id}")]
   F["Ensemble forecast<br/>fire3d.spread + pyretechnics"]
@@ -287,13 +348,17 @@ flowchart LR
   D --> A --> W
 ```
 
-1. **Catalog.** CAL FIRE's incident lists give the live fires and the fires of a year (the 2026 season for the
-   overview, 2025 behind a filter); NASA FIRMS's public 24-hour feeds count recent detections near each one. Every
-   time the backend checks CAL FIRE, it appends any change of a fire's acres, containment or status, with CAL FIRE's
-   own update time, to `data/official/calfire/`.
+1. **Catalog.** NIFC WFIGS's national lists (current, this year, all years) and CAL FIRE's incident lists give the
+   active fires and the fires of a year (the 2026 season for the overview, 2025 behind a filter): wildfires only,
+   lower 48 and DC. In California CAL FIRE's record wins and WFIGS adds the fires CAL FIRE does not list. NASA FIRMS's
+   public 24-hour feeds count recent detections near each fire. Every time the backend checks CAL FIRE, it appends any
+   change of a fire's acres, containment or status, with CAL FIRE's own update time, to `data/official/calfire/`.
+   The offline region files give each fire's state, county, time zone and accuracy region.
 2. **Build** (`fire3d.build.pipeline`). Fire-3d chooses an *analysis area* around the fire: a square in the fire's UTM
-   zone (10 or 11), sized to the fire. It then downloads elevation (USGS 3DEP), fuels and canopy (LANDFIRE), an aerial
-   photo (NAIP) and burn severity (Sentinel-2 dNBR). From satellite detections and perimeters it reconstructs when
+   zone (10 to 19 across the lower 48), sized to the fire. It then downloads elevation (USGS 3DEP), fuels and canopy
+   (LANDFIRE: the pre-fire edition, LF2023 to LF2025; where LF2025 has no data yet, parts of the South and East, the
+   previous edition), an aerial photo (NAIP) and burn severity (Sentinel-2 dNBR). Outside California the fire's
+   agency perimeters are matched by its IRWIN id. From satellite detections and perimeters it reconstructs when
    each cell burned (an *arrival-time* map), plus hourly burned area and key events. For live fires it also asks
    NASA's catalog of satellite passes (CMR) whether later passes over the fire saw nothing, which sets the latest
    observation. Finally it fetches weather for a 4 × 4 grid of points (Open-Meteo) and, for live fires, runs a first
@@ -301,20 +366,24 @@ flowchart LR
 3. **Bundle.** Everything lands in `data/incidents/<id>/`: `manifest.json`, raw grids (`layers/*.bin`), JSON files
    (detections, perimeters, timeseries, events, weather) and one folder per forecast run (`forecasts/<run_id>/`, with
    arrival-time quantiles, burn probability and flame length). Incident IDs look like `2025-eaton-fire-dbfa57` (year,
-   name, and the start of CAL FIRE's ID).
+   name, and the start of CAL FIRE's ID) or `2024-horse-gulch-889237` (the start of the fire's IRWIN id in NIFC's
+   records).
 4. **Forecast** (`fire3d.spread`). Many model runs start from the area burned at the start time and spread the fire
    for up to 72 hours (details in [the forecast section](#the-forecast-model-and-how-good-it-is)). For past fires
    Fire-3d also scores the forecast against what actually burned.
 5. **API.** FastAPI serves incident lists, bundle files and build or forecast jobs, plus the official information:
-   CAL FIRE's record and recorded changes, and NWS fire-weather alerts (one statewide request to the NWS, cached
-   2 minutes; for past times the Iowa Environmental Mesonet archive). With the live loop on, every 15 minutes it copies
-   CAL FIRE's latest acres, containment and status into each live fire; when there are new detections, or every
-   3 hours, it also refreshes the observations and weather and re-runs the forecast if needed.
+   CAL FIRE's record and recorded changes, each fire's NIFC WFIGS record, NWS fire-weather alerts and the local
+   officials' messages the NWS relays (one national request to the NWS, cached 2 minutes; for past times the Iowa
+   Environmental Mesonet archive and FEMA's IPAWS archive), evacuation zones (Cal OES, Oregon OEM) and the place
+   lookup. With the live loop on, every 15 minutes it copies the latest acres, containment and status from each live
+   fire's record into its bundle; when there are new detections, or every 3 hours, it also refreshes the observations
+   and weather and re-runs the forecast if needed. When a provider cannot be reached, the API says so within seconds
+   (a failed list is not asked again for a minute, and an older copy is labelled with its own time).
 6. **Web app.** The Public / Command map reprojects the UTM grids pixel by pixel into the web map's projection and draws
    them below the road and place labels; Forensic draws the same arrays in 3D.
 
-Conventions: JSON times are UTC epoch milliseconds (fields end in `_ms`) and the app displays Pacific time; grid row 0
-is the north edge; wind directions are the direction the wind blows **from**. The data contracts are in
+Conventions: JSON times are UTC epoch milliseconds (fields end in `_ms`) and the app displays each fire's own time
+zone (`time_zone` in its record); grid row 0 is the north edge; wind directions are the direction the wind blows **from**. The data contracts are in
 [SPEC.md](SPEC.md) (sections 4–6).
 
 ### Command line
@@ -337,7 +406,7 @@ Helper scripts, also from `backend/`:
 
 | Script | Purpose |
 |---|---|
-| `uv run python scripts/make_fixture.py [--only demo\|live]` | write the two synthetic demo bundles |
+| `uv run python scripts/make_fixture.py [--only demo\|live\|east]` | write the two synthetic demo bundles (fixture-demo, fixture-live); `--only east` writes fixture-east (North Carolina), which the default run leaves out |
 | `uv run python scripts/serve_fixture.py --port 8710` | serve bundles from disk without the full backend |
 | `uv run python scripts/check_bundle.py <id> [--quicklook DIR]` | check a bundle against the data contract; optional quick-look images |
 | `uv run python -m fire3d.spread.validate hindcast …` or `… live-start …` | batch hindcasts for calibration, or the check of the live start on past fires (see [docs/validation.md](docs/validation.md), section 9) |
@@ -348,7 +417,7 @@ Helper scripts, also from `backend/`:
 | Method | Path | Returns |
 |---|---|---|
 | GET | `/api/health` | `{ok, version}` |
-| GET | `/api/incidents?mode=live\|historical&year=2026&min_acres=300` | incident list; `year` picks CAL FIRE's list of that year (historical mode, default 2025); each row adds `bbox_lonlat`, the analysis area of a prepared fire |
+| GET | `/api/incidents?mode=live\|historical&year=2026&min_acres=300&state=MT` | the national incident list (live: every active wildfire; historical: the fires of `year`, default the current year, of `min_acres` or more); each row adds `bbox_lonlat`, the analysis area of a prepared fire; `sources` says whether CAL FIRE's and NIFC's lists answered, and when Fire-3d fetched them |
 | GET | `/api/incidents/{id}` | summary, manifest and current job |
 | POST | `/api/incidents/{id}/build?force=false` | a build job |
 | POST | `/api/incidents/{id}/forecast` | a forecast job (body: `start_ms`, `horizon_h`, `ensemble`, `members`, all optional) |
@@ -356,9 +425,13 @@ Helper scripts, also from `backend/`:
 | GET | `/api/bundles/{id}/{path}` | bundle files (gzip, ETag) |
 | GET | `/api/incidents/{id}/aircraft` | firefighting aircraft near a live fire |
 | GET | `/api/live/status` | live-loop status |
-| GET | `/api/geocode?q=<US street address \| California town \| ZIP code>` | street addresses: Census Geocoder matches (cached 30 days); California towns and ZIP areas: the local Census Gazetteer index (no upstream call) |
+| GET | `/api/geocode?q=<US street address \| US town or county \| ZIP code>` | street addresses: Census Geocoder matches (cached 30 days); towns, counties and ZIP areas of every state: the local Census Gazetteer index (no upstream call) |
+| GET | `/api/geo/lookup?lon=&lat=` | state, county, time zone and coverage at a point (offline region files) |
+| GET | `/api/accuracy-regions` | the accuracy label of each region (from `backend/fire3d/data/regional_accuracy.json`) |
+| GET | `/api/official/incident-record?incident=<id>` | the fire's NIFC WFIGS record: the protecting agency, its numbers and the record's own update time |
+| GET | `/api/official/local-alerts?incident=<id>&at_ms=<ms>` or `?bbox=w,s,e,n` | the local officials' messages relayed by the NWS (live) or from FEMA's IPAWS archive (past days), verbatim |
 | GET | `/api/official/calfire?incident=<id>` | CAL FIRE's current record of the fire (its own numbers and update time) and every change Fire-3d has recorded since it first checked; past fires: CAL FIRE's final record |
-| GET | `/api/official/fire-weather?incident=<id>&at_ms=<ms>&margin_km=15` | NWS Red Flag Warnings and Fire Weather Watches whose zones meet the fire's area + 15 km, verbatim; the present from the NWS, past times from the Iowa Environmental Mesonet archive (labelled archived); without `incident`, every current California alert |
+| GET | `/api/official/fire-weather?incident=<id>&at_ms=<ms>&margin_km=15` | NWS Red Flag Warnings and Fire Weather Watches whose zones meet the fire's area + 15 km, verbatim; the present from the NWS, past times from the Iowa Environmental Mesonet archive (labelled archived); without `incident`, every current alert in the lower 48 |
 | GET | `/api/extras/{evacuations,cameras,cameras/latest,imagery,sources}` | optional sources (`?incident=<id>` or `?bbox=w,s,e,n`; a camera image needs `?id=<camera id>`) |
 
 </details>
@@ -395,27 +468,27 @@ flowchart TB
 |---|---|
 | `config.py`, `http.py` | settings, environment variables, the FIRMS key and secret masking; a cached HTTP client with retries, a concurrency cap and the FIRMS rate limiter |
 | `grid.py`, `bundle.py`, `contracts.py`, `types.py`, `timeutil.py` | analysis-area math, bundle reading and writing (atomic, locked), data contracts |
-| `sources/` | one module per provider: `calfire`, `calfire_history` (the CAL FIRE change log), `firms`, `overpass` (NASA CMR satellite passes), `perimeters`, `terrain` (3DEP), `landfire`, `imagery` (NAIP), `sentinel` (dNBR), `weather` (Open-Meteo), `nws` (NWS alerts and the IEM archive), `aircraft` (adsb.lol, adsb.fi fallback) |
-| `catalog.py` | the live list and the year lists (2026 season, 2025), with each prepared fire's area |
-| `data/gazetteer_ca.json` | the California towns and ZIP areas index for search (built by `scripts/build_gazetteer.py`) |
+| `sources/` | one module per provider: `calfire`, `calfire_history` (the CAL FIRE change log), `wfigs` (NIFC's national lists and records), `firms`, `overpass` (NASA CMR satellite passes), `perimeters`, `terrain` (3DEP), `landfire`, `imagery` (NAIP), `sentinel` (dNBR), `weather` (Open-Meteo), `nws` (NWS alerts, relayed local messages and the IEM archive), `openfema` (FEMA's IPAWS archive), `evacuations` (Cal OES and Oregon OEM, and which states have a feed), `aircraft` (adsb.lol, adsb.fi fallback) |
+| `catalog.py`, `regions.py` | the national live list and the year lists (2026 season, 2025) with the California merge and each prepared fire's area; state, county, time zone and accuracy region at a point |
+| `data/` | `gazetteer_us.json` (towns, counties and ZIP areas for search), the region files, `nwcg_agency_codes.json` (plain agency names), `regional_accuracy.json` (the accuracy labels) |
 | `build/` | `pipeline` (the build sequence), `aoi` (terrain, fuels, imagery, trees, burn scar), `observed` (spread reconstruction), `live_observation` (the latest observation of a live fire), `weather_bundle` |
 | `spread/` | `moisture` (fuel moisture, fire weather index), `behavior`, `engine` (pyretechnics runs), `ensemble` (forecasts), `validate` (scores and calibration) |
-| `api/` | `app` (routes), `jobs` (build and forecast queue), `live` (refresh loop), `geocode` (Census proxy, local towns and ZIP codes), `extras` (evacuation zones, cameras, recent imagery), `official` (CAL FIRE record and changes, NWS fire weather) |
+| `api/` | `app` (routes), `jobs` (build and forecast queue), `live` (refresh loop), `geocode` (Census proxy, local towns, counties and ZIP codes), `extras` (evacuation zones, cameras, recent imagery), `official` (CAL FIRE record and changes, NWS fire weather, local officials' alerts), `records` (NIFC WFIGS records, accuracy regions) |
 | `cli.py` | the command line above |
 
 **Web app** (`web/src/`):
 
 | Folder | Role |
 |---|---|
-| `state/` | two zustand stores: `store.ts` (incident, the three CAL FIRE lists, live or past data, forecast run, timeline, zoom focus) and `workspace.ts` (workspace, preset, 2D/3D, basemap, units, selected point, map view, overview filter, fire card); browser history |
+| `state/` | two zustand stores: `store.ts` (incident, the three fire lists, live or past data, forecast run, timeline, zoom focus) and `workspace.ts` (workspace, preset, 2D/3D, basemap, units, selected point, map view, overview filter, fire card); the fire's time zone; browser history |
 | `api/` | typed API client |
 | `map/` | the MapLibre map: basemaps, terrain, reprojected fire overlays, vector layers, fire markers, zoom focus, fire framing, 3D buildings, controls, legend and credits |
 | `location/` | search (addresses, towns, ZIP codes, coordinates, fire names), the location card and the coordinate strip |
 | `ui/shell/`, `ui/timeline/`, `ui/feed/` | the map workspace layout (header, overview panel, fire card, panels, drawers, safe area, workspace switching), the compact timeline, Official now and the updates feed |
-| `official/` | official information: Cal OES evacuations at a point, CAL FIRE's record and changes, NWS alerts and their map layer |
+| `official/` | official information: evacuations at a point, the fire's records (CAL FIRE and NIFC WFIGS), NWS alerts and their map layer, local officials' alerts |
 | `extras/` | optional sources: evacuation zones, cameras, recent satellite imagery and the satellite chip |
 | `scene/` and the other `ui/` files | the Forensic workspace: 3D scene, effects, panels, full timeline, charts, Key Events |
-| `lib/`, `data/` | geodesy, UTM reprojection, plain-language wording, raster loading |
+| `lib/`, `data/` | geodesy, UTM reprojection, the time formatter (the fire's own zone, 12- or 24-hour), plain-language and accuracy wording, raster loading |
 
 **The two workspaces.** `App.tsx` mounts only the active workspace, so the hidden one does not render in the
 background. In Public / Command, MapLibre GL JS owns the camera, terrain and tiles, and the fire grids are drawn as
@@ -425,7 +498,8 @@ is handed over so you keep looking at the same place.
 Design documents: [SPEC.md](SPEC.md) (data contracts and HTTP API), [docs/redesign/BRIEF.md](docs/redesign/BRIEF.md)
 (the map-first redesign), [docs/redesign/BRIEF-2.md](docs/redesign/BRIEF-2.md) and
 [docs/redesign/PLAN-2.md](docs/redesign/PLAN-2.md) (the California overview, civilian search and official
-information), [docs/redesign/CONTRACT.md](docs/redesign/CONTRACT.md) (interfaces between the parts),
+information), [docs/redesign/BRIEF-3.md](docs/redesign/BRIEF-3.md) and [docs/redesign/PLAN-3.md](docs/redesign/PLAN-3.md)
+(the lower 48 states), [docs/redesign/CONTRACT.md](docs/redesign/CONTRACT.md) (interfaces between the parts),
 [docs/validation.md](docs/validation.md) (forecast validation), [PLAN.md](PLAN.md) and
 [docs/dev/module-reports.md](docs/dev/module-reports.md) (build notes).
 
@@ -453,7 +527,10 @@ Fire-3d summarizes the runs in two ways:
 Three calibrated settings are on by default ([docs/validation.md](docs/validation.md), sections 3 and 5):
 
 1. **Drought-adjusted live fuel moisture.** After a dry winter the vegetation is treated as drier than the monthly
-   table says. (Eaton had only 12 mm of rain since October.)
+   table says. (Eaton had only 12 mm of rain since October.) Outside California the moisture of living plants comes
+   instead from a growing-season index computed from the fire's own weather (the NFDRS 2016 GSI), because
+   California's month table does not fit other climates: it assumed green grass in a Texas February, where the grass
+   was cured.
 2. **Held quiet perimeter.** Edges with no growth and no satellite detection of new burning within 1 km in the
    12 hours before the start do not spread. A detection counts as spread only where it coincides with growth: hot
    pixels on ground that burned more than 12 hours earlier are burnout, not spread.
@@ -514,10 +591,52 @@ would improve.
 ### Caveats on the scores
 
 - The hindcasts used almost perfect weather (archived short-range HRRR forecasts). Real-time forecasts will do worse.
-- Only three fires were used, two of them in the same Santa Ana wind event, and all in chaparral and grass. The
-  settings may not transfer to timber or other fire regimes.
+- Only three fires were used to set the model, two of them in the same Santa Ana wind event, and all in chaparral and
+  grass. The test outside California (next section) shows that the settings do not transfer well.
 - The shrinking multiplier will under-predict a new wind event two or three days after the start.
 - The "observed" spread is itself a reconstruction: on a synthetic test its median timing error was 1.29 hours.
+
+### Outside California: 12 past fires in six regions
+
+Before brief 3's launch the model was tested on 12 past fires outside California, two in each of six regions (the
+national fire-management areas): the Northwest, Northern Rockies, Great Basin, Southwest, Southern Plains (Texas and
+Oklahoma) and Southeast. The fires, start times and rules were written down before the first score
+([docs/validation.md, section 10](docs/validation.md#10-outside-california-brief-3)); nothing was tuned on them. Each
+fire was re-forecast from 3 or 4 start times during its main growth with archived weather and scored at 12, 24, 48
+and 72 hours with the same growth-only Sørensen score (0 = no overlap, 1 = perfect).
+
+| Region | Test fires (score each) | Region score | Forecast growth vs real growth (median) |
+|---|---|---:|---|
+| Northwest | Emigrant, OR (0.28); Lower Sugarloaf, WA (0.23) | 0.26 | about a quarter (0.26×) |
+| Northern Rockies | Island Creek, ID (0.19); Horse Gulch, MT (0.49) | 0.34 | too little on one (0.63×), too much on the other (1.78×) |
+| Great Basin | France Canyon, UT (0.22); Cottonwood Peak, NV (0.28) | 0.25 | a little too little (0.83×) |
+| Southwest | Trout, NM (0.35); Greer, AZ (0.35) | 0.35 | too much (1.84×) |
+| Southern Plains | Windy Deuce, TX (0.30); Rush, OK (0.49) | 0.39 | too little (0.69×) |
+| Southeast | Table Rock, SC (0.21); Black Cove, NC (0.17) | 0.19 | about a third (0.35×) |
+| Southern California (for comparison) | Eaton (0.44), Madre (0.40), Palisades (0.47) | 0.43 | too much (1.85×) |
+| Rocky Mountain, Eastern, Northern California | none | not tested | "Accuracy not yet tested here" |
+
+What this means, in plain words:
+
+- **The model does worse outside California.** Region scores range from 0.19 (Southeast) to 0.39 (Southern Plains),
+  against 0.43 in Southern California, where the settings were fitted (a best case).
+- **It usually forecasts too little new spread outside California** (8 of the 12 fires), because the settings that
+  slow the model down were fitted to California fires that it over-predicted. Fires that ran again days after a quiet
+  spell are the worst case. The exceptions were wind-driven runs in grass and timber (Greer, Horse Gulch, Trout), which
+  grew too much, as California's fires do.
+- **The Appalachian leaf-litter fires** (Table Rock and Black Cove) scored lowest: the model forecast a fifth to a half
+  of the real growth.
+- **Two fires per region is a small sample.** Two fires of the same region differ by about 0.1 on average, so a region
+  score is uncertain by roughly ±0.07 (±0.13 with 95 % confidence); in the Northern Rockies the two fires differ by
+  0.30. Each region tested only the fuels its two fires burned; its other fuels are untested.
+- **Live forecasts will do worse.** These re-runs used the weather that really happened. Re-issuing the same fires
+  as if they were live (forecast from the latest satellite pass) scored 0.23 on average, and real live forecasts use
+  predicted weather, which is worse again.
+- **Southern Plains depends on one fire's timing.** Windy Deuce's run is timed by satellite passes, and NIFC's own
+  perimeter time differs by about a day, so its score is uncertain.
+
+The app shows these results per region as described in [How good is the model here?](#start-on-the-national-map).
+The numbers are in `backend/fire3d/data/regional_accuracy.json`.
 
 ### Live forecasts
 
@@ -552,31 +671,58 @@ seconds. To reproduce the numbers, see [docs/validation.md, section 9](docs/vali
 
 ## Limitations
 
-- **California only.** The overview shows what CAL FIRE lists as active and its 2026 list (300 acres or more); the
-  2025 list (300 acres or more, or 100 with the picker's toggle) is behind a filter. Zooming in shows the spread only
-  for prepared fires in those lists; any other fire needs "Prepare analysis" first.
+- **The lower 48 states and Washington, DC only.** Alaska and Hawaii are not supported yet (they need different map
+  handling and have patchier terrain and fuel data): their fires are not listed, a fire there cannot be prepared, and
+  a point there says "Fire-3d does not support Alaska, Hawaii or US territories yet." The overview shows every fire
+  CAL FIRE or NIFC lists as active, and the 2026 and 2025 fires of 300 acres or more (100 with the picker's switch for
+  2025). Zooming in shows the spread only for prepared fires; any other fire needs "Prepare analysis" first.
+- **Accuracy differs by region, and the samples are small.** The model was tested on 2 past fires in each of six
+  regions outside California (scores 0.19 to 0.39, against 0.43 in Southern California, where its settings were
+  fitted); see [Outside California](#outside-california-12-past-fires-in-six-regions). Two fires per region give a
+  rough value (about ±0.07), only the fuels those fires burned were tested, and the Rocky Mountain and Eastern regions
+  and Northern California were not tested at all ("Accuracy not yet tested here"). Outside California the model usually
+  forecasts too little new spread.
+- **Evacuation zones in two states only.** Official evacuation zones come from Cal OES in California and Oregon's
+  Department of Emergency Management in Oregon, current status only. Every other state says "Evacuation zones: not
+  available in this state", never an all-clear: Fire-3d found no other free, official, public, machine-readable state
+  feed. Washington has one, but its terms require users to "hold harmless, defend, and indemnify the State of
+  Washington", so by your decision it is not used; Florida publishes county status only. County and vendor
+  evacuation systems are out of scope. Everywhere, the local officials' messages that the NWS relays still show, but
+  most local alerts are never relayed.
+- **Cameras are California only** (ALERTCalifornia, Caltrans); elsewhere "Not available in this state".
+- **Records outside California have no change history yet.** Fire-3d records every change of a CAL FIRE record;
+  NIFC WFIGS records show their latest numbers with their own update time only. NIFC's current list sometimes answers
+  two different snapshots within minutes; Fire-3d shows what it gets, with the record's time.
+- **Not done yet:** GOES-East satellite images (recent imagery uses GOES-West), and recorded change history for NIFC
+  WFIGS records.
 - **Fixed analysis area.** Each fire's model area is set when it is built. Panning beyond it shows "Outside modeled
-  area", which means unknown, not low risk.
+  area", which means unknown, not low.
 - **Coarse observations.** Satellite detections are 375 m (VIIRS), 1 km (MODIS) or 2–3 km (GOES) across, with a few
-  polar-orbiting passes a day. The replay is interpolated between them. 27 of the 78 past fires of 300 acres or
-  more have no agency perimeter, so they rely on detections alone, and perimeter times are best estimates.
+  polar-orbiting passes a day. The replay is interpolated between them. Many fires have no agency perimeter: of the
+  1,178 wildfires of 300 acres or more in the lower 48 in 2026 (counted on Oct 22, 2026), 356 (about 30 %) had no
+  NIFC perimeter, and in the Southeast only about 30 % had one. Those fires rely on detections alone, and perimeter
+  times are best estimates.
 - **"No fire seen" has limits.** A satellite pass only rules out fire above its detection limit: thick cloud, smoke or
   smoldering can hide a burning fire. Passes are looked up at the fire's center, so a very large fire can lie partly
   outside a pass. A live forecast's start moves forward only when its bundle refreshes (new detections, or every
   3 hours for a quiet fire), so it can trail the newest pass by a few hours.
-- **Search** finds US street addresses with house numbers (approximate pins), California towns and ZIP codes
-  (approximate centers; the map moves there and asks for an address or a click), coordinates and fire names; no
-  landmarks, businesses or street names without a house number. A town search never opens a fire, but if the town
+- **Search** finds US street addresses with house numbers (approximate pins), US towns, counties and ZIP codes
+  (approximate centers; the map moves there and asks for an address or a click; PO-box-only ZIP codes are missing),
+  coordinates and fire names; no landmarks, businesses or street names without a house number. A ZIP area is described
+  as "near" the closest town to its center, which can be a neighboring place. A town search never opens a fire, but if the town
   lies in a prepared fire's area, zooming there shows that fire's spread (for example "Malibu" shows the Bryson Fire),
   as any zoom does.
-- **Evacuation data** is current status only, and only as complete as the counties that feed the Cal OES layer. Cal
-  OES gives no issue time (Fire-3d shows when Cal OES listed the zone) and does not say which fire a zone belongs to;
-  zones within 15 km of a fire are shown with their distance.
+- **Evacuation data** is current status only, and only as complete as the counties that feed the Cal OES and Oregon
+  OEM layers. Cal OES gives no issue time (Fire-3d shows when Cal OES listed the zone), and neither layer says which
+  fire a zone belongs to; zones within 15 km of a fire are shown with their distance. Oregon's past zones are not
+  shown: past days show the archived FEMA messages instead.
 - **CAL FIRE history** exists only from Oct 18, 2026, when Fire-3d started recording it, and only while a backend
   checks CAL FIRE (the live loop does so every 15 minutes). Past fires show CAL FIRE's final record, and a record CAL
   FIRE edited long after containment (Eaton, Aug 2026) says that its update time is that edit, not news from the fire.
-- **NWS alerts:** live alerts come from the NWS API (no live Red Flag Warning was in effect in California during the
-  final test, so live outlines were checked only with recorded samples and Eaton's archived warning). Past alerts come
+- **Local officials' alerts** relayed by the NWS reach Fire-3d only when local officials send them through the NWS
+  (about 1 in 20 fire and evacuation alerts in 2024-26); FEMA's archive for past days is about a day late and is
+  matched to a fire by county, so a message can be about another fire in the same county (the card says so).
+- **NWS alerts:** live alerts come from the NWS API, for all lower-48 states in one request. Past alerts come
   from the Iowa Environmental Mesonet archive, an archived copy and not an official NWS source; its search samples 5
   points (the reported location and the corners of the analysis area) and looks back 14 days, so an alert covering
   only another part of the area, or one that began more than about 13 days earlier, could be missed. Zone outlines on
@@ -590,8 +736,20 @@ seconds. To reproduce the numbers, see [docs/validation.md, section 9](docs/vali
 - **Performance.** On a 1440 × 900 window at pixel ratio 2, Forensic's default (high quality with depth of field)
   runs at about 50 frames per second (about 37 uncapped in the realistic style); high without depth of field, medium
   and low hold 60. The map draws 2D at well over 200 frames per second; in 3D it reaches about 60–70 at pixel ratio 2
-  (about 105 at pixel ratio 1), measured without the browser's frame cap.
+  (about 105 at pixel ratio 1), measured without the browser's frame cap. These numbers are from brief 2 on a Mac;
+  brief 3 ran in a cloud session without a graphics card, so frame rates were not measured again (with many more
+  markers on the national overview, check them on your Mac).
 - **Free public map services** (OpenFreeMap, Mapterhorn, USGS) have no service-level guarantee.
+- **Weather quota.** Open-Meteo's free API allows fewer than 10,000 calls a day, 5,000 an hour and 600 a minute per
+  internet address. On a shared address (a cloud machine, an office network) other users count too: "Prepare
+  analysis" then fails with "Open-Meteo daily request limit reached; retry after the reset (00:00 UTC)". Fire-3d then
+  sends that weather host no more requests, except one small check at most once an hour; when the host answers the
+  check, Fire-3d carries on (at the latest after the reset at 00:00 UTC). This happened during the final check of
+  brief 3, on Oct 23, 2026.
+- **When a fire list cannot be reached.** If NIFC's or CAL FIRE's list does not answer, the overview says which one,
+  and a list that could not be refreshed is shown with the time of the copy ("could not be refreshed right now;
+  showing the copy fetched 47 min ago"). If both are down, only fires already prepared on your machine are listed,
+  with their records as saved, and the overview says so; it never says "no active fires".
 - **Local only.** There is no deployment, user accounts or authentication.
 - **Known advisory:** maplibre-gl 5.24.0 carries advisory GHSA-jrc7-96c5-q579 (a cross-site scripting bypass in the
   sanitizer behind MapLibre's built-in attribution control). Fire-3d keeps that control off and renders credits and
@@ -608,10 +766,13 @@ seconds. To reproduce the numbers, see [docs/validation.md, section 9](docs/vali
 | Aircraft are missing or slow to appear | Aircraft are tracked for live fires only and shown in Forensic only (the map workspace does not ask for them). When adsb.lol cannot be reached, Fire-3d falls back to adsb.fi automatically; the first request after each 5-minute retry window can wait about 17 seconds for the timeout. |
 | The map says "Street map unavailable", "Roads and place names unavailable", "3D terrain unavailable … showing a flat map" or "Aerial photos are not loading (USGS); showing the street map" | That map service is down. The fire layers keep working; after a USGS failure the map uses the dark map until you press "Try aerial again". Try another basemap, or point `VITE_OPENFREEMAP_STYLE_BASE`, `VITE_MAPTERHORN_TILEJSON` or `VITE_USGS_IMAGERY_SERVICE` at another server. |
 | Zooming in on a fire shows only its marker | Its analysis is not prepared yet: the chip under the marker says "Spread not prepared yet · Prepare analysis (1-3 min)". Click it and press the button on the fire's card. With `./dev.sh`, the live loop prepares up to 4 active live fires after startup. |
-| A row of "Official now" says "Unavailable right now" | That official source (Cal OES, CAL FIRE or the NWS) did not answer; Fire-3d never fills in a quiet state for it. "Not available for past dates" means the source publishes current status only (Cal OES), or the archive could not be reached. |
-| Town or ZIP code searches fail | The local index `backend/fire3d/data/gazetteer_ca.json` is missing: rebuild it with `uv run python scripts/build_gazetteer.py` (see Run). |
+| A row of "Official now" says "Unavailable right now" | That official source (Cal OES, Oregon OEM, CAL FIRE, NIFC, the NWS, the Iowa Environmental Mesonet or FEMA's archive) did not answer; Fire-3d never fills in a quiet state for it. "Not available for past dates" means the source publishes current status only (Cal OES, Oregon OEM). "Not available in this state" means Fire-3d has no official evacuation source for that state. |
+| The overview says a fire list "could not be reached" or "could not be refreshed" | NIFC's or CAL FIRE's list did not answer. Fire-3d tries that list again a minute later; the reload button next to the source line reloads the overview. |
+| "Prepare analysis" fails with "Open-Meteo daily request limit reached" | The free weather quota of your internet address is used up (see Limitations). Fire-3d checks the host again once an hour and carries on when it answers; the quota resets at 00:00 UTC at the latest. `uv run python -m fire3d.cli weather-probe` (from `backend/`) says whether the weather service answers now. |
+| Town or ZIP code searches fail | The local index `backend/fire3d/data/gazetteer_us.json` is missing: rebuild it with `uv run python scripts/build_gazetteer.py` (see Run). |
 | An optional source says "unavailable" | The official source did not answer; the panel gives the reason. Fire-3d never fills in invented data. |
-| A build ends with an error | A required step failed, for example the CAL FIRE list, USGS elevation, LANDFIRE fuels or Open-Meteo weather. The message says which; retry later from the app or with `build <id> --force`. If CAL FIRE is down, its last cached list is used. Optional parts (aerial photo, burn severity, trees) only add a warning. |
+| A build ends with an error | A required step failed, for example the fire lists, USGS elevation, LANDFIRE fuels or Open-Meteo weather. The message says which; retry later from the app or with `build <id> --force`. If the lists cannot be reached at all, a build is refused with "The fire lists could not be reached right now; try again later." Optional parts (aerial photo, burn severity, trees) only add a warning. |
+| A fire in Alaska or Hawaii cannot be prepared | Fire-3d supports the lower 48 states and DC only, for now. |
 | `uv sync` fails while building pyretechnics | Install a C compiler (on macOS: `xcode-select --install`) and run it again. |
 | Live data is marked STALE | The newest observation is more than 6 hours old. It means "check the time", not "the fire is out". |
 | A live forecast shows no growth | Its whole perimeter is held: satellites saw no new fire near it for 12 hours or more, or CAL FIRE reports it fully contained. That means no modeled growth, not that the fire is out; check official sources. |
@@ -624,7 +785,9 @@ you share or publish anything made with Fire-3d.
 
 > [!WARNING]
 > **Some sources are for non-commercial use only:** Open-Meteo's free API, adsb.fi and ALERTCalifornia camera images
-> (CC BY-NC-ND 4.0). Newer pyretechnics releases may also be non-commercial (see below). Commercial use would need an
+> (CC BY-NC-ND 4.0). **One source requires a notice:** anything that shows FEMA's archived alerts must say "This
+> product uses the Federal Emergency Management Agency's OpenFEMA API, but is not endorsed by FEMA" and must not use
+> FEMA or DHS logos (Fire-3d shows the notice next to the archived alerts and in the map credits). Newer pyretechnics releases may also be non-commercial (see below). Commercial use would need an
 > Open-Meteo API subscription, permission from adsb.fi, a license from UC San Diego for ALERTCalifornia, and a check
 > of the pyretechnics license, or those features turned off.
 
@@ -632,15 +795,17 @@ you share or publish anything made with Fire-3d.
 
 | Source | Used for | License and terms | Credit |
 |---|---|---|---|
-| [CAL FIRE incidents](https://www.fire.ca.gov/incidents) | incident lists, reported location, acres, containment, and the change history Fire-3d records | public website data. fire.ca.gov refuses automated requests (HTTP 403), so CAL FIRE's own conditions of use could not be read; the [State of California conditions of use](https://www.ca.gov/use/) treat information on state websites as public domain unless marked otherwise (photographs may need permission) | CAL FIRE |
+| [CAL FIRE incidents](https://www.fire.ca.gov/incidents) | California's incident lists, reported location, acres, containment, and the change history Fire-3d records | public website data. fire.ca.gov refuses automated requests (HTTP 403), so CAL FIRE's own conditions of use could not be read; the [State of California conditions of use](https://www.ca.gov/use/) treat information on state websites as public domain unless marked otherwise (photographs may need permission) | CAL FIRE |
 | [NASA FIRMS](https://www.earthdata.nasa.gov/data/tools/firms) | satellite fire detections (VIIRS, MODIS, GOES, Landsat) | NASA open data, [no restrictions on use](https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance); optional free [MAP_KEY](https://firms.modaps.eosdis.nasa.gov/api/map_key/) | "We acknowledge the use of data and/or imagery from NASA's Fire Information for Resource Management System (FIRMS), part of NASA's Land, Atmosphere Near real-time Capability for Earth observations (LANCE) and NASA's Earth Science Data and Information System (ESDIS)." |
 | [NASA CMR](https://cmr.earthdata.nasa.gov/search/site/docs/search/api.html) (Common Metadata Repository) | times of the VIIRS and MODIS passes over a live fire, which set where its forecast starts; pass times for recent imagery | NASA open data, no key, [no restrictions on use](https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance) | NASA Earthdata (CMR) |
-| [NIFC WFIGS perimeters](https://data-nifc.opendata.arcgis.com/) | agency-mapped fire perimeters | open federal interagency data, no login; the public ArcGIS items (owner NIFC_Authoritative) carry only NIFC's disclaimer (no warranty; the data are not legal documents) and no use restrictions | Wildland Fire Interagency Geospatial Services (WFIGS) Group, NIFC |
+| [NIFC WFIGS Incident Locations](https://data-nifc.opendata.arcgis.com/datasets/nifc::wildland-fire-incident-locations) (current, this year, all years; IRWIN) | the national fire list, each fire's record outside California (and California fires CAL FIRE does not list), the protecting agency and its numbers | open federal interagency data, no login; the ArcGIS items (owner NIFC_Authoritative) carry only NIFC's disclaimer (no warranty; not legal documents) and no use restrictions (checked 2026-10-22 and 23) | "NIFC WFIGS (IRWIN)" |
+| [NWCG Unit Identifiers, PMS 931](https://www.nwcg.gov/publications/pms931) (Sep 2022) | plain names of the protecting agencies' codes ("USFS" → "USDA Forest Service"), stored in `backend/fire3d/data/nwcg_agency_codes.json` | "Publications and training materials produced by NWCG are in the public domain … permitted if NWCG information is accurately credited to NWCG" (the PDF, checked 2026-10-23) | "Agency names: NWCG unit identifiers" |
+| [NIFC WFIGS perimeters](https://data-nifc.opendata.arcgis.com/) | agency-mapped fire perimeters (outside California matched by the fire's IRWIN id) | open federal interagency data, no login; the public ArcGIS items (owner NIFC_Authoritative) carry only NIFC's disclaimer (no warranty; the data are not legal documents) and no use restrictions | Wildland Fire Interagency Geospatial Services (WFIGS) Group, NIFC |
 | [USGS 3DEP](https://www.usgs.gov/3d-elevation-program) | elevation for the model and the Forensic terrain | U.S. public domain ([USGS copyrights and credits](https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits)) | U.S. Geological Survey |
-| [LANDFIRE](https://landfire.gov/) (LF2024, LF2025) | fuels and canopy for the model | U.S. Government data (U.S. Department of the Interior and USDA Forest Service), public domain with no use constraints in the USGS metadata; landfire.gov itself states no license and asks to be cited | cite as on [landfire.gov/data/citation](https://landfire.gov/data/citation) |
+| [LANDFIRE](https://landfire.gov/) (LF2023, LF2024, LF2025: the edition before each fire) | fuels and canopy for the model | U.S. Government data (U.S. Department of the Interior and USDA Forest Service), public domain with no use constraints in the USGS metadata; landfire.gov itself states no license and asks to be cited | cite as on [landfire.gov/data/citation](https://landfire.gov/data/citation) |
 | [NAIP](https://naip-usdaonline.hub.arcgis.com/) (USDA), served by [The National Map](https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer) | aerial photo in Forensic, water mask | U.S. public domain, credit requested ([USDA FSA policy](https://www.fsa.usda.gov/help/policies-and-links)) | USGS, USDA, The National Map: Orthoimagery |
 | [Sentinel-2 L2A](https://registry.opendata.aws/sentinel-2-l2a-cogs/) via [Element 84 Earth Search](https://www.element84.com/earth-search/) | burn severity (dNBR); recent images | [Copernicus Sentinel data legal notice](https://sentinels.copernicus.eu/documents/247904/690755/Sentinel_Data_Legal_Notice): free, full and open access, modification allowed | "Contains modified Copernicus Sentinel data <year>" |
-| [Open-Meteo](https://open-meteo.com/) | weather: HRRR, GFS and ECMWF ensembles, archived forecasts, ERA5 | data [CC BY 4.0](https://open-meteo.com/en/licence); the free API is for **non-commercial use only**, under 10,000 calls a day ([terms](https://open-meteo.com/en/terms)) | "Weather data by Open-Meteo.com", linked to open-meteo.com |
+| [Open-Meteo](https://open-meteo.com/) | weather: HRRR, GFS and ECMWF ensembles, archived forecasts, ERA5 (also the daily weather behind the growing-season index outside California) | data [CC BY 4.0](https://open-meteo.com/en/licence); the free API is for **non-commercial use only**, under 10,000 calls a day, 5,000 an hour and 600 a minute per internet address ([terms](https://open-meteo.com/en/terms), checked 2026-10-23) | "Weather data by Open-Meteo.com", linked to open-meteo.com |
 
 ### Map, search and aircraft
 
@@ -649,11 +814,13 @@ you share or publish anything made with Fire-3d.
 | [OpenFreeMap](https://openfreemap.org/) | dark and roads basemaps, labels | free, commercial use allowed, no service-level guarantee ([terms of service](https://openfreemap.org/tos/)) | OpenFreeMap |
 | [OpenMapTiles](https://openmaptiles.org/) | vector tile schema and style design | design [CC BY 4.0, code BSD-3-Clause](https://github.com/openmaptiles/openmaptiles/blob/master/LICENSE.md) | © OpenMapTiles |
 | [OpenStreetMap](https://www.openstreetmap.org/copyright) | roads, places and labels, and the 3D building shapes (served by OpenFreeMap) | [ODbL 1.0](https://www.openstreetmap.org/copyright) | © OpenStreetMap contributors |
-| [Mapterhorn](https://mapterhorn.com/) | 3D terrain and hillshade | code BSD-3-Clause; tiles built from open data, listed on its [attribution page](https://mapterhorn.com/attribution/). In California: USGS 3DEP (public domain) and Copernicus GLO-30 (Copernicus free and open license) | © Mapterhorn; U.S. Geological Survey; Copernicus GLO-30: © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA |
+| [Mapterhorn](https://mapterhorn.com/) | 3D terrain and hillshade | code BSD-3-Clause; tiles built from open data, listed on its [attribution page](https://mapterhorn.com/attribution/). In the United States: USGS 3DEP (public domain) and Copernicus GLO-30 (Copernicus free and open license) | © Mapterhorn; U.S. Geological Survey; Copernicus GLO-30: © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA |
 | [USGS Imagery Only](https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer) | aerial basemap (dated photos, not live) | U.S. public domain ([USGS](https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits)) | USDA, USGS The National Map: Orthoimagery |
 | [MapLibre GL JS](https://maplibre.org/) 5.24.0 | map renderer | [BSD-3-Clause](https://github.com/maplibre/maplibre-gl-js/blob/main/LICENSE.txt) | MapLibre |
 | [US Census Geocoder](https://geocoding.geo.census.gov/geocoder/Geocoding_Services_API.html) | street-address search (`Public_AR_Current` benchmark) | free U.S. government service, no key; no separate terms page | U.S. Census Bureau |
-| [U.S. Census Bureau Gazetteer Files](https://www.census.gov/geographies/reference-files/time-series/geo/gazetteer-files.html) (2026: California places and ZIP Code Tabulation Areas) | town and ZIP code search, from a local index (no request at search time) | U.S. public domain (a U.S. Government work, 17 U.S.C. 105) | U.S. Census Bureau Gazetteer Files |
+| [U.S. Census Bureau Gazetteer Files](https://www.census.gov/geographies/reference-files/time-series/geo/gazetteer-files.html) (2026: places, counties and ZIP Code Tabulation Areas of every state) | town, county and ZIP code search, from a local index (no request at search time) | the page states no license; a U.S. Government work (17 U.S.C. 105), so public domain | U.S. Census Bureau Gazetteer Files |
+| [Census TIGERweb](https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/State_County/MapServer) (states, counties; American Indian areas for the Navajo Nation and Hopi Reservation) | the state, county and accuracy region at a point, from local files (simplified, retrieved 2026-10-23) | U.S. public domain; the service's credit text is "Source: U.S. Census Bureau" | "Boundaries: U.S. Census Bureau TIGERweb" |
+| [USDOT BTS NTAD Time Zones](https://services.arcgis.com/xOi1kZaI0eWDREZv/arcgis/rest/services/NTAD_Time_Zones/FeatureServer/0) | the time zone at a point (every fire's and place's local time), from a local file | "available for unrestricted public use" (17 U.S.C. § 101 government work; the layer's own text, checked 2026-10-23) | "Time zones: USDOT BTS NTAD" |
 | [adsb.lol](https://www.adsb.lol/docs/open-data/api/) | live aircraft positions | ODbL 1.0 | adsb.lol |
 | [adsb.fi](https://github.com/adsbfi/opendata) | aircraft fallback when adsb.lol cannot be reached | **personal, non-commercial use only**; about 1 request per second | adsb.fi, with a link to its home page |
 
@@ -661,14 +828,21 @@ you share or publish anything made with Fire-3d.
 
 | Source | Used for | License and terms | Credit |
 |---|---|---|---|
-| [National Weather Service API](https://www.weather.gov/documentation/services-web-api) | current Red Flag Warnings and Fire Weather Watches in California and their fire-weather zone outlines | U.S. public domain, open data ([NWS disclaimer](https://www.weather.gov/disclaimer)); no key; Fire-3d sends the User-Agent "Fire-3d/0.1 (research prototype)" and limits itself to 30 requests a minute | National Weather Service |
+| [National Weather Service API](https://www.weather.gov/documentation/services-web-api) | current Red Flag Warnings and Fire Weather Watches in the lower 48 and their fire-weather zone outlines; the local officials' messages the NWS relays (Fire Warning, Evacuation Immediate, Shelter In Place Warning, Civil Danger Warning; Civil Emergency Message and Local Area Emergency when they mention fire, smoke or evacuation), quoted verbatim with the sender's name | U.S. public domain, open data ([NWS disclaimer](https://www.weather.gov/disclaimer), checked 2026-10-23: free for any lawful purpose as long as the use does not claim it as one's own, imply NWS endorsement, or present modified content as official); no key; Fire-3d sends the User-Agent "Fire-3d/0.1 (research prototype)" and limits itself to 30 requests a minute | "National Weather Service"; local messages also name their sender ("relayed by NWS") |
+| [OpenFEMA IPAWS Archived Alerts v1](https://www.fema.gov/openfema-data-page/ipaws-archived-alerts-v1) | the local officials' messages of past days (about a day late), labelled archived, with their own times and a link to the record | [OpenFEMA terms](https://www.fema.gov/about/openfema/terms-conditions) (last updated Jan 22, 2025; read by the brief-3 build and its review): products "must clearly state" the notice below, FEMA and DHS logos need written permission, and users should cite the date the data were accessed (Fire-3d shows when it fetched them). fema.gov refuses automated requests (HTTP 403), so the page was not re-read automatically | "FEMA IPAWS archive via OpenFEMA" and "This product uses the Federal Emergency Management Agency's OpenFEMA API, but is not endorsed by FEMA" |
 | [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/) (Iowa State University) NWS product archive | past Red Flag Warnings and Fire Weather Watches for replays | public domain ([IEM disclaimer](https://mesonet.agron.iastate.edu/disclaimer.php)); an archived copy of NWS products, not an official NWS source | National Weather Service, archived copy via the Iowa Environmental Mesonet (Iowa State University) |
-| [Cal OES California Evacuation Aggregation Layer](https://data.ca.gov/dataset/california-evacuation-aggregation-layer) (with the County Evacuation Inventory) | official evacuation zones | public, "No restrictions on public use"; Cal OES disclaimer: "This information is constantly changing, and Cal OES does not verify or certify the information contained herein." | Evacuation zones: local officials via Cal OES |
+| [Cal OES California Evacuation Aggregation Layer](https://data.ca.gov/dataset/california-evacuation-aggregation-layer) (with the County Evacuation Inventory) | official evacuation zones in California | public, "No restrictions on public use"; Cal OES disclaimer: "This information is constantly changing, and Cal OES does not verify or certify the information contained herein." | Evacuation zones: local officials via Cal OES |
+| [Oregon OEM "Evacuation Areas Public"](https://www.arcgis.com/home/item.html?id=dd2bee51e3004dc4b1004df34fbd9e29) (Oregon Department of Emergency Management) | official evacuation zones in Oregon (current status only) | the item's license field is "Public", its access information "Oregon Department of Emergency Management", with no use restrictions or further terms published (checked 2026-10-22 and 23) | Evacuation zones: local officials via Oregon Department of Emergency Management |
 | [Cal OES California Webcams](https://www.arcgis.com/home/item.html?id=5b4040338d704693994d5682ab2747c5) | camera locations | public use | Cal OES California Webcams |
 | [ALERTCalifornia](https://alertcalifornia.org/terms/) (UC San Diego) | wildfire camera images | **CC BY-NC-ND 4.0: non-commercial, no derivatives**; never crop the information bar or partner logos ([crediting rules](https://alertcalifornia.org/crediting-and-branding/)) | ALERTCalifornia \| UC San Diego, with every image |
 | [Caltrans CCTV](https://cwwp2.dot.ca.gov/documentation/cctv/cctv.htm) | traffic camera images | no charge; public domain ([conditions of use](https://dot.ca.gov/conditions-of-use)) | Caltrans |
 | [NASA GIBS](https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api) | Landsat (HLS), VIIRS and GOES-West image tiles (their pass times come from NASA CMR, above) | NASA open data, [no restrictions on use](https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance); GOES is NOAA public domain | the product's credit plus "NASA GIBS (ESDIS)" and the GIBS acknowledgement |
 | [Element 84 Earth Search](https://www.element84.com/earth-search/) | Sentinel-2 scene search | free public STAC API; the images follow the Copernicus terms above | Earth Search by Element 84 |
+
+**Not used, and why:** FEMA's live IPAWS feed (needs registration; the NWS relay and the public archive are used
+instead); Washington's evacuation layer (its terms require users to indemnify the State of Washington; you declined
+it); Florida's statewide status (county status only, not zones); Arizona's planning zones (not maintained); county and
+vendor evacuation systems (need agreements, out of scope); Google data, paid map services and Nominatim (never used).
 
 ### Software
 

@@ -7,7 +7,8 @@
   to ``weather.json``: for every hour, the behaviour of the dominant burnable fuel within 2 km of the fire front
   (centroid of the pixels that burned in the previous hour of ``observed_arrival``, else the most recently burned
   pixels, else the ignition point), with that zone's median slope and canopy sheltering, the hour's at-fire wind
-  and dead fuel moisture, and the month's live fuel moisture.
+  and dead fuel moisture, and the day's live fuel moisture (outside California the GSI of that local day, the latest
+  one held past the end of the series; California the month table).
 """
 
 from __future__ import annotations
@@ -28,6 +29,86 @@ log = logging.getLogger(__name__)
 ZONE_RADIUS_M = 2000.0           # dominant-fuel search radius around the front
 RECENT_PIXELS = 50               # pixels used for the front location when nothing burned in the last hour
 M_PER_FT = 0.3048
+
+
+# The behaviour charts' own never-silent warning (CONTRACT 14.12.10): hours outside California whose day has no GSI
+# value use California's values; replaced on every annotation.
+BEHAVIOR_LFM_WARN_PREFIX = "Fire behaviour charts"
+
+
+def _live_moisture_by_hour(bdir: Path, man: dict, tz: str | None, precip_wy: float | None):
+    """``f(t_ms) -> (herb, woody)``.
+
+    Outside California: the NFDRS 2016 GSI of that local day (``sim/lfm_gsi.json``, CONTRACT 14.12.10). Days after
+    the series hold its latest 21-day value (``gsi_at(..., hold_last=True)``): a live series ends today while the
+    weather runs to +96 h, and a historical one ends ``ERA5_DELAY_DAYS`` before now; a forecast holds live fuel moisture
+    over its run the same way. A day with no GSI value at all (no series, or a gap inside it) uses California's month
+    table, and ``f.fallback`` (local date -> hours, outside California only) records it so the caller adds the
+    manifest warning. California: the month table with the drought adjustment, as before brief 3."""
+    gsi_doc = None
+    outside = False
+    try:
+        from ..build.weather_bundle import gsi_at, is_california, load_lfm_gsi
+
+        outside = not is_california(man.get("summary") or {}) and not config.LFM_FORCE_CALIFORNIA
+        if outside:
+            gsi_doc = load_lfm_gsi(bdir)
+    except Exception as e:  # noqa: BLE001 - the month table is the documented fallback (and is reported)
+        log.info("annotate_weather_with_behavior: no GSI series (%s)", e)
+    by_day: dict = {}
+    fallback: dict = {}                 # local day -> hours that used California's values (outside California)
+
+    def f(t_ms: int) -> tuple[float, float]:
+        from ..timeutil import local_dt
+
+        day = local_dt(int(t_ms), tz).date()
+        if gsi_doc is not None:
+            if day not in by_day:
+                g = gsi_at(gsi_doc, int(t_ms), hold_last=True)
+                by_day[day] = None if g is None else moisture.gsi_live_fuel_moisture(g["gsi"])
+            if by_day[day] is not None:
+                return by_day[day]
+        if outside:
+            fallback[day] = fallback.get(day, 0) + 1
+        return moisture.live_fuel_moisture(local_month(int(t_ms), tz), precip_wy)
+
+    f.fallback = fallback  # type: ignore[attr-defined]
+    return f
+
+
+def _behavior_lfm_warning(fallback: dict) -> str | None:
+    """The manifest warning for the hours (by local day) whose live fuel moisture fell back to California's values."""
+    if not fallback:
+        return None
+    a, b = min(fallback).isoformat(), max(fallback).isoformat()
+    when = a if a == b else f"{a}..{b}"
+    return (f"{BEHAVIOR_LFM_WARN_PREFIX} ({when}, {sum(fallback.values())} h): live fuel moisture uses California's "
+            "seasonal values (GSI series unavailable); experimental.")
+
+
+def _with_behavior_lfm_warning(warnings: list, message: str | None) -> list:
+    """``warnings`` with the behaviour charts' warning replaced by ``message`` (dropped when None). Not added when the
+    build's interim warning is there already (the whole bundle uses California's values and says so)."""
+    from ..build.weather_bundle import INTERIM_LFM_WARNING, LEGACY_INTERIM_LFM_WARNINGS
+
+    ws = [w for w in warnings or [] if not str(w).startswith(BEHAVIOR_LFM_WARN_PREFIX + " (")]
+    if message and INTERIM_LFM_WARNING not in ws and not LEGACY_INTERIM_LFM_WARNINGS.intersection(ws):
+        ws.append(message)
+    return ws
+
+
+def _record_behavior_lfm_warning(bdir: Path, man: dict, message: str | None) -> None:
+    """Write the manifest only when its warnings change (and only when the bundle has a manifest)."""
+    if not man or _with_behavior_lfm_warning(man.get("warnings") or [], message) == list(man.get("warnings") or []):
+        return
+
+    def fn(m: dict) -> None:
+        m["warnings"] = _with_behavior_lfm_warning(m.get("warnings") or [], message)
+
+    try:
+        fbundle.update_manifest(bdir, fn)
+    except (OSError, ValueError) as e:
+        log.warning("annotate_weather_with_behavior: could not record the live fuel moisture warning (%s)", e)
 
 
 def _clip(v: float, lo: float, hi: float) -> float:
@@ -233,6 +314,7 @@ def annotate_weather_with_behavior(bundle_dir: Path) -> None:
         precip_wy, _ = precip_to(bdir, man, int(t[0]), fetch=False)
     except Exception as e:  # noqa: BLE001 - the plain month table is a safe fallback
         log.info("annotate_weather_with_behavior: no water-year precipitation (%s)", e)
+    live_fm = _live_moisture_by_hour(bdir, man, tz, precip_wy)
     flame_ft = np.zeros(n)
     ros_ch = np.zeros(n)
     for k in range(n):
@@ -242,8 +324,7 @@ def annotate_weather_with_behavior(bundle_dir: Path) -> None:
         z = zones[key]
         if z is None:
             continue
-        month = local_month(int(t[k]), tz)
-        herb, woody = moisture.live_fuel_moisture(month, precip_wy)
+        herb, woody = live_fm(int(t[k]))
         b = surface_behavior(z["fuel_code"], fm1[k], fm10[k], fm100[k], herb, woody, float(wind[k]) * 3.6, z["slope"],
                              canopy_cover=z["canopy_cover"], canopy_height_m=z["canopy_height"])
         flame_ft[k] = b["flame_length_ft"]
@@ -252,4 +333,5 @@ def annotate_weather_with_behavior(bundle_dir: Path) -> None:
     af["ros_ch_per_h_potential"] = [round(float(v), 2) if math.isfinite(v) else 0.0 for v in ros_ch]
     w["at_fire"] = af
     fbundle.write_json(wpath, w, indent=raw[:400].count(b"\n") > 2)
+    _record_behavior_lfm_warning(bdir, man, _behavior_lfm_warning(live_fm.fallback))   # never silent (14.12.10)
     log.info("weather.json annotated: %d hours, %d fuel zone(s)", n, len(zones))

@@ -1,0 +1,195 @@
+{
+ "role": "final-verification (brief 3), 2026-10-23 about 15:30-17:50 UTC; API 8718, Vite 5188; the only agent editing",
+ "summary": "Final verification of brief 3 (fires across the lower 48). (1) The independent panel's 13 findings were each verified against the code (several reproduced with an outage harness) and all fixed with tests: the 1 blocker (SR-B1: with both fire lists down the web showed two false, contradicting notices, 'list no active fires' and a synthetic fixture as an official active fire), the 5 majors (SR-M1/F2 stale list copies presented as current; SR-M2/F1 outage answers slower than the web's 30 s timeout, 45-273 s; F3 README still California-only) and the 7 minors (F4, F5, F6, F7, SR-m1..m4). Backend: fire3d.http.DownMemo remembers a failed source for 60 s; list requests use 5 s connect / 12 s read timeouts and at most one retry; CAL FIRE, NIFC WFIGS and the FIRMS feeds are fetched side by side; ListSource.stale; a non-JSON 200 never replaces the last good copy; the both-down fallback lists only prepared fires of listed ids (never fixtures or failed builds) and the default year; at_ms bounded (422); broken region files 503; LiveStatus.active_incidents null when unknown; the live summary sync skips synthetic bundles. Web: one honest notice when both lists are down, stale-copy notices with the copy's age, 'checked' from sources[].retrieved_ms, 'Could not load' on a cold failure, 'Unavailable right now' for unreachable local alerts and fire-weather archive (the 'none' caveat said once), hectares in the lists in metric, 'Unknown, not low.', the Forensic banner's replay year. Measured with every host refusing and an empty cache: a prepared fire opens in 2.1 s (was 273 s), a listed fire without a bundle is 503 in 0.01 s, lists 0.01-2 s. (2) One national live-loop cycle: 228 active fires in 23 states; the auto-build cap held (exactly 4 candidates, chosen nationally: FL and 3 WA fires), but Open-Meteo's daily limit on this shared cloud IP refused all four at 16:52 UTC (the weather probe said ok a minute earlier); the quota path worked as designed (one refused request, the next three refused without requests). The one allowed 'Prepare analysis' press (Sand Creek, MT, from its card) was refused at once with the same honest message; no new fire was prepared. Official records work nationally (WFIGS records in WA, FL, MT, CA with their own zones; CAL FIRE history recorded). (3) Review checklist: time API check 0/0; wording scan clean; endpoint walk 102 paths, 0 contract problems, 0 key leaks, no 5xx; count-only key scan 7,833 files and git history: 0. (4) README rewritten for the lower 48 (coverage, every new source with its terms and the OpenFEMA notice, limitations, the 12-fire accuracy summary, evacuation coverage by state, the Open-Meteo shared-quota note); SPEC rows; CONTRACT §14.16. (5) Gates: pytest 1005 passed; web typecheck 0, lint 55 warnings (all src/scene), vitest 76 files 1,197 passed 2 skipped, build OK. 1 non-GET request in all runs (the Prepare press).",
+ "files": [
+  "backend/fire3d/http.py (DownMemo, reset_down_memos, has_cache, evict_bad_answer, connect_timeout, expect_json)",
+  "backend/fire3d/sources/wfigs.py, backend/fire3d/sources/calfire.py (memo, stale flag, timeouts, stale-if-error without network)",
+  "backend/fire3d/sources/firms.py (live feeds: memo, 12 s read, one retry)",
+  "backend/fire3d/catalog.py (_source stale, _side_by_side for CAL FIRE + WFIGS + FIRMS, DEGRADED_CACHE_S, WFIGS_STALE/CALFIRE_STALE)",
+  "backend/fire3d/api/app.py (fallback rows: listed ids only, no failed builds, default year, LISTS_DOWN_FALLBACK; RegionsUnavailable 503 handler)",
+  "backend/fire3d/api/live.py (active_incidents None when unknown; sync skips synthetic bundles)",
+  "backend/fire3d/api/official.py, backend/fire3d/api/extras.py, backend/fire3d/timeutil.py (at_ms <= MAX_QUERY_MS)",
+  "backend/fire3d/regions.py (RegionsUnavailable, REGIONS_UNAVAILABLE_TEXT)",
+  "backend/fire3d/contracts.py (ListSource.stale, LiveStatus.active_incidents nullable)",
+  "backend/tests/test_outages_final.py (new, 14 tests), backend/tests/conftest.py, test_api.py, test_api_live.py, test_live_housekeeping.py, test_us_catalog_list.py",
+  "web/src/api/types.ts (ListSource.stale, LiveStatus.active_incidents)",
+  "web/src/state/overview.ts (+test): listHealth, ALL_LISTS_DOWN(_SHORT), staleListText, listErrorLines, noLiveText, activeCountText, emptyListText(health)",
+  "web/src/ui/shell/OverviewPanel.tsx (+test), web/src/ui/IncidentPicker.tsx, web/src/location/OverviewCard.tsx, web/src/ui/Overlays.tsx, web/src/ui/Menus.tsx",
+  "web/src/official/model.ts (+test), web/src/ui/feed/OfficialNow.tsx, web/src/location/official.ts, web/src/official/localAlerts.test.ts, web/src/extras/runtime.ts (+test), web/src/ui/shell/officialSummary.test.ts",
+  "web/src/lib/format.ts, web/src/lib/format.test.ts (new)",
+  "web/src/location/describe.ts (+test), web/src/map/MapLegend.tsx, web/src/location/types.ts ('Unknown, not low.')",
+  "README.md, SPEC.md, docs/redesign/CONTRACT.md (§14.1 ListSource/LiveStatus, new §14.16)",
+  "docs/redesign/progress/brief3-final-verification.md, docs/redesign/reports/final-verification-3.json",
+  "docs/screenshots/final3-*.png (9)"
+ ],
+ "verification": {
+  "commits": [
+   "6b65a82 backend outage fixes",
+   "631737c web outage states",
+   "bef4a52 orchestrator checkpoint (included this role's follow-ups: failed builds out of the fallback list, sync skips synthetic bundles, shorter peek, README in progress)",
+   "5d6e8d2 FIRMS beside the lists, 12 s read timeout",
+   "final docs/report commit (this report)"
+  ],
+  "gates": {
+   "backend": "cd backend && uv run pytest -q -> 1005 passed (baseline at start 990)",
+   "web": "npm run typecheck -> exit 0; npm run lint -> exit 0, 55 warnings, 0 outside src/scene; npm test -> 76 files, 1,197 passed, 2 skipped (baseline 75 / 1,186); npm run build -> exit 0",
+   "time_api": "node web/scripts/check-time-api.mjs web/src -> 304 files, 0 deprecated uses, 0 America/Los_Angeles literals"
+  },
+  "panel_findings": {
+   "SR-B1 (blocker)": "Verified in code (listSourceNotices / emptyListText / PeekBar ignored sources[].reason; _bundle_rows listed fixture-live). Fixed: web ALL_LISTS_DOWN notice, peek 'Fire lists unavailable right now', empty text without 'list no'; backend lists only listed-id, non-failed bundles. Not adopted: answering 503 for the live list (kept 200 so prepared fires stay reachable, clearly labelled). Screens: final3-lists-down-*.png.",
+   "SR-M1 (major)": "Verified (stale copy reported 'available', web never read retrieved_ms). Fixed: ListSource.stale + reason; web stale notice, 'fetched <age>', peek 'not refreshed (N ago)'. Screens: final3-wfigs-stale-*.png.",
+   "SR-M2 (major)": "Verified (4 retries with backoff, no negative cache, sequential lookups). Fixed: DownMemo 60 s, 5 s connect / 12 s read, <=1 retry (0 with a cached copy), parallel fetch, degraded lists rebuilt after 60 s; web 'Could not load' on cold failure. Measured below.",
+   "SR-m1": "Verified. Fixed: 'Unavailable right now.' for local alerts and the IEM-archive outage; duplicate sentence trimmed. Screens: final3-official-down-*.png.",
+   "SR-m2": "Verified (int(... or 0)). Fixed: nullable; menu 'unknown (fire lists unavailable)'.",
+   "SR-m3": "Verified (FileNotFoundError -> 500). Fixed: 503 with a plain sentence; test with missing files.",
+   "SR-m4": "Verified. Fixed: fmtAcresShort(acres, units); picker column 'Hectares'.",
+   "F1 (major)": "Same as SR-M2. pytest test_total_outage_answers_within_the_web_timeout: real backoff, every host refusing: bundle fire < 5 s, listed fire without bundle 503 < 10 s, next answers < 1 s.",
+   "F2 (major)": "Same as SR-M1; also the location card's 'Fire lists: ... checked' uses retrieved_ms; vitest for a copy older than updated_ms.",
+   "F3 (major)": "Verified (README unchanged since 1c500b1, gazetteer_ca.json). Fixed: README rewritten (see 'readme').",
+   "F4": "Same as SR-B1; NoLiveNotice now takes the open replay's year and never says 'no active fires' when lists are down.",
+   "F5": "Verified by code (no upper bound). Fixed: le=MAX_QUERY_MS (2100-01-01) on the 5 at_ms params; walk shows 422.",
+   "F6": "Verified by code. Fixed: fallback year = default_year(); test.",
+   "F7": "Verified. Fixed in describe.ts, MapLegend.tsx (and a comment in types.ts)."
+  },
+  "outage_measurements": {
+   "harness": "scratchpad final/final-verification/scripts/run_api.py (an httpx transport that fails chosen hosts; FIRE3D_LIVE=0, port 8718); curl times",
+   "both lists 403, empty cache": "live 0.36 s, 2026 0.03 s, 2025 0.01 s (12 prepared 2025 fires, no fixtures), historical without year -> year 2026; Horse Gulch (prepared) 0.016 s 200; Second Flat (unprepared) 503 0.008 s; live status active_incidents null",
+   "NIFC refused, old cache": "live 1.2 s with wfigs stale=true (copy 6.2 min old); 2026 and 2025 lists 0.4 s (copies within their 30 min / 24 h cache times: not stale); incident record 0.4 s",
+   "every host refused, empty cache (after the final change)": "live list 2.0 s; Horse Gulch 0.012 s; Second Flat 503 0.010 s; 2025 list 0.03 s",
+   "before (panel)": "live 45-53 s, Horse Gulch 273 s, 503 after 130-142 s, incident record over 90 s"
+  },
+  "live_loop": "FIRE3D_LIVE=1 FIRE3D_LIVE_INTERVAL_S=7200 uv run uvicorn fire3d.api.app:app --port 8718 (one cycle only, then stopped). 16:51:37 UTC: 7,875 detections assigned to 228 fires (23 states); /api/live/status {active_incidents 228, detections_24h 7212, detections_24h_ca 86, auto_build true}. Candidates (AUTO_BUILD_MAX 4, national): 2026-bee-haven-2-24-06-de4697 (FL, 2,060 ac), 2026-border-2-a60ca6 (WA), 2026-west-fork-f96d07 (WA), 2026-garda-falls-942121 (WA). Bee Haven built its static layers (37.8 s; LANDFIRE 2025 not released there, LF2024 used) then Open-Meteo's forecast host answered the daily limit (16:52:22); the other 3 were refused in 2-3 ms without a request (per-host block until 00:00 UTC). weather-probe at 16:51:00 had said overall ok / live ok. Log: 0 unexpected errors (5 build-failure ERROR lines, all the quota). The sync also showed 'CAL FIRE summary updated for fixture-live' (a one-time default fill of the synthetic bundle): fixed, the sync now skips synthetic bundles.",
+  "prepare_analysis": "One press from the fire card of 2026-sand-creek-84fd3d (MT, 35,520 ac, USFS via NIFC WFIGS) in Public at 1440x900 (scripts/prepare.mjs): 1 POST /api/incidents/2026-sand-creek-84fd3d/build?force=false; job error within 5 s 'Open-Meteo daily request limit reached; retry after the reset (00:00 UTC)'; the app shows 'BUILD FAILED ... Retry build' and the same banner; 0 page errors. Not retried (instructions). Screens final3-prepare-sand-creek-card.png / -after.png.",
+  "official_records_nationally": "incident-record: Border 2 (WA, NPS National Park Service, America/Los_Angeles, 9,108 ac 74 %), Bee Haven (FL, DVF Division of Forestry, America/New_York), Timber (CA, USFS), each available with changes [] and the caveat 'Fire-3d does not record changes to this record yet' (WFIGS history deferred). CAL FIRE history: /api/official/calfire for Cooley lists 1 recorded change (74 -> 80 %), Timber 0; history files append only on change.",
+  "endpoint_walk": "scripts/walk.py over 102 GET paths (the panel's list plus national lists, new fires, oversized at_ms, geocode, lookup) against 8718 during the live run: 200 x70, 400 x11, 404 x10, 422 x11 (incl. the 5 oversized at_ms); 0 contract problems (contracts.py models), 0 answers containing the key, 0 5xx, none over 10 s.",
+  "key_scan": "scripts/secretscan.py (key read from the environment, never printed): 7,833 files (git-tracked and untracked except .env, web/dist, docs, data/official, every bundle JSON, the final/ scratchpad incl. the hard-linked HTTP cache copy) -> 0 contain the key; git log -S over all history -> 0 commits.",
+  "wording_scan": "git diff 1c500b1 -- web/src backend/fire3d (non-test), added lines, \\bsafe\\b|low risk|all[- ]clear|FireTrace: only identifiers (traversal-safe, thread-safe, DST-safe, quote safe=) and negations ('never an all-clear', 'Not an all-clear'); 'not low risk' removed from user strings (F7).",
+  "non_get_requests": "1 in total (the Prepare press). Access logs: live run 1 POST / 130 GET; lists403 0/33; wfigs-stale 0/31; total 0/16; official-down 0/34 and 0/31; normal 0; total2 0.",
+  "readme": "Intro and screenshots (national overview, Horse Gulch MT, Eaton), the national overview, record sources and the California merge, time zones and clocks, accuracy labels, Public/Command changes, Official now with four rows, run notes (live loop national, gazetteer_us.json, region files), data flow (WFIGS, UTM 10-19, LANDFIRE editions, outages), HTTP API rows (geo/lookup, accuracy-regions, incident-record, local-alerts), architecture, model notes (GSI outside California), a new 'Outside California: 12 past fires in six regions' section with per-fire and per-region numbers from regional_accuracy.json, limitations (lower 48 only, accuracy by region with small samples, evacuations in CA and OR only with Washington declined and Florida county-only, cameras CA only, WFIGS history and GOES-East deferred, Open-Meteo shared quota, outage behaviour, frame rates not re-measured), troubleshooting, and source rows with terms: NIFC WFIGS Incident Locations, NWCG PMS 931, Census Gazetteer (US), TIGERweb, USDOT NTAD, NWS (national + relayed local messages; disclaimer re-read 2026-10-23), OpenFEMA (notice, no logos, cite the date; fema.gov answers automated requests with 403, so the terms page was not re-read here), Oregon OEM, LANDFIRE LF2023-2025, Open-Meteo limits (re-read 2026-10-23: under 10,000/day, 5,000/hour, 600/minute, non-commercial), and a 'Not used, and why' list."
+ },
+ "screenshots": [
+  "docs/screenshots/final3-prepare-sand-creek-card.png (Sand Creek MT card before the press: USFS via NIFC WFIGS, MDT times, Northern Rockies label)",
+  "docs/screenshots/final3-prepare-sand-creek-after.png (build refused: Open-Meteo daily limit, 'Retry build'; 'Evacuations: Not available in this state (Montana)')",
+  "docs/screenshots/final3-lists-down-public-desktop.png (both lists down: one notice, 'Fire lists unavailable · prepared fires' saved records', no 'no active fires')",
+  "docs/screenshots/final3-lists-down-public-phone.png (peek 'Fire lists unavailable right now')",
+  "docs/screenshots/final3-lists-down-command-2025.png (2025 filter: the 12 prepared 2025 fires, no fixtures)",
+  "docs/screenshots/final3-wfigs-stale-public-desktop.png (NIFC refused: 'could not be refreshed right now; showing the copy fetched 7 min ago', 'fetched 7 min ago')",
+  "docs/screenshots/final3-wfigs-stale-public-phone.png ('228 active fires · not refreshed (7 min ago)')",
+  "docs/screenshots/final3-official-down-horse-gulch-public.png (IEM archive down: 'Fire weather Unavailable right now. (NWS, archived)'; archived FEMA local alert with the OpenFEMA notice)",
+  "docs/screenshots/final3-official-down-bend-card.png (NWS down: 'Local officials' alerts: unavailable right now', the 'none' caveat once; Oregon OEM answered)",
+  "All 9 viewed with the Read tool; taken with node scripts/shot.mjs ... --backend swiftshader or a Playwright script with SwiftShader. Forensic was not screenshotted (it can time out under swiftshader); frame rates are not measurable here (no GPU)."
+ ],
+ "contract_deviations": [
+  "§14.1: ListSource gains stale (Python bool = False, TS optional) and LiveStatus.active_incidents becomes int | null (number | null in TS); recorded in §14.1 and §14.16.",
+  "§14.1 'WFIGS down ... plus bundles on disk': the both-down fallback lists only bundles of listed ids that did not fail (never fixture-* or synthetic), and a historical list without year uses the default year (§14.16).",
+  "§14.14 list-down notices are replaced by one ALL_LISTS_DOWN notice when every source shown is unavailable (the per-source notices stay for one source down); new fixed strings in §14.16.",
+  "All at_ms query parameters are bounded at 2100-01-01 (422).",
+  "fire3d.http gains DownMemo, connect_timeout and expect_json; list sources use 5 s / 12 s timeouts and at most one retry (was 4 retries, 15 s / 45-90 s)."
+ ],
+ "known_issues": [
+  "Open-Meteo's daily limit on this shared cloud IP refused every build at 16:52 UTC (a minute after an 'ok' probe): no new fire was prepared in the final check, neither by the 4 auto-builds nor by the one Prepare press. The refusals were honest and immediate. On the user's own connection this should not happen; the reset is 00:00 UTC.",
+  "This branch's git history still contains a private person's name in an OpenFEMA test sample (commit b12dd1e; private repository). A squash-merge into main keeps it out of main; rewriting the branch history was not done (never rewrite history).",
+  "Accuracy outside California is lower (region scores 0.19-0.39 vs 0.43 in-sample in Southern California) and rests on 2 fires per region (about ±0.07); the Rocky Mountain and Eastern regions and Northern California are untested. The model mostly under-predicts new growth outside California.",
+  "Frame rates were not measurable in this cloud session (no GPU); the national overview draws up to about 1,400 markers. Check on the Mac. Forensic was not screenshotted here (swiftshader timeouts).",
+  "A host that accepts connections but never answers was tested only with a simulated read timeout: the first request costs about 25 s (12 s read timeout, one retry on a cold cache), then 60 s of instant answers.",
+  "When both fire lists are down, the prepared live fires are listed with their status as saved when prepared (may be out of date); the notice says so.",
+  "Bee Haven 2-24-06 (FL) keeps a failed bundle from the quota-refused auto-build (static layers only); its card offers 'Prepare analysis again'. Refused builds created empty bundle directories (a lock file only; 4 removed here); harmless.",
+  "Deferred by plan: WFIGS record change history, GOES-East imagery, Alaska and Hawaii, county evacuation feeds.",
+  "From integration (unchanged): NIFC's current list sometimes answers two snapshots within minutes; ZIP areas are described 'near' the closest town to their centre."
+ ],
+ "notes_for_integrator": [
+  "Nothing left for another role. Servers 8718 and 5188 stopped; no process left running.",
+  "Merge: prefer a squash-merge into main (keeps commit b12dd1e's private name out of main).",
+  "Locally, fire data built in the cloud stays in the cloud; the user prepares fires again with 'Prepare analysis' (the Open-Meteo quota then counts on the user's own IP)."
+ ],
+ "user_summary": "What changed in this last step: an independent check found 13 problems, mostly about what Fire-3d says when the fire lists (CAL FIRE and NIFC) or other sources are down. All 13 are fixed and tested. Now, when the lists cannot be reached, the app says so in one clear sentence and never says 'no active fires'; it never shows the demo fire as a real one; an old copy of a list says how old it is; and every answer comes back within seconds instead of timing out after 30 s to 4 minutes. Small fixes: 'unavailable right now' wording for unreachable alert services, hectares in the fire lists when you pick metric, 'Unknown, not low.' outside the modeled area, and bad inputs get a clear error. The README now describes the whole lower 48: coverage, every new data source with its terms (including FEMA's required notice), the accuracy test on 12 fires outside California, evacuation coverage by state, and the limitations.\n\nWhat was verified: one live refresh across the country (228 active fires in 23 states, auto-builds capped at 4 and chosen nationally), official records outside California (Washington, Florida, Montana) and CAL FIRE's change history, 102 API addresses against the data contracts, a key-leak scan (0 of 7,833 files), a wording scan, outage drills with screenshots, and all test suites (1,009 backend, 1,206 web, after the final fixes below).\n\nFinal fixes: a last clean re-check found 9 small problems; all are fixed. A NIFC record that gives only a 'fire out' or 'controlled' date no longer shows it as the containment date (each date now says what it is, for example 'declared out Mar 19, 2026'). Agency codes such as FWS now show the agency's plain name (U.S. Fish and Wildlife Service). The fire list's freshness line now reads 'newest record 10 min old · lists checked in the last 30 min' (or 'sources checked in the last 8 min' for the Active list, whose two sources are fetched at different times) instead of the confusing 'updated … · checked …'. Two 'Spread not prepared yet' labels of nearby fires no longer cover each other. The README's numbers were corrected (demo fire setup, perimeter coverage across the lower 48, weather-limit behaviour, build times, town count).\n\nRemaining issues, most serious first:\n1. No new fire could be prepared today: the free weather service (Open-Meteo) hit its daily limit on the shared cloud address, so the 4 automatic builds and the one 'Prepare analysis' press were refused (honestly, with the reset time 00:00 UTC). On your own connection this should work.\n2. The forecast is less accurate outside California (scores 0.19-0.39 against 0.43), tested on only 2 fires per region, and three regions are untested; it usually forecasts too little new spread there.\n3. Speed (frames per second) could not be measured here (no graphics card); please check the national map on your Mac.\n4. This branch's history contains a private person's name in a test sample (commit b12dd1e); a squash-merge keeps it out of main.\n5. Smaller: a server that hangs without answering costs about 25 s once; when both lists are down, prepared fires show their saved status; a failed Florida build is left with a 'Prepare analysis again' button.\n\nDecisions for you: (a) merge with a squash-merge (recommended) to keep the private name out of main; (b) whether a later brief should re-tune the model for regions outside California, research county evacuation feeds, or add Alaska and Hawaii.",
+ "final_fixes": {
+  "role": "final fixer (brief 3), 2026-10-23 about 18:05-18:40 UTC; API 8718, Vite 5188 (both stopped); the only agent editing",
+  "source": "the clean re-check after the final verification: 9 minor findings R1-R9 (verdict fix-needed). Each was verified against the code or the data first; all 9 were confirmed and are fixed.",
+  "findings": [
+   {
+    "id": "R1",
+    "verified": "confirmed: web/src/official/record.ts set containedMs = contained_ms ?? controlled_ms ?? out_ms and Official now printed it as 'contained'; the summary's contained_ms of a WFIGS row has the same fallback (CONTRACT 14.1), shown as 'contained' on the fire card and the incident overview. Real case: Table Rock (SC, 2025) has only a FireOutDateTime (Mar 19, 2026), shown as its containment date.",
+    "fix": "IncidentSummary.contained_kind ('contained' | 'controlled' | 'out' | null; CAL FIRE rows 'contained', filled on read; synced into live bundles). Web: recordText.containedLabel labels the date 'contained' / 'controlled' / 'declared out', or shows none for an older WFIGS summary that does not say; the record endpoint's three times stay apart (containedMs / controlledMs / outMs) and Official now and the record's feed facts list each with its own label (record.recordEndTimes). Builds add a 'Containment' event only at a containment time (observed.containment_event_ok); no bundle was rebuilt.",
+    "tests": "backend tests/test_final_fixes_3.py (kinds, defaults, event rule); web record.test.ts, recordText.test.ts, FireCard.test.ts (Table Rock: 'declared out Mar 19, 2026', never 'contained')"
+   },
+   {
+    "id": "R2",
+    "verified": "confirmed: make_fixture.py's default writes demo + live; east needs --only east.",
+    "fix": "README quick start runs '--only east' for fixture-east; the helper table lists [--only demo|live|east]."
+   },
+   {
+    "id": "R3",
+    "verified": "confirmed: 27 of 78 is the brief-1 count on CAL FIRE's 2025 California list. A national figure already on disk: docs/redesign/audit-3/backend.md (measured 2026-10-22, no new request): 822 of 1,178 lower-48 wildfires of 300 acres or more in 2026 have a NIFC perimeter (Southeast about 30 %).",
+    "fix": "README: 356 of 1,178 (about 30 %) had no NIFC perimeter, about 30 % coverage in the Southeast, with the count date."
+   },
+   {
+    "id": "R4",
+    "verified": "confirmed: of the 36 POOProtectingAgency codes in the cached WFIGS answers, 13 had no plain name (FWS, DNRF, FFP, NNSA, OES, DOC among those PMS 931 names). Rush (OK) showed 'FWS via NIFC WFIGS' with no name.",
+    "fix": "nwcg_agency_codes.json names every PMS 931 Tier 2 code (71; checked against the PMS 931 PDF already cited, Sep 2022, public domain, credit unchanged); not_named: ARNG, DEC, DFFM, INTER, SHP, SP (two meanings), TRIBE, USMC. README: the plain name 'where NWCG's unit-identifier standard names its code', others as NIFC sends them. Live check: Rush now 'U.S. Fish and Wildlife Service'.",
+    "tests": "backend tests/test_final_fixes_3.py::test_agency_codes_wfigs_sends_have_plain_names"
+   },
+   {
+    "id": "R5",
+    "verified": "confirmed: weather.recheck_daily_block probes once an hour (DAILY_RECHECK_S 3600) and lifts the block when the host answers.",
+    "fix": "README limitation and troubleshooting row describe the hourly check and the 00:00 UTC reset at the latest."
+   },
+   {
+    "id": "R6",
+    "verified": "confirmed: docs/validation.md 10.3 final builds: 30 s (Black Cove) to 539 s (Emigrant, Oregon) with every host answering; Island Creek 1,099 s and France Canyon 1,346 s while a host did not answer.",
+    "fix": "README uses those numbers."
+   },
+   {
+    "id": "R7",
+    "verified": "confirmed: under the 2026 season the source line showed the newest record time of the live list ('updated 3 min ago') beside the oldest fetch time of both lists ('checked 30 min ago').",
+    "fix": "'newest record 10 min old · list checked 2 min ago' (one list), '· lists checked in the last 30 min' (lists fetched at different times), '· copy fetched 47 min ago' (stale); the phone peek '<N> active fires · newest record 5 min old'. overview.newestRecordText / listCheckedText; ListHealth.fetchedNewestMs.",
+    "tests": "web overview.test.ts (3 tests), OverviewPanel.test.ts (season and active lines, peek)"
+   },
+   {
+    "id": "R8",
+    "verified": "confirmed on the live list: Rocky and Tice (Kern Co., CA, 1.5 km apart) at zoom 11.2: the two chips overlapped (before screenshot).",
+    "fix": "Chip layers split: the first chipTargets fire (nearest the view centre) in OVR.*Chip, always drawn and placed first (top layers); the others in OVR.*ChipNext with allow-overlap false and CHIP_NEXT_ANCHORS (below, above, right, left). After: Tice's chip moves above its marker; Sage/Leaf (ND, 0.16 km apart) likewise.",
+    "tests": "web overviewLayers.test.ts (filters, layout, layer order, style valid)"
+   },
+   {
+    "id": "R9",
+    "verified": "confirmed: gazetteer_us.json has 35,585 places of which 3,222 are counties (32,363 others).",
+    "fix": "README: about 32,400 towns and places, every county (3,222) and about 33,800 ZIP areas."
+   }
+  ],
+  "files": [
+   "backend/fire3d/contracts.py (ContainedKind, IncidentSummary.contained_kind, default for CAL FIRE rows)",
+   "backend/fire3d/catalog.py (contained_kind, WFIGS summaries)",
+   "backend/fire3d/api/live.py (sync field)",
+   "backend/fire3d/build/observed.py (containment_event_ok)",
+   "backend/fire3d/data/nwcg_agency_codes.json",
+   "backend/tests/test_final_fixes_3.py (new, 4 tests)",
+   "web/src/api/types.ts, web/src/lib/recordText.ts (+test), web/src/official/record.ts (+test), web/src/official/model.ts, web/src/ui/feed/OfficialNow.tsx, web/src/ui/shell/FireCard.tsx (+test), web/src/ui/IncidentOverview.tsx",
+   "web/src/state/overview.ts (+test), web/src/ui/shell/OverviewPanel.tsx (+test)",
+   "web/src/map/overviewLayers.ts (+test)",
+   "README.md, SPEC.md (IncidentSummary.contained_kind), docs/redesign/CONTRACT.md (new 14.17; 14.9.1 peek wording)",
+   "docs/screenshots/final3-fix-chips-before.png, final3-fix-chips-after.png, final3-fix-chips-after-nd.png, final3-fix-record-declared-out.png"
+  ],
+  "gates": {
+   "backend": "cd backend && uv run pytest -q -> 1009 passed (was 1005)",
+   "web": "npm run typecheck -> exit 0; npm run lint -> exit 0, 55 warnings, all in src/scene; npm test -> 76 files, 1,206 passed, 2 skipped (was 1,197); npm run build -> exit 0",
+   "time_api": "node web/scripts/check-time-api.mjs web/src -> 304 files, 0 deprecated uses, 0 America/Los_Angeles literals"
+  },
+  "checks": [
+   "Screenshots (swiftshader, each viewed): chips before/after (Rocky and Tice, CA; Sage and Leaf, ND), Table Rock's card and Official now ('declared out Mar 19, 2026 12:00 PM EDT', the fire's own zone).",
+   "API (FIRE3D_LIVE=0): /api/incidents/2025-table-rock-20616f -> contained_kind 'out'; Eaton -> 'contained'; Rush (OK) agency 'U.S. Fish and Wildlife Service'.",
+   "Non-GET requests in both API logs: 0; 5xx: 0. Nothing was built and 'Prepare analysis' was not pressed.",
+   "Count-only FIRMS key scan of the diff, the new files and the scratch logs: 0.",
+   "Wording scan of the added lines: no 'safe', 'low risk' or the reference demo's name."
+  ],
+  "known_issues": [
+   "Bundles already on disk were not rebuilt: a summary saved in an older NIFC WFIGS manifest has no contained_kind, so where only that saved summary is shown (both lists down) no end date is shown, rather than a possibly wrong one.",
+   "R3 uses the perimeter count measured on Oct 22, 2026 (docs/redesign/audit-3/backend.md); it is not refreshed automatically."
+  ]
+ },
+ "final_fixes_followup": {
+  "by": "orchestrator, after the final re-check (2026-10-23 ~18:50 UTC)",
+  "R7_active_filter": "listCheckedText now chooses the wording from the spread between the oldest and newest fetch (>= 60 s), whatever the list count: one list with two sources fetched apart reads 'sources checked in the last N min' (web/src/state/overview.ts; 2 new cases in overview.test.ts).",
+  "fixture_east_contained_kind": "make_fixture.py writes contained_kind 'contained' for fixture-east (its contained_ms is a synthetic ContainmentDateTime), so Forensic no longer says 'see the agency record' for a fixture with no record; fixture-east regenerated in data/ (not committed)."
+ }
+}

@@ -51,7 +51,7 @@ from fastapi.responses import Response
 from .. import bundle, config, regions
 from .. import http as fhttp
 from ..sources import evacuations as evac
-from ..timeutil import DAY_MS, HOUR_MS, now_ms
+from ..timeutil import DAY_MS, HOUR_MS, MAX_QUERY_MS, now_ms
 
 log = logging.getLogger(__name__)
 
@@ -383,7 +383,9 @@ def _incident_info(incident_id: str) -> tuple[BBox | None, str | None]:
 
     try:
         s = catalog.get_summary(incident_id)
-    except Exception as e:  # catalog sources down: treat as unknown here
+    except catalog.ListsUnavailable:
+        raise HTTPException(status_code=503, detail=catalog.LISTS_UNAVAILABLE_TEXT) from None
+    except Exception as e:  # noqa: BLE001 - an unexpected lookup failure: treat as unknown here
         log.warning("extras: catalog lookup for %s failed: %s", incident_id, config.mask_secrets(e))
         s = None
     if s is None:
@@ -653,7 +655,8 @@ def evacuations_payload(ctx: AreaContext) -> dict[str, Any]:
         per_source.append((ad, zones))
         zone_caveats.extend(ad.standing_caveats)
         if not zones:
-            zone_caveats.append(ad.none_caveat)
+            # several states in the area: say whose "none" it is (a California-only answer keeps brief 2's sentence)
+            zone_caveats.append(ad.none_caveat_named if len(adapters) > 1 or uncovered else ad.none_caveat)
     checked = {ad.home_state: ad.id in answered for ad in adapters}
     out["states"] = evac.states_entries(states, checked)
     if not answered:
@@ -684,7 +687,7 @@ def evacuations_payload(ctx: AreaContext) -> dict[str, Any]:
 
 
 @router.get("/api/extras/evacuations")
-def get_evacuations(bbox: str | None = None, incident: str | None = None, at_ms: int | None = Query(None, ge=0),
+def get_evacuations(bbox: str | None = None, incident: str | None = None, at_ms: int | None = Query(None, ge=0, le=MAX_QUERY_MS),
                     margin_km: float = Query(DEFAULT_MARGIN_KM, ge=0, le=60)) -> Response:
     """Official evacuation zones (current status only) intersecting ``bbox`` or the incident's area."""
     ctx = area_context(bbox, incident, at_ms, margin_km)
@@ -807,8 +810,9 @@ def cameras_payload(ctx: AreaContext) -> dict[str, Any]:
     out = _base("cameras", ctx, ("caloes_webcams", "alertcalifornia", "caltrans_cctv"))
     out.update({"cameras": {"type": "FeatureCollection", "features": []}, "counts": {}, "excluded": {}})
     if "CA" not in regions.states_in_bbox(ctx.bbox):
-        # CONTRACT §14.8.6 / §14.14: the camera sources are California's; no upstream request elsewhere
-        out.update(status="unavailable", reason_code="state_not_available", reason=CAMERAS_NOT_AVAILABLE)
+        # CONTRACT §14.8.6 / §14.14: the camera sources are California's; no upstream request elsewhere, and no
+        # California source listed for an answer that used none (as evacuations do; the sentence names the networks)
+        out.update(status="unavailable", reason_code="state_not_available", reason=CAMERAS_NOT_AVAILABLE, sources=[])
         return out
     if ctx.is_past:
         out.update(status="not_available_for_past_dates", reason_code="past_date",
@@ -869,7 +873,7 @@ def cameras_payload(ctx: AreaContext) -> dict[str, Any]:
 
 
 @router.get("/api/extras/cameras")
-def get_cameras(bbox: str | None = None, incident: str | None = None, at_ms: int | None = Query(None, ge=0),
+def get_cameras(bbox: str | None = None, incident: str | None = None, at_ms: int | None = Query(None, ge=0, le=MAX_QUERY_MS),
                 margin_km: float = Query(25.0, ge=0, le=60)) -> Response:
     """Public wildfire (ALERTCalifornia) and traffic (Caltrans) cameras in the area (live context only)."""
     ctx = area_context(bbox, incident, at_ms, margin_km)
@@ -1492,7 +1496,7 @@ def imagery_payload(ctx: AreaContext, families: list[str]) -> dict[str, Any]:
 
 
 @router.get("/api/extras/imagery")
-def get_imagery(bbox: str | None = None, incident: str | None = None, at_ms: int | None = Query(None, ge=0),
+def get_imagery(bbox: str | None = None, incident: str | None = None, at_ms: int | None = Query(None, ge=0, le=MAX_QUERY_MS),
                 margin_km: float = Query(5.0, ge=0, le=30), families: str | None = None) -> Response:
     """Recently acquired satellite images (acquired at or before ``at_ms`` / now) for the area."""
     fams = [f.strip() for f in (families or ",".join(IMAGERY_FAMILIES)).split(",") if f.strip()]

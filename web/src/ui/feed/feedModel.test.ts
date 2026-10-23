@@ -8,10 +8,12 @@ import {
   buildFeedItems,
   extendFeedBaseline,
   feedBaseline,
+  feedStatusLabel,
   feedView,
   filterFeed,
   isLaterItem,
   isNewFeedItem,
+  localizeDetailTimes,
   ringCentroid,
   rovingIndex,
   rovingTabStop,
@@ -420,5 +422,52 @@ describe('selectFeedItem', () => {
     useStore.setState({ timeMs: T0 + 5 * H })
     selectFeedItem({ ...live, seekable: false })
     expect(useStore.getState().timeMs).toBe(T0 + 5 * H)
+  })
+})
+
+// Integration part 1 review UX-M3: the build writes 24-hour, zero-padded times into the fire-start text; Public reads
+// 12-hour times (round 2 decision 8), so the feed rewrites them in the panel's clock and the fire's zone.
+describe('fire-start times in the panel clock (review UX-M3)', () => {
+  const BLACK_COVE = 'Reported by DFR via NIFC WFIGS Mar 19, 15:00 EDT. First persistent GOES detection Mar 19, 15:10 EDT (GOES-16). Ignition estimated 30 min before the first VIIRS detection near the point (Suomi NPP, Mar 19, 14:50 EDT).'
+  const T = Date.UTC(2025, 2, 19, 18, 50) // Mar 19, 2025 14:50 EDT
+  it('Public (12 h): "Mar 19, 3:00 PM EDT"; Command (24 h): "Mar 19, 15:00 EDT"', () => {
+    const pub = localizeDetailTimes(BLACK_COVE, timeFmt('America/New_York', '12h'), T)
+    expect(pub).toBe('Reported by DFR via NIFC WFIGS Mar 19, 3:00 PM EDT. First persistent GOES detection Mar 19, 3:10 PM EDT (GOES-16). Ignition estimated 30 min before the first VIIRS detection near the point (Suomi NPP, Mar 19, 2:50 PM EDT).')
+    const cmd = localizeDetailTimes(BLACK_COVE, timeFmt('America/New_York', '24h'), T)
+    expect(cmd).toContain('Mar 19, 15:00 EDT')
+    expect(cmd).not.toMatch(/PM/)
+  })
+  it("a zero-padded day and another zone's abbreviation are read exactly; unknown abbreviations stay as written", () => {
+    // Horse Gulch: "Jul 09, 13:32 MDT" in the fire's own zone
+    expect(localizeDetailTimes('Reported by USFS via NIFC WFIGS Jul 09, 13:32 MDT.', timeFmt('America/Denver', '12h'), Date.UTC(2024, 6, 9, 19))).toBe('Reported by USFS via NIFC WFIGS Jul 9, 1:32 PM MDT.')
+    // a token written in Pacific time read in a Mountain fire's zone keeps its instant
+    expect(localizeDetailTimes('at Jul 09, 12:32 PDT', timeFmt('America/Denver', '24h'), Date.UTC(2024, 6, 9, 19))).toBe('at Jul 9, 13:32 MDT')
+    expect(localizeDetailTimes('fixture ignition at Aug 14, 14:26 PT.', timeFmt('America/Denver', '12h'), Date.UTC(2025, 7, 14))).toBe('fixture ignition at Aug 14, 14:26 PT.')
+  })
+  it('the feed row of the ignition event uses it (Public: 12 h)', () => {
+    const items = buildFeedItems({ manifest: manifest(), events: EVENTS, annotations: [], tf: timeFmt('America/Los_Angeles', '12h') })
+    const start = items.find((i) => i.topic === 'ignition')
+    expect(start?.detail).toContain('Reported by CAL FIRE Jan 7, 6:18 PM PST')
+    expect(start?.detail).not.toContain('18:18')
+  })
+  it('the expanded row\'s "Original" line uses the panel clock too (review round 2, N2): Public 12 h, Command 24 h', () => {
+    const pub = buildFeedItems({ manifest: manifest(), events: EVENTS, annotations: [], tf: timeFmt('America/Los_Angeles', '12h') }).find((i) => i.topic === 'ignition')
+    // the producer's own words stay as written ("persistent GOES detection"); only the times follow the panel clock
+    expect(pub?.original?.detail).toBe('Reported by CAL FIRE Jan 7, 6:18 PM PST. First persistent GOES detection Jan 7, 6:30 PM PST (GOES-18).')
+    expect(pub?.original?.title).toBe('Ignition')
+    const cmd = buildFeedItems({ manifest: manifest(), events: EVENTS, annotations: [], tf: timeFmt('America/Los_Angeles', '24h') }).find((i) => i.topic === 'ignition')
+    expect(cmd?.original?.detail).toContain('Jan 7, 18:18 PST')
+    expect(cmd?.original?.detail).not.toMatch(/ PM /)
+  })
+})
+
+// Integration part 1 review UX-m2: a local officials' message is never "Upcoming" in the feed.
+describe('feed status chip (review UX-m2)', () => {
+  it('a local message sent after the replay time says so; other items keep their words', () => {
+    expect(feedStatusLabel({ status: 'upcoming', topic: 'local-alert' }, true)).toBe('Sent after this time')
+    expect(feedStatusLabel({ status: 'upcoming', topic: 'local-alert' }, false)).toBe('Not yet in effect')
+    expect(feedStatusLabel({ status: 'upcoming', topic: 'fire-weather' }, true)).toBe('Upcoming')
+    expect(feedStatusLabel({ status: 'expired', topic: 'local-alert' }, false)).toBe('Expired')
+    expect(feedStatusLabel({ status: 'active', topic: 'local-alert' }, false)).toBeUndefined()
   })
 })

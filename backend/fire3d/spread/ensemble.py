@@ -303,14 +303,13 @@ def members_from_weather_json(bundle_dir: Path, start_ms: int, horizon_h: int, e
     precip = _hourly_series(af, "precip_mm", n)
     man = fbundle.load_manifest(Path(bundle_dir)) or {}
     month = local_month(start_ms, zone_of(man))            # the fire's own zone (CONTRACT 14.9.7)
-    precip_wy = None
-    try:   # drought-adjusted live fuel moisture when the bundle stores its water-year precipitation
-        from ..build.weather_bundle import precip_to
+    try:   # California: the drought-adjusted month table; elsewhere the NFDRS 2016 GSI (CONTRACT 14.12.10)
+        from ..build.weather_bundle import live_moisture_detail
 
-        precip_wy, _ = precip_to(Path(bundle_dir), man, int(start_ms), fetch=False)
+        lm = live_moisture_detail(Path(bundle_dir), man, int(start_ms), fetch=False)
+        herb, woody = float(lm["herb"]), float(lm["woody"])
     except Exception:  # noqa: BLE001 - the month table is a safe fallback
-        precip_wy = None
-    herb, woody = moisture.live_fuel_moisture(month, precip_wy)
+        herb, woody = moisture.live_fuel_moisture(month, None)
     lo = int(np.searchsorted(t, start_ms - 2 * config.MS_PER_H))
     hi = int(np.searchsorted(t, start_ms + (horizon_h + 2) * config.MS_PER_H)) + 1
     lo, hi = max(0, min(lo, n - 1)), max(lo + 1, min(hi, n))

@@ -36,7 +36,7 @@ export function AnalysisTab() {
       <Runner key={manifest.id} manifest={manifest} job={job} />
       <RunList manifest={manifest} />
       {forecast && <RunSummary manifest={manifest} forecast={forecast} />}
-      {forecast?.skill && forecast.skill.length > 0 && <SkillTable forecast={forecast} />}
+      {forecast?.skill && forecast.skill.length > 0 && <SkillTable skill={forecast.skill} />}
       <RegionAccuracy />
       <Disclaimer />
     </div>
@@ -286,10 +286,10 @@ function RunSummary({ manifest, forecast }: { manifest: IncidentManifest; foreca
 }
 
 /** The per-run skill table (brief 3, V-R13, CONTRACT §14.4): the growth score first when the run has it (the new spread
- *  only), the total relabelled as total-area overlap (it includes the area already burned at the start), and no
- *  green / amber / red tone (a colour would read as a verdict on the model). */
-function SkillTable({ forecast }: { forecast: ForecastManifest }) {
-  const skill = forecast.skill ?? []
+ *  only), the total relabelled as total-area overlap (it includes the area already burned at the start: said in the
+ *  header, or in a note under the table when the growth column makes the header short), and no green / amber / red
+ *  tone (a colour would read as a verdict on the model). */
+export function SkillTable({ skill }: { skill: NonNullable<ForecastManifest['skill']> }) {
   const growth = skill.some((k) => typeof k.growth_sorensen === 'number')
   return (
     <Section
@@ -351,7 +351,11 @@ function SkillTable({ forecast }: { forecast: ForecastManifest }) {
           })}
         </tbody>
       </table>
-      {growth ? null : <p className="muted small">The growth score (new spread only) is not stored for this run.</p>}
+      {growth ? (
+        <p className="muted small">Growth scores only the new spread after the start. Total-area overlap includes the area already burned at the start.</p>
+      ) : (
+        <p className="muted small">The growth score (new spread only) is not stored for this run.</p>
+      )}
       <p className="muted small">Scored against the reconstructed observed arrival time (acres).</p>
     </Section>
   )

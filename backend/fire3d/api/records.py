@@ -3,8 +3,9 @@
 * ``GET /api/official/incident-record?incident=<id>``: the fire's NIFC WFIGS (IRWIN) record, the protecting agency's
   numbers as NIFC publishes them, with the record's own times and a link. Works for every listed id with an IRWIN id
   (WFIGS rows, and California rows matched to one WFIGS record). Not covered (``unavailable`` + ``not_covered``, each
-  with its reason): a California row without a matched record, a CAL FIRE complex row (never one member's record), a
-  bundle-only or synthetic id (``fixture-demo``, ``fixture-east``). An id nobody knows is HTTP 404. WFIGS down:
+  with its reason): a California row without a matched record, a California row matched to several records none of
+  which has its name (the records named), a CAL FIRE complex row (never one member's record), a bundle-only or
+  synthetic id (``fixture-demo``, ``fixture-east``). An id nobody knows is HTTP 404. WFIGS down:
   ``unavailable`` + ``upstream_error``. History outside California is deferred (``changes`` is always ``[]``).
 * ``GET /api/accuracy-regions``: ``data/regional_accuracy.json`` (schema 1; seeded by us-catalog, written by the
   validation tooling) plus ``served_ms``; all ten regions, a missing one served as ``untested``; the status follows
@@ -49,6 +50,9 @@ CAVEAT_NUMBERS = ("These are the protecting agency's numbers as published by NIF
                   "update time. Fire-3d does not record changes to this record yet.")
 CAVEAT_NOT_ALL_CLEAR = "No record or no change is not an all-clear: follow local officials."
 REASON_NO_MATCH = "NIFC WFIGS has no record matched to this fire."
+# A California row matched to several WFIGS records, none with its name (catalog.enrich_calfire: irwin_id null; review
+# R3, a contract3/us-catalog.md deviation): the records are named, never one of them shown as the fire's record
+REASON_SEVERAL = "NIFC WFIGS lists this fire under several records ({names}), so no single record is shown here."
 REASON_COMPLEX = "This is a CAL FIRE complex; NIFC WFIGS lists its member fires separately."
 REASON_SYNTHETIC = "This is synthetic or local data; it has no agency record."
 REASON_DOWN = "NIFC WFIGS could not be reached; the agency record is not shown."
@@ -83,18 +87,24 @@ def _not_covered(body: dict[str, Any], reason: str) -> dict[str, Any]:
     return body
 
 
+def several_reason(names: list[str]) -> str:
+    """:data:`REASON_SEVERAL` with the records' names verbatim ("DALE, BRADFORD BRANCH")."""
+    return REASON_SEVERAL.format(names=", ".join(names))
+
+
 def _resolve(incident_id: str) -> tuple[IncidentSummary | None, bool]:
     """``(summary, listed)``: the listed summary (``catalog.resolve_listed``), else a bundle's (listed False); 404 when
-    nobody knows the id, 400 for an invalid id."""
+    nobody knows the id, 400 for an invalid id, 503 when the source lists cannot be reached (a listed fire's bundle on
+    disk is never answered as "synthetic" because of an outage)."""
     try:
         bundle.bundle_dir(incident_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="invalid incident id") from None
     try:
         listed = catalog.resolve_listed(incident_id)
-    except Exception as e:  # noqa: BLE001 - a lookup failure falls back to the bundle on disk
+    except Exception as e:  # noqa: BLE001 - the lists cannot tell now: 503, never a 500 or "synthetic"
         log.warning("incident-record: resolve_listed(%s) failed: %s", incident_id, config.mask_secrets(e))
-        listed = None
+        raise HTTPException(status_code=503, detail=catalog.LISTS_UNAVAILABLE_TEXT) from None
     if listed is not None:
         return listed, True
     s = catalog.manifest_summary(incident_id)
@@ -115,6 +125,9 @@ def incident_record_payload(incident_id: str) -> dict[str, Any]:
         return _not_covered(body, REASON_COMPLEX)
     irwin = s.irwin_id or (s.uid if s.record_source == "wfigs" else None)
     if not irwin:
+        several = [o.name or o.id for o in s.other_records or [] if o.source == "wfigs"]
+        if len(several) >= 2:
+            return _not_covered(body, several_reason(several))
         return _not_covered(body, REASON_NO_MATCH)
     try:
         rec = wfigs.record_by_irwin(irwin)

@@ -196,6 +196,36 @@ describe('focusIncidentFromMap (decision 10) vs explicit opens', () => {
     expect(useStore.getState().incidentSource).toBeNull()
   })
 
+  it("leaving a past fire returns the overview to now: live mode at the current time, never the closed fire's replay time (review round 2, N3)", async () => {
+    await useStore.getState().selectIncident('a', { source: 'card' })
+    await settle()
+    expect([useStore.getState().mode, useStore.getState().timeMs]).toEqual(['historical', 40 * H])
+    await vi.advanceTimersByTimeAsync(60_000)
+    useStore.getState().closeIncident()
+    let s = useStore.getState()
+    expect([s.incidentId, s.mode, s.timeMs]).toEqual([null, 'live', Date.now()])
+    // zoom-out too
+    useStore.getState().focusIncidentFromMap('b')
+    await settle()
+    expect(useStore.getState().mode).toBe('historical')
+    const zoomedOut = Date.now()
+    useStore.getState().focusIncidentFromMap(null)
+    await settle()
+    s = useStore.getState()
+    expect([s.incidentId, s.incidentSource, s.mode]).toEqual([null, 'zoom', 'live'])
+    expect(s.timeMs).toBeGreaterThanOrEqual(zoomedOut + FOCUS_DEBOUNCE_MS) // applied after the debounce, at that time
+    expect(s.timeMs).toBeLessThanOrEqual(Date.now())
+    // a fire without a ready analysis opened next keeps the current time, not the closed fire's (it sets none itself)
+    await useStore.getState().selectIncident('a', { source: 'card' })
+    await settle()
+    useStore.getState().closeIncident()
+    const closedAt = Date.now()
+    await useStore.getState().selectIncident('u', { source: 'link' })
+    await settle()
+    expect(useStore.getState().timeMs).toBe(closedAt)
+    expect(useStore.getState().timeMs).not.toBe(40 * H)
+  })
+
   it('keeps at most four fires cached, least recently used out first', async () => {
     const ids = ['a', 'b', 'c', 'd', 'e']
     useStore.setState({ catalog: { ...EMPTY_CATALOG, season: ids.map((id) => summary(id, { bundle_status: 'ready' })) } })

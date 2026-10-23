@@ -35,6 +35,7 @@ export function AnalysisDrawer() {
   const open = useWorkspace((s) => s.panels.analysis)
   const setPanel = useWorkspace((s) => s.setPanel)
   const drawing = useStore((s) => s.drawingPath)
+  const command = useWorkspace((s) => s.preset === 'command')
   const heading = useRef<HTMLHeadingElement | null>(null)
   useDrawerFocus(open, heading, 'analysis')
   // a path drawing started here cannot finish on the map: stop it when the drawer closes
@@ -61,7 +62,8 @@ export function AnalysisDrawer() {
         </button>
       </header>
       {drawing && <DrawPathNotice />}
-      <RegionAccuracy className="mw-drawer-accuracy" />
+      {/* Public: the words, the score one tap away (decision 7); Command: the score */}
+      <RegionAccuracy className="mw-drawer-accuracy" words={!command} />
       <Suspense
         fallback={
           <div className="mw-drawer-loading">

@@ -219,6 +219,13 @@ def test_resolution(world, tmp_data_dir: Path) -> None:
 def test_display_names_and_tokens() -> None:
     assert [catalog.display_name(x) for x in ("BIG CLIFF", "O'NEIL", "FD140011", "2ND STREET", "LAC-282478", "Timber", "2-2")] == [
         "Big Cliff", "O'Neil", "Fd140011", "2nd Street", "Lac-282478", "Timber", "2-2"]
+    # possessives and contractions (review R2): a short run after an apostrophe stays lower case; "O'Neil" keeps its cap
+    names = ("DEVIL'S CANYON", "0501 PAT'S CABIN", "JOHNSON'S", "DON'T", "WE'LL", "THEY'RE", "WE'VE", "SHE'D",
+             "D'ANGELO", "O'DELL", "'S CANYON", "ROCK\u2019S")
+    assert [catalog.display_name(x) for x in names] == [
+        "Devil's Canyon", "0501 Pat's Cabin", "Johnson's", "Don't", "We'll", "They're", "We've", "She'd",
+        "D'Angelo", "O'Dell", "'S Canyon", "Rock\u2019s"]
+    assert catalog.make_incident_id(2026, catalog.display_name("DEVIL'S CANYON"), "23e897ab") == "2026-devil-s-canyon-23e897"
     assert catalog.name_tokens("Eaton Fire") == catalog.name_tokens("EATON") == frozenset({"eaton"})
     assert catalog.name_tokens("2-2") != catalog.name_tokens("2-7")
     assert catalog.norm_name("TCU SEPTEMBER LIGHTNING COMPLEX") == catalog.norm_name("TCU September Lightning Complex")
@@ -280,6 +287,55 @@ def test_build_gate_text_for_local_bundles(world, tmp_data_dir: Path) -> None:
         assert s["state"] == "NC" and s["time_zone"] == "America/New_York"
 
 
+def test_lists_unreachable_answer_503_never_a_local_bundle(world, tmp_data_dir: Path) -> None:
+    """us-pipeline review R8: when the source lists cannot be reached, a listed fire's id is "cannot tell now" (503 with
+    one sentence), never "unknown" or "a local or synthetic bundle"; bundle-only ids never ask the lists."""
+    from fire3d.api.app import app
+    from fire3d.build import pipeline
+
+    pine_id = f"2026-pine-{ID['E1E2E3E4'][:6].lower()}"
+    world["cal_down"] = True
+    world["srv"].down = True
+    text = "The fire lists could not be reached right now; try again later."
+    assert catalog.LISTS_UNAVAILABLE_TEXT == text
+    with pytest.raises(catalog.ListsUnavailable) as ei:
+        catalog.resolve_listed(pine_id)
+    assert str(ei.value) == text and "NIFC WFIGS lookup" in ei.value.failed
+    assert catalog.resolve_listed("fixture-demo") is None                   # never a list lookup: no outage to report
+    with pytest.raises(catalog.ListsUnavailable):
+        catalog.get_summary(pine_id)
+    assert not catalog.is_bundle_only(pine_id) and catalog.find_by_irwin("{" + ID["E1E2E3E4"].lower() + "}") is None
+    refused = pipeline.gate_refusal(pine_id, {"id": pine_id})
+    assert refused.status == 503 and str(refused) == text
+    with pytest.raises(pipeline.BuildRefused) as bi:
+        pipeline.build_incident(pine_id)
+    assert bi.value.status == 503 and str(bi.value) == text
+    with TestClient(app) as client:
+        for r in (client.post(f"/api/incidents/{pine_id}/build"), client.get(f"/api/incidents/{pine_id}"),
+                  client.get("/api/official/incident-record", params={"incident": pine_id})):
+            assert r.status_code == 503 and r.json()["detail"] == text, r.text
+            assert "local or synthetic" not in r.text and "unknown incident" not in r.text
+        # a bundle on disk still answers, and a forced rebuild of it is 503 (cannot tell), not "local or synthetic"
+        d = tmp_data_dir / "incidents" / pine_id
+        d.mkdir(parents=True)
+        summ = {"id": pine_id, "name": "Pine", "mode": "live", "year": 2026, "calfire_uid": "", "started_ms": 1,
+                "updated_ms": None, "contained_ms": None, "acres": 1200.0, "percent_contained": 40.0, "is_active": True,
+                "county": None, "location": None, "admin_unit": None, "url": None, "lat": 42.4, "lon": -122.9,
+                "detections_24h": None, "bundle_status": "ready", "bundle_built_ms": 5, "state": "OR",
+                "record_source": "wfigs"}
+        (d / "manifest.json").write_text(json.dumps({"id": pine_id, "status": "ready", "built_ms": 5, "summary": summ}))
+        assert client.get(f"/api/incidents/{pine_id}").json()["summary"]["id"] == pine_id
+        r = client.post(f"/api/incidents/{pine_id}/build", params={"force": "true"})
+        assert r.status_code == 503 and r.json()["detail"] == text
+        r = client.get("/api/official/incident-record", params={"incident": pine_id})
+        assert r.status_code == 503 and "synthetic" not in r.text
+    world["cal_down"] = False
+    world["srv"].down = False
+    catalog.clear_cache()
+    fhttp.reset_down_memos()                     # a failure is remembered for a minute (CONTRACT 14.16)
+    assert catalog.resolve_listed(pine_id).id == pine_id                     # back: resolved again
+
+
 def test_config_year_floor() -> None:
     assert catalog._wf_min(None) == 300 and catalog._wf_min(100) == 100 and catalog._wf_min(0) == catalog.WFIGS_YEAR_FLOOR_ACRES
     assert config.CA_BBOX
@@ -294,7 +350,7 @@ def test_id_pinning_keeps_the_bundle_id(world, tmp_data_dir: Path, monkeypatch: 
     wid = before.id
     d = tmp_data_dir / "incidents" / wid
     d.mkdir(parents=True)
-    (d / "manifest.json").write_text(json.dumps({"status": "ready", "built_ms": 7, "mode": "live",
+    (d / "manifest.json").write_text(json.dumps({"id": wid, "status": "ready", "built_ms": 7, "mode": "live",
                                                  "summary": before.model_dump(mode="json")}))
     mc = cal("McCovey Fire", "ee77ff88-0000-4000-8000-000000000009", 38.0011, -120.4909, "2026-10-10T19:30:00Z", active=True, acres=60)
     monkeypatch.setattr(__import__(__name__), "CAL_LIVE", CAL_LIVE + [mc])
@@ -310,6 +366,23 @@ def test_id_pinning_keeps_the_bundle_id(world, tmp_data_dir: Path, monkeypatch: 
         r = client.post(f"/api/incidents/{cal_id}/build")
         assert r.status_code == 409 and r.json()["detail"] == f"'{cal_id}' is listed as '{wid}'."
         assert client.get(f"/api/incidents/{cal_id}").json()["summary"]["id"] == wid
+    # the live loop's sync: the bundle summary becomes CAL FIRE's record whole (review R1: never CAL FIRE's acres, time
+    # and link under "C&L via NIFC WFIGS" with the IRWIN uid); the id stays
+    from fire3d import bundle
+    from fire3d.api import live
+
+    assert before.record_source == "wfigs" and before.record_issuer == "C&L via NIFC WFIGS" and before.uid == ID["C1C2C3D4"]
+    assert live.sync_live_summaries(list(after.values())) == [wid]
+    m = bundle.load_manifest(d)
+    ms = m["summary"]
+    assert ms["id"] == wid and ms["record_source"] == "calfire" and ms["record_issuer"] == "CAL FIRE"
+    assert ms["uid"] == row.uid == mc["UniqueId"] and ms["calfire_uid"] == row.calfire_uid == mc["UniqueId"]
+    assert ms["url"] == mc["Url"] and ms["acres"] == 60 and ms["name"] == "McCovey Fire" and ms["source_name"] == row.source_name
+    assert ms["agency"] == row.agency and ms["agency_code"] == row.agency_code and ms["aliases"] == [cal_id]
+    assert ms["irwin_id"] == ID["C1C2C3D4"] and ms["mode"] == "live" and m["built_ms"] == 7
+    assert ms["started_ms"] == row.started_ms != before.started_ms and ms["year"] == row.year     # CAL FIRE's start
+    assert not contract_problems(IncidentSummary, ms)
+    assert live.sync_live_summaries(list(after.values())) == []                 # one record now: nothing more to copy
     shutil_rm = __import__("shutil").rmtree
     shutil_rm(d)
     catalog.clear_cache()

@@ -62,14 +62,14 @@ in California CAL FIRE stays the record and WFIGS adds only the fires CAL FIRE d
 | **FIRMS area API (primary, key)** | `https://firms.modaps.eosdis.nasa.gov/api/area/csv/{KEY}/{SOURCE}/{w,s,e,n}/{DAY_RANGE}/{YYYY-MM-DD}` | DAY_RANGE is the number of days starting at the date: **max 5** for VIIRS/MODIS/LANDSAT, **max 2 for GOES_NRT** ("Invalid day range" otherwise). Availability on 2026-10-16 (`/api/data_availability/csv/{KEY}/ALL`):<br>• `VIIRS_SNPP_SP` 2012-01-20…2026-06-30, `VIIRS_NOAA20_SP` 2018-04-01…2026-06-30, `VIIRS_NOAA21_SP` 2023-03-01…2026-06-30, `MODIS_SP` 2000-11…2026-07-31<br>• NRT: `VIIRS_SNPP_NRT` and `VIIRS_NOAA20_NRT` from 2026-07-01, `VIIRS_NOAA21_NRT` from 2024-01-17, `MODIS_NRT` from 2026-08-01, `GOES_NRT` from 2022-08-09, `LANDSAT_NRT` from 2022-06-20<br>**2025 replays:** use the three VIIRS SP sources + MODIS_SP (≈6 VIIRS passes/day at 375 m; e.g. Eaton Jan 8–12: ~530 NOAA-20, ~550 SNPP, ~660 NOAA-21 detections) + GOES_NRT + LANDSAT_NRT.<br>**Live:** the NRT sources (SP for dates before NRT coverage).<br>Columns as the CSV feeds below, plus `instrument` and `type`. **`acq_time` is NOT zero-padded** ("949" = 09:49 UTC): `zfill(4)`.<br>**`type`:** 0 vegetation, 1 volcano, 2 static land source, 3 offshore. Real fire pixels can be tagged 2 (MODIS on Eaton/Palisades) or 3 (Palisades coast), so drop only type 1 and rely on space-time clustering (§8.3) to exclude unrelated static sources.<br>**GOES_NRT** rows: satellites `G16`, `G18` (also `G19`), plus duplicate `G18FRP`-style rows (drop the `*FRP` duplicates). Pixel ≈ 2–3 km; `scan`/`track` are not km (assume a 2 km footprint). Confidence ranges from `30.0000` (low) to `100`. ~2,000 rows per 2 days over Eaton. Use GOES for **timing and activity** (ignition refinement, hourly FRP/activity series, gaps between VIIRS passes), not for the spatial burned mask.<br>**LANDSAT_NRT**: 30 m, sparse (~8-day revisit). Use it for the spatial mask when present.<br>**Caching:** SP and past-dated responses are immutable (TTL 30 d); NRT responses touching the last 48 h TTL 15 min. |
 | FIRMS live CSV (no key) | `https://firms.modaps.eosdis.nasa.gov/data/active_fire/{dir}/csv/{prefix}_USA_contiguous_and_Hawaii_{24h\|48h\|7d}.csv`; (dir, prefix) ∈ (`suomi-npp-viirs-c2`,`SUOMI_VIIRS_C2`), (`noaa-20-viirs-c2`,`J1_VIIRS_C2`), (`noaa-21-viirs-c2`,`J2_VIIRS_C2`), (`modis-c6.1`,`MODIS_C6_1`) | Used for the **California-wide live catalog** (`detections_24h` for every incident in one request per source), and as the fallback when the key is missing. VIIRS columns `latitude,longitude,bright_ti4,scan,track,acq_date,acq_time,satellite,confidence(l/n/h),version,bright_ti5,frp,daynight`. MODIS has `brightness`, numeric `confidence`. 7d files < 1 MB. |
 | FIRMS 2025 yearly archive (no key, fallback) | `https://firms.modaps.eosdis.nasa.gov/data/country/{viirs-snpp\|modis}/2025/{viirs-snpp\|modis}_2025_United_States.csv` | 37 MB / 9 MB, full year 2025, SNPP + MODIS only (`viirs-noaa20` yearly is 404). Fallback for 2025 when the area API is unavailable. Download once, filter to the California bbox (lon −124.6…−113.9, lat 32.4…42.1), cache as parquet. Same `type` rule. |
-| NIFC daily perimeters | `https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Daily_Perimeters_Public/FeatureServer/0/query` with `where`, `outFields`, `outSR=4326`, `f=geojson` (max 2000 records/page; paginate with `resultOffset`) | 1,046 CA records in 2025. Fields: `poly_IncidentName`, `poly_PolygonDateTime` (epoch ms, may be null → fall back to `poly_DateCurrent` → `poly_CreateDate`), `poly_GISAcres`, `poly_FeatureCategory` ("Wildfire Daily Fire Perimeter" / "Wildfire Final Fire Perimeter"), `attr_IrwinID`, `attr_POOState` ("US-CA"), `attr_FireDiscoveryDateTime`, `attr_ContainmentDateTime`, `attr_FireCause`. **Messy:** many duplicate edits share one timestamp; names recur across years and states (e.g. "Gifford" 2020/2021/2023/2025; "Eaton" in MN/FL). Always filter on state = US-CA, time window [start − 2 d, start + 120 d], and distance (< 30 km from the CAL FIRE point). Example where-clause that works: `attr_POOState='US-CA' AND poly_PolygonDateTime >= TIMESTAMP '2025-01-01 00:00:00'`. Current perimeters of live fires are also in `WFIGS_Interagency_Perimeters_Current`. |
+| NIFC daily perimeters | `https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Daily_Perimeters_Public/FeatureServer/0/query` with `where`, `outFields`, `outSR=4326`, `f=geojson` (max 2000 records/page; paginate with `resultOffset`) | 1,046 CA records in 2025. Fields: `poly_IncidentName`, `poly_PolygonDateTime` (epoch ms, may be null → fall back to `poly_DateCurrent` → `poly_CreateDate`), `poly_GISAcres`, `poly_FeatureCategory` ("Wildfire Daily Fire Perimeter" / "Wildfire Final Fire Perimeter"), `attr_IrwinID`, `attr_POOState` ("US-CA"), `attr_FireDiscoveryDateTime`, `attr_ContainmentDateTime`, `attr_FireCause`. **Messy:** many duplicate edits share one timestamp; names recur across years and states (e.g. "Gifford" 2020/2021/2023/2025; "Eaton" in MN/FL). California fires (CAL FIRE records) keep this path exactly: state = US-CA, time window [start − 2 d, start + 120 d], distance (< 30 km from the CAL FIRE point). Fires elsewhere (NIFC WFIGS records) match by IRWIN id: `UPPER(attr_IrwinID) IN (...) OR UPPER(poly_IRWINID) IN (...)`, else by name in `US-<state>`; the time window, distance and size checks stay; a WFIGS record with neither IRWIN id nor state is not matched (warning). Example where-clause that works: `attr_POOState='US-CA' AND poly_PolygonDateTime >= TIMESTAMP '2025-01-01 00:00:00'`. Current perimeters of live fires are also in `WFIGS_Interagency_Perimeters_Current`. |
 | USGS 3DEP DEM | `https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage?bbox={minx},{miny},{maxx},{maxy}&bboxSR={epsg}&imageSR={epsg}&size={W},{H}&format=tiff&pixelType=F32&interpolation=RSP_BilinearInterpolation&f=image` | Returns a float32 GeoTIFF already in our UTM grid. maxImage 8000. |
-| LANDFIRE | `https://lfps.usgs.gov/arcgis/rest/services/Landfire_{ED}/{ED}_{LAYER}_CONUS/ImageServer/exportImage?…&format=tiff&interpolation=RSP_NearestNeighbor&f=image` with ED ∈ {`LF2024`,`LF2025`}, LAYER ∈ {`FBFM40`,`CC`,`CH`,`CBH`,`CBD`,`EVT`} | int16, 30 m native (EPSG:5070), reprojected server-side. FBFM40 codes: 91–99 non-burnable, 101–204 burnable. **CC** is percent; **CH** and **CBH** are metres × 10; **CBD** is kg/m³ × 100. Use **LF2024** (pre-fire fuels) for 2025 incidents and **LF2025** for live incidents. Optional seasonal fuels for live: `Landfire_LF2025_Seasonal_Fuels_2026/LF2025_FBFM40_FA26` (fall 2026). |
+| LANDFIRE | `https://lfps.usgs.gov/arcgis/rest/services/Landfire_{ED}/{ED}_{LAYER}_CONUS/ImageServer/exportImage?…&format=tiff&interpolation=RSP_NearestNeighbor&f=image` with ED ∈ {`LF2023`,`LF2024`,`LF2025`} (LF2023 added in brief 3, same service), LAYER ∈ {`FBFM40`,`CC`,`CH`,`CBH`,`CBD`,`EVT`} | int16, 30 m native (EPSG:5070), reprojected server-side. FBFM40 codes: 91–99 non-burnable, 101–204 burnable. **CC** is percent; **CH** and **CBH** are metres × 10; **CBD** is kg/m³ × 100. Historical: the pre-fire edition LF{federal fiscal year of the start − 1}, at least LF2023 (a fire before October 2023 is refused with 422 unless forced); live: LF2025. LF2025 has no data in parts of the South and East (none at Black Cove, NC, checked 2026-10-23). Optional seasonal fuels for live: `Landfire_LF2025_Seasonal_Fuels_2026/LF2025_FBFM40_FA26` (fall 2026). |
 | NAIP imagery | `https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer/exportImage?bbox=…&bboxSR=…&imageSR=…&size=W,H&format=jpg&f=image` | maxImage 4000×4000. (`USGSNAIPPlus` timed out; don't use it.) |
 | Sentinel-2 L2A | STAC `POST https://earth-search.aws.element84.com/v1/search` with `{"collections":["sentinel-2-l2a"],"bbox":[…],"datetime":"a/b","query":{"eo:cloud_cover":{"lt":20}}}` | Assets `nir` (B08, 10 m), `swir22` (B12, 20 m), `scl`. Public HTTPS COGs; read windowed via rasterio `WarpedVRT` onto our grid. **Apply each asset's `raster:bands` scale/offset** (L2A has a −0.1 offset since 2022). |
 | Weather forecast (deterministic) | `https://api.open-meteo.com/v1/forecast?latitude=a,b,…&longitude=c,d,…&hourly=temperature_2m,relative_humidity_2m,dew_point_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation&models=gfs_hrrr&wind_speed_unit=ms&timeformat=unixtime&past_days=3&forecast_days=4` | Multi-location works (one JSON object per location). HRRR fills only ~48 h (later hours null); fill the rest with `models=gfs_seamless`. `wind_direction_10m` is the meteorological FROM direction. |
 | Weather ensemble (**live only**) | `https://ensemble-api.open-meteo.com/v1/ensemble?…&models=gfs025` (31 members: control + `_member01…30`) or `models=ecmwf_ifs025` (51) | Keys look like `wind_speed_10m_member07`. Multi-location works. **Only covers ~the last 90 days plus the forecast** (range 2026-07-16…2026-11-21 on 2026-10-16), so it cannot be used for 2025. |
-| Weather historical | `https://historical-forecast-api.open-meteo.com/v1/forecast?…&start_date=YYYY-MM-DD&end_date=…&models=gfs_hrrr` | Archived HRRR forecasts; works for 2025. Fallback: `https://archive-api.open-meteo.com/v1/archive` (ERA5). Free tier is ~10k calls/day, so cache everything. |
+| Weather historical | `https://historical-forecast-api.open-meteo.com/v1/forecast?…&start_date=YYYY-MM-DD&end_date=…&models=gfs_hrrr` | Archived HRRR forecasts; works for 2025. Fallback: `https://archive-api.open-meteo.com/v1/archive` (ERA5). Free tier limits per IP: daily (~10k), hourly (~5k) and per-minute (~600) weighted calls; a refusal is HTTP 429 with a JSON body such as {"error":true,"reason":"Daily API request limit exceeded. Please try again tomorrow."} (resets 00:00 UTC). Cache everything; never cache an error body (§8.4). |
 | ADS-B | `https://api.adsb.lol/v2/point/{lat}/{lon}/{radius_nm}`, `https://api.adsb.lol/v2/type/{ICAO type}`; fallback `https://opendata.adsb.fi/api/v2/lat/{lat}/lon/{lon}/dist/{nm}` (free for non-commercial use) when adsb.lol is unreachable | Response `{ac:[…], now, total}` (adsb.fi: `{aircraft:[…], now (s), resultCount}`). Aircraft fields: `hex`, `flight` (callsign, space-padded), `r` (registration), `t` (ICAO type), `lat`, `lon`, `alt_baro` (ft, or the string "ground"), `alt_geom`, `gs` (kt), `track`, `category`, `seen`, `squawk`. |
 | NWS fire weather alerts (no key; added 2026-10-18) | `GET https://api.weather.gov/alerts/active?area=CA&event=Red%20Flag%20Warning,Fire%20Weather%20Watch` (header `User-Agent: Fire-3d/0.1 (research prototype)`, `Accept: application/geo+json`); zone polygons `GET https://api.weather.gov/zones/fire/{UGC}` | GeoJSON CAP alerts; fire weather alerts carry `geometry: null` and list their fire weather zones in `geocode.UGC` / `affectedZones`; P-VTEC in `parameters.VTEC` (e.g. `/O.CON.KLOX.FW.W.0005.000000T0000Z-261018T0300Z/`). Open data, free to use; a User-Agent is required (optional contact via `FIRE3D_NWS_CONTACT`). NWS keeps no archive: past dates answer an empty list. Cached 2 min (alerts) / 30 days (zones). |
 | NWS alert archive (Iowa Environmental Mesonet, no key; added 2026-10-18) | `GET https://mesonet.agron.iastate.edu/json/vtec_events_bypoint.py?lat=&lon=&sdate=YYYY-MM-DD&edate=`, `/json/vtec_event.py?wfo=LOX&year=2025&phenomena=FW&significance=W&etn=1`, `/geojson/vtec_event.py?…` (same query) | Public domain ("may be used freely by anyone for any lawful purpose"), an archived copy of NWS products, not an NWS source. bypoint lists events by their start date (look back about 14 days); `vtec_event` gives per-zone `utc_product_issue`, `utc_issue`, `utc_expire` (final; a watch upgraded or cancelled before it began ends before it begins) and the original text products (`report`, `svs[]`); the geojson features' `id` is the UGC. Cached 30 days (30 min while the window touches the last day). |
@@ -78,7 +78,7 @@ in California CAL FIRE stays the record and WFIGS adds only the fires CAL FIRE d
 | USDOT BTS NTAD Time Zones (brief 3) | `https://services.arcgis.com/xOi1kZaI0eWDREZv/arcgis/rest/services/NTAD_Time_Zones/FeatureServer/0` | Time zone at a point (`backend/fire3d/data/us_timezones.geojson`, built offline by `scripts/build_us_regions.py`). "Available for unrestricted public use" (the layer's own text, checked 2026-10-23). Credit "Time zones: USDOT BTS NTAD". |
 | Census TIGERweb states, counties, AIANNH (brief 3) | `https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/{State_County/MapServer/0,1, AIANNHA/MapServer/2}` | State, county, Navajo Nation and Hopi Reservation (`us_states.geojson`, `us_counties.geojson`, `us_timezones.geojson`). Public domain, "Source: U.S. Census Bureau". Credit "Boundaries: U.S. Census Bureau TIGERweb". |
 | Census 2026 Gazetteer Files, national (brief 3) | `https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2026_Gazetteer/2026_Gaz_{place,counties,zcta}_national.zip` | Towns, counties and ZIP areas of every state for `/api/geocode` (`backend/fire3d/data/gazetteer_us.json`). Public domain. Credit "U.S. Census Bureau Gazetteer Files". |
-| NWS API alerts, national (brief 3, us-pipeline) | `GET https://api.weather.gov/alerts/active?area=<the 48 states + DC>` | Fire weather and the local officials' messages NWS relays. Public domain (weather.gov/disclaimer). Credit "National Weather Service". |
+| NWS API alerts, national (brief 3, us-pipeline) | `GET https://api.weather.gov/alerts/active?area=<the 48 states + DC>` | Fire weather and the local officials' messages NWS relays: also `event=` the local officials' NWEM types (Fire Warning FRW, Evacuation Immediate EVI, Shelter In Place Warning SPW, Civil Danger Warning CDW always; Civil Emergency Message CEM and Local Area Emergency LAE only when the text mentions fire, smoke or evacuation); NWS keeps about 7 days, so past dates use the OpenFEMA IPAWS archive. Public domain (weather.gov/disclaimer). Credit "National Weather Service". |
 | OpenFEMA IPAWS Archived Alerts v1 (brief 3, us-pipeline) | `https://www.fema.gov/api/open/v1/IpawsArchivedAlerts` | Local officials' messages of past days, labelled archived. OpenFEMA terms (2025-01-22): the notice "This product uses the Federal Emergency Management Agency's OpenFEMA API, but is not endorsed by FEMA" is required; no FEMA or DHS logos. Credit "FEMA IPAWS archive via OpenFEMA". |
 | Oregon OEM "Evacuation Areas Public" (brief 3, us-official) | Oregon Department of Emergency Management ArcGIS layer | Evacuation zones in Oregon. Licence field "Public"; no further terms published (checked 2026-10-22). Credit "Oregon Department of Emergency Management". |
 | LANDFIRE LF2023 (brief 3, us-pipeline) | the LANDFIRE service above with ED `LF2023` | Pre-fire fuels of federal fiscal year 2024 fires. Public domain. Credit "LANDFIRE" (edition named). |
@@ -101,11 +101,12 @@ Fire-3d/
       types.py           shared dataclasses (Contract §7.1)
       contracts.py       pydantic models mirroring §5/§6 JSON (Contract)
       grid.py            Grid + AOI math (Contract §7.2)
-      http.py            cached HTTP client with retries
+      http.py            cached HTTP client with retries; DownMemo (a failed source is not asked again for 60 s, §14.16)
       bundle.py          bundle paths, manifest load/save/update (atomic + lock), layer write/read
       timeutil.py
       sources/  calfire.py firms.py perimeters.py terrain.py landfire.py imagery.py sentinel.py weather.py aircraft.py
-      catalog.py
+                wfigs.py nws.py openfema.py evacuations.py calfire_history.py overpass.py   (brief 3: national list, NWS, FEMA archive, evacuations)
+      catalog.py regions.py
       build/    aoi.py observed.py weather_bundle.py pipeline.py
       spread/   moisture.py behavior.py engine.py ensemble.py validate.py
       api/      app.py jobs.py live.py
@@ -165,6 +166,11 @@ CAL FIRE rows: `f"{year}-{slug(name)}-{calfire_uid[:6].lower()}"` (year of `Star
 NIFC WFIGS rows (brief 3): `f"{UFI year}-{slug(name)}-{IRWIN id[:6].lower()}"` (the `UniqueFireIdentifier` year and
 the IRWIN id without braces), e.g. `2025-black-cove-95c3c8`. Every California id keeps resolving; ids nobody lists
 (fixtures, local bundles) are served read-only from their manifest and never rebuilt.
+Id pinning (CONTRACT 14.2): a CAL FIRE row matched to a WFIGS record that already has a bundle under its WFIGS id
+keeps that id; its CAL FIRE id is listed in `aliases` and resolves too (a build by the alias answers 409
+"'{alias}' is listed as '{id}'."), and the live loop makes the bundle's summary CAL FIRE's record (§8.7).
+WFIGS names in ALL CAPS are title-cased for display, a short run after an apostrophe kept lower case ("DEVIL'S
+CANYON" → "Devil's Canyon", "O'NEIL" → "O'Neil"); the slug is the same either way.
 `slug`: lowercase, strip, non-alphanumerics → `-`, collapse repeats, trim `-`.
 The fixture uses id `fixture-demo`.
 
@@ -209,15 +215,16 @@ interface IncidentSummary {
   bundle_status: "none" | "building" | "ready" | "error";
   bundle_built_ms: number | null;
   // Brief 3 (docs/redesign/CONTRACT.md §14.1). `calfire_uid` is deprecated: the CAL FIRE UniqueId, or "" when the row
-  // is not CAL FIRE's record. The new fields are optional in TS until the integration makes the five (R) ones required;
-  // the backend always sends them (old manifests and fixtures are filled on read: uid <- calfire_uid, record_source
-  // "calfire", record_issuer and agency "CAL FIRE", source_name <- name, active_sources from is_active, state and
-  // time_zone from the location; never America/Los_Angeles by default).
-  uid?: string;                                        // (R) CAL FIRE UniqueId, or IRWIN id (upper case, no braces)
-  record_source?: "calfire" | "wfigs";                 // (R) whose record this row is; absent = "calfire"
-  record_issuer?: string;                              // (R) "CAL FIRE" | "<agency code> via NIFC WFIGS" | "NIFC WFIGS (IRWIN)"
-  state?: string | null;                               // (R) USPS code of the point of origin (48 states + "DC")
-  time_zone?: string;                                  // (R) IANA zone of the reported location, never assumed
+  // is not CAL FIRE's record. The five (R) fields are required since the brief-3 integration; the backend always sends
+  // them (old manifests and fixtures are filled on read: uid <- calfire_uid, record_source "calfire", record_issuer
+  // and agency "CAL FIRE" (a NIFC WFIGS record without an issuer: "<agency code> via NIFC WFIGS", else "NIFC WFIGS
+  // (IRWIN)"), source_name <- name, active_sources from is_active, state and time_zone from the location; never
+  // America/Los_Angeles by default). The other new fields stay optional.
+  uid: string;                                         // (R) CAL FIRE UniqueId, or IRWIN id (upper case, no braces)
+  record_source: "calfire" | "wfigs";                  // (R) whose record this row is
+  record_issuer: string;                               // (R) "CAL FIRE" | "<agency code> via NIFC WFIGS" | "NIFC WFIGS (IRWIN)"
+  state: string | null;                                // (R) USPS code of the point of origin (48 states + "DC"); null off-US
+  time_zone: string;                                   // (R) IANA zone of the reported location, never assumed
   agency?: string | null; agency_code?: string | null; // protecting agency: plain name and verbatim code
   irwin_id?: string | null; unique_fire_id?: string | null; source_name?: string; gacc?: string | null;
   accuracy_region?: "NWCC" | "NRCC" | "GBCC" | "SWCC" | "SACC-SP" | "SACC-SE" | "RMCC" | "EACC" | "ONCC" | "OSCC" | null;
@@ -226,6 +233,9 @@ interface IncidentSummary {
   complex_name?: string | null;                        // a member fire outside California ("Part of the X Complex")
   complex_members?: string[];                          // a CAL FIRE complex row: its NIFC WFIGS member names, verbatim
   aliases?: string[];                                  // other ids that resolve to this row (id pinning)
+  contained_kind?: "contained" | "controlled" | "out" | null; // which agency time contained_ms is (CONTRACT §14.17):
+                                                       // NIFC WFIGS Containment, else Control, else FireOut; CAL FIRE
+                                                       // "contained"; null: no time, or an older NIFC WFIGS manifest
 }
 
 interface OtherRecord {                                // brief 3: another agency's record of the same fire
@@ -342,22 +352,22 @@ and README.
 | Method | Path | Response |
 |---|---|---|
 | GET | `/api/health` | `{ok: true, version}` |
-| GET | `/api/incidents?mode=live\|historical&min_acres=300&year=<current UTC year>&state=` | `{mode, updated_ms, incidents: IncidentListRow[], year?, sources?}`. **Brief 3 (CONTRACT §14.1, §14.2):** the lower 48 states + DC from NIFC WFIGS, with CAL FIRE as the record in California (WFIGS adds only the California fires CAL FIRE does not list; a California fire is active when either agency says so; a CAL FIRE complex is one row). Live: every active wildfire in the lower 48, whatever its size, sorted by `detections_24h` then acres. Historical: the wildfires of `year` (default: the current UTC year) of `min_acres` (default 300) or more, by acres. Prescribed burns, complex parents outside California, Alaska, Hawaii and territories are never listed. `state` (USPS code) filters rows. `sources[]` (`ListSource`: `id` "calfire" \| "wfigs", `name`, `status` "available" \| "unavailable", `retrieved_ms`, `reason`) says which lists answered; with WFIGS down only California (CAL FIRE) is listed, with CAL FIRE down California's WFIGS rows still list. gzip when the request accepts it (`Vary: Accept-Encoding`). Brief 2 text, still true for California: `{mode, updated_ms, incidents: IncidentListRow[], year?}`. Historical: CAL FIRE's list of `year` (default 2025; e.g. `year=2026` for the current season, refreshed every 30 min and overlaid with the fresher live-list records), default `min_acres=300`, sorted by acres desc; every row keeps mode `"historical"` (`is_active` says whether CAL FIRE still lists the fire as active; `/api/incidents/{id}` resolves such a fire as live); the response says which `year` it lists. Live: all active `Type ∈ {Wildfire, Fire}` incidents, sorted by `detections_24h` then acres (`year` is ignored). Rows (BRIEF-2) are `IncidentSummary` + `bbox_lonlat: [w, s, e, n] \| null`: the analysis area (`manifest.grid.bbox_lonlat`) of a ready bundle, else null. |
+| GET | `/api/incidents?mode=live\|historical&min_acres=300&year=<current UTC year>&state=` | `{mode, updated_ms, incidents: IncidentListRow[], year?, sources}`. **Brief 3 (CONTRACT §14.1, §14.2):** the lower 48 states + DC from NIFC WFIGS, with CAL FIRE as the record in California (WFIGS adds only the California fires CAL FIRE does not list; a California fire is active when either agency says so; a CAL FIRE complex is one row). Live: every active wildfire in the lower 48, whatever its size, sorted by `detections_24h` then acres. Historical: the wildfires of `year` (default: the current UTC year) of `min_acres` (default 300) or more, by acres. Prescribed burns, complex parents outside California, Alaska, Hawaii and territories are never listed. `state` (USPS code) filters rows. `sources[]` (`ListSource`: `id` "calfire" \| "wfigs", `name`, `status` "available" \| "unavailable", `retrieved_ms`, `reason`, `stale`) says which lists answered and when Fire-3d fetched them; with WFIGS down only California (CAL FIRE) is listed, with CAL FIRE down California's WFIGS rows still list; `stale: true` when a list could not be refreshed and an older copy is shown (CONTRACT §14.16). Both lists down: 200 with the bundles on disk of listed fires only (never synthetic bundles or failed builds), both sources `unavailable` with one reason. A failed list is remembered for 60 s, so every answer stays within seconds during an outage (§14.16). gzip when the request accepts it (`Vary: Accept-Encoding`). Brief 2 text, still true for California: `{mode, updated_ms, incidents: IncidentListRow[], year?}`. Historical: CAL FIRE's list of `year` (default 2025; e.g. `year=2026` for the current season, refreshed every 30 min and overlaid with the fresher live-list records), default `min_acres=300`, sorted by acres desc; every row keeps mode `"historical"` (`is_active` says whether CAL FIRE still lists the fire as active; `/api/incidents/{id}` resolves such a fire as live); the response says which `year` it lists. Live: all active `Type ∈ {Wildfire, Fire}` incidents, sorted by `detections_24h` then acres (`year` is ignored). Rows (BRIEF-2) are `IncidentSummary` + `bbox_lonlat: [w, s, e, n] \| null`: the analysis area (`manifest.grid.bbox_lonlat`) of a ready bundle, else null. |
 | GET | `/api/incidents/{id}` | `{summary: IncidentSummary, manifest: IncidentManifest \| null, job: JobStatus \| null}` |
-| POST | `/api/incidents/{id}/build?force=false` | `JobStatus`. Builds or rebuilds the bundle in the background; returns the existing job if one is running. Brief 3 (CONTRACT §14.2): an id is buildable only when a CAL FIRE or NIFC WFIGS list knows it (never a manifest alone) and its state is in the lower 48 + DC: unknown id 404 "unknown incident"; Alaska, Hawaii or a territory 422 "Fire-3d does not support Alaska, Hawaii or US territories yet."; a local or synthetic bundle (`fixture-demo`, `fixture-east`) 409 "'{id}' is a local or synthetic bundle; it cannot be rebuilt." (a non-forced build of a ready one returns it untouched). |
+| POST | `/api/incidents/{id}/build?force=false` | `JobStatus`. Builds or rebuilds the bundle in the background; returns the existing job if one is running. Brief 3 (CONTRACT §14.2): an id is buildable only when a CAL FIRE or NIFC WFIGS list knows it (never a manifest alone) and its state is in the lower 48 + DC: unknown id 404 "unknown incident"; Alaska, Hawaii or a territory 422 "Fire-3d does not support Alaska, Hawaii or US territories yet."; a local or synthetic bundle (`fixture-demo`, `fixture-east`) 409 "'{id}' is a local or synthetic bundle; it cannot be rebuilt." (a non-forced build of a ready one returns it untouched); the source lists unreachable (no list that answered knows the id) 503 "The fire lists could not be reached right now; try again later." (also `GET /api/incidents/{id}` of a listed fire without a bundle, the incident record and `/api/extras/*` by incident), never "a local or synthetic bundle". |
 | POST | `/api/incidents/{id}/forecast` body `{start_ms?: number, horizon_h?: number = 72, ensemble?: "auto" \| "gfs025" \| "ecmwf_ifs025" \| "perturbed" \| "none", members?: number}` | `JobStatus`. Default `start_ms`: live = `time_range.now_ms`, the latest observation of the fire: a confirmed satellite pass after the last detection counts (§8.3), so a fire that went quiet starts at the latest pass with its last mapped area, not at its last detection; historical = 24 h after ignition. `"auto"`: live → gfs025, historical → perturbed. |
 | GET | `/api/jobs/{job_id}` | `JobStatus` |
 | GET | `/api/bundles/{id}/{path:path}` | Static bundle files, gzip, `Cache-Control: no-cache` + ETag. Path traversal must be impossible. |
 | GET | `/api/incidents/{id}/aircraft?all=0` | `{updated_ms, source: "adsb.lol" \| "adsb.fi", radius_nm, aircraft: Aircraft[], note?}`. `source` names the provider that answered (adsb.fi is the fallback while adsb.lol is unreachable). Live incidents only (historical → empty list plus a note). Every provider failing or rate-limited → empty list plus a note (never an error status). Cached 10 s. |
-| GET | `/api/live/status` | `{last_refresh_ms, next_refresh_ms, active_incidents, detections_24h_ca, auto_build, detections_24h?}`. Brief 3: `detections_24h` = keyless FIRMS feed rows of the last 24 h inside the lower-48 state polygons; `detections_24h_ca` (California) stays for one release; `active_incidents` = the live list length. |
+| GET | `/api/live/status` | `{last_refresh_ms, next_refresh_ms, active_incidents, detections_24h_ca, auto_build, detections_24h}`. Brief 3: `detections_24h` = keyless FIRMS feed rows of the last 24 h inside the lower-48 state polygons; `detections_24h_ca` (California) stays for one release; `active_incidents` = the live list length, `null` when the lists could not be read (never 0; CONTRACT §14.16). |
 | GET | `/api/geo/lookup?lon=&lat=` | Brief 3 (CONTRACT §14.3). `GeoLookup` `{lon, lat, coverage: "lower48" \| "alaska" \| "hawaii" \| "territory" \| "outside_us", supported, state, state_name, county: {fips, name} \| null, time_zone, time_zone_name, note}`: offline (Census TIGERweb states and counties, USDOT BTS NTAD time zones with the Navajo Nation and Hopi Reservation). `note` is the coverage sentence when not supported. 400 on bad numbers; `Cache-Control: public, max-age=86400`. |
-| GET | `/api/accuracy-regions` | Brief 3 (CONTRACT §14.4). `AccuracyRegionsResponse`: `backend/fire3d/data/regional_accuracy.json` (schema 1) plus `served_ms`; all ten regions (NWCC, NRCC, GBCC, SWCC, SACC-SP, SACC-SE, RMCC, EACC, ONCC, OSCC), a region missing from the file served as `untested`. Status: `tested` with >= 2 fires and >= 16 scored leads, else `limited` with >= 1 fire, else `untested`. `Cache-Control: no-cache`. |
+| GET | `/api/accuracy-regions` | Brief 3 (CONTRACT §14.4). `AccuracyRegionsResponse`: `backend/fire3d/data/regional_accuracy.json` (schema 1) plus `served_ms`; all ten regions (NWCC, NRCC, GBCC, SWCC, SACC-SP, SACC-SE, RMCC, EACC, ONCC, OSCC), a region missing from the file served as `untested`. Status: `tested` with >= 2 fires and >= 16 scored leads, else `limited` with >= 1 fire, else `untested`. Each region's `fires[]` (`AccuracyFire`) carries the fire's own `growth_ratio_median` (optional; brief 3 integration); the region's is null when its fires erred in opposite directions. `Cache-Control: no-cache`. |
 | GET | `/api/geocode?q=<US street address \| US town \| ZIP code \| county>` | Brief 3 (CONTRACT §14.10): local matches come from `backend/fire3d/data/gazetteer_us.json` (2026 Census Gazetteer Files, every state; replaces `gazetteer_ca.json`); each gains `state`, `state_name`, `county`, `supported` (false in Alaska, Hawaii, territories), `name`/`matched_address` "<Name>, <ST>", `place_type` (Census LSAD in plain words) and `place_type_label`; "Springfield, IL", "Springfield IL", "83702 ID" parse; no match: "No US city, town, county or ZIP code matches '<q>'." Brief 2 text: Map-first redesign (shapes in docs/redesign/CONTRACT.md §6 and §13 location). A street address (house number first) is proxied to the US Census Geocoder (`Public_AR_Current`, cached 30 days); a California town or a 5-digit ZIP code is matched locally in `backend/fire3d/data/gazetteer_ca.json` (2026 Census Gazetteer Files, no upstream call; replies say `kind` and `local: true`). Coordinates are parsed by the browser (400 here). 503 when the local index is missing. |
 | GET | `/api/extras/{evacuations,cameras,cameras/latest,imagery,sources}` | Optional official and public sources (CONTRACT §12.1): Cal OES evacuation zones, public cameras, recent satellite imagery; `?incident=<id>` or `?bbox=w,s,e,n`. Upstream failures answer 200 with an honest status, never invented data. Brief 3 (CONTRACT §14.8): evacuations come from a state registry (Cal OES in California, Oregon OEM in Oregon); every other state answers `unavailable` + `reason_code: "state_not_available"` without an upstream request ("Official evacuation zones are not available in this state ({State}). Follow local officials."); the answer adds `states[]` and per-source fields. Cameras outside California answer `state_not_available`. |
 | GET | `/api/official/calfire?incident={id}` | BRIEF-2. `CalFireOfficial`: CAL FIRE's current record of the incident (its own numbers and `Updated` time), every change of acres, containment, active or final status Fire-3d has recorded since it first checked (append-only `data/official/calfire/<UniqueId>.jsonl`, outside the bundles), and caveats. Each call is a check and records the current record. Past fires have only CAL FIRE's final record. Brief 3 (§14.5): a fire whose `record_source` is "wfigs" answers `unavailable` + `not_covered` ("CAL FIRE does not list this fire; its official record is published by NIFC WFIGS."); any listed id resolves (no 404 for a listed fire without a bundle). |
-| GET | `/api/official/fire-weather?incident={id}&at_ms=&margin_km=15` | BRIEF-2. `FireWeather`: NWS Red Flag Warnings and Fire Weather Watches whose zones meet the incident's analysis area + `margin_km`, verbatim, with `covers_reported_location` and `nearest_km`. The present (no `at_ms`, or within 6 h of now, or later): the live NWS list (one statewide request, cached 2 min; zone polygons cached 30 days). An older `at_ms`, or any `at_ms` of a historical incident: the Iowa Environmental Mesonet archive (`archived: true`); a historical incident without `at_ms`, or an archive failure, is `not_available_for_past_dates`, never "no alerts". Without `incident`: every current California alert.  Brief 3 (§14.6): one cached national request (`area=` the 48 states + DC); per fire, alerts are kept only when a UGC's state is in the fire's states before any zone loads. Adds `states_checked` (the states this answer covers; absent = ["CA"]), `alert_states`, and each alert's `time_zone`. |
-| GET | `/api/official/incident-record?incident={id}` | Brief 3 (CONTRACT §14.5). `IncidentRecord`: the fire's NIFC WFIGS (IRWIN) record (WFIGS rows and California rows matched to one WFIGS record) with the protecting agency, its own times and a link. A California row without a match, a CAL FIRE complex row and a synthetic or local bundle answer `unavailable` + `not_covered` with their reasons; an unknown id is 404; WFIGS down is `upstream_error`. |
-| GET | `/api/official/local-alerts?incident={id}&at_ms=&margin_km=15` or `?bbox=w,s,e,n` | Brief 3 (CONTRACT §14.7). `LocalAlerts`: local officials' messages relayed by the NWS (live and the last 7 days) and FEMA's IPAWS archive via OpenFEMA (older days, labelled archived), verbatim, each with a `source_url`. `incident` xor `bbox` (else 400); unknown incident 404. |
+| GET | `/api/official/fire-weather?incident={id}&at_ms=&margin_km=15` | BRIEF-2. `FireWeather`: NWS Red Flag Warnings and Fire Weather Watches whose zones meet the incident's analysis area + `margin_km`, verbatim, with `covers_reported_location` and `nearest_km`. The present (no `at_ms`, or within 6 h of now, or later): the live NWS list (one statewide request, cached 2 min; zone polygons cached 30 days). An older `at_ms`, or any `at_ms` of a historical incident: the Iowa Environmental Mesonet archive (`archived: true`); a historical incident without `at_ms`, or an archive failure, is `not_available_for_past_dates`, never "no alerts". Without `incident`: every current California alert.  Brief 3 (§14.6): one cached national request (`area=` the 48 states + DC); per fire, alerts are kept only when a UGC's state is in the fire's states before any zone loads. Adds `states_checked` (the states this answer covers; `[]` when none could be checked), `alert_states`, and each alert's `time_zone` (all required since the integration; the web still reads a cached answer without `states_checked` as ["CA"]). |
+| GET | `/api/official/incident-record?incident={id}` | Brief 3 (CONTRACT §14.5). `IncidentRecord`: the fire's NIFC WFIGS (IRWIN) record (WFIGS rows and California rows matched to one WFIGS record) with the protecting agency, its own times and a link. A California row without a match, one matched to several records none of which has its name (the reason names them; several records that all carry its name, such as the Lucas Fire's two LUCAS records, are one record: the largest, then the newest), a CAL FIRE complex row and a synthetic or local bundle answer `unavailable` + `not_covered` with their reasons; an unknown id is 404; WFIGS down is `upstream_error`; the source lists unreachable for the id 503. |
+| GET | `/api/official/local-alerts?incident={id}&at_ms=&margin_km=15` or `?bbox=w,s,e,n` | Brief 3 (CONTRACT §14.7). `LocalAlerts`: local officials' messages relayed by the NWS (live and the last 7 days) and FEMA's IPAWS archive via OpenFEMA (older days, labelled archived), verbatim, each with a `source_url`. `incident` xor `bbox` (else 400); unknown incident 404. An area that touches no lower-48 state (Alaska, Hawaii, territories, outside the US) answers `unavailable` / `state_not_available` with both channels `not_checked` ("Fire-3d checks local officials' alerts in the lower 48 states only." plus the §14.14 sentence), with no NWS request. Every `at_ms` query parameter (here, fire weather and `/api/extras/*`) is limited to 2100-01-01 (larger: 422; CONTRACT §14.16). |
 
 ```ts
 interface JobStatus {
@@ -405,14 +415,14 @@ interface FireWeatherAlert {
   area_desc: string | null; ugcs: string[]; message_type: string | null; status: string;
   covers_reported_location: boolean | null; nearest_km: number | null; archived: boolean;
   phase: "upcoming" | "in_effect" | "ended";
-  time_zone?: string | null;          // (R) brief 3: IANA zone of the alert's first zone, else its state's main zone
+  time_zone: string | null;           // brief 3 (required since the integration): IANA zone of the alert's first zone, else its state's main zone
 }
 interface FireWeather extends OfficialEnvelope {
   alerts: FireWeatherAlert[];
   zones: GeoJSON.FeatureCollection;   // simplified outlines; properties { ugc, name, alert_ids }
   area_bbox: [number, number, number, number] | null; reported_location: [number, number] | null;   // lon, lat
-  states_checked?: string[];          // (R) brief 3: the states this answer covers; absent = ["CA"]
-  alert_states?: string[];            // (R) brief 3: the states with at least one alert in this answer
+  states_checked: string[];           // brief 3 (required since the integration): the states this answer covers; [] = none checked
+  alert_states: string[];             // brief 3 (required since the integration): the states with at least one alert in this answer
 }
 // Brief 3 (CONTRACT §14.5, §14.7)
 interface IncidentRecord extends OfficialEnvelope {          // kind "incident_record"
@@ -430,8 +440,9 @@ interface LocalAlerts extends OfficialEnvelope {             // kind "local_aler
   alerts: LocalAlert[];               // fields in CONTRACT §14.7 (id = CAP identifier, channel "nws_api" | "openfema_archive",
                                       // archived, event, event_code, message_type, references, sender_name, sender_is_platform,
                                       // sent/effective/onset/expires_ms, headline, description, instruction, wea_text,
-                                      // wea_long_text, web, source_url (always, https), area_desc, same_codes, ugcs, polygon,
-                                      // match, covers_reported_location, nearest_km, time_zone, phase)
+                                      // wea_long_text, web, source_url (always, https), area_desc, same_codes, ugcs, polygon
+                                      // (GeoJSON Polygon, or MultiPolygon when an archived message had several areas),
+                                      // match, covers_reported_location and nearest_km (null for a county match), time_zone, phase)
   channels: { id: "nws_api" | "openfema_archive"; status: "available" | "unavailable" | "pending" | "not_checked";
               retrieved_ms: number | null; source_updated_ms: number | null; reason: string | null }[];
   area_bbox: [number, number, number, number] | null; reported_location: [number, number] | null;
@@ -525,7 +536,7 @@ def weather_points(grid: Grid) -> list[tuple[lat, lon]]          # 4×4 cell cen
 # sources/sentinel.py     [terrain]  compute_dnbr(grid, pre_window_ms, post_window_ms) -> tuple[np.ndarray | None, dict]
 # build/aoi.py            [terrain]  build_static_layers(ctx) -> None  # elevation, fuel, canopy_*, naip, trees, burn_severity, sim/static.npz; updates manifest
 # sources/calfire.py      [firedata] list_live() -> list[dict]; list_year(year) -> list[dict]
-# sources/firms.py        [firedata] load_year_ca(year) -> pd.DataFrame; load_live_ca(days=7) -> pd.DataFrame
+# sources/firms.py        [firedata] load_year_us(year, bbox=None) -> pd.DataFrame; load_live_us(days=7) -> pd.DataFrame  (brief 3: lower 48)
 #                                    columns: t_ms, lat, lon, frp, satellite, instrument, confidence, daynight, scan, track
 # sources/perimeters.py   [firedata] fetch_perimeters(name, lat, lon, start_ms, end_ms) -> list[dict(t_ms, acres, geometry: shapely (lon/lat), source, category)]
 # catalog.py              [firedata] get_catalog(mode, min_acres=None, refresh=False) -> list[IncidentSummary]; get_summary(incident_id) -> IncidentSummary | None
@@ -566,7 +577,7 @@ def weather_points(grid: Grid) -> list[tuple[lat, lon]]          # 4×4 cell cen
 - **LANDFIRE:** request at M² with nearest neighbour.
   - Scale: CH and CBH ÷ 10 → m; CBD ÷ 100 → kg/m³; CC ÷ 100 → fraction (keep percent in `canopy_cover.bin`).
   - Nodata/negative → non-burnable 99 for fuel, 0 for canopy.
-  - Edition: LF2024 for historical, LF2025 for live (optionally FBFM40 FA26).
+  - Edition (`landfire.edition_for`): historical = the pre-fire edition LF{FY − 1} of the start's federal fiscal year, at least LF2023 (`landfire_gate`: before October 2023 → 422 unless forced; forced builds use LF2023 with a "LANDFIRE:" warning); live = LF2025. A failed edition falls back to the next older one only (LF2025 → LF2024 → LF2023, never forward). An edition with no fuel code in the AOI, or with no fuel code on more than 2 % of the land cells (inside the lower-48 + DC state polygons, elevation above 0.5 m), switches the whole bundle to the next older edition with the warning "LANDFIRE: LANDFIRE 2025 is not released here yet; LANDFIRE 2024 used" (other editions: "LANDFIRE <E> has no fuel data for <p>% of the land here; LANDFIRE <older> used"). Ground outside the US without fuel data stays fuel 99 and is labelled "outside fuel data coverage: not modeled (unknown, not low)"; stats gain `nodata_land_frac` and `outside_coverage_cells`.
 - **NAIP:** `size = min(4000, max(2048, extent/3))` px square, JPEG.
 - **Sky-view factor** (`sky_view.bin`, render grid): horizon-based ambient occlusion from the DEM.
   - 16 azimuths, march out to ~1.5 km with geometric step growth; SVF = mean over azimuths of cos²(horizon angle);
@@ -615,6 +626,7 @@ def weather_points(grid: Grid) -> list[tuple[lat, lon]]          # 4×4 cell cen
    - Footprint: VIIRS ≈ 375 m × (scan, track); MODIS ≈ 1 km × (scan, track); LANDSAT 30 m; GOES ≈ 2 km (timing
      only).
 2. **Perimeters:**
+   - Fetch: California records as §2; other fires by IRWIN id, else name + state (§2).
    - Dedupe per timestamp (keep the latest edit, i.e. max `poly_DateCurrent`).
    - Make them cumulative: each perimeter = union with all earlier ones.
    - Drop ones that shrink by more than 20%; flag them.
@@ -634,7 +646,7 @@ def weather_points(grid: Grid) -> list[tuple[lat, lon]]          # 4×4 cell cen
    - For k\* = 0, use the ignition point at the ignition time.
    - Result: smooth, monotone fronts. Pixels outside F = NEVER.
 6. **Ignition:**
-   - Use the CAL FIRE point at `Started`, snapped into the earliest burned region.
+   - Use the fire record's point (CAL FIRE in California, NIFC WFIGS/IRWIN elsewhere) at its start time, snapped into the earliest burned region; every text names the record's issuer (`record_issuer`, e.g. "Reported by USFS via NIFC WFIGS Jul 09, 13:32 MDT"), times in the fire's own zone (`summary.time_zone`).
    - If that point is > 3 km from the earliest detections, use their centroid and label the source.
 7. **timeseries:**
    - `area(t)` = count(arrival ≤ t)·res² → acres; growth = Δarea.
@@ -647,7 +659,7 @@ def weather_points(grid: Grid) -> list[tuple[lat, lon]]          # 4×4 cell cen
    - **spot_fire (prob.):** a detection > 750 m outside the previous `B_k`; max 3.
    - **ridge_crossing (est.):** the front crosses a prominent ridge, e.g. pixels with TPI > +40 m at ~500 m radius
      forming lines, burned from one side then the other within 12 h.
-   - **containment:** from WFIGS `attr_ContainmentDateTime`, or CAL FIRE at 100%.
+   - **containment:** from WFIGS `attr_ContainmentDateTime`, or the record at 100% ("{issuer} (100% contained)").
    - **peak_wind:** max gust while the fire grew. This is added in `pipeline.py` after weather is built.
 9. `default_profile_path` = [ignition, the farthest burned pixel along the dominant growth direction].
    `time_range`:
@@ -660,19 +672,33 @@ def weather_points(grid: Grid) -> list[tuple[lat, lon]]          # 4×4 cell cen
        granule was published ≥ 30 min before our FIRMS data of the same satellite were fetched (a satellite whose
        FIRMS request failed has no confirmed passes). A confirmed pass after `last_detection_ms` saw no fire above
        the detection limit; `last_pass_ms` = the newest confirmed pass.
-     - now_ms = max(`last_detection_ms`, `last_pass_ms`), except when CAL FIRE acreage reported after the last
+     - now_ms = max(`last_detection_ms`, `last_pass_ms`), except when the record's acreage (CAL FIRE or NIFC WFIGS) reported after the last
        detection exceeds 1.25 × the mapped area + 100 ac (the fire grew unseen): then now_ms = `last_detection_ms`
        with a warning. Without CMR (outage) now_ms = `last_detection_ms`, with a warning.
      - Activity too weak or coarse to map area (low-confidence VIIRS/MODIS pixels within 1 km of the burned area,
        GOES detections of this fire on ≥ 2 scans within 1 h) after `last_detection_ms` is stored with the confirmed
        passes in `sim/activity.json` (backend only) for the forecast (§8.5). It never moves now_ms.
      - The `NASA CMR satellite passes` data source explains the decision in plain words.
+10. **Data sources:** the data sources list the fire's own record first: "CAL FIRE incidents" or "NIFC WFIGS incident
+    record (IRWIN)" (IRWIN id and issuer in `detail`).
 
 ### 8.4 Weather and fuel moisture
 - **Points:** the 4×4 `weather_points(grid)`.
 - **Live:** HRRR (`past_days=3`) filled with `gfs_seamless`.
 - **Historical:** historical-forecast HRRR over [start − 72 h, end + 72 h], falling back to the ERA5 archive.
   Chunk long ranges.
+- **Fire-local time:** month-dependent values (live fuel moisture rows) use the month in the fire's zone
+  (`timeutil.local_month(ms, summary.time_zone)`), never Pacific.
+- **Open-Meteo limits** (`sources/weather.py`, `fire3d.http`): a 429 naming a daily, hourly or per-minute limit is
+  never retried (a per-minute one is waited out once) and blocks that host in the process until the reset; a blocked
+  host answers from the cache or raises `WeatherQuotaExceeded` ("Open-Meteo daily request limit reached; retry after
+  the reset (00:00 UTC)"). A *daily* block is re-checked at most once an hour (`weather.DAILY_RECHECK_S = 3600`,
+  counted from the block or the last re-check) with one tiny uncached probe request (no retries): an answer lifts the
+  block, a limit answer renews it (`weather.recheck_daily_block`, used by every request and by the build preflight; at
+  most 24 tiny requests a day per blocked host; on a shared IP the daily refusal can be transient). Error bodies
+  (stream errors, cut-off JSON, `{"error": true}`) are never cached and are evicted when found. A refused
+  deterministic request fails the build (never ERA5-filled); `build --require-hrrr` also refuses ERA5-filled hours
+  and, in California, a missing water-year total. `weather-probe` sends one tiny uncached request per host.
 - Request `timeformat=unixtime`, `wind_speed_unit=ms`.
 - Wind direction is FROM. Convert to u/v for averaging/interpolation:
   `u = −S·sin(dir)`, `v = −S·cos(dir)`.
@@ -685,6 +711,26 @@ def weather_points(grid: Grid) -> list[tuple[lat, lon]]          # 4×4 cell cen
   - Jul–Oct: herb 0.3, woody 0.7
   - Nov–Dec: herb 0.6, woody 0.9
   - Foliar moisture 1.0.
+  - Outside California (`summary.state != "CA"`) live fuel moisture follows the NFDRS 2016 Growing Season Index
+    (Jolly et al. 2005; the default parameters of the USFS reference code NFDRS4): daily GSI = iTmin · iVPD · iDayl
+    with iTmin 0 at −2 °C .. 1 at 5 °C (daily minimum temperature), iVPD 1 at 900 Pa .. 0 at 4100 Pa (VPD =
+    es(Tmax) · (1 − max(RHmin, 5 %)/100), es = 610.7 · exp(17.38 T / (239 + T)) Pa), iDayl 0 at 10 h .. 1 at 11 h
+    (MT-CLIM day length); the GSI at a forecast start is the mean of the 21 local days before the start's day (all 21
+    required), scaled by MaxGSI 1.0; below the green-up threshold 0.5 herb 0.30 and woody 0.60, above it linear to
+    herb 2.50 and woody 2.00 at GSI 1. Inputs: hourly 2 m temperature and humidity at the fire, aggregated to the
+    fire's local days, from the Open-Meteo ERA5 archive (`models=era5`, historical builds: start − 28 d through the
+    end of the weather window) or the forecast host's `past_days=28` (live builds); stored in the backend-only
+    `sim/lfm_gsi.json` (builds and live forecasts fetch it; hindcasts never do). The hourly fire behaviour charts use
+    each local day's GSI and hold the latest 21-day value after the series ends (a live series ends today). The
+    forecast note reads "live fuel moisture herb H%, woody W%: NFDRS 2016 growing season index G (mean of the 21 days
+    A..B; source)". `config.GSI_*`. California keeps the month table and drought rule.
+  - Never silent: a bundle outside California without the series (refused or failed request, or fewer than 21 days
+    before a start) uses California's values with the manifest warning "Live fuel moisture outside California uses
+    California's seasonal values because the regional (GSI) series is unavailable; experimental." and the forecast
+    note prefix "Live fuel moisture: California's seasonal values (GSI series unavailable); experimental."; hours of
+    the behaviour charts without a GSI value add the manifest warning "Fire behaviour charts (<dates>, <n> h): live
+    fuel moisture uses California's seasonal values (GSI series unavailable); experimental."; `build --require-hrrr`
+    fails instead. docs/validation.md section 10 reports the method's test on 12 fires.
 - **FFWI:** Fosberg, using EMC (%) and wind (mph).
 - `at_fire` = weather interpolated at the ignition/centroid.
 - **Ensembles** (`member_weathers`):
@@ -727,7 +773,8 @@ def weather_points(grid: Grid) -> list[tuple[lat, lon]]          # 4×4 cell cen
   - flame_length_p50 over members that burned the pixel.
   - Series: hourly area quantiles across members; ROS p50 from the members' spread_rate at the front.
 - **Historical runs:** skill = Sørensen between (forecast p50 burned by start + L) and (observed burned by
-  start + L), for L ∈ {12, 24, 48, 72} within the data range.
+  start + L), for L ∈ {12, 24, 48, 72} within the data range. Each skill entry also carries `growth_sorensen`
+  (Sørensen of the new growth only, `validate.skill_entry`).
 - **`validate.py`** also provides a CLI-callable batch hindcast used to pick `spread_adjustment`, e.g. a grid search
   over {0.5, 0.75, 1, 1.5, 2} on 2–3 fires. Record the result in `docs/validation.md`.
 - Spotting is off by default. Crown fire is on.
@@ -742,7 +789,7 @@ def weather_points(grid: Grid) -> list[tuple[lat, lon]]          # 4×4 cell cen
   Live forecasts add, from `sim/activity.json` and the manifest summary:
   - activity markers (§8.3) after the window start, also those seen after the forecast start: the perimeter within
     1 km of them (GOES: of a 1 km disk around the pixel centre) stays active;
-  - CAL FIRE containment: at least `percent_contained` of the perimeter is held, the cells farthest from recent
+  - the record's containment (CAL FIRE or NIFC WFIGS, note "{issuer} reports N% containment"): at least `percent_contained` of the perimeter is held, the cells farthest from recent
     activity first (where the contained lines are is not published);
   - when the start is later than the last sign of activity (a quiet satellite pass), the multiplier's decay is
     counted from that activity, as if the forecast had started there.
@@ -776,14 +823,30 @@ California, NIFC WFIGS elsewhere; brief 3) and the national FIRMS 7d feeds (`fir
 lower-48 box with a 0.5° margin). Then:
 - every ready live bundle's `manifest.summary` follows its records (acres, containment, update time, active flag,
   location fields, `detections_24h`, and since brief 3 `active_sources`, `other_records`, `complex_members`,
-  `irwin_id`, `gacc`, `accuracy_region`): an atomic manifest update, no rebuild, `built_ms` unchanged. An incident
-  that left the live list is looked up in its year list;
+  `irwin_id`, `gacc`, `accuracy_region`): an atomic manifest update, no rebuild, `built_ms` unchanged. When the
+  listed row is another agency's record than the summary's (`record_source` or `uid` differs: an id pinned to a bundle
+  built under the fire's NIFC WFIGS id, §4.4 / CONTRACT 14.2), the record's identity is copied too (`name`,
+  `source_name`, `record_source`, `record_issuer`, `uid`, `calfire_uid`, `agency`, `agency_code`, `unique_fire_id`,
+  `aliases`, `complex_name`, `state`, `time_zone`, `started_ms`, `year`; the id and `time_origin_ms` stay), so the
+  numbers, the link and the issuer always come from one record. An incident that left the live list is looked up in
+  its year list;
 - for each built live bundle with detections newer than `now_ms` (or built > 3 h ago, which picks up quiet
   satellite passes):
   - re-run `build_observed` and `build_weather`;
   - re-run the forecast when the last one is > 3 h old or burned area changed > 2%;
   - after a live-loop forecast, keep the newest 4 ready runs plus every run issued in the last 6 h; other runs leave
     the manifest first, and their directories are deleted ≥ 1 h later (an open view keeps working).
+- Weather in a live refresh is refetched at most hourly (`config.LIVE_WEATHER_REFETCH_S = 3600`) and not at all once
+  the day's weighted Open-Meteo usage passes `config.OPEN_METEO_DAILY_SOFT_CAP = 6000` (`weather.open_meteo_usage()`,
+  persisted in `data/cache/open_meteo_usage.json`; cost = locations × max(1, series/10) × max(1, days/14)); the
+  bundle then keeps its weather with "Weather not refreshed: daily request budget reached."; a refused refresh keeps
+  it with "Weather not refreshed: Open-Meteo daily request limit reached." (the hourly and per-minute limits name
+  themselves the same way; removed by the next successful refresh). A refresh without supplied detections loads
+  `firms.load_live_us(days=2)`. After a successful build, the OpenFEMA archive window of the fire is prefetched once
+  (`pipeline.archive_prefetch` → `openfema.prefetch`; best effort, never fails the build): an API build job only
+  starts the one deduplicated background fetch (`openfema.start`) and ends when its bundle is ready (`JobManager.drain`
+  waits for these follow-up threads); a CLI build fetches synchronously, each request capped at
+  `openfema.PREFETCH_TIMEOUT_S = 15` s with no retry. A window that failed less than 10 min ago is not restarted.
 
 Max 1 forecast job at a time.
 
@@ -1057,7 +1120,9 @@ interface AppState {
   conventions on synthetic terrain. Tests are offline and fast (< 60 s total).
 - **Network smoke scripts** live in `fire3d/cli.py`:
   - `uv run python -m fire3d.cli catalog --mode live|historical`
-  - `… build <id-or-name> [--force]`
+  - `… build <id-or-name> [--force] [--require-hrrr]` (`--require-hrrr` fails instead of filling with ERA5; every
+    build prints the HRRR / GFS / ERA5 hour counts)
+  - `… weather-probe` (one uncached request per Open-Meteo host; exit 0 only when historical builds can run)
   - `… forecast <id> [--start ISO] [--horizon 72] [--ensemble auto]`
   - `… hindcast <id> --start ISO`
   - `… serve`

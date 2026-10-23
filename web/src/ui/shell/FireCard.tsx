@@ -12,12 +12,13 @@ import { useId, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { recordBlocks, recordIssuerLabel } from '../../api/records'
 import type { IncidentSummary } from '../../api/types'
+import { NWCG_AGENCY_CREDIT } from '../../lib/dataCredits'
 import { fmtAcres, fmtNumber } from '../../lib/format'
 import { accuracyLabel, type AccuracyLabel } from '../../lib/plainLanguage'
-import { agencyIdLine, complexMembers, isHttps as https, partOfComplex, recordBlockText } from '../../lib/recordText'
-import { fmtAt, fmtDayDate, fmtRelative, type TimeFmt } from '../../lib/time'
+import { agencyIdLine, agencyNameShown, complexMembers, containedLabel, isHttps as https, partOfComplex, recordBlockText, recordStatus } from '../../lib/recordText'
+import { fmtAt, fmtDayDate, fmtRelative, localYear, recordYearMode, type TimeFmt } from '../../lib/time'
 import { findRegion, useAccuracyRegions } from '../../state/accuracy'
-import { analysisState, findFire, fireStatus, fireWhere, isActiveFire, type AnalysisState } from '../../state/overview'
+import { analysisReadyText, analysisState, findFire, fireWhere, isActiveFire, type AnalysisState } from '../../state/overview'
 import { useStore } from '../../state/store'
 import { useTimeFormatFor } from '../../state/timeZone'
 import { useWorkspace } from '../../state/workspace'
@@ -28,38 +29,47 @@ import { useDrawerFocus } from './hooks'
 
 const mapCanvas = () => document.querySelector<HTMLElement>('.mw-map canvas')
 
-/** The analysis state of the card's fire: the open fire's live manifest and job win over the list's chip. */
-function useAnalysis(fire: IncidentSummary | null): { state: AnalysisState; progress: number | null } {
+/** The analysis state of the card's fire: the open fire's live manifest and job win over the list's chip. `modelRuns`:
+ *  the open fire's experimental model runs (null when the card's fire is not the open one with a ready bundle). */
+function useAnalysis(fire: IncidentSummary | null): { state: AnalysisState; progress: number | null; modelRuns: number | null } {
   const cur = useStore(
     useShallow((s) => ({
       id: s.incidentId,
       manifest: s.manifest?.status ?? null,
+      modelRuns: s.manifest?.status === 'ready' && s.manifest.id === s.incidentId ? (s.manifest.forecasts?.length ?? 0) : null,
       jobRunning: s.job != null && s.job.kind === 'build' && (s.job.status === 'queued' || s.job.status === 'running'),
       jobFailed: s.job != null && s.job.kind === 'build' && s.job.status === 'error',
       progress: s.job?.kind === 'build' ? s.job.progress : null,
     })),
   )
-  if (!fire) return { state: 'none', progress: null }
-  if (cur.id !== fire.id) return { state: analysisState(fire), progress: null }
-  if (cur.manifest === 'ready') return { state: 'ready', progress: null }
-  if (cur.jobRunning || cur.manifest === 'building' || fire.bundle_status === 'building') return { state: 'building', progress: cur.progress }
-  if (cur.jobFailed || cur.manifest === 'error' || fire.bundle_status === 'error') return { state: 'error', progress: null }
-  return { state: analysisState(fire) === 'ready' ? 'ready' : 'none', progress: null }
+  if (!fire) return { state: 'none', progress: null, modelRuns: null }
+  if (cur.id !== fire.id) return { state: analysisState(fire), progress: null, modelRuns: null }
+  if (cur.manifest === 'ready') return { state: 'ready', progress: null, modelRuns: cur.modelRuns }
+  if (cur.jobRunning || cur.manifest === 'building' || fire.bundle_status === 'building') return { state: 'building', progress: cur.progress, modelRuns: null }
+  if (cur.jobFailed || cur.manifest === 'error' || fire.bundle_status === 'error') return { state: 'error', progress: null, modelRuns: null }
+  return { state: analysisState(fire) === 'ready' ? 'ready' : 'none', progress: null, modelRuns: null }
 }
 
 function modeChip(f: IncidentSummary): { label: string; cls: string } {
   return isActiveFire(f) ? { label: 'Active', cls: 'is-live' } : { label: String(f.year), cls: 'is-year' }
 }
 
-/** The agency's official record (§14.5): heading, numbers, update time in the fire's zone, link; one block per agency
- *  when they disagree; a complex's members. Only the record's own values: nothing from the model. */
+/** The agency's official record (§14.5): heading, numbers, its own status, update time in the fire's zone, link; one
+ *  block per agency when they disagree; a complex's members. Only the record's own values: nothing from the model and
+ *  nothing from another agency's record (the Timber Fire: CAL FIRE's section never says "Active" when only NIFC does). */
 export function OfficialRecord({ fire, nowMs, tf }: { fire: IncidentSummary; nowMs: number; tf: TimeFmt }) {
-  const status = fireStatus(fire)
-  const active = isActiveFire(fire)
+  // this agency's own status and wording, never the merged listing's (the title's chip says whether Fire-3d lists the
+  // fire as active, which it does when either agency does; round 3 item 2, the Timber Fire)
+  const status = recordStatus(fire)
+  const active = status.ownActive
   const issuer = recordIssuerLabel(fire)
   const blocks = recordBlocks(fire)
   const disagree = blocks.length > 1
   const updated = fire.updated_ms
+  // the containment date with its own meaning: a NIFC WFIGS record's date may be its control or fire-out time (§14.17)
+  const endLabel = containedLabel(fire)
+  // years on every record time when any differs from the fire's year or today's (review UX-m1)
+  const yearMode = recordYearMode([updated, endLabel ? fire.contained_ms : null], tf.tz, [fire.year, localYear(nowMs, tf.tz)])
   const members = complexMembers(fire)
   const idLine = agencyIdLine(fire)
   const wfigs = (fire.record_source ?? 'calfire') === 'wfigs'
@@ -87,15 +97,15 @@ export function OfficialRecord({ fire, nowMs, tf }: { fire: IncidentSummary; now
         {updated != null ? (
           active ? (
             <>
-              Updated by {issuer} <span className="mw-mono">{fmtAt(updated, tf, { zone: true, year: 'auto', refMs: nowMs })}</span> ({fmtRelative(updated, nowMs)})
+              Updated by {issuer} <span className="mw-mono">{fmtAt(updated, tf, { zone: true, year: yearMode })}</span> ({fmtRelative(updated, nowMs)})
             </>
           ) : (
             <>
-              {issuer} record last edited <span className="mw-mono">{fmtAt(updated, tf, { zone: true, year: 'auto', refMs: nowMs })}</span>
-              {fire.contained_ms != null && (
+              {issuer} record last edited <span className="mw-mono">{fmtAt(updated, tf, { zone: true, year: yearMode })}</span>
+              {endLabel != null && fire.contained_ms != null && (
                 <>
                   {' '}
-                  · contained <span className="mw-mono">{fmtDayDate(fire.contained_ms, tf.tz, { year: 'always' })}</span>
+                  · {endLabel} <span className="mw-mono">{fmtDayDate(fire.contained_ms, tf.tz, { year: 'always' })}</span>
                 </>
               )}
             </>
@@ -148,6 +158,7 @@ export function OfficialRecord({ fire, nowMs, tf }: { fire: IncidentSummary; now
         </a>
       )}
       {idLine && <p className="fc-id mw-mono">{idLine}</p>}
+      {agencyNameShown(fire) && <p className="fc-credit">{NWCG_AGENCY_CREDIT}</p>}
     </section>
   )
 }
@@ -196,11 +207,11 @@ function useAccuracyLabel(fire: IncidentSummary | null): { label: AccuracyLabel 
   return { label: accuracyLabel(findRegion(data, fire.accuracy_region ?? null), data.method), failed: false }
 }
 
-function AnalysisLine({ state, progress }: { state: AnalysisState; progress: number | null }) {
+function AnalysisLine({ state, progress, modelRuns }: { state: AnalysisState; progress: number | null; modelRuns: number | null }) {
   if (state === 'ready')
     return (
       <p className="fc-analysis is-ready">
-        <i className="fc-dot" aria-hidden="true" /> Analysis ready: spread reconstruction and the experimental model
+        <i className="fc-dot" aria-hidden="true" /> {analysisReadyText(modelRuns)}
       </p>
     )
   if (state === 'building')
@@ -222,7 +233,7 @@ export function FireCard() {
   const fire = useStore((s) => findFire(id, s.summary, s.catalog))
   const catalogLoading = useStore((s) => s.catalog.loading)
   const currentId = useStore((s) => s.incidentId)
-  const { state, progress } = useAnalysis(fire)
+  const { state, progress, modelRuns } = useAnalysis(fire)
   const command = useWorkspace((s) => s.preset === 'command')
   const accuracy = useAccuracyLabel(fire)
   const nowMs = useNow(30_000)
@@ -273,7 +284,7 @@ export function FireCard() {
         </button>
       </header>
       <OfficialRecord fire={fire} nowMs={nowMs} tf={tf} />
-      <AnalysisLine state={state} progress={progress} />
+      <AnalysisLine state={state} progress={progress} modelRuns={modelRuns} />
       <div className="fc-actions">
         {!isCurrent && ready && (
           <button type="button" className="mw-btn is-primary fc-main" onClick={() => void openFire(fire.id)}>

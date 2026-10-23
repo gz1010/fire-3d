@@ -1,0 +1,169 @@
+{
+ "role": "us-official",
+ "summary": "Official information is now honest across the lower 48 (CONTRACT §14.5-14.9, both ends). Backend: a state registry (fire3d/sources/evacuations.py) with Cal OES moved behind one adapter (California answers keep every brief-2 key and value, checked key by key against the brief-2 code's answers) and a new Oregon OEM adapter; every other state, Washington and Florida included, answers state_not_available with the §14.14 sentence and no upstream request; border dedup, explicit outFields, the EV-R6 status fix, cameras outside California answer state_not_available. Web: 'not available in this state' everywhere without a feed, no California rectangle in any evacuation or NWS path (the point's state from /api/geo/lookup and the answer's states_checked decide), source-neutral wording from sources[] (Oregon levels shown with OEM's definitions and 'added to the Oregon state layer'), source-neutral agency records (CAL FIRE or NIFC WFIGS, labelled from recordIssuerLabel, disagreement blocks, complex members, synthetic/not-checked states), the national NWS wording ('Official now · lower 48 states' only with all 49 codes, each alert in its own zone), local officials' alerts relayed by NWS and archived by FEMA with the OpenFEMA notice and a link on every message, the us-official dev preset, and the time migration of every owned file (check-time-api 0 and 0). Milestones M1-M6 and both cut-line items are done. The orchestrator's relayed issues (Horse Gulch data status in PDT, repeated not-available text without a full stop, WFIGS fires showing a CAL FIRE card, OpenFEMA notice, 'OFFICIAL NOW California') are fixed and checked on Horse Gulch.",
+ "files": [
+  "backend/fire3d/sources/evacuations.py (new)",
+  "backend/fire3d/api/extras.py",
+  "backend/scripts/record_test_samples_evacuations.py (new)",
+  "backend/tests/test_evacuations_sources.py (new)",
+  "backend/tests/data/evacuations/{or_oem_2026-08-15T1200Z.geojson,or_oem_layer_info.json,caloes_brief2_expected.json,PROVENANCE.md} (new)",
+  "web/src/official/{model,hooks,client,runtime,types,calfire,fireWeather,mapLayer}.ts",
+  "web/src/official/{record,localAlerts}.ts (new) + record.test.ts, localAlerts.test.ts (new)",
+  "web/src/official/__fixtures__/{localAlerts,national}.ts (new)",
+  "web/src/official/{model,fireWeather,calfire}.test.ts",
+  "web/src/extras/{evacuation,format,credits,cameras,imagery,types,hooks,runtime}.ts",
+  "web/src/extras/{EvacuationPanel,CameraPanel,ImageryPanel}.tsx",
+  "web/src/extras/__fixtures__/{samplesUs,clock.testutil}.ts (new)",
+  "web/src/extras/{evacuation,format,cameras,imagery,runtime}.test.ts",
+  "web/src/extras/dev/{presets.ts,main.tsx,DevApp.tsx,dev.css}",
+  "web/src/extras/dev/{UsOfficialPreset.tsx,usOfficialSeed.ts} (new)",
+  "web/src/ui/feed/{OfficialNow.tsx,UpdatesFeed.tsx,feedModel.ts,feedMeta.ts,types.ts,updatesFeed.css}",
+  "web/src/ui/feed/{feedModel,feedModelBrief2}.test.ts",
+  "web/src/ui/shell/{officialSummary.ts,dataStatus.ts,UpdatesPanel.tsx,LayersPanel.tsx}",
+  "web/src/ui/shell/{officialSummary,dataStatus}.test.ts",
+  "web/src/location/official.ts",
+  "web/src/location/official.test.ts",
+  "docs/redesign/contract3/us-official.md (new)",
+  "docs/redesign/progress/brief3-us-official.md (new)",
+  "docs/redesign/reports/brief3-us-official.json (new)",
+  "docs/screenshots/brief3-us-official-*.png (10)"
+ ],
+ "commits": [
+  "8ac1154 M1",
+  "c56947e M2",
+  "1c14914 M3 (most M3 files were captured by orchestrator checkpoints 3710089 / 7b7cd81)",
+  "4dcb81b M4",
+  "f6ddb54 M5",
+  "77291ab M6",
+  "final: screenshots, cut-line items, report (this commit)"
+ ],
+ "verification": [
+  "cd backend && uv run pytest -q -> 878 passed (69.5 s; includes other roles' uncommitted fixer edits in the shared tree). Mine: uv run pytest -q tests/test_evacuations_sources.py tests/test_extras.py -> 79 passed (40 + 39).",
+  "test_evacuations_sources.py covers: Reno, Carson City, Las Vegas NV, Yuma AZ, Bozeman MT, Seattle WA, Tampa FL bboxes -> state_not_available with 'Official evacuation zones are not available in this state ({State}). Follow local officials.' and router.calls == [] (0 upstream requests); past date and an incident in Montana too; Anchorage and Tijuana -> the not-supported / outside-US sentences; Klamath Falls OR (mocked empty) -> available, 0 zones, sources[0] Oregon OEM with its own times, 'Oregon OEM lists no evacuation zone here right now. That is not an all-clear…', never OEM's 'If there are no records…' sentence, no 'Cal OES' anywhere, whitelisted outFields; Brookings OR/CA -> both sources, one copy per zone (Del Norte zone from Cal OES), Cal OES failure keeps the OEM copy; Lake Tahoe CA/NV -> 'Nevada: official evacuation zones are not available in this state'; recorded Oregon sample -> 12 zones, counts order 4/warning 2/advisory 6, 'Level 3' + OEM definition + press-release URL, listed_ms = created_date, last_edited_date never output, hazard 'Other' kept, Fire_Name null case; 4 California cases (zones, none, Imperial not covered, HTTP 503) keep every brief-2 key and value (only states, 7 per-source fields incl. aggregator, 10 zone props added); status-mapping regressions (No Evacuation Order, Not Reporting, Level 1 - Ready, Level 2 - Be Set, Level 3 - Go, Level 3, Planning Zone, null); privacy: no response key matches email|phone|user|editor|creator|submit even when the layer sends Editor_*; cameras for Reno, Klamath Falls, Tampa, Anchorage -> state_not_available with the §14.14 sentence and 0 requests; Brookings still lists California cameras.",
+  "cd web && npm run typecheck -> exit 0; npm run lint -> exit 0, 55 warnings, 0 outside src/scene; npm test -> 67 files, 1079 passed, 2 skipped; npm run build -> exit 0.",
+  "node web/scripts/check-time-api.mjs --role us-official -> 89 files, total: 0 deprecated uses, 0 America/Los_Angeles literals (4 listed tz-ok opt-outs: dataStatus.ts deprecated fmtStatusTime, UsOfficialPreset.tsx Oregon point, 2 recorded-data lines in official/__fixtures__/localAlerts.ts).",
+  "Web acceptance tests: official/model.test.ts 'evacuations outside California' (Reno, Las Vegas, Yuma, Bozeman -> 'not-available' 'Not available in this state (Nevada|Arizona|Montana)'; Medford OR point -> listed Oregon OEM zones; Klamath none-listed; border CA/NV by point state) and 'NWS checked follows states_checked' (CA-only answer: Reno not_checked, missing states_checked read as ['CA'], no 'lower 48' text; 49-code answer: Reno 'none', header scope 'lower 48 states'); location/official.test.ts (Oregon none listed with 'Oregon OEM, checked 2 min ago · not an all-clear', not available, NWS checked none, NWS not checked, live local alert, archived alert with the FEMA notice, local alerts 404 -> 'Local officials' alerts: not checked', every local-alert line has an https link, WFIGS record link 'NIFC WFIGS'); official/record.test.ts (WFIGS summary never yields 'CAL FIRE' in record, feed, summary or data-status output; complex row shows members, secondaryRecordUrl null (never /api/official/incident-record), never a member's acres; Timber disagreement blocks; synthetic; HTTP 404 -> not checked); official/localAlerts.test.ts (6); calfire.test.ts: California strings unchanged, one expectation changed by the contract (feed topic 'calfire' -> 'record').",
+  "Cal OES lines left in owned non-test web files: 75 (grep -niE 'cal ?oes|CAL_OES|caloes' over official, extras, ui/feed, the 4 shell files, location/official.ts, excluding tests/fixtures). All are: code comments naming both sources (~35), source ids such as 'caloes_evacuations' (~12), Cal OES's own data (California zones' credit and fallback link, the Cal OES camera list 'Cal OES California Webcams', the Cal OES rebuild tip) (~16), or brief-2-shape fallbacks for an answer without sources[] (always California) (~12). No Cal OES text is shown for a non-California answer (tests assert it for Oregon, Nevada, Montana).",
+  "Screenshots (swiftshader, API 8713 FIRE3D_LIVE=0, Vite 5183, each viewed): docs/screenshots/brief3-us-official-dev-preset-desktop.png ('Official now · lower 48 states' with the recorded national Red Flag Warnings in MDT, a live relayed NWEM, an archived Kern County OES message with the FEMA notice and 'source record (FEMA archive)', a pending archive, the Jackson County OR card with 'Level 3: GO NOW – Leave Immediately!', 'Oregon OEM level; definition by Oregon OEM', 'added to the Oregon state layer Aug 13, 5:20 PM PDT'); brief3-us-official-overview-desktop.png (live national backend: 'OFFICIAL NOW lower 48 states', alerts in MDT, 12-hour Public); brief3-us-official-location-reno-desktop.png ('Evacuation zones: not available in this state / Not available in this state (Nevada)', 'Fire weather alerts (NWS): checked, none in effect here', 'Local officials' alerts relayed by NWS: none here · not an all-clear'); brief3-us-official-location-brookings-phone.png (Oregon checked live: 'No evacuation order or warning listed here · Oregon OEM, checked 1 min ago · not an all-clear', link 'Oregon OEM'); brief3-us-official-fixture-east-command-desktop.png (after us-catalog M2/M4: 'not available in these states (North Carolina, South Carolina)', 'Fire record · Not available: synthetic or local data.', NWS 'Not checked. Demo data…', local alerts 'Not checked. Demo data…', 24-hour EDT, 'Times: Eastern Time (EDT), the fire's local time'); brief3-us-official-cameras-nonca-desktop.png (Horse Gulch MT: 'Public cameras: not available in this state' + 'Public cameras: California only (ALERTCalifornia, Caltrans). Not available in this state.'); brief3-us-official-eaton-command-desktop.png (California regression against audit3-web-official-eaton-command-desktop.png: Evacuations, CAL FIRE record and fire weather rows identical; new Local officials' alerts row with a real archived LA City message); extra: brief3-us-official-horse-gulch-command-desktop.png and -public-desktop.png (WFIGS record 'NIFC WFIGS incident record' labelled 'Updated by USFS (USDA Forest Service) via NIFC WFIGS Nov 19, 12:03 MST', RFW in MDT, local alerts none in NWS or FEMA's archive, Public 12-hour MST/MDT).",
+  "Non-GET requests in browser runs (uvicorn access logs, grep -cE '\"(POST|PUT|PATCH|DELETE) '): run 1 (dev preset) 0 of 2 requests; run 2 (all other screenshots) 0 of 239. Horse Gulch asked only /api/official/incident-record (6), never /api/official/calfire; Eaton asked /api/official/calfire. 'Prepare analysis' was never pressed; no fire was built.",
+  "Wording scan: git diff 02a4e00 -- <my non-test source paths> | grep '^+' | grep -inE '\\bsafe\\b|low risk|all[- ]clear|Fire[T]race' -> 18 hits, all negations: 15 user-facing 'not an all-clear' / 'No alert here is not an all-clear' strings and 3 code comments ('Nothing here is an all-clear', '…never \"none\"… all-clear', 'no record is ever an all-clear'); 0 'safe', 0 'low risk', 0 reference-demo name.",
+  "Key scan (count only, value never printed): FIRMS_MAP_KEY occurrences in my logs and notes 0; files in my committed paths containing it 0.",
+  "Frame-rate measurements are not meaningful here (no GPU, swiftshader); none reported."
+ ],
+ "screenshots": [
+  "docs/screenshots/brief3-us-official-dev-preset-desktop.png",
+  "docs/screenshots/brief3-us-official-overview-desktop.png",
+  "docs/screenshots/brief3-us-official-location-reno-desktop.png",
+  "docs/screenshots/brief3-us-official-location-brookings-phone.png",
+  "docs/screenshots/brief3-us-official-fixture-east-command-desktop.png",
+  "docs/screenshots/brief3-us-official-cameras-nonca-desktop.png",
+  "docs/screenshots/brief3-us-official-eaton-command-desktop.png",
+  "docs/screenshots/brief3-us-official-horse-gulch-command-desktop.png",
+  "docs/screenshots/brief3-us-official-horse-gulch-public-desktop.png",
+  "docs/screenshots/brief3-us-official-eaton-feed-command-desktop.png",
+  "docs/screenshots/brief3-us-official-eaton-feed-public-desktop.png",
+  "docs/screenshots/brief3-us-official-location-tijuana-desktop.png"
+ ],
+ "contract_deviations": [
+  "§14.8.2: sources[] entries also carry 'aggregator' ('Cal OES' / 'Oregon OEM'), additive, so the web never derives the short name from 'publisher'.",
+  "§14.8.1: EvacAdapter has three derived properties (upstream_name, layer_what, none_caveat); no extra dataclass fields.",
+  "§14.14: several uncovered states read 'Official evacuation zones are not available in these states (Nevada, Utah). Follow local officials.' (the contract has only the singular sentence).",
+  "§14.8.3: the state check runs before the past-date check, so a past time in a state without a feed answers state_not_available (California past answers unchanged).",
+  "§14.7 card line: the link is in OfficialLine.url with a new optional urlLabel (\"issuer's link\", 'source record (NWS)', 'source record (FEMA archive)'); us-web's OfficialSection still renders 'Read it'.",
+  "§14.5: OfficialInfo.calfire keeps its field name but holds the source-neutral RecordStatus (CAL FIRE or NIFC WFIGS).",
+  "§14.7: the quoted text prefers the WEA text, then the headline, then the description, cut at 220 characters with '…' (full texts behind 'More').",
+  "§14.6 wave-1 screenshot expectations (overview naming California; Reno 'NWS not checked') no longer apply: us-pipeline's national endpoint is live, so the overview says 'lower 48 states' and Reno is checked; the California-only behaviour is covered by unit tests against a CA-only answer.",
+  "§14.9.3 checker: four tz-ok opt-outs (listed under verification); review round 1 adds 8 more, all recorded zones of the new LOCAL_ARCHIVE_EATON fixture (12 in all).",
+  "§14.8.7: the dev preset's national NWS answer has Mountain-time alerts only (the only recorded national answer); the second zone is shown through local alerts (Pacific and Mountain), not by merging another day's alert (review R3).",
+  "§14.7: local-alert lines carry a location phrase ('area covers the fire's reported location' / 'area N mi from the fire's reported location · may be about another fire' / 'matched by county …'), the web orders them by relevance (in effect, covering, nearest, newest), and the location card keeps only the messages whose area reaches its point (localAlertsAtPoint, 1 km); additive LocalAlertItem fields nearestKm, where, polygon, sameCodes, LocalAlertsOfficial.elsewhere, OfficialPlace.countyFips (review R1).",
+  "§14.8.6: a state_not_available cameras answer has sources [] (review R5); §14.8.3: in an answer covering several states, Cal OES's none caveat names its source (review R6)."
+ ],
+ "known_issues": [
+  "The live Oregon OEM layer is empty off-season (count 0 on 2026-10-22/23): Oregon zones with content are shown from the recorded 2026-08-15 history snapshot only (tests and the dev preset).",
+  "The Public compact summary (UpdatesPanel 'Official now', desktop Public) has three lines (evacuations, record, fire weather); local officials' alerts are in the full Official now block, the feed and the location card, not in the compact summary.",
+  "Local-alert sender names are verbatim and can carry the sender's COG number ('200277,LA City Public Alerts,City of Los Angeles'), as us-pipeline documented.",
+  "fmtWhen and the other pure helpers default to getTimeFormat() when no tf is passed (contract §14.9.6); components pass the hook's tf, the dev page (extras-dev.html) uses the default.",
+  "Gates were run in the shared tree with other roles' uncommitted fixer edits present (SPEC.md, catalog.py, api/live.py, api/records.py, tests/data/official/*); all passed."
+ ],
+ "notes_for_integrator": [
+  "Fold docs/redesign/contract3/us-official.md into CONTRACT §14 as '14.x as built'.",
+  "location/CardParts.tsx (us-web) OfficialSection: render OfficialLine.urlLabel (when present) instead of 'Read it', so local-alert links say \"issuer's link\" / 'source record (NWS)' / 'source record (FEMA archive)'; update its doc comment: the fireWeather array now holds the NWS status line(s) and the local officials' alert lines (§14.7), and rename the field to e.g. 'lines' later.",
+  "us-web call sites can now pass tf everywhere (they report they do); remove the deprecated exports once unused: official/model.ts insideCalifornia, extras/evacuation.ts NOT_FIRE_SPECIFIC, ui/shell/dataStatus.ts fmtStatusTime (its tz-ok opt-out goes with it), ui/feed/types.ts topic 'calfire', official/hooks.ts useCalfire alias.",
+  "Make the §14.8.2 optional TS fields required in web/src/extras/types.ts (states, per-source fields, zone props) and §14.6 states_checked / alert_states / time_zone once every producer sends them.",
+  "SPEC §2 / README credits (final verification): 'Oregon Department of Emergency Management' (evacuation zones in Oregon, licence field 'Public', no further terms published, re-read 2026-10-23), and the OpenFEMA notice line for archived local alerts.",
+  "If Washington's terms are ever accepted, add an adapter to fire3d/sources/evacuations.py ADAPTERS; STATE_AVAILABILITY derives from ADAPTERS (no flag exists).",
+  "Optional: add a local officials' alerts line to the Public compact summary (ui/shell/officialSummary.ts, us-official's file)."
+ ],
+ "fixes_round_1": {
+  "review": "docs/redesign/reports/review3-us-official.json (verdict fix-needed; 1 major, 6 minor, all in role)",
+  "restart_note": "No partial work from the interrupted earlier fixer was found: git status was clean in every us-official path, nothing was committed for it, and the scratch folder review-us-official/ held only the reviewer's files. No stale worktree of this role blocked anything.",
+  "issues": {
+   "R1": "fixed. Verified: on Eaton at the replay time the answer lists LA City's Sunset Fire / Runyon Canyon messages (29.5, 26.2, 26.5 km) first and the rows had no location context. Now LocalAlertItem keeps nearestKm and adds where {from fire|point, covers, km}, polygon and sameCodes; localAlertOrder sorts in effect first, then the area covering the location, then the nearest, then the newest (Eaton: LACo OEM's orders at 1.0-2.7 km first). localAlertPlace adds the location phrase to every line in Official now, the feed (detail) and the card (sub and subCompact): 'area covers the fire's reported location' / 'area 1.7 mi from the fire's reported location · may be about another fire' / 'matched by county, not by an exact area · may be about another fire', in the viewer's units. Official now adds '34 messages for this fire's area; in effect first, then the nearest to its reported location:' and LOCAL_PLACE_NOTE under More. The location card measures from its point (localAlertsAtPoint): only messages whose area covers the point or lies within 1 km (about the live card's ?bbox= box; county matches in the point's county via geo lookup), the rest counted ('27 of the fire's local alerts are for other places in its area (see Updates).'), 'area covers this point' first. Wording differs from the reviewer's proposal on purpose: 'the message does not say which fire it is about' is false for messages that name their fire (Kern 'Cyrus Fire updated to an Evacuation Order'), and Fire-3d never reads the text, so lines say 'may be about another fire' and the note says Fire-3d ties a message to the fire only by where its area lies. Distances say 'from the fire's reported location' because that is what nearest_km measures (not the fire's edge). Tests: localAlerts.test.ts (4 new cases on LOCAL_ARCHIVE_EATON, 8 of the 33 messages of Fire-3d's own Eaton answer recorded 2026-10-23: nearest in-effect message first, ended last, a covering area first, the phrase on every feed row and card line in mi and km, the point filter and elsewhere count, the county match at a point), location/official.test.ts (every local line's sub and subCompact has the phrase).",
+   "R2": "fixed. Verified: notCheckedAt returned null (checked) for pointState undefined with a 49-code answer. It now waits for the lookup ('Checking NWS fire weather alerts…') whatever the answer covers. model.test.ts: Reno, Anchorage and Tijuana with pointState undefined -> loading; Anchorage and Tijuana with null -> 'not checked here'; Reno NV -> checked, none.",
+   "R3": "partly fixed, deviation recorded. Verified: the preset's national answer has 3 Red Flag Warnings, all MDT. The only recorded national answer is Mountain-only; merging a Pacific alert from another day (the LOX sample of 2026-10-17) would make an answer that never existed, so it is not done. The preset now adds an archived Sheridan County, Wyoming local alert (sent Oct 9, 7:03 PM MDT) next to the Pacific Kern and LA messages, so each alert in its own zone is visible; the deviation is in the as-built note (deviation 8) and contract_deviations.",
+   "R4": "fixed. Verified: LocalAlertsOfficial.credits was never read and the attribution named no local-alert source. localAlertCredits(local) in useExtrasCredits: \"Local officials' alerts: National Weather Service (relayed local officials' messages)\" when NWS answered or a relayed message is listed; \"Local officials' alerts: FEMA IPAWS archive via OpenFEMA. This product uses the Federal Emergency Management Agency's OpenFEMA API, but is not endorsed by FEMA.\" (link to the OpenFEMA terms, no logo) when the archive answered or an archived message is listed; nothing while not checked, pending or demo. Test in localAlerts.test.ts; seen in the Eaton and Horse Gulch screenshots' credit bar.",
+   "R5": "fixed. Verified: /api/extras/cameras?incident=2024-horse-gulch-889237 listed the three California sources. cameras_payload now answers sources [] for state_not_available, and the panel hides source lines for that reason code (cameraSourcesShown, for an older backend). Tests: test_cameras_outside_california (sources == [], no 'Cal OES' anywhere in the answer), cameras.test.ts. Screenshot docs/screenshots/brief3-us-official-cameras-nonca-desktop.png (no source line under the Montana cameras panel).",
+   "R6": "fixed. Verified with the Brookings mock. In an answer covering several states (two sources, or a state without a feed) Cal OES's none caveat names its source: 'Cal OES lists no evacuation zone here right now. That is not an all-clear: follow local officials.' (EvacAdapter.none_caveat_named); a California-only answer keeps the brief-2 sentence (the four brief-2 regression cases still pass key by key). Tests: test_brookings_none_listed_names_each_source, test_california_only_none_keeps_the_brief2_sentence, the Lake Tahoe CA/NV case. One live probe of Brookings (2026-10-23) shows both named lines.",
+   "R7": "fixed. dataStatus.ts header: the fire's zone with its abbreviation on the preset's clock through fmtStatusTimeAt; official/runtime.ts fireWeatherFor: the national answer per states_checked (California only from an older backend)."
+  },
+  "gates": {
+   "backend": "cd backend && uv run pytest -q -> 880 passed (68.7 s), main checkout",
+   "web_main_checkout": "typecheck exit 0; lint exit 0, 55 warnings, 0 outside src/scene; npm test 72 files, 1107 passed, 2 skipped (includes other roles' uncommitted files); build exit 0. Earlier in the session typecheck/build failed only in us-web's untracked web/src/lib/recordText.test.ts (TS2322 'season'); it passed on the final run.",
+   "web_clean_worktree": "HEAD eab069d plus only this fix's files: typecheck 0; lint 55 (all src/scene); npm test 67 files, 1085 passed, 3 skipped; build exit 0",
+   "check_time_api": "node web/scripts/check-time-api.mjs --role us-official -> 0 deprecated uses, 0 America/Los_Angeles literals (the new Eaton fixture's recorded zones carry tz-ok)",
+   "non_get_requests": "0 in both API runs (8713, FIRE3D_LIVE=0): 94 GET and 36 GET",
+   "key_scan": "FIRMS_MAP_KEY count-only scan of the logs, outputs and diff: 0",
+   "wording_scan": "added lines: 6 hits, all negations ('not an all-clear', 'never an all-clear', 'No alert here is not an all-clear')"
+  },
+  "screenshots": [
+   "docs/screenshots/brief3-us-official-eaton-local-alerts-command-desktop.png (Eaton Command at the replay time: nearest LACo OEM order first, location phrase on each line, FEMA credit and notice in the credit bar)",
+   "docs/screenshots/brief3-us-official-eaton-local-card-command-desktop.png (location card at a point inside an order's area: 'area covers this point' first, '+4 more', '27 of the fire's local alerts are for other places')",
+   "docs/screenshots/brief3-us-official-dev-preset-desktop.png (updated: Wyoming MDT row, location phrases)",
+   "docs/screenshots/brief3-us-official-cameras-nonca-desktop.png (updated: no Cal OES source line under a Montana fire)"
+  ],
+  "files": [
+   "backend/fire3d/api/extras.py",
+   "backend/fire3d/sources/evacuations.py",
+   "backend/tests/test_evacuations_sources.py",
+   "web/src/official/{localAlerts,localAlerts.test,hooks,model,model.test,runtime}.ts",
+   "web/src/official/__fixtures__/localAlerts.ts (LOCAL_ARCHIVE_EATON)",
+   "web/src/location/official.ts, official.test.ts",
+   "web/src/ui/feed/OfficialNow.tsx",
+   "web/src/extras/{runtime,cameras,cameras.test}.ts, CameraPanel.tsx, dev/UsOfficialPreset.tsx",
+   "web/src/ui/shell/dataStatus.ts",
+   "docs/redesign/contract3/us-official.md",
+   "docs/redesign/progress/brief3-us-official.md"
+  ]
+ },
+ "fixes_round_2": {
+  "review": "round-2 review of us-official (issues N1 major, N2 and N3 minor, all in role; reviewer screenshots in the scratch folder review-us-official/shots2/)",
+  "restart_note": "No partial work of the interrupted earlier fixer was found: git status and git diff were clean in every us-official path and nothing was committed for it after 18808f4 (round 1). The scratch folder review-us-official/ held only the reviewer's files; fix-us-official/ is round 1's. The only stale worktree (review-us-web/wt2) belongs to the us-web review and did not block anything, so it was left alone.",
+  "issues": {
+   "N1": "fixed. Verified: on Eaton at the replay time the Official filter opens on LA City's Sunset Fire warning and the Runyon Canyon messages, and their place phrase sat at the end of `detail`, which the feed clamps to 1 line (Command) or 2 (Public), so a collapsed row never showed it. Now FeedItem has an optional `place` (ui/feed/types.ts) and localAlertFeedItems puts localAlertPlace(...) there; UpdatesFeed renders it as its own line (.uf-place, a pin icon, never clamped) right under the title, and `detail` keeps event, sent time and channel (the phrase is said once). Re-taken at Eaton t=1736394000000, Official filter: Command shows 'area 18 mi from the fire's reported location · may be about another fire' and 'area 16 mi …' on the first two collapsed rows; Public shows the same on the Sunset and Runyon rows. Tests (localAlerts.test.ts): every feed row's `place` equals localAlertPlace of its message (mi and km), `detail` never repeats it, the newest row in feed order is the Sunset Fire warning with 'area 18 mi from the fire's reported location · may be about another fire'.",
+   "N2": "fixed. Verified: at Tijuana and Anchorage the ?bbox= answer is nws_api 'available' with counties [] and 0 alerts, and the card said 'Local officials' alerts relayed by NWS: none here · not an all-clear'. New pure localAlertsForPointState (official/localAlerts.ts), used by useOfficialAtPoint through the new localAlertsAtSelectedPoint: while the point's state is looked up (placeState undefined) a 'listed' or 'none' answer reads 'Checking local officials' alerts…'; where the point has no state (null: outside the lower 48) 'none' becomes 'Local officials' alerts: not checked' with 'Fire-3d checks local officials' alerts in the lower 48 states only.'; when the lookup failed, 'Fire-3d could not tell which state this point is in.'. Messages listed there stay listed (their area reaches the point). The fire's own answer (past time, point in its area) waits for the lookup too. Tests: Tijuana and Anchorage box answers (from the reviewer's recorded answers) -> not checked with the lower-48 reason, loading while undefined, never 'none here'; lookup failed -> its reason; Reno NV -> none here; LA CEM listed stays listed with null state; the fire's Eaton answer -> loading, then listed with elsewhere 6. Screenshot: location card at 32.51,-117.02 (Tijuana) and 61.2,-149.9 (Anchorage): evacuation, NWS and local alerts all 'not …' here; Reno still 'none here · not an all-clear'. The backend side (nws_api 'not_checked' when states_in_area is empty) is us-pipeline's api/official.py and is left to the integration.",
+   "N3": "fixed. Verified: localAlertsAtPoint counted every message it left out of the live ?bbox= answer in `elsewhere`, and localAlertLines then said 'N of the fire's local alerts are for other places in its area (see Updates).', though that answer is the point's box, not the fire's, and Updates does not list it (backend _counties(area) matches every county the ±0.005° box touches). localAlertsAtPoint now takes `source: 'fire' | 'box'` (default 'fire'): the fire's answer still counts `elsewhere`; the box answer counts `nearby` {county, area}, worded '1 nearby local alert is for a neighbouring county, not this point's county.' (or '… for an area that does not reach this point.'), without '(see Updates)'. Tests: a point on the Los Angeles side of the Los Angeles / Ventura line with a Ventura County-wide message in the box answer -> none here with the neighbouring-county sentence, never \"the fire's\" or 'see Updates'; with the LA message too -> the LA line plus the sentence; an area match left out -> the area sentence. No screenshot (needs a live county-wide message next to a county line)."
+  },
+  "gates": {
+   "backend": "cd backend && uv run pytest -q -> 882 passed (68.2 s), main checkout (no backend change in this round)",
+   "web_main_checkout": "typecheck (tsc -b) exit 0; lint exit 0, 55 warnings, 0 outside src/scene; npm test 72 files, 1111 passed, 2 skipped; build exit 0",
+   "check_time_api": "node web/scripts/check-time-api.mjs --role us-official -> 0 deprecated uses, 0 America/Los_Angeles literals",
+   "non_get_requests": "0 in the API run (8713, FIRE3D_LIVE=0): 116 GET",
+   "key_scan": "FIRMS_MAP_KEY count-only scan of the diff and logs: 0",
+   "wording_scan": "added lines: 4 hits, all negations or test text ('never an all-clear', 'none here · not an all-clear', 'Not an all-clear either way')"
+  },
+  "screenshots": [
+   "docs/screenshots/brief3-us-official-eaton-feed-command-desktop.png (Eaton Command at the replay time, Official filter: each collapsed local-alert row shows 'area 18 mi / 16 mi from the fire's reported location · may be about another fire')",
+   "docs/screenshots/brief3-us-official-eaton-feed-public-desktop.png (the same in Public, Details open)",
+   "docs/screenshots/brief3-us-official-location-tijuana-desktop.png (overview, point in Tijuana: 'Local officials' alerts: not checked · Fire-3d checks local officials' alerts in the lower 48 states only.')"
+  ],
+  "files": [
+   "web/src/official/localAlerts.ts (FeedItem.place for local alerts; localAlertsAtPoint source 'fire' | 'box' with `nearby`; localAlertsForPointState; localAlertsAtSelectedPoint; LOCAL_LOWER48_REASON, LOCAL_LOOKUP_FAILED_REASON)",
+   "web/src/official/hooks.ts (useOfficialAtPoint uses localAlertsAtSelectedPoint with the point's state)",
+   "web/src/official/localAlerts.test.ts (round-2 cases)",
+   "web/src/location/official.ts (localAlertLines: `nearby` wording)",
+   "web/src/ui/feed/types.ts (FeedItem.place, optional)",
+   "web/src/ui/feed/UpdatesFeed.tsx, web/src/ui/feed/updatesFeed.css (.uf-place line, never clamped)",
+   "docs/redesign/contract3/us-official.md, docs/redesign/progress/brief3-us-official.md, this report, 3 screenshots"
+  ]
+ }
+}

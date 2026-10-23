@@ -5,7 +5,8 @@
 import type { Map as MapLibreMap, SourceSpecification } from 'maplibre-gl'
 import type { FeedItem } from '../ui/feed/types'
 import { apiPath } from './client'
-import { fmtDateTime } from '../lib/time'
+import { fmtAt, type TimeFmt } from '../lib/time'
+import { getTimeFormat } from '../state/timeZone'
 import { agoText, durationText, fmtWhen, relativeToText } from './format'
 import type { ExtrasLegendEntry } from './legend'
 import { LayerGroupHandle, type BeforeId, type LayerGroup, type LayerHandleOptions } from './mapLayers'
@@ -23,7 +24,7 @@ export const FAMILY_LABEL: Record<ImageryFamily, string> = {
   'sentinel-2': 'Sentinel-2 (10 m)',
   landsat: 'Landsat 8/9 (30 m)',
   viirs: 'VIIRS daily (375 m)',
-  goes: 'GOES-West, every 10 min (1-2 km)',
+  goes: 'GOES, every 10 min (1-2 km)',
 }
 export const FAMILY_ORDER: ImageryFamily[] = ['sentinel-2', 'landsat', 'viirs', 'goes']
 
@@ -126,12 +127,13 @@ export function orderedProducts(data: ImageryResponse | null, startedMs: number 
 }
 
 /** Rows of the panel's list with a heading where the group changes ("Since the fire started", "Before the fire
- *  (context)", "GOES-West …"); `ordered` comes from orderedProducts. */
+ *  (context)", "<GOES platform> …", named from the product's `platform`); `ordered` comes from orderedProducts. */
 export function withGroupHeadings(ordered: readonly ImageryProduct[], refMs: number, startedMs: number | null, live: boolean): { p: ImageryProduct; t: ImageryTiming; heading: string | null }[] {
   let last: string | null = null
   return ordered.map((p) => {
     const t = imageryTiming(p, refMs, startedMs, live)
-    const group = p.family === 'goes' ? 'GOES-West: every 10 min, 1-2 km pixels' : t.beforeFire ? 'Before the fire (context)' : startedMs != null ? 'Since the fire started' : 'Newest'
+    // W13: the satellite named from the product's own platform ("GOES-West", later "GOES-East")
+    const group = p.family === 'goes' ? `${p.platform || 'GOES'}: every 10 min, 1-2 km pixels` : t.beforeFire ? 'Before the fire (context)' : startedMs != null ? 'Since the fire started' : 'Newest'
     const heading = group !== last ? group : null
     last = group
     return { p, t, heading }
@@ -291,16 +293,16 @@ export function resolutionText(p: ImageryProduct): string {
   return shown != null ? `${p.resolution_m} m pixels (shown at about ${Math.round(shown)} m over this area)` : `${p.resolution_m} m pixels`
 }
 
-export function imageryLegend(p: ImageryProduct | null, refMs: number): ExtrasLegendEntry[] {
+export function imageryLegend(p: ImageryProduct | null, refMs: number, tf: TimeFmt = getTimeFormat()): ExtrasLegendEntry[] {
   if (!p || !p.available) return []
   return [
     {
       id: `imagery-${p.id}`,
       layer: 'recentImagery',
       label: `Satellite image · ${p.platform}`,
-      detail: `${p.family === 'viirs' && p.pass_times_ms.length > 1 ? 'passes from' : 'acquired'} ${fmtWhen(p.acquired_ms, refMs)} · ${resolutionText(p).toLowerCase()} · not live`,
+      detail: `${p.family === 'viirs' && p.pass_times_ms.length > 1 ? 'passes from' : 'acquired'} ${fmtWhen(p.acquired_ms, refMs, tf)} · ${resolutionText(p).toLowerCase()} · not live`,
       swatch: { kind: 'raster' },
-      compact: `Satellite image · ${platformText(p)} · ${fmtDateTime(p.acquired_ms)}`,
+      compact: `Satellite image · ${platformText(p)} · ${fmtAt(p.acquired_ms, tf)}`,
     },
   ]
 }

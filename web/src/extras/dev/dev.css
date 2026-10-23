@@ -219,3 +219,13 @@ body,
     top: 222px;
   }
 }
+
+/* us-official preset (fixture-only official panels, CONTRACT §14.8.7) */
+.uo-root { overflow: auto; height: 100vh; padding: 16px 20px 40px; box-sizing: border-box; }
+.uo-head h1 { font-size: 16px; margin: 0 0 4px; }
+.uo-head p { margin: 0 0 14px; color: var(--m-text-2, #9aa7b4); font-size: 12px; }
+.uo-grid { display: grid; grid-template-columns: repeat(3, minmax(300px, 1fr)); gap: 16px; align-items: start; }
+.uo-col h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 8px; color: var(--m-text-2, #9aa7b4); }
+.uo-panel { background: var(--m-panel, #111a24); border: 1px solid var(--m-border, #223040); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
+.uo-label { font-size: 11px; color: var(--m-text-2, #9aa7b4); margin: 0 0 6px; }
+@media (max-width: 1000px) { .uo-grid { grid-template-columns: 1fr; } }

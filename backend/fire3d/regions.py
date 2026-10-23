@@ -149,13 +149,24 @@ class _Layer:
 
 _lock = threading.Lock()
 _layers: dict[str, _Layer] = {}
+REGIONS_UNAVAILABLE_TEXT = ("Fire-3d's region files (states, counties and time zones) could not be read on this server, "
+                            "so the state, county and time zone are unknown here. Reinstall Fire-3d.")
+
+
+class RegionsUnavailable(RuntimeError):
+    """A bundled region file is missing or unreadable (a broken installation, never a provider outage). The API
+    answers 503 with :data:`REGIONS_UNAVAILABLE_TEXT` (final verification, panel SR-m3), never a 500."""
 
 
 def _layer(name: str) -> _Layer:
     with _lock:
         lay = _layers.get(name)
         if lay is None:
-            lay = _Layer({"states": STATES_FILE, "counties": COUNTIES_FILE, "timezones": TIMEZONES_FILE}[name])
+            path = {"states": STATES_FILE, "counties": COUNTIES_FILE, "timezones": TIMEZONES_FILE}[name]
+            try:
+                lay = _Layer(path)
+            except (OSError, ValueError, KeyError, TypeError) as e:
+                raise RegionsUnavailable(f"region file {path.name} could not be read: {type(e).__name__}") from None
             _layers[name] = lay
         return lay
 

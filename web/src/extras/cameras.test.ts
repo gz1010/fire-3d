@@ -9,6 +9,7 @@ import {
   cameraLayerGroup,
   cameraLegend,
   cameraServiceText,
+  cameraSourcesShown,
   cameraViewText,
   compassWord,
   distanceBearing,
@@ -16,6 +17,10 @@ import {
   sortCameras,
 } from './cameras'
 import type { CamerasResponse } from './types'
+import { setCaliforniaCommandClock } from './__fixtures__/clock.testutil'
+import { timeFmt } from '../lib/time'
+
+setCaliforniaCommandClock()
 
 const COOLEY: [number, number] = [-123.192868, 38.827218]
 
@@ -82,12 +87,23 @@ describe('camera list, legend and feed', () => {
   })
 })
 
+describe('camera sources under the panel (review R5)', () => {
+  it('lists the California sources only for an answer that used them', () => {
+    expect(cameraSourcesShown(CAMERAS_SAMPLE).map((s) => s.id)).toEqual(CAMERAS_SAMPLE.sources.map((s) => s.id))
+    expect(CAMERAS_SAMPLE.sources.length).toBeGreaterThan(0)
+    // outside California (an older backend still listed them): no Cal OES line under a Montana fire
+    const montana: CamerasResponse = { ...CAMERAS_SAMPLE, status: 'unavailable', reason_code: 'state_not_available', reason: 'Public cameras: California only (ALERTCalifornia, Caltrans). Not available in this state.' }
+    expect(cameraSourcesShown(montana)).toEqual([])
+    expect(cameraSourcesShown(null)).toEqual([])
+  })
+})
+
 describe('camera texts', () => {
   const [sanel, , hopland101] = sortCameras(CAMERAS_SAMPLE, COOLEY).map((i) => i.feature)
 
   it('describes view and service state from the sources only', () => {
-    expect(cameraViewText(sanel)).toBe('Pan-tilt-zoom; pointing S (170°) as last reported')
-    expect(cameraViewText(hopland101)).toBe('Fixed view looking south')
+    expect(cameraViewText(sanel, timeFmt('America/Los_Angeles', '24h'))).toBe('Pan-tilt-zoom; pointing S (170°) as last reported')
+    expect(cameraViewText(hopland101, timeFmt('America/Los_Angeles', '24h'))).toBe('Fixed view looking south')
     expect(cameraServiceText(hopland101)).toBe('In service · new image about every 10 min')
     expect(cameraServiceText(sanel)).toBeNull()
     expect(cameraServiceText({ ...hopland101, properties: { ...hopland101.properties, in_service: false } })).toBe('Out of service (Caltrans)')

@@ -54,7 +54,7 @@ function exposeDevControls(c: DevControls): void {
 function initialPreset(): { id: string; time: number } {
   const p = new URLSearchParams(window.location.search)
   const id = p.get('preset') ?? 'cooley'
-  return { id: DEV_PRESETS.some((d) => d.id === id) ? id : 'cooley', time: Number(p.get('time') ?? 0) || 0 }
+  return { id: DEV_PRESETS.some((d) => d.id === id && !d.standalone) ? id : 'cooley', time: Number(p.get('time') ?? 0) || 0 }
 }
 
 /** fitBounds padding that keeps the area clear of the dev chrome (side panels on the right, or a bottom sheet). */
@@ -219,6 +219,10 @@ export function DevApp() {
   useEffect(() => {
     ctl.current = {
       setPreset: (id, t = 0) => {
+        if (DEV_PRESETS.find((p) => p.id === id)?.standalone) {
+          window.location.search = `?preset=${id}`
+          return
+        }
         setPresetId(id)
         setTimeIdx(t)
         setCameraId(null)

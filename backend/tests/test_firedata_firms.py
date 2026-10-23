@@ -310,33 +310,33 @@ def test_detections_for_falls_back_when_every_request_fails(route, monkeypatch: 
     assert all(s_["via"] == "csv_feed_7d" for s_ in df.attrs["sources"])
 
 
-def test_load_live_ca_filters_to_california(route) -> None:
+def test_load_live_us_keeps_the_lower_48_box(route) -> None:
     r = route([(r"SUOMI_VIIRS_C2", sample("viirs_snpp_feed.csv")), (r"J1_VIIRS_C2", sample("viirs_snpp_feed.csv").replace(",N,", ",N20,")),
                (r"J2_VIIRS_C2", httpx.Response(500)), (r"MODIS_C6_1", sample("modis_feed.csv"))])
-    df = firms.load_live_ca(1)
+    df = firms.load_live_us(1)
     assert all("_24h.csv" in u for u in r.calls)
-    w, s, e, n = config.CA_BBOX
+    w, s, e, n = firms.L48_FIRMS_BOX
     assert df["lon"].between(w, e).all() and df["lat"].between(s, n).all()
     assert set(df["source"]) == {"VIIRS_SNPP_NRT", "VIIRS_NOAA20_NRT", "MODIS_NRT"}
     assert any("J2_VIIRS_C2" in x for x in df.attrs["warnings"])      # one feed down: partial data + warning
     route([(r"/data/active_fire/", httpx.Response(500))])
     firms_ = firms
     with pytest.raises(firms_.FirmsError):
-        firms_.load_live_ca(7, refresh=True)
+        firms_.load_live_us(7, refresh=True)
 
 
-def test_load_year_ca_downloads_once_to_parquet(route, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_year_us_downloads_once_to_parquet(route, monkeypatch: pytest.MonkeyPatch) -> None:
     viirs = sample("viirs_noaa20_sp.csv").replace(",N20,", ",N,")
     viirs = viirs.replace("2025-01-08,949,N,VIIRS,n,2,", "2025-01-08,949,N,VIIRS,n,2.0NRT,", 1)
     far = "\n45.0,-73.0,300,0.4,0.4,2025-01-08,1000,N,VIIRS,n,2,290,1.0,N,0\n"
     r = route([(r"/data/country/viirs-snpp/2025/", viirs.rstrip("\n") + far), (r"/data/country/modis/2025/", sample("modis_sp.csv"))])
-    df = firms.load_year_ca(2025)                                     # deprecated wrapper: the national file, CA box
+    df = firms.load_year_us(2025, config.CA_BBOX)                     # the national file, read in the CA box
     assert len(r.calls) == 2 and len(df) == 7 + 5                    # Quebec row outside the CA box, volcano dropped
     assert set(df["source"]) == {"VIIRS_SNPP_SP", "VIIRS_SNPP_NRT", "MODIS_SP"}
     pq = Path(config.CACHE_DIR) / "firms" / "firms_us_2025.parquet"   # brief 3: one national file per year
     assert pq.is_file() and not list((pq.parent / "raw").glob("*.csv"))
     assert not list(pq.parent.glob("firms_ca_*"))
-    again = firms.load_year_ca(2025)
+    again = firms.load_year_us(2025, config.CA_BBOX)
     assert len(r.calls) == 2 and len(again) == len(df)
     national = firms.load_year_us(2025)
     assert len(national) == len(df) + 1                                # the Quebec-border row (45.0, -73.0) is kept
@@ -370,6 +370,6 @@ def test_goes_window_straddling_the_archive_boundary() -> None:
     assert sum(c.days for c in chunks) >= 40
 
 
-def test_load_year_ca_only_for_completed_years() -> None:
+def test_load_year_us_only_for_completed_years() -> None:
     with pytest.raises(firms.FirmsError, match="completed years"):
-        firms.load_year_ca(int(utc_day(now_ms())[:4]))
+        firms.load_year_us(int(utc_day(now_ms())[:4]))
