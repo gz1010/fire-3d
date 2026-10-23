@@ -443,6 +443,7 @@ export interface AccuracyFire {
   gfs_fill_hours?: number // hours of the model window where HRRR was missing and GFS filled it (0 for pure HRRR)
   weather_source?: string // the bundle's verbatim source ("open-meteo:historical-forecast:gfs_hrrr")
   replaced?: string | null // the V §3 fire this one replaced and the failed check, else null
+  growth_ratio_median?: number | null // this fire's own median forecast / observed growth ratio (null: no ratio)
 }
 
 export interface AccuracyRegion {

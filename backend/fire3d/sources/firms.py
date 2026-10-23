@@ -37,8 +37,7 @@ DataFrames returned by :func:`detections_for` / :func:`fetch_area` / :func:`load
 Brief 3 (CONTRACT 14.12.1): the keyless loaders are national. :func:`load_live_us` and :func:`load_year_us` keep the
 lower-48 box with a 0.5-degree margin (:data:`L48_FIRMS_BOX`; border fires keep their Canadian and Mexican
 detections; Hawaii and Alaska rows are dropped); the yearly archive is cached as ``firms_us_{year}.parquet`` (sorted
-by longitude) and read with pyarrow ``filters=`` on lon/lat. ``load_live_ca`` / ``load_year_ca`` remain as deprecated
-wrappers (the California box cut of the national loaders).
+by longitude) and read with pyarrow ``filters=`` on lon/lat.
 """
 
 from __future__ import annotations
@@ -648,11 +647,6 @@ def load_live_us(days: float = 7, *, refresh: bool = False) -> pd.DataFrame:
     return _load_live(days, L48_FIRMS_BOX, refresh)
 
 
-def load_live_ca(days: float = 7, *, refresh: bool = False) -> pd.DataFrame:
-    """DEPRECATED (brief 3; use :func:`load_live_us`): the same feeds cut to the SPEC's California box."""
-    return _load_live(days, config.CA_BBOX, refresh)
-
-
 def _load_live(days: float, bbox: Sequence[float], refresh: bool) -> pd.DataFrame:
     window = _live_window(days)
     frames, sources, warnings = [], [], []
@@ -749,12 +743,6 @@ def load_year_us(year: int, bbox: tuple | None = None) -> pd.DataFrame:
             except FileNotFoundError:
                 pass
     return _year_frame(path, year, bbox)
-
-
-def load_year_ca(year: int = 2025) -> pd.DataFrame:
-    """DEPRECATED (brief 3; use :func:`load_year_us`): the yearly archive's rows inside the SPEC's California box,
-    read from ``firms_us_{year}.parquet``."""
-    return load_year_us(year, config.CA_BBOX)
 
 
 # ------------------------------------------------------------------------------------------------------------------

@@ -89,10 +89,10 @@ def _behavior_lfm_warning(fallback: dict) -> str | None:
 def _with_behavior_lfm_warning(warnings: list, message: str | None) -> list:
     """``warnings`` with the behaviour charts' warning replaced by ``message`` (dropped when None). Not added when the
     build's interim warning is there already (the whole bundle uses California's values and says so)."""
-    from ..build.weather_bundle import INTERIM_LFM_WARNING
+    from ..build.weather_bundle import INTERIM_LFM_WARNING, LEGACY_INTERIM_LFM_WARNINGS
 
     ws = [w for w in warnings or [] if not str(w).startswith(BEHAVIOR_LFM_WARN_PREFIX + " (")]
-    if message and INTERIM_LFM_WARNING not in ws:
+    if message and INTERIM_LFM_WARNING not in ws and not LEGACY_INTERIM_LFM_WARNINGS.intersection(ws):
         ws.append(message)
     return ws
 

@@ -34,7 +34,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
 
-from .. import bundle, config
+from .. import bundle, catalog, config
 from ..build import pipeline
 from ..contracts import AircraftResponse, ForecastRequest, HealthResponse, IncidentSummary, dump
 from ..http import _MaskSecretsFilter
@@ -154,12 +154,14 @@ def _summary_dict(s: Any) -> dict:
 
 
 def _catalog_summary(incident_id: str) -> dict | None:
-    from .. import catalog
-
+    """The catalog's summary as a dict, or None. ``catalog.ListsUnavailable`` (the lists cannot be reached and no
+    bundle on disk knows the id) is raised: the API answers 503 (:func:`_lists_unavailable`), never "unknown"."""
     try:
         s = catalog.get_summary(incident_id)
     except NotImplementedError:
         return None
+    except catalog.ListsUnavailable:
+        raise
     except Exception as e:
         log.warning("catalog.get_summary(%s) failed: %s", incident_id, config.mask_secrets(e))
         return None
@@ -405,6 +407,14 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Fire-3d API", version=config.VERSION, description="Wildfire Forensics & Forecast (SPEC 6)", lifespan=lifespan)
 app.add_middleware(MaskedErrorMiddleware)
+
+
+@app.exception_handler(catalog.ListsUnavailable)
+async def _lists_unavailable(request: Request, exc: catalog.ListsUnavailable) -> Response:
+    """CONTRACT 14.2: an id the source lists cannot decide right now (CAL FIRE or NIFC WFIGS unreachable, no bundle on
+    disk) is 503 "The fire lists could not be reached right now; try again later.", never 404 or a local bundle."""
+    return JSONResponse({"detail": catalog.LISTS_UNAVAILABLE_TEXT}, status_code=503)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$",
@@ -459,7 +469,6 @@ def list_incidents(
     Rows carry ``bbox_lonlat`` (the analysis area of a ready bundle, else null). ``sources`` says which source lists
     answered. gzip when accepted. Falls back to the bundles on disk when both source lists are unavailable."""
     lo = min_acres if min_acres is not None else (DEFAULT_HISTORICAL_MIN_ACRES if mode == "historical" else None)
-    from .. import catalog
 
     yr = year if mode == "historical" else None
     st = state.upper() if state else None
@@ -518,14 +527,15 @@ UNSUPPORTED_TEXT = "Fire-3d does not support Alaska, Hawaii or US territories ye
 def _not_buildable(incident_id: str, summary: dict) -> tuple[int, str]:
     """The build gate's answer for an id ``pipeline.is_catalog_incident`` refuses (CONTRACT 14.2): 422 for Alaska,
     Hawaii or a territory; 409 for a local or synthetic bundle (no CAL FIRE or NIFC WFIGS list knows the id) or an
-    alias of a listed fire; else 409 "cannot be built in this version"."""
-    from .. import catalog, regions
+    alias of a listed fire; 503 when the lists cannot be reached (never "a local or synthetic bundle"); else 409
+    "cannot be built in this version"."""
+    from .. import regions
 
-    listed = None
     try:
         listed = catalog.resolve_listed(incident_id)
-    except Exception as e:  # noqa: BLE001 - a lookup failure must not turn into a 500
+    except Exception as e:  # noqa: BLE001 - a lookup failure must not turn into a 500: the lists cannot tell now
         log.warning("build gate: resolve_listed(%s) failed: %s", incident_id, config.mask_secrets(e))
+        return 503, catalog.LISTS_UNAVAILABLE_TEXT
     st = (listed.state if listed is not None else summary.get("state")) or None
     if listed is not None and not regions.is_supported_state(st):
         return 422, UNSUPPORTED_TEXT

@@ -24,7 +24,6 @@ import fcntl
 import logging
 import math
 import os
-import re
 import shutil
 import threading
 import time
@@ -76,28 +75,25 @@ UNSUPPORTED_TEXT = "Fire-3d does not support Alaska, Hawaii or US territories ye
 
 class BuildRefused(LookupError):
     """The build gate refused an id (CONTRACT 14.2): ``status`` is the HTTP answer the API gives for it (404 unknown,
-    409 a local or synthetic bundle or an alias, 422 Alaska / Hawaii / territories or a pre-LF2023 fire)."""
+    409 a local or synthetic bundle or an alias, 422 Alaska / Hawaii / territories or a pre-LF2023 fire, 503 the
+    source lists cannot be reached right now)."""
 
     def __init__(self, status: int, message: str):
         super().__init__(message)
         self.status = status
 
 
-def spec_incident_id(summary: IncidentSummary) -> str:
-    """Deprecated (brief 3): the CAL FIRE form of a SPEC 4.4 id, ``f"{year}-{slug(name)}-{calfire_uid[:6].lower()}"``.
-    The build gate now asks the source lists (:func:`is_catalog_incident`)."""
-    slug = re.sub(r"[^a-z0-9]+", "-", str(summary.name or "").strip().lower()).strip("-") or "incident"
-    return f"{int(summary.year)}-{slug}-{str(summary.calfire_uid).strip().lower()[:6]}"
-
-
-def _listed(incident_id: str) -> IncidentSummary | None:
-    """``catalog.resolve_listed`` (a CAL FIRE or NIFC WFIGS list knows the id; never a manifest); None on failure."""
+def _listed(incident_id: str, strict: bool = False) -> IncidentSummary | None:
+    """``catalog.resolve_listed`` (a CAL FIRE or NIFC WFIGS list knows the id; never a manifest); None on failure
+    (``strict``: the failure is raised, so :func:`gate_refusal` can answer 503)."""
     from .. import catalog
 
     try:
         s = catalog.resolve_listed(incident_id)
     except Exception as e:  # noqa: BLE001 - an unreachable list: not buildable now, never a 500
         log.warning("build gate: resolve_listed(%s) failed: %s", incident_id, config.mask_secrets(e))
+        if strict:
+            raise
         return None
     if isinstance(s, dict):
         s = IncidentSummary.model_validate(s)
@@ -124,12 +120,16 @@ def is_catalog_incident(incident_id: str, summary: IncidentSummary | dict | None
 
 
 def gate_refusal(incident_id: str, summary: IncidentSummary | dict | None) -> BuildRefused:
-    """The error for an id :func:`is_catalog_incident` refuses (same texts as ``api/app.py``, CONTRACT 14.2)."""
-    from .. import regions
+    """The error for an id :func:`is_catalog_incident` refuses (same texts as ``api/app.py``, CONTRACT 14.2); 503 when
+    the source lists cannot be reached (``catalog.ListsUnavailable`` or any lookup failure)."""
+    from .. import catalog, regions
 
     if summary is None:
         return BuildRefused(404, f"unknown incident {incident_id!r}")
-    listed = _listed(incident_id)
+    try:
+        listed = _listed(incident_id, strict=True)
+    except Exception:  # noqa: BLE001 - logged in _listed; the lists cannot tell now: never "a local or synthetic bundle"
+        return BuildRefused(503, catalog.LISTS_UNAVAILABLE_TEXT)
     if listed is not None and not regions.is_supported_state(listed.state):
         return BuildRefused(422, UNSUPPORTED_TEXT)
     if listed is None:
@@ -510,7 +510,10 @@ def build_incident(incident_id: str, progress: ProgressFn | None = None, force: 
     prog.report("catalog", 0.0, "looking up the incident")
     from .. import catalog
 
-    summary = catalog.get_summary(incident_id)
+    try:
+        summary = catalog.get_summary(incident_id)
+    except catalog.ListsUnavailable as e:
+        raise BuildRefused(503, str(e)) from None
     if isinstance(summary, dict):
         summary = IncidentSummary.model_validate(summary)
     if summary is None or not is_catalog_incident(incident_id, summary):

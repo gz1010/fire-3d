@@ -55,8 +55,6 @@ def test_load_live_us_keeps_the_lower48_box(route) -> None:
     assert got == {(la, lo) for la, lo, _ in KEEP}
     w, s, e, n = firms.L48_FIRMS_BOX
     assert (w, s, e, n) == (-125.4, 23.9, -66.4, 49.9)
-    ca = firms.load_live_ca(1)                                 # deprecated wrapper: the CA box cut of the same feeds
-    assert {(round(a, 2), round(b, 2)) for a, b in zip(ca["lat"], ca["lon"])} == {(34.2, -118.1)}
 
 
 def test_load_year_us_reads_the_national_parquet_with_filters(route, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -128,7 +126,6 @@ def test_cycle_uses_the_national_feeds(monkeypatch: pytest.MonkeyPatch) -> None:
         return feed
 
     monkeypatch.setattr(firms, "load_live_us", fake_us)
-    monkeypatch.setattr(firms, "load_live_ca", lambda *a, **k: pytest.fail("the live loop must use load_live_us"))
     monkeypatch.setattr(catalog, "get_catalog", lambda *a, **k: [_summary("2026-x-abcdef", 31.0, -97.6, 500)])
     monkeypatch.setattr(catalog, "live_detections_24h_us_total", lambda refresh=False: None)
     monkeypatch.setattr(catalog, "live_detections_24h_total", lambda refresh=False: None)

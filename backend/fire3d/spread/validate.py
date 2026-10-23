@@ -393,8 +393,8 @@ def region_accuracy(region_id: str, name: str, fires: Sequence[dict], *, in_samp
     ``by_lead`` the per-lead means over all leads ("12"/"24"/"48"/"72"), ``ignition_relative`` the mean of the fire
     means of the ignition rows, ``range`` the min-max of the fire means, ``growth_ratio_median`` the median of the
     per-lead forecast / observed growth ratios, or None when the fires err in opposite directions and no majority
-    errs the pooled way (:func:`growth_split`, which then adds a caveat naming each fire's median ratio). Fires
-    without a scored lead are not counted."""
+    errs the pooled way (:func:`growth_split`, which then adds a caveat naming each fire's median ratio); each fire
+    carries its own ``growth_ratio_median``. Fires without a scored lead are not counted."""
     scored = []
     for f in fires:
         sc = fire_score(f.get("rows") or [])
@@ -443,7 +443,10 @@ def region_accuracy(region_id: str, name: str, fires: Sequence[dict], *, in_samp
     for f, sc in scored:
         fire = {"id": f["id"], "name": f["name"], "state": f["state"], "n_leads": sc["n_leads"],
                 "growth_sorensen": _r(sc["growth_sorensen"]), "fuels_edition": f.get("fuels_edition") or "",
-                "lfm_method": f.get("lfm_method") or "", "era5_hours": float(f.get("era5_hours") or 0.0)}
+                "lfm_method": f.get("lfm_method") or "", "era5_hours": float(f.get("era5_hours") or 0.0),
+                # this fire's own median forecast / observed growth ratio (null without a ratio): lets a reader see a
+                # region whose fires erred in opposite directions (integration part 2, review W-M1)
+                "growth_ratio_median": _r(float(np.median(sc["growth_ratios"])), 2) if sc["growth_ratios"] else None}
         for k in ("gfs_fill_hours", "weather_source", "replaced"):
             if k in f:
                 fire[k] = f[k]

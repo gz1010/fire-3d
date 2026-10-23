@@ -231,10 +231,15 @@ def test_refused_gsi_series_never_silent_without_require(mt_ctx, monkeypatch) ->
     monkeypatch.setattr(WB, "gsi_inputs", _fake_gsi_inputs(None, refused=True))
     (mt_ctx.bundle_dir / "sim").mkdir(parents=True, exist_ok=True)
     (mt_ctx.bundle_dir / WB.LFM_GSI_JSON).write_text('{"method": "gsi_nfdrs2016", "days": [{"date": "x"}]}')   # stale
+    legacy = next(iter(WB.LEGACY_INTERIM_LFM_WARNINGS))                       # wave 1's "until ... is tested" text
+    bundle.update_manifest(mt_ctx.bundle_dir, lambda m: m.__setitem__("warnings", [*m.get("warnings", []), legacy]))
     WB.build_weather(mt_ctx, source=FakeSource(mt_ctx.fire_grid))
     assert not (mt_ctx.bundle_dir / WB.LFM_GSI_JSON).exists()                 # a stale series is removed
     m = bundle.load_manifest(mt_ctx.bundle_dir)
-    assert WB.INTERIM_LFM_WARNING in m["warnings"]
+    assert WB.INTERIM_LFM_WARNING in m["warnings"] and legacy not in m["warnings"]
+    assert m["warnings"].count(WB.INTERIM_LFM_WARNING) == 1
+    assert WB.INTERIM_LFM_WARNING == ("Live fuel moisture outside California uses California's seasonal values because "
+                                      "the regional (GSI) series is unavailable; experimental.")
     assert any(w.startswith("Weather: GSI live fuel moisture series unavailable") for w in m["warnings"])
     d = WB.live_moisture_detail(mt_ctx.bundle_dir, m, iso_to_ms("2025-08-01T03:00:00Z"), fetch=False)
     assert d["note"].startswith("Live fuel moisture: California's seasonal values (GSI series unavailable); experimental.")
@@ -363,6 +368,10 @@ def test_behaviour_annotation_fallback_is_never_silent(tmp_path) -> None:
     bundle.save_manifest(bdir, {"id": "x", "warnings": [WB.INTERIM_LFM_WARNING]})
     behavior._record_behavior_lfm_warning(bdir, bundle.load_manifest(bdir), msg)
     assert bundle.load_manifest(bdir)["warnings"] == [WB.INTERIM_LFM_WARNING]   # the build's warning says it already
+    old = sorted(WB.LEGACY_INTERIM_LFM_WARNINGS)
+    bundle.save_manifest(bdir, {"id": "x", "warnings": old})
+    behavior._record_behavior_lfm_warning(bdir, bundle.load_manifest(bdir), msg)
+    assert bundle.load_manifest(bdir)["warnings"] == old                       # an older build's text says it too
     ca = behavior._live_moisture_by_hour(bdir, {"summary": {"state": "CA"}}, tz, None)
     ca(now)
     assert ca.fallback == {}                                                    # California's own rule: no warning

@@ -118,7 +118,6 @@ def test_refresh_live_uses_the_national_feed(fake, monkeypatch) -> None:
     calls: list[int] = []
     monkeypatch.setattr(firms, "load_live_us", lambda days=7, refresh=False: calls.append(days) or pd.DataFrame(
         {"t_ms": pd.Series([], dtype="int64"), "lat": pd.Series([], dtype="float64"), "lon": pd.Series([], dtype="float64")}))
-    monkeypatch.setattr(firms, "load_live_ca", lambda *a, **k: pytest.fail("refresh_live must use load_live_us"))
     assert pipeline.refresh_live(live.id) is False and calls == [2]
 
 

@@ -145,7 +145,8 @@ def test_get_summary_fallbacks(services, tmp_data_dir: Path) -> None:
     assert catalog.get_summary("2025-catlett-fire-01fa37") is not None          # below 300 ac still resolves
     assert catalog.get_summary("2024-timber-fire-b7e4a3") is not None           # other year -> CAL FIRE year list
     assert catalog.get_summary("2024-timber-fire-b7e4a3").mode == "historical"
-    assert catalog.get_summary("2025-nothing-fire-abcdef") is None
+    with pytest.raises(catalog.ListsUnavailable):                             # NIFC WFIGS is not served here (404):
+        catalog.get_summary("2025-nothing-fire-abcdef")                       # an id CAL FIRE lacks cannot be decided
     # a bundle on disk that no catalog lists (e.g. the fixture): the manifest's summary
     summ = _summary(id="fixture-demo", name="Fixture Fire")
     d = tmp_data_dir / "incidents" / "fixture-demo"

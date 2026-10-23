@@ -287,6 +287,54 @@ def test_build_gate_text_for_local_bundles(world, tmp_data_dir: Path) -> None:
         assert s["state"] == "NC" and s["time_zone"] == "America/New_York"
 
 
+def test_lists_unreachable_answer_503_never_a_local_bundle(world, tmp_data_dir: Path) -> None:
+    """us-pipeline review R8: when the source lists cannot be reached, a listed fire's id is "cannot tell now" (503 with
+    one sentence), never "unknown" or "a local or synthetic bundle"; bundle-only ids never ask the lists."""
+    from fire3d.api.app import app
+    from fire3d.build import pipeline
+
+    pine_id = f"2026-pine-{ID['E1E2E3E4'][:6].lower()}"
+    world["cal_down"] = True
+    world["srv"].down = True
+    text = "The fire lists could not be reached right now; try again later."
+    assert catalog.LISTS_UNAVAILABLE_TEXT == text
+    with pytest.raises(catalog.ListsUnavailable) as ei:
+        catalog.resolve_listed(pine_id)
+    assert str(ei.value) == text and "NIFC WFIGS lookup" in ei.value.failed
+    assert catalog.resolve_listed("fixture-demo") is None                   # never a list lookup: no outage to report
+    with pytest.raises(catalog.ListsUnavailable):
+        catalog.get_summary(pine_id)
+    assert not catalog.is_bundle_only(pine_id) and catalog.find_by_irwin("{" + ID["E1E2E3E4"].lower() + "}") is None
+    refused = pipeline.gate_refusal(pine_id, {"id": pine_id})
+    assert refused.status == 503 and str(refused) == text
+    with pytest.raises(pipeline.BuildRefused) as bi:
+        pipeline.build_incident(pine_id)
+    assert bi.value.status == 503 and str(bi.value) == text
+    with TestClient(app) as client:
+        for r in (client.post(f"/api/incidents/{pine_id}/build"), client.get(f"/api/incidents/{pine_id}"),
+                  client.get("/api/official/incident-record", params={"incident": pine_id})):
+            assert r.status_code == 503 and r.json()["detail"] == text, r.text
+            assert "local or synthetic" not in r.text and "unknown incident" not in r.text
+        # a bundle on disk still answers, and a forced rebuild of it is 503 (cannot tell), not "local or synthetic"
+        d = tmp_data_dir / "incidents" / pine_id
+        d.mkdir(parents=True)
+        summ = {"id": pine_id, "name": "Pine", "mode": "live", "year": 2026, "calfire_uid": "", "started_ms": 1,
+                "updated_ms": None, "contained_ms": None, "acres": 1200.0, "percent_contained": 40.0, "is_active": True,
+                "county": None, "location": None, "admin_unit": None, "url": None, "lat": 42.4, "lon": -122.9,
+                "detections_24h": None, "bundle_status": "ready", "bundle_built_ms": 5, "state": "OR",
+                "record_source": "wfigs"}
+        (d / "manifest.json").write_text(json.dumps({"id": pine_id, "status": "ready", "built_ms": 5, "summary": summ}))
+        assert client.get(f"/api/incidents/{pine_id}").json()["summary"]["id"] == pine_id
+        r = client.post(f"/api/incidents/{pine_id}/build", params={"force": "true"})
+        assert r.status_code == 503 and r.json()["detail"] == text
+        r = client.get("/api/official/incident-record", params={"incident": pine_id})
+        assert r.status_code == 503 and "synthetic" not in r.text
+    world["cal_down"] = False
+    world["srv"].down = False
+    catalog.clear_cache()
+    assert catalog.resolve_listed(pine_id).id == pine_id                     # back: resolved again
+
+
 def test_config_year_floor() -> None:
     assert catalog._wf_min(None) == 300 and catalog._wf_min(100) == 100 and catalog._wf_min(0) == catalog.WFIGS_YEAR_FLOOR_ACRES
     assert config.CA_BBOX

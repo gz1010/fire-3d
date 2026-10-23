@@ -63,7 +63,6 @@ def default_year() -> int:
     return time.gmtime().tm_year
 
 
-HISTORICAL_YEAR = default_year()    # DEPRECATED alias (the default year when the module was imported): use default_year()
 DEFAULT_MIN_ACRES = 300.0
 WFIGS_YEAR_FLOOR_ACRES = 100.0      # WFIGS year lists are never fetched below this size (a year has ~40,000 wildfires)
 FIRE_TYPES = frozenset({"wildfire", "fire"})
@@ -607,7 +606,9 @@ def enrich_calfire(s: IncidentSummary, matched: list[dict], members: list[dict],
     """What a CAL FIRE row carries from the WFIGS rows dropped into it (CONTRACT 14.2): rule (2), one fire: its
     ``irwin_id``, ``unique_fire_id``, ``gacc``, one ``other_records`` entry and "wfigs" in ``active_sources`` when that
     record is active (two records of one fire, e.g. DALE and BRADFORD BRANCH for CAL FIRE's Dale Fire: both in
-    ``other_records``, the ``irwin_id`` of the one with the same name, else null); rule (1), a complex: ``irwin_id`` null, ``complex_members`` (every member name verbatim), one
+    ``other_records``, the ``irwin_id`` of the one with the same name; several with the same name, e.g. LUCAS twice:
+    :func:`same_name_primary`; none with the same name: null); rule (1), a complex: ``irwin_id`` null,
+    ``complex_members`` (every member name verbatim), one
     named ``other_records`` entry per member, the members' GACC when they all agree, and "wfigs" when any member is
     active. ``is_active`` follows :data:`CA_ACTIVE_RULE`. CAL FIRE's own name, acres, containment and times stay."""
     recs = members + matched
@@ -625,7 +626,7 @@ def enrich_calfire(s: IncidentSummary, matched: list[dict], members: list[dict],
     primary = None
     if not (members or is_complex):
         same_name = [r for r in matched if name_tokens(r.get("source_name")) == name_tokens(s.name)]
-        primary = matched[0] if len(matched) == 1 else (same_name[0] if len(same_name) == 1 else None)
+        primary = matched[0] if len(matched) == 1 else (same_name_primary(same_name) if same_name else None)
     if primary is None:
         upd.update(irwin_id=None, unique_fire_id=None)       # a complex, or several records with no single same-name one
         if members:
@@ -636,6 +637,13 @@ def enrich_calfire(s: IncidentSummary, matched: list[dict], members: list[dict],
         if pinned is not None and pinned != s.id:
             upd.update(id=pinned, aliases=sorted({*(s.aliases or []), s.id}))
     return s.model_copy(update=upd)
+
+
+def same_name_primary(recs: list[dict]) -> dict:
+    """One record for several WFIGS records that all carry the fire's own name (the Lucas Fire: LUCAS from two CAL FIRE
+    units, 1,099 ac and 4,128 ac): they are one fire's records, so the largest reported size is its record, then the
+    most recently modified (CONTRACT 14.2). Every record stays in ``other_records`` with its own issuer and status."""
+    return max(recs, key=lambda r: (r.get("acres") if r.get("acres") is not None else -1.0, r.get("updated_ms") or 0))
 
 
 def wfigs_id(rec: dict) -> str:
@@ -917,23 +925,41 @@ def _find(rows: list[IncidentSummary], incident_id: str) -> IncidentSummary | No
     return None
 
 
+class ListsUnavailable(LookupError):
+    """:func:`resolve_listed` could not decide an id: no list that answered knows it and at least one source list
+    (CAL FIRE or NIFC WFIGS) could not be reached. The API answers 503 with :data:`LISTS_UNAVAILABLE_TEXT` (CONTRACT
+    14.2), never "a local or synthetic bundle"."""
+
+    def __init__(self, message: str = "", *, failed: tuple[str, ...] = ()):
+        super().__init__(message or LISTS_UNAVAILABLE_TEXT)
+        self.failed = failed
+
+
+LISTS_UNAVAILABLE_TEXT = "The fire lists could not be reached right now; try again later."
+
+
 def resolve_listed(incident_id: str) -> IncidentSummary | None:
     """The summary of an id that a source list knows (never a bundle manifest): the live list, the year list of the
     id's year, CAL FIRE's year list (any size), then one cached ``IrwinID LIKE '{ABCDEF%'`` query on the WFIGS
     all-years layer; the id's year and slug are checked. A California WFIGS record that the merge folds into a CAL FIRE
-    fire is not listed under its WFIGS id (None). Bundle-only ids (``fixture-demo``, ``fixture-east``) -> None."""
+    fire is not listed under its WFIGS id (None). Bundle-only ids (``fixture-demo``, ``fixture-east``) -> None.
+
+    Raises :class:`ListsUnavailable` when no list that answered knows the id and at least one lookup failed (an outage
+    is "cannot tell now", never "unknown" or "a local bundle")."""
     from .sources import calfire, wfigs
 
     parsed = parse_incident_id(incident_id)
     if parsed is None:
         return None
     year, slug, uid6 = parsed
+    failed: list[str] = []
     try:
         hit = _find(_base("live", False)[0], incident_id)
         if hit is not None:
             return _with_bundle(hit)
     except calfire.CalFireError as e:
         log.warning("resolve_listed(%s): live catalog unavailable: %s", incident_id, e)
+        failed.append("live list")
     if 2000 <= year <= default_year():
         try:
             hit = _find(_base("historical", False, year)[0], incident_id)
@@ -941,6 +967,7 @@ def resolve_listed(incident_id: str) -> IncidentSummary | None:
                 return _with_bundle(hit)
         except calfire.CalFireError as e:
             log.warning("resolve_listed(%s): %d catalog unavailable: %s", incident_id, year, e)
+            failed.append(f"{year} list")
         try:
             for r in year_records(year):
                 if r.get("uid", "").startswith(uid6) and slugify(r.get("name", "")) == slug and (r.get("type") or "").lower() in FIRE_TYPES:
@@ -949,12 +976,14 @@ def resolve_listed(incident_id: str) -> IncidentSummary | None:
                         return _with_bundle(s)
         except calfire.CalFireError as e:
             log.warning("resolve_listed(%s): CAL FIRE %d list unavailable: %s", incident_id, year, e)
+            failed.append(f"CAL FIRE {year} list")
     try:
         cands = [r for r in wfigs.find_irwin_prefix(uid6) if r["irwin_id"].lower().startswith(uid6)
                  and int(r.get("year") or 0) == year and slugify(display_name(r.get("source_name"))) == slug]
     except Exception as e:  # noqa: BLE001
         log.warning("resolve_listed(%s): WFIGS lookup unavailable: %s", incident_id, config.mask_secrets(e))
-        return None
+        failed.append("NIFC WFIGS lookup")
+        cands = []
     for r in cands:
         # Alaska, Hawaii and territories are never listed, but their ids resolve (with their own state), so the build
         # gate can answer "not supported yet" (422) instead of "unknown"
@@ -967,6 +996,8 @@ def resolve_listed(incident_id: str) -> IncidentSummary | None:
         except Exception:  # noqa: BLE001
             pass
         return _with_bundle(summary_from_wfigs(r, "live" if r["irwin_id"] in active else "historical", active, st))
+    if failed:
+        raise ListsUnavailable(failed=tuple(failed))
     return None
 
 
@@ -984,8 +1015,15 @@ def _folded_into_calfire(rec: dict) -> bool:
 
 def get_summary(incident_id: str) -> IncidentSummary | None:
     """The summary for one incident id (either mode), or None: :func:`resolve_listed`, else a bundle manifest on disk
-    (e.g. ``fixture-demo``, ``fixture-east``: the manifest's summary, served read-only)."""
-    s = resolve_listed(incident_id)
+    (e.g. ``fixture-demo``, ``fixture-east``: the manifest's summary, served read-only). When the lists cannot be
+    reached a bundle on disk still answers; without one :class:`ListsUnavailable` is raised."""
+    try:
+        s = resolve_listed(incident_id)
+    except ListsUnavailable:
+        m = manifest_summary(incident_id)
+        if m is not None:
+            return m
+        raise
     if s is not None:
         return s
     return manifest_summary(incident_id)
@@ -1009,8 +1047,11 @@ def manifest_summary(incident_id: str) -> IncidentSummary | None:
 
 def is_bundle_only(incident_id: str) -> bool:
     """True when only a bundle manifest knows this id (``fixture-demo``, ``fixture-east``, any local or synthetic
-    bundle): no CAL FIRE or WFIGS list does."""
-    return resolve_listed(incident_id) is None and manifest_summary(incident_id) is not None
+    bundle): no CAL FIRE or WFIGS list does. False when the lists cannot be reached (cannot tell)."""
+    try:
+        return resolve_listed(incident_id) is None and manifest_summary(incident_id) is not None
+    except ListsUnavailable:
+        return False
 
 
 def find_by_irwin(irwin_id: str) -> IncidentSummary | None:
@@ -1035,8 +1076,10 @@ def find_by_irwin(irwin_id: str) -> IncidentSummary | None:
     if not rows:
         return None
     r = rows[0]
-    s = resolve_listed(make_incident_id(int(r["year"]), display_name(r.get("source_name")), r["irwin_id"]))
-    return s
+    try:
+        return resolve_listed(make_incident_id(int(r["year"]), display_name(r.get("source_name")), r["irwin_id"]))
+    except ListsUnavailable:
+        return None
 
 
 # ------------------------------------------------------------------------------------------------------------------

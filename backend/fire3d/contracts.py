@@ -589,6 +589,7 @@ class AccuracyFire(ContractModel):
     gfs_fill_hours: float | None = Optional_()   # hours where HRRR was missing and GFS filled it
     weather_source: str | None = Optional_()     # the bundle's verbatim weather source
     replaced: str | None = Optional_()           # the V 3 fire this one replaced and the failed check, else null
+    growth_ratio_median: float | None = Optional_()   # this fire's median forecast / observed growth ratio
 
 
 class AccuracyRegion(ContractModel):

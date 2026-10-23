@@ -195,9 +195,9 @@ EVENT_PRIORITY = ("ignition", "containment", "rapid_growth", "spot_fire", "ridge
 # ==================================================================================================================
 # Small helpers
 # ==================================================================================================================
-def la_time(ms: int | float, tz: str | None = None) -> str:
-    """``"Jan 07, 18:18 MST"`` in the fire's zone ``tz`` (``timeutil.fmt_local``; UTC when None). The name is kept
-    from brief 2; nothing here assumes Pacific time any more."""
+def fire_local_time(ms: int | float, tz: str | None = None) -> str:
+    """``"Jan 07, 18:18 MST"`` in the fire's zone ``tz`` (``timeutil.fmt_local``; UTC when None). Brief 2 called it
+    ``la_time``; nothing here assumes Pacific time."""
     return fmt_local(ms, tz)
 
 
@@ -1335,7 +1335,7 @@ def ignition_time(started_ms: int, origin_ms: int, ign_xz: tuple[float, float], 
     if tg is not None:
         if tg - GOES_LAG_MS < t_ign:
             t_ign = tg - GOES_LAG_MS
-            why = f"10 min before the first persistent {SATELLITE_NAMES.get(sat, sat)} detection ({la_time(tg, tz)})"
+            why = f"10 min before the first persistent {SATELLITE_NAMES.get(sat, sat)} detection ({fire_local_time(tg, tz)})"
         if tg <= started_ms + 2 * HOUR_MS:
             conf = "observed"
     if spatial is not None and len(spatial):
@@ -1347,7 +1347,7 @@ def ignition_time(started_ms: int, origin_ms: int, ign_xz: tuple[float, float], 
             if tp - POLAR_LAG_MS < t_ign:
                 t_ign = tp - POLAR_LAG_MS
                 why = (f"30 min before the first {first['instrument']} detection near the point "
-                       f"({SATELLITE_NAMES.get(str(first['satellite']), first['satellite'])}, {la_time(tp, tz)})")
+                       f"({SATELLITE_NAMES.get(str(first['satellite']), first['satellite'])}, {fire_local_time(tp, tz)})")
                 conf = "observed"
     if first_snapshot_ms is not None and t_ign >= first_snapshot_ms:
         t_ign = int(first_snapshot_ms) - GOES_LAG_MS
@@ -2124,9 +2124,9 @@ def build_observed_stats(ctx: BuildContext) -> dict[str, Any]:
                          activity, spatial)
 
     events: list[dict] = []
-    ign_detail = f"Reported by {issuer} {la_time(started, tz)}."
+    ign_detail = f"Reported by {issuer} {fire_local_time(started, tz)}."
     if t_goes is not None:
-        ign_detail += f" First persistent GOES detection {la_time(t_goes, tz)} ({SATELLITE_NAMES.get(goes_sat, goes_sat)})."
+        ign_detail += f" First persistent GOES detection {fire_local_time(t_goes, tz)} ({SATELLITE_NAMES.get(goes_sat, goes_sat)})."
     if t_ign != started:
         ign_detail += f" Ignition estimated {ign_why}."
     ign_src = issuer + (" + FIRMS GOES" if t_goes is not None else "")

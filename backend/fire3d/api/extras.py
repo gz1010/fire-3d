@@ -383,7 +383,9 @@ def _incident_info(incident_id: str) -> tuple[BBox | None, str | None]:
 
     try:
         s = catalog.get_summary(incident_id)
-    except Exception as e:  # catalog sources down: treat as unknown here
+    except catalog.ListsUnavailable:
+        raise HTTPException(status_code=503, detail=catalog.LISTS_UNAVAILABLE_TEXT) from None
+    except Exception as e:  # noqa: BLE001 - an unexpected lookup failure: treat as unknown here
         log.warning("extras: catalog lookup for %s failed: %s", incident_id, config.mask_secrets(e))
         s = None
     if s is None:

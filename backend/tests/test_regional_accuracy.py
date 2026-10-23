@@ -70,6 +70,7 @@ def test_fires_erring_in_opposite_directions_give_no_region_ratio() -> None:
     ic = _fire("island-creek", "NRCC", [0.2] * 12, ratio=0.63, name="Island Creek")
     r = V.region_accuracy("NRCC", "Northern Rockies", [ic, hg], caveats=["Two fires only"])
     assert r["growth_ratio_median"] is None and r["growth_sorensen"] == pytest.approx(0.35)
+    assert {f["name"]: f["growth_ratio_median"] for f in r["fires"]} == {"Island Creek": 0.63, "Horse Gulch": 1.78}
     assert r["caveats"] == ["Two fires only", ("The fires erred in opposite directions: too much growth on Horse Gulch "
                                                "(×1.78), too little on Island Creek (×0.63); no single growth ratio is "
                                                "given for this region.")]
@@ -159,6 +160,12 @@ def test_committed_file_follows_the_contract() -> None:
     assert any("Horse Gulch (×1.78)" in c and "Island Creek (×0.63)" in c for c in by["NRCC"]["caveats"])
     assert any(c.startswith("Windy Deuce: WFIGS's own polygon time puts about 65 %") for c in by["SACC-SP"]["caveats"])
     assert by["OSCC"]["growth_ratio_median"] == 1.85
+    # each fire's own median ratio (integration part 2; validation's per-fire medians)
+    per_fire = {f["name"]: f.get("growth_ratio_median") for r in doc["regions"] for f in r.get("fires") or []}
+    assert per_fire == {"Emigrant": 0.2, "Lower Sugarloaf": 0.4, "Island Creek": 0.63, "Horse Gulch": 1.78,
+                        "France Canyon": 1.03, "Cottonwood Peak": 0.83, "Trout": 1.39, "Greer": 3.76,
+                        "Windy Deuce": 0.59, "Rush": 0.9, "Table Rock": 0.22, "Black Cove": 0.46, "Eaton Fire": 1.74,
+                        "Madre Fire": 2.2, "Palisades Fire": 0.57}
     for rid in ("NWCC", "NRCC", "GBCC", "SWCC", "SACC-SP", "SACC-SE"):
         lo, hi = by[rid]["range"]
         assert by[rid]["caveats"][0].startswith("Two fires only: a rough value (")

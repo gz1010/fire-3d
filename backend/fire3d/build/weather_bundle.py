@@ -64,10 +64,15 @@ RH_MIN, RH_MAX = 1.0, 100.0
 MS_TO_KMH = 3.6
 DATA_SOURCE_NAME = "Weather"
 WARN_PREFIX = "Weather: "                 # manifest warnings written here (replaced on every rebuild)
-# CONTRACT 14.12.10: until a regional live fuel moisture method is tested, fires outside California use California's
-# seasonal values, and say so (an unprefixed manifest warning, replaced on every rebuild like the others).
-INTERIM_LFM_WARNING = ("Live fuel moisture outside California uses California's seasonal values until a regional "
-                       "method is tested; experimental.")
+# CONTRACT 14.12.10: a bundle outside California whose GSI series is unavailable uses California's seasonal values,
+# and says so (an unprefixed manifest warning, replaced on every rebuild like the others). The GSI method itself was
+# tested on 12 fires (docs/validation.md section 10), so the text no longer says "until a regional method is tested".
+INTERIM_LFM_WARNING = ("Live fuel moisture outside California uses California's seasonal values because the regional "
+                       "(GSI) series is unavailable; experimental.")
+# The wave-1 text, still in manifests built before the GSI method: removed on rebuild like the current one.
+LEGACY_INTERIM_LFM_WARNINGS = frozenset({
+    "Live fuel moisture outside California uses California's seasonal values until a regional method is tested; experimental.",
+})
 # Never silent (14.12.10): a bundle outside California without its GSI series uses California's values and says so.
 INTERIM_LFM_NOTE = "Live fuel moisture: California's seasonal values (GSI series unavailable); experimental."
 LFM_GSI_JSON = "sim/lfm_gsi.json"         # backend-only daily GSI inputs outside California (builds and live forecasts fetch it; hindcasts never do)
@@ -615,7 +620,8 @@ def build_weather(ctx: BuildContext, source: WeatherSource | None = None) -> Non
         ds = [d for d in m.get("data_sources", []) if not (isinstance(d, dict) and d.get("name") == DATA_SOURCE_NAME)]
         ds.append({"name": DATA_SOURCE_NAME, "detail": detail, "fetched_ms": fetched})
         m["data_sources"] = ds
-        ws = [w for w in m.get("warnings", []) if not str(w).startswith(WARN_PREFIX) and w != INTERIM_LFM_WARNING]
+        ws = [w for w in m.get("warnings", []) if not str(w).startswith(WARN_PREFIX) and w != INTERIM_LFM_WARNING
+              and w not in LEGACY_INTERIM_LFM_WARNINGS]
         m["warnings"] = ws + [WARN_PREFIX + w for w in warnings] + interim
 
     bundle.update_manifest(bdir, record)

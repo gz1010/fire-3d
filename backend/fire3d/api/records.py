@@ -94,16 +94,17 @@ def several_reason(names: list[str]) -> str:
 
 def _resolve(incident_id: str) -> tuple[IncidentSummary | None, bool]:
     """``(summary, listed)``: the listed summary (``catalog.resolve_listed``), else a bundle's (listed False); 404 when
-    nobody knows the id, 400 for an invalid id."""
+    nobody knows the id, 400 for an invalid id, 503 when the source lists cannot be reached (a listed fire's bundle on
+    disk is never answered as "synthetic" because of an outage)."""
     try:
         bundle.bundle_dir(incident_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="invalid incident id") from None
     try:
         listed = catalog.resolve_listed(incident_id)
-    except Exception as e:  # noqa: BLE001 - a lookup failure falls back to the bundle on disk
+    except Exception as e:  # noqa: BLE001 - the lists cannot tell now: 503, never a 500 or "synthetic"
         log.warning("incident-record: resolve_listed(%s) failed: %s", incident_id, config.mask_secrets(e))
-        listed = None
+        raise HTTPException(status_code=503, detail=catalog.LISTS_UNAVAILABLE_TEXT) from None
     if listed is not None:
         return listed, True
     s = catalog.manifest_summary(incident_id)

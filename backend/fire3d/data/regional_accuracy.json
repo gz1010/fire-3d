@@ -80,6 +80,7 @@
           "fuels_edition": "LF2024",
           "lfm_method": "gsi_nfdrs2016",
           "era5_hours": 0.0,
+          "growth_ratio_median": 0.2,
           "gfs_fill_hours": 0,
           "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
           "replaced": null
@@ -93,6 +94,7 @@
           "fuels_edition": "LF2024",
           "lfm_method": "gsi_nfdrs2016",
           "era5_hours": 0.0,
+          "growth_ratio_median": 0.4,
           "gfs_fill_hours": 0,
           "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
           "replaced": null
@@ -148,6 +150,7 @@
           "fuels_edition": "LF2024",
           "lfm_method": "gsi_nfdrs2016",
           "era5_hours": 0.0,
+          "growth_ratio_median": 0.63,
           "gfs_fill_hours": 0,
           "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
           "replaced": null
@@ -161,6 +164,7 @@
           "fuels_edition": "LF2023",
           "lfm_method": "gsi_nfdrs2016",
           "era5_hours": 0.0,
+          "growth_ratio_median": 1.78,
           "gfs_fill_hours": 0,
           "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
           "replaced": null
@@ -213,6 +217,7 @@
           "fuels_edition": "LF2024",
           "lfm_method": "gsi_nfdrs2016",
           "era5_hours": 0.0,
+          "growth_ratio_median": 1.03,
           "gfs_fill_hours": 0,
           "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
           "replaced": null
@@ -226,6 +231,7 @@
           "fuels_edition": "LF2024",
           "lfm_method": "gsi_nfdrs2016",
           "era5_hours": 0.0,
+          "growth_ratio_median": 0.83,
           "gfs_fill_hours": 0,
           "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
           "replaced": null
@@ -278,6 +284,7 @@
           "fuels_edition": "LF2024",
           "lfm_method": "gsi_nfdrs2016",
           "era5_hours": 0.0,
+          "growth_ratio_median": 1.39,
           "gfs_fill_hours": 0,
           "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
           "replaced": null
@@ -291,6 +298,7 @@
           "fuels_edition": "LF2024",
           "lfm_method": "gsi_nfdrs2016",
           "era5_hours": 0.0,
+          "growth_ratio_median": 3.76,
           "gfs_fill_hours": 0,
           "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
           "replaced": null
@@ -344,6 +352,7 @@
           "fuels_edition": "LF2023",
           "lfm_method": "gsi_nfdrs2016",
           "era5_hours": 0.0,
+          "growth_ratio_median": 0.59,
           "gfs_fill_hours": 0,
           "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
           "replaced": null
@@ -357,6 +366,7 @@
           "fuels_edition": "LF2024",
           "lfm_method": "gsi_nfdrs2016",
           "era5_hours": 0.0,
+          "growth_ratio_median": 0.9,
           "gfs_fill_hours": 0,
           "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
           "replaced": null
@@ -407,6 +417,7 @@
           "fuels_edition": "LF2024",
           "lfm_method": "gsi_nfdrs2016",
           "era5_hours": 0.0,
+          "growth_ratio_median": 0.22,
           "gfs_fill_hours": 0,
           "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
           "replaced": null
@@ -420,6 +431,7 @@
           "fuels_edition": "LF2024",
           "lfm_method": "gsi_nfdrs2016",
           "era5_hours": 0.0,
+          "growth_ratio_median": 0.46,
           "gfs_fill_hours": 0,
           "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
           "replaced": null
@@ -490,6 +502,7 @@
           "fuels_edition": "LF2024",
           "lfm_method": "ca_month_table_drought",
           "era5_hours": 0.0,
+          "growth_ratio_median": 1.74,
           "gfs_fill_hours": 0,
           "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
           "replaced": null
@@ -503,6 +516,7 @@
           "fuels_edition": "LF2024",
           "lfm_method": "ca_month_table_drought",
           "era5_hours": 0.0,
+          "growth_ratio_median": 2.2,
           "gfs_fill_hours": 0,
           "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
           "replaced": null
@@ -516,6 +530,7 @@
           "fuels_edition": "LF2024",
           "lfm_method": "ca_month_table_drought",
           "era5_hours": 0.0,
+          "growth_ratio_median": 0.57,
           "gfs_fill_hours": 0,
           "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
           "replaced": null

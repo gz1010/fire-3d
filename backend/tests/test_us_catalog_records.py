@@ -106,9 +106,44 @@ def test_synthetic_unknown_and_down(world, client, tmp_data_dir: Path) -> None:
     world["srv"].down = True
     catalog.clear_cache()
     down = client.get("/api/official/incident-record", params={"incident": pine.id})
-    assert down.status_code in (200, 404)                                # the id needs the list to resolve
+    assert down.status_code in (200, 503)                                # the id needs the list: never 404 (R8)
     if down.status_code == 200:
         assert down.json()["reason_code"] == "upstream_error" and down.json()["current"] is None
+    else:
+        assert down.json()["detail"] == catalog.LISTS_UNAVAILABLE_TEXT
+
+
+def test_same_name_records_are_one_record() -> None:
+    """us-catalog review N2: CAL FIRE's Lucas Fire matched two NIFC WFIGS records both named LUCAS (recorded live
+    2026-10-23: one from each of two CAL FIRE units). They are one fire's records: the larger, then the newer, is the
+    fire's record (irwin_id), so the record panel never says "several records (LUCAS, LUCAS)"; both stay listed."""
+    from test_us_catalog_mock import feature
+
+    def lucas(irwin: str, ufi: str, size: float, discovered: str, modified: str, pct: float | None) -> dict:
+        f = feature("LUCAS", irwin, "US-CA", -122.80, 39.00, ufi=ufi, size=size, pct=pct, discovered=discovered,
+                    modified=modified, agency="CAL FIRE", unit=ufi.split("-")[1], county="Lake", gacc="ONCC")
+        return wfigs.normalize(f)
+
+    meu = lucas("06749cfd-de8b-4cfa-8c11-075f7d8ab353", "2026-CAMEU-010693", 1099, "2026-09-11T14:18:08Z",
+                "2026-09-12T00:46:35Z", None)
+    lnu = lucas("0330e46b-236e-4706-8a32-04ac4a27ac1f", "2026-CALNU-016127", 4128, "2026-09-11T19:21:21Z",
+                "2026-09-24T07:20:33Z", 100)
+    cal = catalog.summary_from_record({"name": "Lucas Fire", "uid": "21bc39aa-0000-4000-8000-000000000001", "year": 2026,
+                                       "started_ms": meu["started_ms"],
+                                       "lat": 39.0, "lon": -122.8, "is_active": False, "acres": 4128.0, "type": "Wildfire"},
+                                      "historical")
+    assert cal is not None
+    for order in ([meu, lnu], [lnu, meu]):
+        row = catalog.enrich_calfire(cal, list(order), [], set())
+        assert row.irwin_id == lnu["irwin_id"] and row.unique_fire_id == "2026-CALNU-016127"
+        assert sorted(o.id for o in row.other_records) == sorted([meu["irwin_id"], lnu["irwin_id"]])
+        assert row.complex_members in (None, [])
+    same = dict(meu, acres=4128.0)                                         # equal sizes: the newer record
+    assert catalog.enrich_calfire(cal, [same, lnu], [], set()).irwin_id == lnu["irwin_id"]
+    other = dict(meu, source_name="BRADFORD BRANCH")                       # Dale rule unchanged: the same-name one
+    assert catalog.enrich_calfire(cal, [other, lnu], [], set()).irwin_id == lnu["irwin_id"]
+    nobody = [dict(meu, source_name="NORTH"), dict(lnu, source_name="SOUTH")]
+    assert catalog.enrich_calfire(cal, nobody, [], set()).irwin_id is None   # none named like the fire: no single record
 
 
 def test_record_on_recorded_sample(recorded, client) -> None:
