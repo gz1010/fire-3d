@@ -31,8 +31,10 @@ national search). Ports API 8711, Vite 5181. Started 2026-10-23 ~00:20 UTC.
 - Cut line: (a) in M5, (b) ca_county_gacc, (d) SPEC prose, (e) nwcg_agency_codes, (f) id pinning done; (c) KD-tree not done
   (dense 235x11,792 in 0.57 s).
 
+- Final gates (backend 829 passed; web gates ok), wording scan (5 justified hits), key scan (0), report written.
+
 ## Next
-- Final gates, wording scan, key scan, report.
+- Done; waiting for review.
 
 ## Decisions
 - §14.1 before-validator implemented as an after-validator using model_fields_set (a before-validator breaks strict
