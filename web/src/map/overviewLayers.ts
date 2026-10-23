@@ -193,6 +193,55 @@ export function splitOverview(fires: readonly IncidentSummary[], o: { hidden?: R
   return out
 }
 
+/** Where a fire lies across the lower 48, for the label anchors of a narrow map at the national zoom: far west
+ *  (California, Oregon and Washington coasts), west, centre, east, far east. */
+export type LabelSide = 'ww' | 'w' | 'c' | 'e' | 'ee'
+export function labelSide(lon: number): LabelSide {
+  if (lon < -116) return 'ww'
+  if (lon < -105) return 'w'
+  if (lon > -76) return 'ee'
+  if (lon > -87) return 'e'
+  return 'c'
+}
+
+/** A narrow map (a phone, under NARROW_PX) below this zoom shows most of the lower 48 across its width. */
+export const NARROW_LABEL_MAX_ZOOM = 3
+type Anchor = 'top' | 'bottom' | 'left' | 'right'
+/** The label anchors tried, in order (MapLibre: 'left' puts the text to the right of the point). Everywhere but a
+ *  narrow map's national view: below, above, left, right of the marker. There, a label grows towards the middle of
+ *  the country, so a west-coast fire's label never runs off the screen's left edge (and an east-coast one off its
+ *  right edge): a label that does not fit that way is left out, as any colliding label is. */
+export const LABEL_ANCHORS: Readonly<Record<LabelSide, readonly Anchor[]>> = {
+  ww: ['left'],
+  w: ['left', 'top', 'bottom'],
+  c: ['top', 'bottom', 'right', 'left'],
+  e: ['right', 'top', 'bottom'],
+  ee: ['right'],
+}
+/** The label's distance from the marker centre (ems) for a marker radius `r` (px), as the radial offset gives it. */
+export const labelOffsetEm = (r: number): number => 0.45 + r / 12
+/** MapLibre's anchor-offset list ("top", [0, 1.2], …) for some anchors at one marker radius. */
+export function anchorOffsets(anchors: readonly Anchor[], r: number): (Anchor | [number, number])[] {
+  const d = Math.round(labelOffsetEm(r) * 1000) / 1000
+  const off: Record<Anchor, [number, number]> = { top: [0, d], bottom: [0, -d], left: [d, 0], right: [-d, 0] }
+  return anchors.flatMap((a) => [a, off[a]])
+}
+/** `text-variable-anchor-offset` of a narrow map's labels: below NARROW_LABEL_MAX_ZOOM by the fire's `side`, else the
+ *  default anchors; the offset follows the marker radius `r` as `text-radial-offset` does on wide maps. */
+export function narrowLabelAnchorOffset(): unknown {
+  const forSide = (side: LabelSide) => [
+    'interpolate',
+    ['linear'],
+    ['get', 'r'],
+    MARKER_MIN_PX,
+    ['literal', anchorOffsets(LABEL_ANCHORS[side], MARKER_MIN_PX)],
+    MARKER_MAX_PX,
+    ['literal', anchorOffsets(LABEL_ANCHORS[side], MARKER_MAX_PX)],
+  ]
+  const bySide = ['match', ['get', 'side'], 'ww', forSide('ww'), 'w', forSide('w'), 'e', forSide('e'), 'ee', forSide('ee'), forSide('c')]
+  return ['step', ['zoom'], bySide, NARROW_LABEL_MAX_ZOOM, forSide('c')]
+}
+
 /** One point feature per fire (agency coordinates); `pinned` features are labelled at every zoom. */
 export function overviewFeatures(fires: readonly IncidentSummary[], units: Units, o: { pinned?: boolean } = {}): FeatureCollection {
   const features: Feature<Geometry>[] = []
@@ -220,6 +269,7 @@ export function overviewFeatures(fires: readonly IncidentSummary[], units: Units
         chip: chipText(s.bundle_status),
         start: s.started_ms,
         state: s.state ?? '',
+        side: labelSide(s.lon),
       },
     })
   })
@@ -397,7 +447,7 @@ const LABEL_TEXT: unknown = [
 ]
 
 /** The overview layers, bottom to top (added above the basemap labels, below the open fire's markers). */
-export function overviewLayers(theme: MapTheme): LayerSpecification[] {
+export function overviewLayers(theme: MapTheme, o: { narrow?: boolean } = {}): LayerSpecification[] {
   const p = theme === 'light' ? PALETTE.light : PALETTE.dark
   const tone = theme === 'light' ? 'light' : 'dark'
   const S = OVERVIEW_SOURCES
@@ -494,8 +544,10 @@ export function overviewLayers(theme: MapTheme): LayerSpecification[] {
         'text-field': LABEL_TEXT,
         'text-font': FONT,
         'text-size': 12,
-        'text-variable-anchor': ['top', 'bottom', 'right', 'left'],
+        'text-variable-anchor': [...LABEL_ANCHORS.c],
         'text-radial-offset': ['+', 0.45, ['/', ['get', 'r'], 12]],
+        // a narrow map's national view: labels grow towards the middle of the country (takes over the two above)
+        ...(o.narrow ? { 'text-variable-anchor-offset': narrowLabelAnchorOffset() } : {}),
         'text-justify': 'auto',
         'text-max-width': 14,
         'text-allow-overlap': false,

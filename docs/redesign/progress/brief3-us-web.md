@@ -33,3 +33,9 @@ Role: us-web (API 8712, Vite 5182). Scratch: /tmp/claude-0/-home-user-fire-3d/46
 ## Open problems
 - (resolved) Georgia/Alaska points showed "No evacuation order or warning listed here · Cal OES" while my API ran pre-us-official-M2 backend code; after restarting the API the card says "Evacuation zones: not available in this state" (Georgia) / "not available here" (Alaska).
 - us-official panels still print fire-weather and data-status times in PDT for a Montana fire (Horse Gulch shots): their files.
+
+## Review fixes round 1 (2026-10-23)
+- Start: no uncommitted us-web changes and no earlier fix commit (clean restart).
+- R1 fire card record status from the record's own agency (recordStatus), hover via map/hoverText.ts with the other record on its own line; status cell wraps. R2 zone hover names the source from sources[] (Cal OES / Oregon OEM). R3 skill-table note under the table when the header is short. R4 urlLabel link labels. R5 NWCG and TIGERweb/NTAD credits next to the data. R6 dev page meta. R7 narrow-map labels grow inward below z3 (the reviewer's 'right first' would have made it worse: 'right' puts text left of the point).
+- Gates: backend 880 passed; tsc 0; lint 55 (all src/scene); vitest 72 files, 1,107 passed, 2 skipped; build OK; check-time-api 0/0; 0 non-GET; key scan 0.
+- Screenshots: docs/screenshots/brief3-us-web-fix1-*.png (8), each viewed.

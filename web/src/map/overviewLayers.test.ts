@@ -1,4 +1,4 @@
-import { validateStyleMin } from '@maplibre/maplibre-gl-style-spec'
+import { createPropertyExpression, latest, validateStyleMin } from '@maplibre/maplibre-gl-style-spec'
 import { describe, expect, it } from 'vitest'
 import type { IncidentSummary } from '../api/types'
 import { overviewFires } from '../state/overview'
@@ -12,9 +12,14 @@ import {
   clusterClickZoom,
   clusterHoverText,
   DIM_OPACITY,
+  anchorOffsets,
   isPinned,
   isSmallActive,
+  LABEL_ANCHORS,
   labelMinZoom,
+  labelSide,
+  NARROW_LABEL_MAX_ZOOM,
+  narrowLabelAnchorOffset,
   markerRadius,
   OVERVIEW_CHIP_LAYERS,
   OVERVIEW_CLUSTER_LAYERS,
@@ -293,6 +298,35 @@ describe('layers', () => {
       }
       expect(new Set(ids).size).toBe(ids.length)
     }
+  })
+
+  it('narrow maps (phones): the labels grow towards the middle of the country at the national zoom (R7)', () => {
+    // sides across the lower 48: the coasts of CA/OR/WA, the interior West, the middle, the East, the Atlantic coast
+    expect([-122.4, -112, -98.6, -84.4, -71.1].map(labelSide)).toEqual(['ww', 'w', 'c', 'e', 'ee'])
+    // a west-coast label is never placed to the left of its fire ('right' anchor), an east-coast one never to its right
+    for (const side of ['ww', 'w'] as const) expect(LABEL_ANCHORS[side]).not.toContain('right')
+    for (const side of ['e', 'ee'] as const) expect(LABEL_ANCHORS[side]).not.toContain('left')
+    expect(anchorOffsets(['left', 'top'], 6)).toEqual(['left', [0.95, 0], 'top', [0, 0.95]])
+    // only narrow maps carry the per-side anchors; wide maps keep the radial offset
+    const label = (narrow: boolean) => (overviewLayers('dark', { narrow }).find((l) => l.id === OVR.pinnedLabel) as unknown as { layout: Record<string, unknown> }).layout
+    expect(label(false)['text-variable-anchor-offset']).toBeUndefined()
+    expect(label(false)['text-variable-anchor']).toEqual(['top', 'bottom', 'right', 'left'])
+    expect(label(true)['text-variable-anchor-offset']).toEqual(narrowLabelAnchorOffset())
+    for (const theme of ['dark', 'light', 'aerial'] as const) expect(validateStyleMin(style(overviewLayers(theme, { narrow: true })) as never)).toEqual([])
+    // evaluated as MapLibre does: by side below z3, the default anchors from z3, the offset following the marker radius
+    const spec = (latest as unknown as { layout_symbol: Record<string, never> }).layout_symbol['text-variable-anchor-offset']
+    const parsed = createPropertyExpression(narrowLabelAnchorOffset() as never, spec)
+    expect(parsed.result).toBe('success')
+    const expr = parsed.value as unknown as { evaluate: (g: { zoom: number }, f: unknown) => { values: unknown[] } }
+    const at = (zoom: number, side: string, r: number) => expr.evaluate({ zoom }, { type: 'Point', properties: { side, r }, geometry: { type: 'Point', coordinates: [0, 0] } }).values
+    expect(at(2.1, 'ww', 13)).toEqual(anchorOffsets(['left'], 13))
+    expect(at(2.1, 'ee', 4)).toEqual(anchorOffsets(['right'], 4))
+    expect(at(2.1, 'w', 13)).toEqual(anchorOffsets(LABEL_ANCHORS.w, 13))
+    expect(at(2.1, 'c', 13)).toEqual(anchorOffsets(LABEL_ANCHORS.c, 13))
+    expect(at(NARROW_LABEL_MAX_ZOOM, 'ww', 13)).toEqual(anchorOffsets(LABEL_ANCHORS.c, 13))
+    // features carry their side
+    const fc = overviewFeatures([fire({ id: 'a', lon: -121.5, lat: 40 })], 'us')
+    expect(fc.features[0].properties?.side).toBe('ww')
   })
 
   it('draw order: active marks above other fires, pinned above both; labels above markers, pinned labels placed first', () => {

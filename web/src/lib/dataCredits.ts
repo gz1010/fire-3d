@@ -16,6 +16,12 @@ export const OPEN_METEO_CREDIT: DataCredit = { id: 'open-meteo', text: 'Weather 
 export const FIRMS_ACKNOWLEDGEMENT =
   "We acknowledge the use of data and/or imagery from NASA's Fire Information for Resource Management System (FIRMS), part of NASA's Land, Atmosphere Near real-time Capability for Earth observations (LANCE) and NASA's Earth Science Data and Information System (ESDIS)."
 
+/** Credits of the national reference data Fire-3d adds to what it shows (CONTRACT §14.13, SPEC data sources): the plain
+ *  agency names after NIFC WFIGS agency codes ("USFS (USDA Forest Service)"), and the state, county and time zone of a
+ *  point (/api/geo/lookup). Shown next to that data. */
+export const NWCG_AGENCY_CREDIT = 'Agency names: NWCG unit identifiers'
+export const GEO_LOOKUP_CREDIT = 'Boundaries: U.S. Census Bureau TIGERweb · Time zones: USDOT BTS NTAD'
+
 /** True for weather sources fetched from Open-Meteo ("open-meteo:gfs_hrrr", "open-meteo:historical-forecast:..."). */
 export function isOpenMeteo(source: string | null | undefined): boolean {
   return typeof source === 'string' && /^open-meteo\b/i.test(source.trim())

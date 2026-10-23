@@ -12,12 +12,13 @@ import { useId, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { recordBlocks, recordIssuerLabel } from '../../api/records'
 import type { IncidentSummary } from '../../api/types'
+import { NWCG_AGENCY_CREDIT } from '../../lib/dataCredits'
 import { fmtAcres, fmtNumber } from '../../lib/format'
 import { accuracyLabel, type AccuracyLabel } from '../../lib/plainLanguage'
-import { agencyIdLine, complexMembers, isHttps as https, partOfComplex, recordBlockText } from '../../lib/recordText'
+import { agencyIdLine, agencyNameShown, complexMembers, isHttps as https, partOfComplex, recordBlockText, recordStatus } from '../../lib/recordText'
 import { fmtAt, fmtDayDate, fmtRelative, type TimeFmt } from '../../lib/time'
 import { findRegion, useAccuracyRegions } from '../../state/accuracy'
-import { analysisState, findFire, fireStatus, fireWhere, isActiveFire, type AnalysisState } from '../../state/overview'
+import { analysisState, findFire, fireWhere, isActiveFire, type AnalysisState } from '../../state/overview'
 import { useStore } from '../../state/store'
 import { useTimeFormatFor } from '../../state/timeZone'
 import { useWorkspace } from '../../state/workspace'
@@ -51,11 +52,14 @@ function modeChip(f: IncidentSummary): { label: string; cls: string } {
   return isActiveFire(f) ? { label: 'Active', cls: 'is-live' } : { label: String(f.year), cls: 'is-year' }
 }
 
-/** The agency's official record (§14.5): heading, numbers, update time in the fire's zone, link; one block per agency
- *  when they disagree; a complex's members. Only the record's own values: nothing from the model. */
+/** The agency's official record (§14.5): heading, numbers, its own status, update time in the fire's zone, link; one
+ *  block per agency when they disagree; a complex's members. Only the record's own values: nothing from the model and
+ *  nothing from another agency's record (the Timber Fire: CAL FIRE's section never says "Active" when only NIFC does). */
 export function OfficialRecord({ fire, nowMs, tf }: { fire: IncidentSummary; nowMs: number; tf: TimeFmt }) {
-  const status = fireStatus(fire)
-  const active = isActiveFire(fire)
+  // this agency's own status and wording, never the merged listing's (the title's chip says whether Fire-3d lists the
+  // fire as active, which it does when either agency does; round 3 item 2, the Timber Fire)
+  const status = recordStatus(fire)
+  const active = status.ownActive
   const issuer = recordIssuerLabel(fire)
   const blocks = recordBlocks(fire)
   const disagree = blocks.length > 1
@@ -148,6 +152,7 @@ export function OfficialRecord({ fire, nowMs, tf }: { fire: IncidentSummary; now
         </a>
       )}
       {idLine && <p className="fc-id mw-mono">{idLine}</p>}
+      {agencyNameShown(fire) && <p className="fc-credit">{NWCG_AGENCY_CREDIT}</p>}
     </section>
   )
 }

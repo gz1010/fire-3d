@@ -1,7 +1,8 @@
 // Display text for a fire's agency record (brief 3, CONTRACT §14.5) that is not the shared issuer / disagreement rule
 // (those live in api/records.ts: recordIssuerLabel, recordBlocks, which this file never re-implements).
-import type { RecordBlock } from '../api/records'
+import { otherRecordIssuerLabel, ownRecordActive, recordIssuerLabel, type RecordBlock } from '../api/records'
 import type { IncidentSummary } from '../api/types'
+import { fireStatus, type FireStatusKey } from '../state/overview'
 import { fmtAt, type TimeFmt } from './time'
 
 /** Which agency's identifier a summary carries: CAL FIRE's UniqueId or NIFC WFIGS's IRWIN id. */
@@ -29,6 +30,28 @@ export const isHttps = (u: string | null | undefined): u is string => typeof u =
 export function recordBlockText(b: RecordBlock, tf: TimeFmt, refMs?: number): string {
   const when = b.updated_ms != null ? `updated ${fmtAt(b.updated_ms, tf, { zone: true, year: 'auto', refMs })}` : 'no update time given'
   return `${b.is_active ? 'Active' : 'Not listed as active'} (${b.issuer}, ${when})`
+}
+
+/** The status of the fire's own record (§14.5, round 3 item 2): that agency's own active flag (`ownRecordActive`),
+ *  never the merged listing's (Fire-3d lists a fire as active when either agency does). A record that is not active
+ *  reads "Contained" at 100 % or with a containment date; when another agency still lists the fire as active it reads
+ *  "Not listed as active" (the agency said no more than that), else the listing's word ("Out"). */
+export function recordStatus(s: IncidentSummary): { key: FireStatusKey; label: string; ownActive: boolean } {
+  const ownActive = ownRecordActive(s)
+  if (ownActive) return { ...fireStatus(s), ownActive }
+  if ((s.percent_contained ?? 0) >= 100 || s.contained_ms != null) return { key: 'contained', label: 'Contained', ownActive }
+  // the merged row is active only because another agency lists the fire: this agency's record says no more than that
+  if (s.mode === 'live' || s.is_active) return { key: 'out', label: 'Not listed as active', ownActive }
+  return { ...fireStatus(s), ownActive }
+}
+
+/** Whether the fire's record section shows a plain agency name that Fire-3d added after an agency code
+ *  ("USFS (USDA Forest Service) via NIFC WFIGS"), from the NWCG unit identifiers (credited next to it, §14.13): in the
+ *  fire's own issuer label, or in another agency's record shown because it disagrees (the `recordBlocks` rule). */
+export function agencyNameShown(fire: IncidentSummary): boolean {
+  if (recordIssuerLabel(fire) !== recordIssuerLabel({ ...fire, agency: null })) return true
+  const own = ownRecordActive(fire)
+  return (fire.other_records ?? []).some((o) => o.is_active !== own && otherRecordIssuerLabel(o) !== otherRecordIssuerLabel({ ...o, agency: null }))
 }
 
 /** A CAL FIRE complex's member names (NIFC WFIGS names, verbatim), each with its own record link (its `other_records`

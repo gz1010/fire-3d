@@ -162,6 +162,11 @@
   color: var(--m-text);
   white-space: nowrap;
 }
+/* "Not listed as active" (a record that disagrees with the other agency's) wraps inside its column */
+.fc-facts dd.fc-status {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .fc-status.is-active {
   color: var(--m-fire-front);
 }
@@ -236,6 +241,7 @@
 }
 .fc-members,
 .fc-id,
+.fc-credit,
 .fc-complex {
   margin: 0;
   font-size: var(--m-fs-sm);

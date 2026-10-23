@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { IncidentSummary } from '../api/types'
 import type { OfficialInfo } from '../official/hooks'
+import { GEO_LOOKUP_CREDIT } from '../lib/dataCredits'
 import { directionWord, distance, area } from '../lib/plainLanguage'
 import { fmtAt, fmtRelative, zoneLine } from '../lib/time'
 import { fireFlyTo, fireStatus, fireWhere, isActiveFire } from '../state/overview'
@@ -153,6 +154,8 @@ export function OverviewCard({ sel, official }: { sel: SelectedLocation; officia
           <h3 className="loc-block-title">Updated and reliability</h3>
           <ul>
             {lookupPlace(geo) && <li>Place: {lookupPlace(geo)}</li>}
+            {/* the place and the time zone below come from Fire-3d's offline lookup (/api/geo/lookup, §14.13) */}
+            {geo && <li className="loc-credit">{GEO_LOOKUP_CREDIT}</li>}
             {newest != null && (
               <li>
                 Fire lists: CAL FIRE and NIFC WFIGS, checked {fmtRelative(newest, nowMs)} ({fmtAt(newest, tf, { zone: true })})

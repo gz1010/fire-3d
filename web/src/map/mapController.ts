@@ -41,12 +41,11 @@ import { recordIssuerLabel } from '../api/records'
 import type { ForecastLayerName, ForecastManifest, IncidentManifest, IncidentSummary } from '../api/types'
 import { HOUR_MS, loadRasterSet, type LoadedLayer, type RasterSet } from '../data/rasters'
 import { aoiBounds, fireBounds, type LonLatBox } from '../lib/fireBounds'
-import { area as areaText } from '../lib/plainLanguage'
 import { aoiCornersLonLat, localToLonLat, overlayMapping } from '../lib/reproject'
 import { fmtAt, timeFmt, type TimeFmt } from '../lib/time'
 import { mountOfficialLayers, type OfficialLayersHandle } from '../official/mapLayer'
 import { useAnnotations } from '../state/annotations'
-import { findFire, fireFlyTo, fireStatus, fireWhere, overviewFires, PAST_YEAR, SEASON_YEAR, type OverviewCatalog } from '../state/overview'
+import { findFire, fireFlyTo, overviewFires, PAST_YEAR, SEASON_YEAR, type OverviewCatalog } from '../state/overview'
 import { readUrlParams } from '../state/runtime'
 import { useStore } from '../state/store'
 import { getTimeFormat } from '../state/timeZone'
@@ -58,6 +57,7 @@ import { maskGeometry } from './contours'
 import { allFocusCandidates, CENTRAL_FRACTION, chipTargets, FocusHold, focusUnlessHeld, FOCUS_DEBOUNCE_MS, FOCUS_OUT_ZOOM, type FocusCurrent, type FocusView } from './focus'
 import { boundsCenter, Framing, goalFor, latestPerimeter, LOWER48_BOUNDS, LOWER48_START, mapCovered, zoomForBounds, type CameraPose, type FrameGoal } from './framing'
 import { drapedLayers, HATCH_IMAGE, hatchImage, LAYER_GROUPS, LYR, SRC, topLayers, type MapTheme } from './layers'
+import { recordHoverLines, zoneHoverLines } from './hoverText'
 import { fmtLatLon, SelectionPin } from './markers'
 import { EMPTY_OVERLAYS, motionMs, patchOverlays, setProvider, useMapRuntime, type MapActions } from './mapStore'
 import {
@@ -92,6 +92,8 @@ import {
   OVERVIEW_HIT_LAYERS,
   OVERVIEW_LABEL_LAYERS,
   OVERVIEW_SOURCES,
+  NARROW_PX,
+  narrowLabelAnchorOffset,
   overviewData,
   overviewFilters,
   overviewLayers,
@@ -108,7 +110,7 @@ import { BASEMAP_STYLE, devProviderFailures, OPENFREEMAP_GLYPHS, UNREACHABLE } f
 import { RasterOverlay } from './rasterOverlay'
 import { bindExtrasLayers, EXTRAS_HOVER_LAYERS, type ExtrasLayers } from './extrasLayers'
 import { cameraViewText } from '../extras/cameras'
-import { EVAC_LAYERS, zoneDetail } from '../extras/evacuation'
+import { EVAC_LAYERS } from '../extras/evacuation'
 import { useExtrasRuntime } from '../extras/runtime'
 import { KIND_META } from '../ui/feed/feedMeta'
 
@@ -191,6 +193,8 @@ export class MapController {
   private derived: DerivedStyle | null = null
   private basemapSeq = 0
   private styleReady = false
+  /** The overview labels use a narrow map's anchors (onStyleLoad, updateLabelAnchors). */
+  private narrowLabels = false
   private rasters: RasterSet | null = null
   private rasterKey = ''
   private bufs: Buffers | null = null
@@ -432,6 +436,15 @@ export class MapController {
     this.map.setStyle(derived.style, { diff: false })
   }
 
+  /** A map that became narrow or wide (a phone turned, a window resized): the overview labels' anchors follow. */
+  private updateLabelAnchors(): void {
+    if (!this.styleReady) return
+    const narrow = this.map.getContainer().clientWidth < NARROW_PX
+    if (narrow === this.narrowLabels) return
+    this.narrowLabels = narrow
+    for (const id of OVERVIEW_LABEL_LAYERS) if (this.map.getLayer(id)) this.map.setLayoutProperty(id, 'text-variable-anchor-offset', narrow ? (narrowLabelAnchorOffset() as never) : undefined)
+  }
+
   private onStyleLoad(): void {
     const map = this.map
     if (!this.derived) {
@@ -462,8 +475,10 @@ export class MapController {
       if ((layer.id === LYR.observedRaster && !map.getSource(SRC.observedRaster)) || (layer.id === LYR.forecastRaster && !map.getSource(SRC.forecastRaster))) continue
       map.addLayer(layer, before)
     }
-    // fire markers above the basemap labels, below the open fire's own markers and labels
-    for (const layer of overviewLayers(theme)) map.addLayer(layer)
+    // fire markers above the basemap labels, below the open fire's own markers and labels; a narrow map's national view
+    // grows each label towards the middle of the country (overviewLayers.ts LABEL_ANCHORS)
+    this.narrowLabels = width < NARROW_PX
+    for (const layer of overviewLayers(theme, { narrow: this.narrowLabels })) map.addLayer(layer)
     for (const layer of topLayers(theme)) map.addLayer(layer)
     this.applyLayerVisibility(null)
     if (useWorkspace.getState().perspective === '3d') this.enableTerrain()
@@ -1160,6 +1175,7 @@ export class MapController {
   private bindMapEvents(): void {
     const map = this.map
     map.on('style.load', () => this.onStyleLoad())
+    map.on('resize', () => this.updateLabelAnchors())
     map.on('move', () => {
       if (this.moveRaf) return
       this.moveRaf = requestAnimationFrame(() => {
@@ -1434,15 +1450,10 @@ export class MapController {
     const clock = getTimeFormat().clock
     /** A fire's own zone with the current clock (overview rows and hovers use each row's zone, §14.9.1). */
     const tfOf = (s: Pick<IncidentSummary, 'time_zone'> | null | undefined): TimeFmt => timeFmt(s?.time_zone, clock)
-    /** The agency's official record of a fire, as text ("USFS via NIFC WFIGS (official): …"), in the fire's zone. */
+    /** The agency's official record of a fire ("USFS via NIFC WFIGS (official): …"), with its own status, in the
+     *  fire's zone; another agency's differing record on its own line (hoverText.ts). */
     const record = (s: IncidentSummary) => {
-      const where = fireWhere(s)
-      if (where) line(where)
-      const parts = [s.acres != null ? areaText(s.acres, units).text : 'size not reported']
-      if (s.percent_contained != null) parts.push(`${Math.round(s.percent_contained)} % contained`)
-      parts.push(fireStatus(s).label)
-      line(`${recordIssuerLabel(s)} (official): ${parts.join(' · ')}`)
-      if (s.updated_ms) line(`Updated ${fmtAt(s.updated_ms, tfOf(s), { zone: true })}`, 'fxm-tip-hint')
+      for (const l of recordHoverLines(s, units, tfOf(s))) line(l.text, l.cls)
     }
     if (EXTRAS_HOVER_LAYERS.cameras.includes(f.layer.id)) {
       const cam = useExtrasRuntime.getState().cams.data?.cameras.features.find((c) => c.properties.id === p.id)
@@ -1454,13 +1465,11 @@ export class MapController {
       return el
     }
     if (EXTRAS_HOVER_LAYERS.zones.includes(f.layer.id)) {
-      const zone = useExtrasRuntime.getState().evac.data?.zones.features.find((z) => z.id === p.id)
+      const evac = useExtrasRuntime.getState().evac.data ?? null
+      const zone = evac?.zones.features.find((z) => z.id === p.id)
       if (!zone) return null
-      const d = zoneDetail(zone, Date.now(), getTimeFormat())
-      line(d.status, 'fxm-tip-title')
-      line(d.title)
-      line(`${d.jurisdiction} · ${d.updatedText}`)
-      line('Official status from local officials via Cal OES. Fire-3d forecasts are not evacuation instructions.', 'fxm-tip-hint')
+      // the state source that listed the zone (Cal OES, Oregon OEM), from the answer's sources (§14.8.5)
+      for (const l of zoneHoverLines(zone, evac, Date.now(), getTimeFormat())) line(l.text, l.cls)
       return el
     }
     if (OVERVIEW_CLUSTER_LAYERS.includes(f.layer.id)) {

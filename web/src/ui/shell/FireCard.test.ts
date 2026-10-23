@@ -73,9 +73,38 @@ describe('fire card record (§14.5)', () => {
     expect(r.official).toContain("The agencies' records differ on whether the fire is active")
     expect(r.official).toContain('Not listed as active (CAL FIRE, updated Oct 20, 10:00 AM PDT)')
     expect(r.official).toContain('Active (USFS via NIFC WFIGS, updated Oct 22, 9:05 AM PDT)')
-    // agreeing agencies: one record, no split
+    // CAL FIRE's own section speaks for CAL FIRE only: its status and its time wording are never NIFC's
+    expect(r.official).not.toContain('StatusActive')
+    expect(r.official).toContain('StatusNot listed as active')
+    expect(r.official).not.toContain('Updated by CAL FIRE')
+    expect(r.official).toMatch(/CAL FIRE record last edited Oct 20,( 2026)? 10:00 AM PDT/)
+    // the title chip is Fire-3d's listing (active when either agency says so), outside the record
+    expect(r.outside).toContain('Active')
+    // agreeing agencies: one record, no split, "Active" and "Updated by CAL FIRE"
     const agree = render({ ...timber, active_sources: ['calfire', 'wfigs'] })
     expect(agree.official).not.toContain('records differ')
+    expect(agree.official).toContain('StatusActive')
+    expect(agree.official).toContain('Updated by CAL FIRE')
+  })
+
+  it('a contained CAL FIRE record that NIFC still lists as active reads "Contained" (the Rocky Fire)', () => {
+    const rocky = summaryFixture({
+      id: '2026-rocky-fire-f65c7d',
+      name: 'Rocky Fire',
+      mode: 'live',
+      year: 2026,
+      is_active: true,
+      acres: 1,
+      percent_contained: 100,
+      updated_ms: Date.UTC(2026, 8, 14, 13, 22),
+      active_sources: ['wfigs'],
+      other_records: [otherRecordFixture({ name: 'Rocky', is_active: true })],
+    })
+    const r = render(rocky)
+    expect(r.official).toContain('StatusContained')
+    expect(r.official).not.toContain('StatusActive')
+    expect(r.official).not.toContain('Updated by CAL FIRE')
+    expect(r.official).toContain('Not listed as active (CAL FIRE')
   })
 
   it('a CAL FIRE complex: heading, acres and containment stay CAL FIRE’s; members named and linked under "Includes"', () => {
@@ -99,6 +128,19 @@ describe('fire card record (§14.5)', () => {
     expect(r.official).toContain('Includes (NIFC WFIGS names): 2-2, 2-7')
     expect(r.html).toContain('href="https://example.org/2-2"')
     expect(r.html).toContain('href="https://example.org/2-7"')
+  })
+
+  it('a plain agency name added after a NIFC WFIGS code is credited to the NWCG unit identifiers (§14.13)', () => {
+    expect(render(wfigsSummaryFixture()).official).toContain('Agency names: NWCG unit identifiers')
+    // the code alone (name unknown): nothing added, no credit
+    expect(render(wfigsSummaryFixture({ agency: null })).official).not.toContain('NWCG')
+    // a CAL FIRE record alone: no credit
+    expect(render(summaryFixture({ year: 2026 })).official).not.toContain('NWCG')
+    // a disagreeing NIFC WFIGS record shown with its agency name: credited
+    const timber = summaryFixture({ mode: 'live', year: 2026, is_active: true, active_sources: ['wfigs'], other_records: [otherRecordFixture({ agency: 'USDA Forest Service' })] })
+    const r = render(timber)
+    expect(r.official).toContain('USFS (USDA Forest Service) via NIFC WFIGS')
+    expect(r.official).toContain('Agency names: NWCG unit identifiers')
   })
 
   it('a member fire outside California says which complex it is part of (the name verbatim, "Complex" never twice)', () => {
