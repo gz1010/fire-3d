@@ -2,7 +2,8 @@
 
 Commands:
   ``catalog --mode live|historical [--min-acres N] [--refresh]``  list incidents
-  ``build <id-or-name> [--force]``                                 build (or rebuild) a bundle, with progress
+  ``build <id-or-name> [--force] [--require-hrrr]``                build (or rebuild) a bundle, with progress
+  ``weather-probe``                                                 ask each Open-Meteo host once (exit 0 = overall ok)
   ``forecast <id-or-name> [--start ISO] [--horizon 72] [--ensemble auto] [--members N]``
   ``hindcast <id-or-name> --start ISO [...]``                      forecast from a past moment and print its skill
   ``serve [--port 8710] [--host 127.0.0.1] [--reload] [--live/--no-live] [--auto-build/--no-auto-build]``
@@ -125,14 +126,40 @@ def _cmd_catalog(args: argparse.Namespace) -> int:
     return 0
 
 
+def weather_hours(bundle_dir: Any) -> dict | None:
+    """``{source, hours, hrrr_hours, gfs_fill_hours, era5}`` of a bundle's stored deterministic weather (hours with
+    ``hrrr`` false are GFS-filled, or ERA5 when ``era5``), or None without weather."""
+    from pathlib import Path
+
+    try:
+        from .build.weather_bundle import load_grid_weather
+        from .bundle import load_manifest
+
+        gw = load_grid_weather(Path(bundle_dir))
+        if gw is None:
+            return None
+        m = load_manifest(Path(bundle_dir)) or {}
+        era5 = "era5" in str(gw.source) or any("ERA5 reanalysis used" in str(w) for w in m.get("warnings") or [])
+        n, h = int(len(gw.t_ms)), int(sum(bool(x) for x in gw.hrrr))
+        return {"source": gw.source, "hours": n, "hrrr_hours": h, "gfs_fill_hours": n - h, "era5": era5}
+    except Exception:   # never fail a finished build over its summary line
+        return None
+
+
 def _cmd_build(args: argparse.Namespace) -> int:
     from .build.pipeline import build_incident
 
     incident_id = resolve_incident(args.incident)
-    print(f"building {incident_id}{' (force)' if args.force else ''} into {config.INCIDENTS_DIR / incident_id}", flush=True)
+    flags = " (force)" if args.force else ""
+    flags += " (require HRRR)" if args.require_hrrr else ""
+    print(f"building {incident_id}{flags} into {config.INCIDENTS_DIR / incident_id}", flush=True)
     t0 = time.monotonic()
-    m = build_incident(incident_id, progress=_progress_printer(), force=args.force)
+    m = build_incident(incident_id, progress=_progress_printer(), force=args.force, require_hrrr=args.require_hrrr)
     print(f"built {m.id}: status={m.status} in {time.monotonic() - t0:.0f} s")
+    wh = weather_hours(config.INCIDENTS_DIR / incident_id)
+    if wh:
+        print(f"  weather: {wh['source']}; {wh['hours']} h: HRRR {wh['hrrr_hours']} h, not HRRR {wh['gfs_fill_hours']} h "
+              f"({'ERA5 used' if wh['era5'] else 'GFS fill, 0 ERA5 h'})")
     print(f"  AOI {m.grid.extent_m / 1000:g} km {m.grid.crs}, fire grid {m.grid.fire.width}² @ {m.grid.fire.res_m:.1f} m, "
           f"elevation {m.grid.elev_min_m:.0f}-{m.grid.elev_max_m:.0f} m")
     print(f"  layers: {', '.join(sorted(m.layers))}")
@@ -201,6 +228,29 @@ def _cmd_hindcast(args: argparse.Namespace) -> int:
     return _run_forecast(args, hindcast=True)
 
 
+def format_probe(result: dict) -> list[str]:
+    """The ``weather-probe`` lines: one per host, then ``overall`` and ``live``."""
+    detail = result.get("detail") or {}
+    lines = []
+    for host, status in (result.get("hosts") or {}).items():
+        extra = f"  ({detail[host]})" if detail.get(host) else ""
+        lines.append(f"{host:<20} {status}{extra}")
+    lines.append(f"{'overall':<20} {result.get('overall')}  (forecast, historical-forecast, archive: historical builds)")
+    lines.append(f"{'live':<20} {result.get('live')}  (forecast, ensemble: live builds)")
+    return lines
+
+
+def _cmd_weather_probe(args: argparse.Namespace) -> int:
+    from .sources.weather import probe_open_meteo
+    from .timeutil import ms_to_iso, now_ms
+
+    result = probe_open_meteo()
+    print(f"Open-Meteo probe at {ms_to_iso(now_ms())} (one uncached request per host)")
+    for line in format_probe(result):
+        print(config.mask_secrets(line))
+    return 0 if result.get("overall") == "ok" else 1
+
+
 def _cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
@@ -229,7 +279,13 @@ def build_parser() -> argparse.ArgumentParser:
     b = sub.add_parser("build", help="build (or rebuild) an incident bundle")
     b.add_argument("incident", help="incident id or name")
     b.add_argument("--force", action="store_true", help="rebuild even if the bundle is ready")
+    b.add_argument("--require-hrrr", action="store_true",
+                   help="fail instead of filling weather hours with ERA5 (and, for a California fire, without the "
+                        "water-year precipitation total)")
     b.set_defaults(func=_cmd_build)
+
+    w = sub.add_parser("weather-probe", help="ask each Open-Meteo host once; exit 0 only when historical builds can run")
+    w.set_defaults(func=_cmd_weather_probe)
 
     for name, helptext, start_required in (("forecast", "run an ensemble forecast", False),
                                            ("hindcast", "forecast from a past moment and score it against what burned", True)):

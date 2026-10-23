@@ -2,7 +2,12 @@
 
 * On-disk cache in ``CACHE_DIR/http`` keyed by sha256(method + masked URL + sorted params + body).
   ``ttl_s``: seconds a cached 2xx response stays valid; ``None`` = forever; ``0`` = bypass the cache entirely.
-* Exponential backoff with jitter on 429 / 5xx / timeouts / connection errors (honours ``Retry-After``).
+* Exponential backoff with jitter on 429 / 5xx / timeouts / connection errors (honours ``Retry-After``), except a
+  429 whose body says a daily / hourly / minutely request limit was exceeded (Open-Meteo's quota answer, CONTRACT
+  14.12.2): that one raises at once, since retrying within seconds cannot help.
+* Only usable 2xx bodies are cached: a body that is an error in disguise (``{"error": true}``, an ArcGIS
+  ``{"error": {...}}``, JSON that does not parse or is cut off, Open-Meteo's "Unexpected error while streaming
+  data") is returned to the caller but never stored, and such an entry found in the cache is evicted.
 * At most ``config.HTTP_MAX_CONCURRENCY`` (4) requests in flight per process; ``User-Agent`` set; redirects followed.
 * Every request to ``firms.modaps.eosdis.nasa.gov/api/`` first takes a slot from :data:`firms_limiter`
   (150 per rolling 10 min); cache hits don't count.
@@ -17,6 +22,7 @@ import hashlib
 import logging
 import os
 import random
+import re
 import tempfile
 import threading
 import time
@@ -40,6 +46,43 @@ BACKOFF_BASE_S = 1.5
 MAX_BACKOFF_S = 60.0
 
 Params = Mapping[str, Any] | Sequence[tuple[str, Any]] | None
+
+# A 429 with one of these bodies is a quota answer: never retried (Open-Meteo, CONTRACT 14.12.2).
+_QUOTA_RE = re.compile(r"\b(daily|hourly|minutely)\s+api\s+request\s+limit\s+exceeded", re.IGNORECASE)
+_STREAM_ERROR = b"Unexpected error while streaming data"
+ERROR_BODY_PARSE_MAX = 4 << 20       # JSON bodies up to this size are parsed to check them; larger ones by their ends
+
+
+def quota_period(text: str | bytes | None) -> str | None:
+    """``"daily"`` / ``"hourly"`` / ``"minutely"`` when ``text`` is a request-limit answer, else None."""
+    if not text:
+        return None
+    if isinstance(text, bytes):
+        text = text[:2000].decode("utf-8", errors="replace")
+    m = _QUOTA_RE.search(text)
+    return m.group(1).lower() if m else None
+
+
+def is_error_body(content: bytes, content_type: str = "") -> bool:
+    """True when a 2xx body is an error in disguise and must not be cached: Open-Meteo's "Unexpected error while
+    streaming data" (anywhere in the last 1 KB, or a short body), JSON that does not parse or is cut off, or a
+    top-level JSON object whose ``error`` is ``true`` or an object (Open-Meteo, ArcGIS)."""
+    if not content:
+        return False
+    if _STREAM_ERROR in content[-1024:] or (len(content) <= 4096 and _STREAM_ERROR in content):
+        return True
+    head = content[:64].lstrip()
+    looks_json = "json" in (content_type or "").lower() or head[:1] in (b"{", b"[")
+    if not looks_json:
+        return False
+    if len(content) > ERROR_BODY_PARSE_MAX:      # too big to be an error answer; only catch a cut-off body
+        tail = content.rstrip()[-1:]
+        return head[:1] in (b"{", b"[") and tail not in (b"}", b"]")
+    try:
+        doc = orjson.loads(content)
+    except orjson.JSONDecodeError:
+        return True
+    return isinstance(doc, dict) and (doc.get("error") is True or isinstance(doc.get("error"), dict))
 
 
 class _MaskSecretsFilter(logging.Filter):
@@ -253,6 +296,14 @@ def _cache_read(key: str, ttl_s: float | None) -> Response | None:
         content = body_p.read_bytes()
     except (OSError, orjson.JSONDecodeError):
         return None
+    if is_error_body(content, meta.get("content_type", "")):      # stored before error bodies were refused
+        log.info("http cache: evicting an error body for %s", meta.get("url", ""))
+        for p in (body_p, meta_p):
+            try:
+                p.unlink()
+            except FileNotFoundError:
+                pass
+        return None
     return Response(int(meta.get("status", 200)), meta.get("url", ""), content, meta.get("content_type", ""), True, int(meta.get("fetched_ms", st.st_mtime * 1000)))
 
 
@@ -331,9 +382,12 @@ def request(
             if 200 <= status < 300:
                 resp = Response(status, shown, content, r.headers.get("content-type", ""), False, int(time.time() * 1000))
                 if use_cache:
-                    _cache_write(key, resp)
+                    if is_error_body(content, resp.content_type):
+                        log.warning("%s %s -> %d with an error body; not cached", method, shown, status)
+                    else:
+                        _cache_write(key, resp)
                 return resp
-            if status != 429 and status < 500:
+            if (status != 429 and status < 500) or (status == 429 and quota_period(content)):
                 snippet = content[:300].decode("utf-8", errors="replace").strip()
                 raise HttpError(status, shown, snippet or r.reason_phrase or "request failed")
             err = f"status {status}"

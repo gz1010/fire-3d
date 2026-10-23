@@ -29,14 +29,23 @@ Note: Open-Meteo's ``gfs_seamless`` equals ``gfs_hrrr`` wherever HRRR exists, so
 
 Every request goes through :mod:`fire3d.http` (disk cache, retries, 4 concurrent): one multi-location request per
 <= 31-day chunk for all points. TTL: 30 min for live/forecast data, 30 days for archived data.
+
+Quota (CONTRACT 14.12.2). Open-Meteo's free API has a daily, hourly and per-minute request limit per IP, counted per
+host. Its "Daily API request limit exceeded" answer (HTTP 429) raises :class:`WeatherQuotaExceeded` with no retries
+and blocks that host in this process until the reset (00:00 UTC; the next hour or minute for the shorter limits):
+a later request to a blocked host is answered from the disk cache or raises at once, without a network call.
+A refused HRRR / forecast request fails :meth:`OpenMeteoSource.deterministic` (no silent ERA5 fill);
+:func:`probe_open_meteo` asks each host once, uncached, for ``fire3d.cli weather-probe``.
 """
 
 from __future__ import annotations
 
 import logging
 import re
+import threading
 from datetime import timedelta
 from typing import Any, Protocol, Sequence, runtime_checkable
+from urllib.parse import urlsplit
 
 import numpy as np
 
@@ -84,6 +93,190 @@ _MEMBER_KEY = re.compile(r"^(?P<base>[a-z0-9_]+?)(?:_member(?P<num>\d+))?$")
 
 class WeatherError(RuntimeError):
     """No usable weather could be obtained for the requested points/window."""
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Open-Meteo request limits (CONTRACT 14.12.2)
+# ---------------------------------------------------------------------------------------------------------------
+HOSTS: dict[str, str] = {           # probe / block label -> base URL
+    "forecast": FORECAST_URL,
+    "historical-forecast": HISTORICAL_URL,
+    "archive": ARCHIVE_URL,
+    "ensemble": ENSEMBLE_URL,
+}
+OVERALL_HOSTS = ("forecast", "historical-forecast", "archive")    # what historical and validation builds need
+LIVE_HOSTS = ("forecast", "ensemble")                             # what live builds need
+QUOTA_DAILY_MESSAGE = "Open-Meteo daily request limit reached; retry after the reset (00:00 UTC)"
+PROBE_TIMEOUT_S = 20.0
+
+
+def quota_message(period: str = "daily", until_ms: int | None = None) -> str:
+    """The user-facing sentence for a refused request (the daily one is fixed by CONTRACT 14.12.2)."""
+    if period == "hourly":
+        at = ms_to_dt(until_ms).strftime("%H:%M") if until_ms else "the next hour"
+        return f"Open-Meteo hourly request limit reached; retry after the reset ({at} UTC)"
+    if period == "minutely":
+        return "Open-Meteo per-minute request limit reached; retry in a minute"
+    return QUOTA_DAILY_MESSAGE
+
+
+class WeatherQuotaExceeded(WeatherError):
+    """Open-Meteo refused a request because a request limit is reached (``period`` "daily" | "hourly" |
+    "minutely"); ``host`` is the label of :data:`HOSTS`, ``until_ms`` when this process asks that host again."""
+
+    def __init__(self, host: str, period: str = "daily", until_ms: int | None = None, detail: str = ""):
+        self.host = host
+        self.period = period
+        self.until_ms = until_ms
+        self.detail = detail
+        super().__init__(quota_message(period, until_ms))
+
+
+_blocks: dict[str, tuple[int, str]] = {}     # host label -> (blocked until epoch ms, period); per process
+_blocks_lock = threading.Lock()
+
+
+def host_label(url: str) -> str:
+    """The :data:`HOSTS` label of an Open-Meteo URL (the host name itself for anything else)."""
+    host = (urlsplit(url).hostname or url).lower()
+    for label, base in HOSTS.items():
+        if host == urlsplit(base).hostname:
+            return label
+    return host
+
+
+def quota_reset_ms(period: str, now: int) -> int:
+    """When a refused ``period`` limit opens again: the next 00:00 UTC, the next whole hour or minute."""
+    if period == "minutely":
+        return (int(now) // 60_000 + 1) * 60_000
+    if period == "hourly":
+        return floor_hour_ms(now) + HOUR_MS
+    return (int(now) // DAY_MS + 1) * DAY_MS
+
+
+def block_host(label: str, period: str = "daily", now: int | None = None) -> int:
+    """Mark ``label`` refused until its reset; returns that time (epoch ms)."""
+    until = quota_reset_ms(period, now_ms() if now is None else int(now))
+    with _blocks_lock:
+        cur = _blocks.get(label)
+        if cur is None or cur[0] < until:
+            _blocks[label] = (until, period)
+    log.warning("weather: %s refused by Open-Meteo (%s limit); no requests to it until %s", label, period, ms_to_iso(until))
+    return until
+
+
+def host_block(label: str, now: int | None = None) -> tuple[int, str] | None:
+    """``(until_ms, period)`` while ``label`` is blocked, else None (an expired block is dropped)."""
+    t = now_ms() if now is None else int(now)
+    with _blocks_lock:
+        cur = _blocks.get(label)
+        if cur is not None and cur[0] <= t:
+            del _blocks[label]
+            cur = None
+    return cur
+
+
+def blocked_hosts(now: int | None = None) -> dict[str, int]:
+    """Every currently blocked host label -> blocked until (epoch ms)."""
+    return {lab: blk[0] for lab in list(_blocks) if (blk := host_block(lab, now)) is not None}
+
+
+def clear_host_blocks() -> None:
+    """Forget every block (tests, or after a successful probe)."""
+    with _blocks_lock:
+        _blocks.clear()
+
+
+def raise_if_blocked(labels: Sequence[str], now: int | None = None) -> None:
+    """Raise :class:`WeatherQuotaExceeded` (no network call) when one of ``labels`` is blocked."""
+    for lab in labels:
+        blk = host_block(lab, now)
+        if blk is not None:
+            raise WeatherQuotaExceeded(lab, blk[1], blk[0])
+
+
+def deterministic_hosts(start_ms: int, end_ms: int, now: int | None = None) -> list[str]:
+    """The hosts :meth:`OpenMeteoSource.deterministic` asks for HRRR over ``[start_ms, end_ms]`` (ERA5 aside)."""
+    t_now = now_ms() if now is None else int(now)
+    live_floor = floor_hour_ms(t_now) - FORECAST_PAST_DAYS * DAY_MS
+    out = []
+    if floor_hour_ms(start_ms) < live_floor:
+        out.append("historical-forecast")
+    if ceil_hour_ms(end_ms) >= live_floor:
+        out.append("forecast")
+    return out
+
+
+def om_request(url: str, params: dict, ttl_s: float | None, timeout: float = 120.0) -> http.Response:
+    """GET an Open-Meteo URL through :mod:`fire3d.http`, honouring the per-host block: a blocked host answers from
+    the disk cache or raises :class:`WeatherQuotaExceeded` without a network call; a limit answer blocks the host
+    and raises it (never retried)."""
+    label = host_label(url)
+    blk = host_block(label)
+    if blk is not None:
+        hit = http.peek_cache("GET", url, params, ttl_s)
+        if hit is not None:
+            return hit
+        raise WeatherQuotaExceeded(label, blk[1], blk[0])
+    try:
+        return http.request("GET", url, params=params, ttl_s=ttl_s, timeout=timeout)
+    except http.HttpError as e:
+        period = http.quota_period(e.message) if e.status == 429 else None
+        if period is None:
+            raise
+        until = block_host(label, period)
+        raise WeatherQuotaExceeded(label, period, until, e.message) from None
+
+
+def _probe_params(label: str, now: int) -> dict[str, str]:
+    base = {"latitude": "39.7392", "longitude": "-104.9903", "hourly": "temperature_2m", "timeformat": "unixtime"}
+    if label == "historical-forecast":
+        d = ms_to_iso(now - 30 * DAY_MS)[:10]
+        return {**base, "models": DETERMINISTIC_MODELS[0], "start_date": d, "end_date": d}
+    if label == "archive":
+        d = ms_to_iso(now - (ERA5_DELAY_DAYS + 4) * DAY_MS)[:10]
+        return {**base, "start_date": d, "end_date": d}
+    if label == "ensemble":
+        return {**base, "models": "gfs025", "forecast_days": "1"}
+    return {**base, "forecast_days": "1"}
+
+
+def _combine(statuses: Sequence[str]) -> str:
+    if all(s == "ok" for s in statuses):
+        return "ok"
+    return "daily_limit" if "daily_limit" in statuses else "unreachable"
+
+
+def probe_open_meteo(timeout: float = PROBE_TIMEOUT_S) -> dict:
+    """One uncached tiny request to each Open-Meteo host (one location, one variable, one day).
+
+    Returns ``{"overall": s, "live": s, "hosts": {"forecast": s, "historical-forecast": s, "archive": s,
+    "ensemble": s}, "detail": {host: text}}`` with ``s`` in ``ok`` / ``daily_limit`` (any request-limit answer) /
+    ``unreachable``. ``overall`` (historical and validation builds) is ok only when forecast, historical-forecast
+    and archive are; ``live`` (live builds) only when forecast and ensemble are. A limit answer blocks the host;
+    an ok answer lifts this process's block."""
+    now = now_ms()
+    hosts: dict[str, str] = {}
+    detail: dict[str, str] = {}
+    for label, url in HOSTS.items():
+        try:
+            resp = http.request("GET", url, params=_probe_params(label, now), ttl_s=0, timeout=timeout, retries=0)
+            if http.is_error_body(resp.content, resp.content_type):
+                hosts[label], detail[label] = "unreachable", "error body: " + resp.text[:120]
+                continue
+            hosts[label], detail[label] = "ok", f"HTTP {resp.status}"
+            with _blocks_lock:
+                _blocks.pop(label, None)
+        except http.HttpError as e:
+            period = http.quota_period(e.message) if e.status == 429 else None
+            if period is not None:
+                block_host(label, period, now)
+                hosts[label], detail[label] = "daily_limit", f"HTTP 429 {period} limit: {e.message[:120]}"
+            else:
+                hosts[label] = "unreachable"
+                detail[label] = f"HTTP {e.status}: {e.message[:120]}" if e.status else e.message[:120]
+    return {"overall": _combine([hosts[h] for h in OVERALL_HOSTS]), "live": _combine([hosts[h] for h in LIVE_HOSTS]),
+            "hosts": hosts, "detail": detail}
 
 
 @runtime_checkable
@@ -339,8 +532,9 @@ class OpenMeteoSource:
 
     name = "open-meteo"
 
-    def __init__(self, blend_h: float = BLEND_H):
+    def __init__(self, blend_h: float = BLEND_H, *, allow_era5: bool = True):
         self.blend_h = float(blend_h)
+        self.allow_era5 = bool(allow_era5)      # False (``--require-hrrr``): a past hour without HRRR/GFS fails
         self.last_error: str | None = None      # why the last ensemble() call returned None
 
     # --- deterministic -----------------------------------------------------------------------------------------
@@ -368,8 +562,10 @@ class OpenMeteoSource:
                 params = {**_coord_params(pts), "hourly": hourly_list, "models": ",".join(DETERMINISTIC_MODELS),
                           "wind_speed_unit": "ms", "timeformat": "unixtime", "start_date": d0, "end_date": d1}
                 try:
-                    resp = http.request("GET", url, params=params, ttl_s=HISTORICAL_TTL_S if archived else LIVE_TTL_S, timeout=REQUEST_TIMEOUT_S)
+                    resp = om_request(url, params, HISTORICAL_TTL_S if archived else LIVE_TTL_S, REQUEST_TIMEOUT_S)
                     locs = _locations(resp.json(), P)
+                except WeatherQuotaExceeded:
+                    raise                     # refused HRRR: fail, never fill silently with ERA5 (CONTRACT 14.12.2)
                 except (http.HttpError, WeatherError, ValueError) as e:
                     msg = getattr(e, "message", str(e))
                     warnings.append(f"open-meteo {kind} {d0}..{d1} failed ({msg[:160]})")
@@ -395,6 +591,9 @@ class OpenMeteoSource:
         era5_used = False
         if holes.any():
             past = t[holes & (t < now - ERA5_DELAY_DAYS * DAY_MS)]
+            if past.size and not self.allow_era5:
+                raise WeatherError(f"HRRR and GFS are missing for {past.size} past hour(s); ERA5 filling is not allowed "
+                                   "(--require-hrrr)")
             if past.size:
                 era = _empty(T, P)
                 got = False
@@ -402,8 +601,12 @@ class OpenMeteoSource:
                     params = {**_coord_params(pts), "hourly": hourly_list, "wind_speed_unit": "ms", "timeformat": "unixtime",
                               "start_date": d0, "end_date": d1}
                     try:
-                        resp = http.request("GET", ARCHIVE_URL, params=params, ttl_s=HISTORICAL_TTL_S, timeout=REQUEST_TIMEOUT_S)
+                        resp = om_request(ARCHIVE_URL, params, HISTORICAL_TTL_S, REQUEST_TIMEOUT_S)
                         locs = _locations(resp.json(), P)
+                    except WeatherQuotaExceeded as e:
+                        warnings.append(f"open-meteo ERA5 archive {d0}..{d1} refused ({e}); {past.size} h without "
+                                        "HRRR/GFS interpolated in time")
+                        break
                     except (http.HttpError, WeatherError, ValueError) as e:
                         msg = getattr(e, "message", str(e))
                         warnings.append(f"open-meteo ERA5 archive {d0}..{d1} failed ({msg[:160]})")
@@ -457,7 +660,7 @@ class OpenMeteoSource:
             params = {**_coord_params(pts), "hourly": ",".join(ENSEMBLE_VARS), "models": model, "wind_speed_unit": "ms",
                       "timeformat": "unixtime", "start_date": d0, "end_date": d1}
             try:
-                resp = http.request("GET", ENSEMBLE_URL, params=params, ttl_s=LIVE_TTL_S, timeout=REQUEST_TIMEOUT_S)
+                resp = om_request(ENSEMBLE_URL, params, LIVE_TTL_S, REQUEST_TIMEOUT_S)
                 locs = _locations(resp.json(), P)
             except (http.HttpError, WeatherError, ValueError) as e:
                 msg = getattr(e, "message", str(e))
@@ -517,13 +720,14 @@ def water_year_precip(lat: float, lon: float, start_ms: int) -> dict:
 
     Daily ``precipitation_sum`` from the Open-Meteo ERA5 archive (``ARCHIVE_URL``, ~5 day latency); the most recent
     days that the archive does not have yet come from the forecast API (archived model analyses). Returns
-    ``{precip_mm, from, to, days, source, fetched_ms, warnings}``; ``precip_mm`` is None when nothing could be
-    fetched. Never raises for provider failures."""
+    ``{precip_mm, from, to, days, source, fetched_ms, warnings, refused}``; ``precip_mm`` is None when any part
+    could not be fetched (a partial total would understate the rain), with the reason in ``warnings``;
+    ``refused`` is True when Open-Meteo's request limit refused a part. Never raises for provider failures."""
     wy0 = water_year_start_ms(start_ms)
     end = floor_hour_ms(int(start_ms)) - DAY_MS
     now = now_ms()
     out: dict[str, Any] = {"precip_mm": None, "from": ms_to_iso(wy0)[:10], "to": ms_to_iso(end)[:10], "days": 0,
-                           "source": "", "fetched_ms": now, "warnings": []}
+                           "source": "", "fetched_ms": now, "warnings": [], "refused": False}
     if end < wy0:                          # the fire starts on Oct 1: nothing has fallen yet this water year
         out.update(precip_mm=0.0, source="water year not started")
         return out
@@ -533,16 +737,20 @@ def water_year_precip(lat: float, lon: float, start_ms: int) -> dict:
         segments.append((ARCHIVE_URL, wy0, archive_end))
     if end > archive_end:
         segments.append((FORECAST_URL, max(wy0, archive_end + DAY_MS), end))
-    total, days, sources, fetched = 0.0, 0, [], []
+    total, days, sources, fetched, failed = 0.0, 0, [], [], False
     for url, a, b in segments:
         params = {"latitude": f"{lat:.4f}", "longitude": f"{lon:.4f}", "daily": "precipitation_sum", "timezone": "GMT",
                   "start_date": ms_to_iso(a)[:10], "end_date": ms_to_iso(b)[:10]}
         try:
-            resp = http.request("GET", url, params=params, ttl_s=HISTORICAL_TTL_S if url == ARCHIVE_URL else LIVE_TTL_S,
-                                timeout=REQUEST_TIMEOUT_S)
+            resp = om_request(url, params, HISTORICAL_TTL_S if url == ARCHIVE_URL else LIVE_TTL_S, REQUEST_TIMEOUT_S)
             daily = (resp.json() or {}).get("daily") or {}
             vals = [float(v) for v in daily.get("precipitation_sum") or [] if v is not None]
-        except (http.HttpError, ValueError, TypeError, AttributeError) as e:
+        except WeatherQuotaExceeded as e:
+            out["refused"] = failed = True
+            out["warnings"].append(f"water-year precipitation {ms_to_iso(a)[:10]}..{ms_to_iso(b)[:10]} refused ({e})")
+            continue
+        except (http.HttpError, WeatherError, ValueError, TypeError, AttributeError) as e:
+            failed = True
             out["warnings"].append(f"water-year precipitation {ms_to_iso(a)[:10]}..{ms_to_iso(b)[:10]} unavailable "
                                    f"({getattr(e, 'message', str(e))[:120]})")
             continue
@@ -550,7 +758,7 @@ def water_year_precip(lat: float, lon: float, start_ms: int) -> dict:
         days += len(vals)
         sources.append("era5-archive" if url == ARCHIVE_URL else "forecast-api")
         fetched.append(resp.fetched_ms)
-    if days:
+    if days and not failed:
         out.update(precip_mm=round(total, 1), days=days, source="open-meteo:" + "+".join(sources),
                    fetched_ms=max(fetched))
     return out

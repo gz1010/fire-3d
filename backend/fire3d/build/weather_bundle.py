@@ -287,9 +287,11 @@ def _fire_lonlat(manifest: dict) -> tuple[float, float]:
     return (w + e) / 2.0, (so + n) / 2.0
 
 
-def fetch_antecedent(bdir: Path, manifest: dict, start_ms: int | None = None) -> dict | None:
+def fetch_antecedent(bdir: Path, manifest: dict, start_ms: int | None = None, *,
+                     problems: list[str] | None = None) -> dict | None:
     """Fetch the water-year precipitation at the fire up to the fire start and store it as ``sim/antecedent.json``.
-    Returns the stored dict, or None when no precipitation could be fetched."""
+    Returns the stored dict, or None when no precipitation could be fetched; the reasons are appended to
+    ``problems`` when given (a refused request says so)."""
     start = int(start_ms if start_ms is not None else
                 ((manifest.get("ignition") or {}).get("t_ms") or (manifest.get("summary") or {}).get("started_ms")
                  or manifest.get("time_origin_ms") or now_ms()))
@@ -298,6 +300,8 @@ def fetch_antecedent(bdir: Path, manifest: dict, start_ms: int | None = None) ->
     for w in r.get("warnings") or []:
         log.warning("antecedent precipitation: %s", w)
     if r.get("precip_mm") is None:
+        if problems is not None:
+            problems.extend(str(w) for w in r.get("warnings") or [])
         return None
     doc = {"precip_wy_mm": float(r["precip_mm"]), "from": r["from"], "to": r["to"], "days": int(r["days"]),
            "to_ms": int(floor_hour_ms(start) - DAY_MS), "lat": round(lat, 5), "lon": round(lon, 5),
@@ -363,11 +367,24 @@ def live_moisture_for(bdir: Path, manifest: dict, start_ms: int, gw: GridWeather
                          f"{p:.0f} mm by {ms_to_iso(int(start_ms))[:10]} ({why})")
 
 
+def is_california(summary: Any) -> bool:
+    """The California rule switch (CONTRACT 14.12.10): ``summary.state == "CA"``; without a state (before the
+    regions data), a CAL FIRE record (``calfire_uid`` set)."""
+    state = getattr(summary, "state", None) if not isinstance(summary, dict) else summary.get("state")
+    if state:
+        return str(state).upper() == "CA"
+    uid = getattr(summary, "calfire_uid", None) if not isinstance(summary, dict) else summary.get("calfire_uid")
+    return bool(uid)
+
+
 def build_weather(ctx: BuildContext, source: WeatherSource | None = None) -> None:
     """Fetch hourly weather for the bundle's 4 x 4 points and write ``weather.json`` + ``sim/weather.npz``;
     records a "Weather" data source and any warnings in the manifest. Raises :class:`WeatherError` when no
-    weather could be obtained."""
-    src = source if source is not None else OpenMeteoSource()
+    weather could be obtained, :class:`~fire3d.sources.weather.WeatherQuotaExceeded` when Open-Meteo refused the
+    HRRR / forecast request (nothing is written then), and with ``ctx.require_hrrr`` a :class:`WeatherError` for any
+    ERA5-filled hour or, for a California fire, a missing water-year precipitation total."""
+    require = bool(getattr(ctx, "require_hrrr", False))
+    src = source if source is not None else OpenMeteoSource(allow_era5=not require)
     ctx.progress("weather", 0.0, "Fetching hourly weather")
     bdir = Path(ctx.bundle_dir)
     manifest = bundle.load_manifest(bdir) or {}
@@ -377,6 +394,8 @@ def build_weather(ctx: BuildContext, source: WeatherSource | None = None) -> Non
     a, b = weather_window(ctx.mode, start, end, now)
     grid = ctx.fire_grid
     res = src.deterministic(weather_points(grid), a, b)
+    if require and res.get("era5"):
+        raise WeatherError("ERA5 reanalysis filled hours where HRRR/GFS were unavailable; --require-hrrr refuses them")
     gw = GridWeather.from_source(res)
     ctx.progress("weather", 0.6, f"Fuel moisture and FFWI for {len(gw.t_ms)} h")
     xs, zs = weather_axes(grid)
@@ -389,11 +408,17 @@ def build_weather(ctx: BuildContext, source: WeatherSource | None = None) -> Non
     save_grid_weather(bdir, gw)
     warnings = [str(w) for w in res.get("warnings", [])]
     if not gw.synthetic:
+        problems: list[str] = []
         try:
-            if fetch_antecedent(bdir, bundle.load_manifest(bdir) or manifest) is None:
-                warnings.append("water-year precipitation unavailable: live fuel moisture uses the month table")
-        except Exception as e:   # never fail the build for the drought adjustment
-            warnings.append(f"water-year precipitation unavailable ({config.mask_secrets(e)[:120]})")
+            if fetch_antecedent(bdir, bundle.load_manifest(bdir) or manifest, problems=problems) is None:
+                why = f" ({problems[0][:160]})" if problems else ""
+                problems.insert(0, "water-year precipitation unavailable: live fuel moisture uses the month table" + why)
+        except Exception as e:   # never fail the build for the drought adjustment (except with --require-hrrr)
+            problems.insert(0, f"water-year precipitation unavailable ({config.mask_secrets(e)[:120]})")
+        if problems:
+            if require and is_california(ctx.summary):
+                raise WeatherError(f"{problems[0]}; --require-hrrr needs it for California's drought adjustment")
+            warnings.append(problems[0])
     fire_start = int((manifest.get("ignition") or {}).get("t_ms") or start)
     _, _, moist_note = live_moisture_for(bdir, bundle.load_manifest(bdir) or manifest, fire_start, gw, fetch=False)
     detail = (f"{gw.source}; 4x4 points, {len(gw.t_ms)} h {ms_to_iso(int(gw.t_ms[0]))} .. {ms_to_iso(int(gw.t_ms[-1]))}; "

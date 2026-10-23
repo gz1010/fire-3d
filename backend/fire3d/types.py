@@ -30,6 +30,9 @@ class BuildContext:
     fire_bbox_lonlat: tuple[float, float, float, float] | None = None
     end_ms: int | None = None           # time_range.end_ms once known
     now_ms: int | None = None
+    time_zone: str | None = None        # IANA zone of the fire (summary.time_zone, CONTRACT 14.9.7); None = UTC labels
+    require_hrrr: bool = False          # ``build --require-hrrr``: fail on an ERA5-filled hour or, for a California
+                                        # fire, a refused water-year precipitation total (CONTRACT 14.12.2)
 
 
 @dataclass

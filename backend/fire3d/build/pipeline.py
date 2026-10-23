@@ -36,6 +36,7 @@ import numpy as np
 from .. import bundle, config
 from ..contracts import ForecastManifest, IncidentManifest, IncidentSummary, contract_problems, dump
 from ..grid import grids_from_manifest, make_aoi, manifest_grid
+from ..sources.weather import WeatherQuotaExceeded
 from ..timeutil import DAY_MS, HOUR_MS, now_ms, time_origin_for
 from ..types import BuildContext, ProgressFn
 
@@ -66,6 +67,7 @@ _STATIC_SYNONYMS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 REFRESH_STAGES = {"observations": 0.6, "weather": 0.3, "behavior": 0.1}
 REFRESH_FAILED_PREFIX = "Live refresh failed"
+WEATHER_NOT_REFRESHED_PREFIX = "Weather not refreshed: "
 
 
 def spec_incident_id(summary: IncidentSummary) -> str:
@@ -93,7 +95,7 @@ def is_catalog_incident(incident_id: str, summary: IncidentSummary | dict | None
 def short_error(exc: BaseException) -> str:
     """One-line, secret-masked description of an exception (for job errors and manifest warnings)."""
     msg = " ".join(str(exc).split()) or type(exc).__name__
-    text = msg if isinstance(exc, (LookupError, BundleBusy)) else f"{type(exc).__name__}: {msg}"
+    text = msg if isinstance(exc, (LookupError, BundleBusy, WeatherQuotaExceeded)) else f"{type(exc).__name__}: {msg}"
     text = config.mask_secrets(text)
     return text if len(text) <= ERROR_MAX_CHARS else text[: ERROR_MAX_CHARS - 1] + "…"
 
@@ -440,12 +442,17 @@ def _validate(m: dict) -> IncidentManifest:
 # ----------------------------------------------------------------------------------------------------------------
 # Build
 # ----------------------------------------------------------------------------------------------------------------
-def build_incident(incident_id: str, progress: ProgressFn | None = None, force: bool = False) -> IncidentManifest:
+def build_incident(incident_id: str, progress: ProgressFn | None = None, force: bool = False, *,
+                   require_hrrr: bool = False) -> IncidentManifest:
     """Build (or with ``force`` rebuild) the bundle of ``incident_id``; returns the final manifest.
 
     Without ``force`` an already "ready" bundle is returned untouched. Raises ``LookupError`` for an incident the
     catalog does not know, :class:`BundleBusy` when another process keeps building it, and re-raises any build
-    failure after marking the manifest "error".
+    failure after marking the manifest "error". :class:`~fire3d.sources.weather.WeatherQuotaExceeded` is raised
+    before anything is written when a weather host this build needs is already known to be refused (CONTRACT
+    14.12.2), and a refused HRRR / forecast request during the build fails it (never filled with ERA5).
+    ``require_hrrr`` (``build --require-hrrr``) also fails on any ERA5-filled hour and, for a California fire, on a
+    missing water-year precipitation total.
     """
     bdir = bundle.bundle_dir(incident_id)
     prog = BuildProgress(progress, STAGE_WEIGHTS)
@@ -473,7 +480,7 @@ def build_incident(incident_id: str, progress: ProgressFn | None = None, force: 
         if existing and existing.get("status") == "ready" and not force:     # built by someone else meanwhile
             prog.finish("catalog", "bundle already built")
             return IncidentManifest.model_validate(existing)
-        return _build_locked(bdir, summary, BuildProgress(progress, _stage_weights(summary.mode)))
+        return _build_locked(bdir, summary, BuildProgress(progress, _stage_weights(summary.mode)), require_hrrr=require_hrrr)
 
 
 def _read_manifest(bdir: Path) -> dict | None:
@@ -485,7 +492,20 @@ def _read_manifest(bdir: Path) -> dict | None:
     return m if isinstance(m, dict) else None
 
 
-def _build_locked(bdir: Path, summary: IncidentSummary, prog: BuildProgress) -> IncidentManifest:
+def weather_preflight(summary: IncidentSummary, now: int | None = None) -> None:
+    """Raise :class:`~fire3d.sources.weather.WeatherQuotaExceeded` (no network call) when a weather host this
+    build needs is blocked in this process after a request-limit answer, so a refused build fails before it
+    clears an existing bundle or spends requests on terrain and fuels (the live loop's remaining candidates)."""
+    from ..build.weather_bundle import weather_window
+    from ..sources.weather import deterministic_hosts, raise_if_blocked
+
+    t = now_ms() if now is None else int(now)
+    end = None if summary.mode == "live" else _preliminary_end(summary, t)
+    a, b = weather_window(summary.mode, int(summary.started_ms), end, t)
+    raise_if_blocked(deterministic_hosts(a, b, t), t)
+
+
+def _build_locked(bdir: Path, summary: IncidentSummary, prog: BuildProgress, *, require_hrrr: bool = False) -> IncidentManifest:
     from .. import catalog
     from ..build.aoi import build_static_layers
     from ..build.observed import build_observed
@@ -493,6 +513,7 @@ def _build_locked(bdir: Path, summary: IncidentSummary, prog: BuildProgress) -> 
 
     mode = summary.mode
     t_start = now_ms()
+    weather_preflight(summary, t_start)
     warnings: list[str] = []
     prog.report("catalog", 0.3, "estimating the fire extent")
     bbox = None
@@ -524,6 +545,7 @@ def _build_locked(bdir: Path, summary: IncidentSummary, prog: BuildProgress) -> 
         summary=building_summary, bundle_dir=bdir, render_grid=render, fire_grid=fire, time_origin_ms=time_origin,
         mode=mode, progress=prog.static_fn(), fire_bbox_lonlat=tuple(bbox) if bbox else None,
         end_ms=prelim_end, now_ms=t_start if mode == "live" else None,
+        time_zone=getattr(summary, "time_zone", None), require_hrrr=require_hrrr,
     )
     prog.report("catalog", 1.0, "bundle initialised")
     try:
@@ -701,7 +723,9 @@ def _refresh_locked(incident_id: str, bdir: Path, progress: ProgressFn | None) -
         summary=IncidentSummary.model_validate(_summary_with(summary, "ready", m.get("built_ms"))), bundle_dir=bdir,
         render_grid=render, fire_grid=fire, time_origin_ms=int(m["time_origin_ms"]), mode="live",
         progress=prog.stage_fn("observations"), fire_bbox_lonlat=tuple(bbox) if bbox else None, end_ms=t_now, now_ms=t_now,
+        time_zone=getattr(summary, "time_zone", None),
     )
+    weather_note: str | None = None
     try:
         prog.report("observations", 0.0, "new detections: rebuilding the observed spread")
         build_observed(ctx)
@@ -709,7 +733,11 @@ def _refresh_locked(incident_id: str, bdir: Path, progress: ProgressFn | None) -
         ctx.end_ms, ctx.now_ms = int(tr.get("end_ms", t_now)), int(tr.get("now_ms", t_now))
         ctx.progress = prog.stage_fn("weather")
         prog.report("weather", 0.0, "refreshing weather")
-        build_weather(ctx)
+        try:
+            build_weather(ctx)
+        except WeatherQuotaExceeded as e:     # keep the bundle's last weather (nothing was written), say so
+            weather_note = weather_not_refreshed(e)
+            log.warning("refresh_live(%s): %s", incident_id, weather_note)
     except BaseException as e:
         try:
             add_warning(bdir, f"{REFRESH_FAILED_PREFIX} at {time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime())}: {short_error(e)}")
@@ -723,12 +751,24 @@ def _refresh_locked(incident_id: str, bdir: Path, progress: ProgressFn | None) -
         m2["status"] = "ready"
         m2["built_ms"] = built
         m2["summary"] = _summary_with(summary, "ready", built)
-        m2["warnings"] = [w for w in m2.get("warnings") or [] if not str(w).startswith(REFRESH_FAILED_PREFIX)]
+        m2["warnings"] = [w for w in m2.get("warnings") or []
+                          if not str(w).startswith((REFRESH_FAILED_PREFIX, WEATHER_NOT_REFRESHED_PREFIX))]
+        if weather_note:
+            m2["warnings"].append(weather_note)
 
     final = bundle.update_manifest(bdir, finalize)
     _validate(final)
     prog.finish("behavior", "live bundle refreshed")
     return True
+
+
+def weather_not_refreshed(exc: WeatherQuotaExceeded) -> str:
+    """The live-refresh warning for a refused weather request (CONTRACT 14.12.2)."""
+    if exc.period == "hourly":
+        return WEATHER_NOT_REFRESHED_PREFIX + "Open-Meteo hourly request limit reached."
+    if exc.period == "minutely":
+        return WEATHER_NOT_REFRESHED_PREFIX + "Open-Meteo per-minute request limit reached."
+    return WEATHER_NOT_REFRESHED_PREFIX + "Open-Meteo daily request limit reached."
 
 
 def run_forecast_locked(
