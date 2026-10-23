@@ -142,6 +142,10 @@ describe('NWS fire weather states', () => {
     expect(quiet).toMatchObject({ state: 'none', archived: false, credit: 'National Weather Service' })
     expect(quiet.caveat).toMatch(/near this fire\. That is not an all-clear/)
     expect(fireWeatherNow(ok({ ...FW_COOLEY_LIVE_QUIET, status: 'not_available_for_past_dates', reason: 'Archive down.' }), Date.now(), { demo: false, hasIncident: true, tf: LA24 })).toMatchObject({ state: 'past-date', reason: 'Archive down.' })
+    // the archive could not be reached: unavailable right now, never "not available for this time" (panel SR-m1)
+    expect(
+      fireWeatherNow(ok({ ...FW_COOLEY_LIVE_QUIET, status: 'not_available_for_past_dates', reason_code: 'upstream_error', reason: 'The archive could not be reached.' }), Date.now(), { demo: false, hasIncident: true, tf: LA24 }),
+    ).toMatchObject({ state: 'unavailable', reasonCode: 'upstream_error' })
     expect(fireWeatherNow(ok(FW_COOLEY_LIVE_QUIET), Date.now(), { demo: true, hasIncident: true, tf: LA24 })).toMatchObject({ state: 'unavailable', reasonCode: 'demo' })
     expect(fireWeatherNow(ok(live()), LIVE_AT, { demo: false, hasIncident: false, statewide: true, tf: LA24 }).state).toBe('active')
     expect(fireWeatherNow(ok({ ...live([]) }), LIVE_AT, { demo: false, hasIncident: false, statewide: true, tf: LA24 }).caveat).toMatch(/in California\. That is not an all-clear/)

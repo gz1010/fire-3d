@@ -295,6 +295,23 @@ describe('review round 2', () => {
     expect(`${line.text} ${line.sub}`).not.toMatch(/none here|does not mean there were none/)
   })
 
+  it('an unreachable service is "unavailable right now", and "that does not mean there were none" is said once (panel SR-m1)', () => {
+    const down = {
+      ...LOCAL_LIVE_LA_CEM,
+      status: 'unavailable' as const,
+      reason_code: 'upstream_error',
+      reason: "The National Weather Service alert service could not be reached (no response). Local officials' alerts relayed by NWS are not shown; that does not mean there were none.",
+      alerts: [],
+      counties: [],
+      channels: LOCAL_LIVE_LA_CEM.channels.map((c) => ({ ...c, status: 'unavailable' as const, retrieved_ms: null })),
+    }
+    const s = localAlertsState(ok(down))
+    expect(s.state).toBe('unavailable')
+    const line = localAlertLines(s, LA12)[0]
+    expect(line.text).toBe("Local officials' alerts: unavailable right now")
+    expect(`${line.text} ${line.sub}`.match(/does not mean there were none/gi)?.length).toBe(1)
+  })
+
   it("N3 (integration): every message of the live box answer that reaches the point is listed, never '+N more (see Updates)'", () => {
     // Updates lists the open fire's messages, not the point's box answer, so the card must not send people there
     const la = LOCAL_LIVE_LA_CEM.alerts[0]

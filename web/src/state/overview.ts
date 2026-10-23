@@ -5,6 +5,8 @@
 // nothing in the overview is model output, and a place without a marker is never an all-clear.
 import type { IncidentSummary, ListSource } from '../api/types'
 import type { LonLatBox } from '../lib/fireBounds'
+import { fmtRelative } from '../lib/time'
+import type { CatalogList } from './catalog'
 import { stateName } from '../lib/usStates'
 import type { MapFlyTo } from './workspace'
 
@@ -28,6 +30,17 @@ export const LIST_ABSENCE_SHORT = 'Only reported fires are listed · not an all-
 /** CONTRACT §14.14: a list source is down. */
 export const NIFC_LIST_DOWN = 'The national fire list (NIFC) is unavailable right now; only California fires (CAL FIRE) are listed.'
 export const CALFIRE_LIST_DOWN = "CAL FIRE's list is unavailable right now; California fires are listed from NIFC WFIGS."
+/** CONTRACT §14.16: both source lists down. The server lists only the fires prepared on it (from their saved records). */
+export const ALL_LISTS_DOWN =
+  'The fire lists (CAL FIRE and NIFC) could not be reached right now. Only fires prepared on this server are listed, with their records as saved when each was prepared. Not an all-clear: follow local officials.'
+/** The phone peek's short form of ALL_LISTS_DOWN. */
+export const ALL_LISTS_DOWN_SHORT = 'Fire lists unavailable right now'
+/** §14.16: a list that could not be refreshed, served from an older copy (relative time: the rows span many zones). */
+export function staleListText(id: ListSource['id'], retrievedMs: number | null, nowMs: number): string {
+  const who = id === 'wfigs' ? 'The national fire list (NIFC)' : "CAL FIRE's list"
+  const copy = retrievedMs != null ? `the copy fetched ${fmtRelative(retrievedMs, nowMs)}` : 'an older copy'
+  return `${who} could not be refreshed right now; showing ${copy}. Newer fires may be missing.`
+}
 /** The empty view (§14.11): never "no fires". */
 export const EMPTY_VIEW = 'No listed fires in this view.'
 
@@ -206,18 +219,86 @@ export function scrollToRow(i: number, rowH: number, scrollTop: number, viewH: n
   return scrollTop
 }
 
-/** The §14.14 notices for list sources reported unavailable (deduplicated over the lists shown). */
-export function listSourceNotices(sources: readonly (readonly ListSource[] | null | undefined)[]): string[] {
-  const down = new Set<string>()
-  for (const list of sources) for (const src of list ?? []) if (src.status === 'unavailable') down.add(src.id)
+/** How the source lists behind the shown lists answered (CONTRACT §14.1 sources[], §14.16). */
+export interface ListHealth {
+  /** Every source of every list that reported its sources is unavailable: the server lists only prepared fires. */
+  allDown: boolean
+  /** Sources reported unavailable (deduplicated over the lists). */
+  down: Set<ListSource['id']>
+  /** Sources served from an older copy that could not be refreshed, with that copy's fetch time (the oldest). */
+  stale: Map<ListSource['id'], number | null>
+  /** When Fire-3d fetched the lists shown: the oldest `retrieved_ms` of the available sources (null: not reported). */
+  fetchedMs: number | null
+}
+
+export function listHealth(sources: readonly (readonly ListSource[] | null | undefined)[]): ListHealth {
+  const down = new Set<ListSource['id']>()
+  const stale = new Map<ListSource['id'], number | null>()
+  let reported = 0
+  let allDown = true
+  let fetchedMs: number | null = null
+  for (const list of sources) {
+    if (!list?.length) continue
+    reported += 1
+    for (const src of list) {
+      if (src.status === 'unavailable') {
+        down.add(src.id)
+        continue
+      }
+      allDown = false
+      if (src.retrieved_ms != null) fetchedMs = fetchedMs == null ? src.retrieved_ms : Math.min(fetchedMs, src.retrieved_ms)
+      if (src.stale) {
+        const prev = stale.get(src.id)
+        const t = src.retrieved_ms ?? null
+        stale.set(src.id, prev == null ? t : t == null ? prev : Math.min(prev, t))
+      }
+    }
+  }
+  return { allDown: reported > 0 && allDown, down, stale, fetchedMs }
+}
+
+/** The notices for the lists shown: both sources down (one notice, ALL_LISTS_DOWN); else the §14.14 notice per source
+ *  reported unavailable, then a §14.16 notice per source served from an older copy. */
+export function listSourceNotices(sources: readonly (readonly ListSource[] | null | undefined)[], nowMs: number = Date.now()): string[] {
+  const h = listHealth(sources)
+  if (h.allDown) return [ALL_LISTS_DOWN]
   const out: string[] = []
-  if (down.has('wfigs')) out.push(NIFC_LIST_DOWN)
-  if (down.has('calfire')) out.push(CALFIRE_LIST_DOWN)
+  if (h.down.has('wfigs')) out.push(NIFC_LIST_DOWN)
+  if (h.down.has('calfire')) out.push(CALFIRE_LIST_DOWN)
+  for (const id of ['wfigs', 'calfire'] as const) if (h.stale.has(id) && !h.down.has(id)) out.push(staleListText(id, h.stale.get(id) ?? null, nowMs))
   return out
 }
 
+/** Each list's name in a failure line ("Could not load the 2026 list: …"). */
+const LIST_NAME: Record<CatalogList, string> = { live: 'the active fires', season: `the ${SEASON_YEAR} list`, historical: `the ${PAST_YEAR} list` }
+
+/** The failure lines of the lists shown: a list that never loaded says "Could not load", one with an earlier copy says
+ *  how old that copy is (never "Showing the last list" when there was none; final verification, panel SR-M2). */
+export function listErrorLines(lists: readonly CatalogList[], errors: Record<CatalogList, string | null>, updatedMs: Record<CatalogList, number | null>, nowMs: number): string[] {
+  const out: string[] = []
+  for (const l of lists) {
+    const e = errors[l]
+    if (e == null) continue
+    const t = updatedMs[l]
+    out.push(t == null ? `Could not load ${LIST_NAME[l]}: ${e}.` : `Could not refresh ${LIST_NAME[l]}: ${e}. Showing the copy loaded ${fmtRelative(t, nowMs)}.`)
+  }
+  return out
+}
+
+/** Forensic's banner when no active fire is listed and a replay is open: the replay's own year, and never "no active
+ *  fires" when a list could not be reached (§14.16). */
+export function noLiveText(health: Pick<ListHealth, 'allDown' | 'down'>, replayYear: number | null): string {
+  const replay = replayYear != null ? `showing a ${replayYear} replay` : 'showing a replay'
+  if (health.allDown) return `The fire lists (CAL FIRE and NIFC) could not be reached right now · ${replay}`
+  if (health.down.size) return `Some fire lists are unavailable right now; the others list no active fires · ${replay}`
+  return `No active fires listed by CAL FIRE or NIFC right now · ${replay}`
+}
+
 /** The overview filter's empty text when no fire at all is listed (the in-view empty text is EMPTY_VIEW). */
-export function emptyListText(filter: OverviewFilter, minAcres: number): string {
+export function emptyListText(filter: OverviewFilter, minAcres: number, health?: Pick<ListHealth, 'allDown' | 'down'>): string {
+  // a source that could not be reached never "lists no fires" (§14.16)
+  if (health?.allDown) return 'No fires prepared on this server to show while the fire lists are unavailable.'
+  if (health?.down.size) return 'No fires listed by the lists that could be reached; the others are unavailable right now.'
   if (filter === 'active') return 'CAL FIRE and NIFC list no active fires right now.'
   if (filter === 'season') return `CAL FIRE and NIFC list no active fires and no ${SEASON_YEAR} fires of ${SEASON_MIN_ACRES} acres or more.`
   return `No ${PAST_YEAR} fires of ${minAcres} acres or more are listed.`
@@ -241,4 +322,10 @@ export function pickerMatches(s: IncidentSummary, q: string): boolean {
   const st = s.state ?? null
   const words = [s.name, s.source_name, s.county, s.location, s.admin_unit, s.id, st, stateName(st), fireWhere(s)]
   return words.some((v) => v?.toLowerCase().includes(q))
+}
+
+/** Settings → Service: the live count, or "unknown" when the fire lists could not be reached (never 0; §14.16). */
+export function activeCountText(n: number | null | undefined): string {
+  if (n == null) return 'unknown (fire lists unavailable)'
+  return `${n.toLocaleString('en-US')} incident${n === 1 ? '' : 's'}`
 }

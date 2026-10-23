@@ -14,7 +14,7 @@ import { GEO_LOOKUP_CREDIT } from '../lib/dataCredits'
 import { directionWord, distance, area } from '../lib/plainLanguage'
 import { fmtAt, fmtRelative, zoneLine } from '../lib/time'
 import { showFireCard } from '../state/fireCard'
-import { fireStatus, fireWhere, isActiveFire } from '../state/overview'
+import { fireStatus, fireWhere, isActiveFire, listHealth } from '../state/overview'
 import { useStore } from '../state/store'
 import { usePlaceZone, useTimeFormatFor } from '../state/timeZone'
 import { useWorkspace, type SelectedLocation } from '../state/workspace'
@@ -80,6 +80,7 @@ export function OverviewCard({ sel, official }: { sel: SelectedLocation; officia
   const narrow = useNarrow()
   const pool = useStore(useShallow((s) => incidentPool(s)))
   const listUpdated = useStore((s) => s.catalog.updatedMs)
+  const listSources = useStore((s) => s.catalog.sources)
   const lastAddress = useAddressDetails((s) => s.details)
   const address = detailsFor(sel, lastAddress)
   const lookup = useGeoLookup(sel.lon, sel.lat)
@@ -99,7 +100,9 @@ export function OverviewCard({ sel, official }: { sel: SelectedLocation; officia
   const point = useMemo(() => checkLocation({ point: sel, timeMs: nowMs, nowMs, summary: null, manifest: null, perimeters: [], detections: [], weather: null, forecast: null, rasters: makeRastersMissing(), address }).point, [sel, nowMs, address])
   const titleIsCoords = !point.address && point.label === formatLatLon(sel.lat, sel.lon, 5)
   const updated = Object.values(listUpdated ?? {}).filter((v): v is number => typeof v === 'number')
-  const newest = updated.length ? Math.max(...updated) : null
+  // when Fire-3d fetched the lists (sources[].retrieved_ms; an older copy keeps its own time), never the answer's time
+  const health = listHealth(Object.values(listSources ?? {}))
+  const newest = health.fetchedMs ?? (updated.length ? Math.max(...updated) : null)
   // phones: a short sheet until the user asks for more; every new point starts short again
   const selKey = `${sel.source}|${sel.lat}|${sel.lon}`
   const [expandedFor, setExpandedFor] = useState<string | null>(null)
@@ -157,10 +160,15 @@ export function OverviewCard({ sel, official }: { sel: SelectedLocation; officia
             {lookupPlace(geo) && <li>Place: {lookupPlace(geo)}</li>}
             {/* the place and the time zone below come from Fire-3d's offline lookup (/api/geo/lookup, §14.13) */}
             {geo && <li className="loc-credit">{GEO_LOOKUP_CREDIT}</li>}
-            {newest != null && (
-              <li>
-                Fire lists: CAL FIRE and NIFC WFIGS, checked {fmtRelative(newest, nowMs)} ({fmtAt(newest, tf, { zone: true })})
-              </li>
+            {health.allDown ? (
+              <li>Fire lists: CAL FIRE and NIFC WFIGS could not be reached right now</li>
+            ) : (
+              newest != null && (
+                <li>
+                  Fire lists: CAL FIRE and NIFC WFIGS, {health.stale.size ? 'could not be refreshed; copy fetched' : 'checked'} {fmtRelative(newest, nowMs)} (
+                  {fmtAt(newest, tf, { zone: true })}){health.down.size > 0 && <> · {[...health.down].map((id) => (id === 'wfigs' ? 'NIFC' : 'CAL FIRE')).join(' and ')} unavailable right now</>}
+                </li>
+              )
             )}
             <li className="is-prototype">{PROTOTYPE_NOTE}</li>
           </ul>

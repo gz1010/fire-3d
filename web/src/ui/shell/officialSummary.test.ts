@@ -34,6 +34,7 @@ describe('Public official summary lines', () => {
     expect(evacuationLine(evac({ state: 'past-date' }), true).text).toBe('Not available for past dates.')
     expect(fireWeatherLine(fw({ state: 'none' })).text).toMatch(/Not an all-clear\.$/)
     expect(fireWeatherLine(fw({ state: 'past-date' })).tone).toBe('muted')
+    expect(fireWeatherLine(fw({ state: 'unavailable', reasonCode: 'upstream_error', archived: true })).text).toBe('Unavailable right now.')
   })
 
   it("keeps the NWS event verbatim with its time, shortens the sender and marks archived copies", () => {

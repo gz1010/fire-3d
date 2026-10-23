@@ -86,6 +86,16 @@ const at = (ms: number, tf: TimeFmt) => fmtAt(ms, tf, { zone: true })
 const https = (u: string | null | undefined) => (u && /^https:\/\//i.test(u) ? u : null)
 
 /** "Follow local officials." is said once, in its own line: drop it from a caveat. */
+/** A reason without "Follow local officials" and without its own "that does not mean there were none" (the line adds
+ *  that sentence once). */
+export function withoutNoneClause(s: string | null | undefined): string | null {
+  const t = withoutFollow(s)
+  if (!t) return null
+  const u = t.replace(/[;,.]?\s*that does not mean there were (?:none|no alerts)\.?\s*$/i, '').trim()
+  if (!u) return null
+  return /[.!?]$/.test(u) ? u : `${u}.`
+}
+
 export function withoutFollow(s: string | null | undefined): string | null {
   if (!s) return null
   const t = s
@@ -250,7 +260,8 @@ export function localAlertLines(answer: LocalAlertsOfficial | undefined, tf: Tim
     case 'loading':
       return [status('local-loading', "Checking local officials' alerts…", null, 'loading')]
     case 'unavailable':
-      return [status('local-unavailable', "Local officials' alerts: not checked", withoutFollow(l.reason) ? `${withoutFollow(l.reason)} That does not mean there were none.` : 'That does not mean there were none.', 'unknown')]
+      // the service could not be reached: "unavailable right now", and the "none" caveat once (panel SR-m1)
+      return [status('local-unavailable', "Local officials' alerts: unavailable right now", withoutNoneClause(l.reason) ? `${withoutNoneClause(l.reason)} That does not mean there were none.` : 'That does not mean there were none.', 'unknown')]
     case 'not-checked':
       return [status('local-unchecked', "Local officials' alerts: not checked", withoutFollow(l.reason) ?? null, 'unknown')]
     case 'none':

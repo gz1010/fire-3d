@@ -86,7 +86,11 @@ const capital = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s)
 
 /** A reason as one sentence before "Follow local officials." (never said twice, always with its full stop). */
 function reasonSentence(reason: string | null | undefined): string {
-  const t = (reason ?? '').replace(/\s*:?\s*follow local officials\.?\s*$/i, '').trim()
+  // the row adds "Follow local officials." and its own "That does not mean …" sentence: never twice (panel SR-m1)
+  const t = (reason ?? '')
+    .replace(/\s*:?\s*follow local officials\.?\s*$/i, '')
+    .replace(/[;,.]?\s*that does not mean there were (?:none|no alerts)\.?\s*$/i, '')
+    .trim()
   if (!t) return ''
   return /[.!?]$/.test(t) ? `${t} ` : `${t}. `
 }
@@ -489,7 +493,7 @@ export function LocalAlertsRow({ l: answer, wallMs, refMs }: { l: LocalAlertsOff
     return (
       <Row icon={icon} label={label} source={null} tone="muted" more={standing}>
         <p className="on-line">
-          <strong>Not checked.</strong> {reasonSentence(l.reason)}
+          <strong>{l.state === 'unavailable' ? 'Unavailable right now.' : 'Not checked.'}</strong> {reasonSentence(l.reason)}
           {l.state === 'unavailable' ? 'That does not mean there were none. ' : ''}Follow local officials.
         </p>
         {pending}

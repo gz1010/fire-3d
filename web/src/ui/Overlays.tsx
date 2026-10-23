@@ -6,6 +6,7 @@ import { useShallow } from 'zustand/react/shallow'
 import type { JobStatus } from '../api/types'
 import { fmtAcres } from '../lib/format'
 import { fmtDayDate } from '../lib/time'
+import { listHealth, noLiveText } from '../state/overview'
 import { useStore } from '../state/store'
 import { useTimeFormat } from '../state/timeZone'
 import { CornerMarks, ProgressBar, Spinner } from './controls'
@@ -191,15 +192,18 @@ export function ErrorBanner() {
   )
 }
 
-/** "No active fires listed" notice when live mode has nothing and a replay is shown instead. */
+/** "No active fires listed" notice when live mode has nothing and a replay is shown instead. The replay's year is the
+ *  open fire's; when a list could not be reached it says so, never "no active fires" (§14.16). */
 export function NoLiveNotice() {
   const show = useStore((s) => !s.catalog.loading && s.catalog.updatedMs.live != null && s.catalog.live.length === 0 && s.summary?.mode === 'historical')
+  const year = useStore((s) => s.summary?.year ?? null)
+  const sources = useStore((s) => s.catalog.sources?.live ?? null)
   const [dismissed, setDismissed] = useState(false)
   if (!show || dismissed) return null
   return (
     <div className="banner banner-info">
       <Info size={13} />
-      <span className="banner-text">No active fires listed by CAL FIRE or NIFC right now · showing a 2025 replay</span>
+      <span className="banner-text">{noLiveText(listHealth([sources]), year)}</span>
       <button type="button" className="icon-btn" aria-label="Dismiss" onClick={() => setDismissed(true)}>
         <X size={13} />
       </button>

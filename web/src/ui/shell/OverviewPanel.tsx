@@ -13,6 +13,7 @@ import { fmtAcresShort, fmtNumber } from '../../lib/format'
 import { fmtRelative } from '../../lib/time'
 import { useMapRuntime } from '../../map/mapStore'
 import {
+  ALL_LISTS_DOWN_SHORT,
   analysisState,
   EMPTY_VIEW,
   emptyListText,
@@ -23,11 +24,14 @@ import {
   isActiveFire,
   LIST_ABSENCE,
   LIST_ABSENCE_SHORT,
+  listErrorLines,
+  listHealth,
   listSourceNotices,
   newestRecordMs,
   OVERVIEW_FILTERS,
   overviewCounts,
   overviewFires,
+  type ListHealth,
   type OverviewFilter,
 } from '../../state/overview'
 import { useStore, type CatalogList } from '../../state/store'
@@ -46,13 +50,19 @@ export const OVERVIEW_TITLE = 'Fires in the lower 48'
 function useOverviewData() {
   const catalog = useStore((s) => s.catalog)
   const filter = useWorkspace((s) => s.overviewFilter)
+  const nowMs = useNow(30_000)
   const rows = useMemo(() => overviewFires(catalog, filter), [catalog, filter])
   const lists = LIST_OF[filter]
   const loading = lists.some((l) => catalog.listLoading[l])
   const errors = lists.map((l) => catalog.listErrors[l]).filter((e): e is string => e != null)
   const checked = lists.map((l) => catalog.updatedMs[l]).filter((t): t is number => t != null)
-  const notices = listSourceNotices(lists.map((l) => catalog.sources?.[l]))
-  return { catalog, filter, rows, loading, notices, error: errors.length ? [...new Set(errors)].join('; ') : null, checkedMs: checked.length ? Math.min(...checked) : null }
+  const shownSources = lists.map((l) => catalog.sources?.[l])
+  const health = listHealth(shownSources)
+  const notices = listSourceNotices(shownSources, nowMs)
+  const errorLines = listErrorLines(lists, catalog.listErrors, catalog.updatedMs, nowMs)
+  // "checked": when Fire-3d fetched the lists (sources[].retrieved_ms), never the time of the answer (panel F2)
+  const checkedMs = health.fetchedMs ?? (checked.length ? Math.min(...checked) : null)
+  return { catalog, filter, rows, loading, notices, health, errorLines, nowMs, error: errors.length ? [...new Set(errors)].join('; ') : null, checkedMs }
 }
 
 /** The fires of the list in the map view (the whole list with "Show all", or when no map is shown). Memoised on the
@@ -65,6 +75,7 @@ function useInView(rows: IncidentSummary[]) {
 }
 
 function FireRow({ fire, index, size, cursor, current, onPick }: { fire: IncidentSummary; index: number; size: number; cursor: boolean; current: boolean; onPick: (f: IncidentSummary) => void }) {
+  const units = useWorkspace((s) => s.units)
   const status = fireStatus(fire)
   const ready = analysisState(fire) === 'ready'
   const where = fireWhere(fire)
@@ -86,7 +97,7 @@ function FireRow({ fire, index, size, cursor, current, onPick }: { fire: Inciden
           <span className="ov-sub">{[where, status.label, contained].filter(Boolean).join(' · ')}</span>
         </span>
         <span className="ov-side">
-          <span className="ov-acres mw-mono">{fmtAcresShort(fire.acres)}</span>
+          <span className="ov-acres mw-mono">{fmtAcresShort(fire.acres, units)}</span>
           {ready && <span className="ov-ready">Analysis ready</span>}
         </span>
       </button>
@@ -176,16 +187,29 @@ function FireList({ rows, onPick }: { rows: IncidentSummary[]; onPick: (f: Incid
   )
 }
 
-/** One line under the filter: where the list comes from and how fresh it is (relative: the rows span many zones). */
-function SourceLine({ rows, checkedMs, loading, nowMs, past }: { rows: IncidentSummary[]; checkedMs: number | null; loading: boolean; nowMs: number; past: boolean }) {
+/** One line under the filter: where the list comes from and how fresh it is (relative: the rows span many zones). When
+ *  both lists are down the rows are prepared fires' saved records, not the agencies' lists (§14.16). A list served from
+ *  an older copy is "fetched" at that copy's time, never "checked just now" (panel F2). */
+function SourceLine({ rows, checkedMs, loading, nowMs, past, health }: { rows: IncidentSummary[]; checkedMs: number | null; loading: boolean; nowMs: number; past: boolean; health: ListHealth }) {
   const newest = newestRecordMs(rows)
   return (
     <p className="ov-source">
       <span className="mw-tag is-official">Official</span>
       <span>
-        {past ? 'Final records' : 'Records'}: CAL FIRE (California), NIFC WFIGS
-        {newest != null && <> · updated {fmtRelative(newest, nowMs)}</>}
-        {checkedMs != null && <> · checked {fmtRelative(checkedMs, nowMs)}</>}
+        {health.allDown ? (
+          <>Fire lists unavailable · prepared fires&apos; saved records</>
+        ) : (
+          <>
+            {past ? 'Final records' : 'Records'}: CAL FIRE (California), NIFC WFIGS
+            {newest != null && <> · updated {fmtRelative(newest, nowMs)}</>}
+            {checkedMs != null && (
+              <>
+                {' '}
+                · {health.stale.size ? 'fetched' : 'checked'} {fmtRelative(checkedMs, nowMs)}
+              </>
+            )}
+          </>
+        )}
       </span>
       <button
         type="button"
@@ -233,22 +257,37 @@ function ViewLine({ total, inViewCount, showAll }: { total: number; inViewCount:
 
 /** Phones, sheet closed: one line above the coordinates, and the short list-absence line. */
 export function PeekBar() {
-  const { live, loading, error, liveLoaded } = useStore(
-    useShallow((s) => ({ live: s.catalog.live, loading: s.catalog.listLoading.live, error: s.catalog.listErrors.live, liveLoaded: s.catalog.updatedMs.live != null })),
+  const { live, loading, error, liveLoaded, sources } = useStore(
+    useShallow((s) => ({ live: s.catalog.live, loading: s.catalog.listLoading.live, error: s.catalog.listErrors.live, liveLoaded: s.catalog.updatedMs.live != null, sources: s.catalog.sources?.live ?? null })),
   )
   const nowMs = useNow(30_000)
   const newest = newestRecordMs(live)
+  const health = listHealth([sources])
   const open = () => useWorkspace.getState().setPanel('updates', true)
+  const n = live.length
+  const count = (
+    <b>
+      {n.toLocaleString('en-US')} active fire{n === 1 ? '' : 's'}
+    </b>
+  )
+  const staleMs = health.stale.size ? Math.min(...[...health.stale.values()].map((t) => t ?? nowMs)) : null
   let text: ReactNode
   if (!liveLoaded && loading) text = 'Loading the active fires…'
   else if (!liveLoaded && error) text = 'Could not load the fire list · open to retry'
-  else if (live.length === 0) text = 'No active fires listed by CAL FIRE or NIFC'
+  // both lists down: never "no active fires" (the agencies could not be asked; §14.16)
+  else if (health.allDown) text = n ? `${ALL_LISTS_DOWN_SHORT} · ${n.toLocaleString('en-US')} prepared fire${n === 1 ? '' : 's'}` : ALL_LISTS_DOWN_SHORT
+  else if (n === 0 && health.down.size) text = 'Some fire lists are unavailable right now · open for details'
+  else if (n === 0) text = 'No active fires listed by CAL FIRE or NIFC'
+  else if (staleMs != null)
+    text = (
+      <>
+        {count} · list copy from {fmtRelative(staleMs, nowMs)} (could not refresh)
+      </>
+    )
   else
     text = (
       <>
-        <b>
-          {live.length.toLocaleString('en-US')} active fire{live.length === 1 ? '' : 's'}
-        </b>
+        {count}
         {newest != null ? ` · records updated ${fmtRelative(newest, nowMs)}` : ''}
       </>
     )
@@ -270,9 +309,8 @@ export function PeekBar() {
 /** Filter, source line, list and its loading / error / empty states (the overview panel and Forensic's "Open a fire
  *  first" screen). */
 export function OverviewList({ onPick }: { onPick: (f: IncidentSummary) => void }) {
-  const { catalog, filter, rows, loading, error, checkedMs, notices } = useOverviewData()
+  const { catalog, filter, rows, loading, error, checkedMs, notices, health, errorLines, nowMs } = useOverviewData()
   const { shown, inViewCount, hasView, showAll } = useInView(rows)
-  const nowMs = useNow(30_000)
   // the 2025 list is large: load it on demand when it failed or was never loaded
   useEffect(() => {
     if (filter === 'past' && catalog.updatedMs.historical == null && !catalog.listLoading.historical && !catalog.listErrors.historical) void useStore.getState().loadCatalog({ lists: ['historical'] })
@@ -301,17 +339,19 @@ export function OverviewList({ onPick }: { onPick: (f: IncidentSummary) => void 
           }))}
         />
       </div>
-      <SourceLine rows={rows} checkedMs={checkedMs} loading={loading} nowMs={nowMs} past={filter === 'past' && !rows.some((r) => isActiveFire(r))} />
+      <SourceLine rows={rows} checkedMs={checkedMs} loading={loading} nowMs={nowMs} past={filter === 'past' && !rows.some((r) => isActiveFire(r))} health={health} />
       {notices.map((n) => (
         <p key={n} className="ov-warn" role="status">
           {n}
         </p>
       ))}
-      {error && rows.length > 0 && (
-        <p className="ov-warn" role="status">
-          Could not refresh: {error}. Showing the last list.
-        </p>
-      )}
+      {error &&
+        rows.length > 0 &&
+        errorLines.map((t) => (
+          <p key={t} className="ov-warn" role="status">
+            {t}
+          </p>
+        ))}
       {hasView && rows.length > 0 && <ViewLine total={rows.length} inViewCount={inViewCount} showAll={showAll} />}
       <div className="ov-body">
         {shown.length > 0 ? (
@@ -334,7 +374,7 @@ export function OverviewList({ onPick }: { onPick: (f: IncidentSummary) => void 
           </div>
         ) : (
           <div className="ov-state is-empty">
-            <p>{emptyListText(filter, catalog.minAcres)}</p>
+            <p>{emptyListText(filter, catalog.minAcres, health)}</p>
             <p className="ov-absence">{LIST_ABSENCE}</p>
           </div>
         )}

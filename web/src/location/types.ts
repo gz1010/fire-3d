@@ -9,7 +9,7 @@ import type { SelectedLocation, SelectionSource } from '../state/workspace'
 /** Why a modeled value is unknown at the point. */
 export type ModelGap =
   | 'no_bundle' // the incident has no ready bundle (yet)
-  | 'outside_modeled_area' // outside the incident's analysis square (AOI): unknown, not low risk
+  | 'outside_modeled_area' // outside the incident's analysis square (AOI): unknown, not low
   | 'no_forecast' // no ready forecast run is selected (missing forecast)
   | 'nodata' // the raster has no value here (LayerInfo.nodata / NaN)
   | 'loading' // rasters still loading

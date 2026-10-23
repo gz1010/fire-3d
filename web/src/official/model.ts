@@ -540,6 +540,9 @@ function fwEnvelope(q: Pick<ExtrasQueryState<FireWeatherResponse>, 'data' | 'loa
     if (q?.error) return { state: 'unavailable', alerts: [], ...fwBase(null), reasonCode: 'request_error', reason: q.error, caveat: FW_CAVEAT }
     return { state: 'loading', alerts: [], ...fwBase(null), caveat: FW_CAVEAT }
   }
+  // the archive of past alerts could not be reached: unavailable right now, never "not available for this time" (panel SR-m1)
+  if (d.status === 'not_available_for_past_dates' && d.reason_code === 'upstream_error')
+    return { state: 'unavailable', alerts: [], ...fwBase(d), reasonCode: 'upstream_error', reason: d.reason, caveat: FW_CAVEAT }
   if (d.status === 'not_available_for_past_dates')
     return { state: 'past-date', alerts: [], ...fwBase(d), reasonCode: d.reason_code ?? 'past_date', reason: d.reason ?? 'Past NWS alerts are not available for this time.', caveat: FW_CAVEAT }
   if (d.status === 'unavailable') return { state: 'unavailable', alerts: [], ...fwBase(d), reasonCode: d.reason_code ?? 'upstream_error', reason: d.reason, caveat: FW_CAVEAT }

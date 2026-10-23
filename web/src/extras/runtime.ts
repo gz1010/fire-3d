@@ -217,10 +217,12 @@ export function extrasStatusLines(
 
 /** Why NWS outlines cannot be drawn for the open fire (past dates without the archive, outages); null otherwise
  *  (no alert in effect is said in "Official now", not as a legend line). */
-export function fireWeatherStatusLine(d: { status: string; reason: string | null } | null, error: string | null, opts: { hasIncident: boolean; demo: boolean }): StatusLine | null {
+export function fireWeatherStatusLine(d: { status: string; reason: string | null; reason_code?: string | null } | null, error: string | null, opts: { hasIncident: boolean; demo: boolean }): StatusLine | null {
   if (!opts.hasIncident || opts.demo) return null
   if (error && !d) return { tone: 'error', title: `${SOURCE_NAME.fireWeather}: could not load`, detail: error }
   if (!d) return null
+  // the archive of past alerts could not be reached: unavailable, never "not available for this time" (panel SR-m1)
+  if (d.status === 'not_available_for_past_dates' && d.reason_code === 'upstream_error') return { tone: 'warn', title: `${SOURCE_NAME.fireWeather}: unavailable right now`, detail: d.reason }
   if (d.status === 'not_available_for_past_dates') return { tone: 'muted', title: `${SOURCE_NAME.fireWeather}: not available for this time`, detail: d.reason }
   if (d.status === 'unavailable') return { tone: 'warn', title: `${SOURCE_NAME.fireWeather}: unavailable`, detail: d.reason }
   return null

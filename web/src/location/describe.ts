@@ -689,7 +689,7 @@ function describeWith(r: LocationReport, o: DescribeOptions): LocationCardModel 
     lat: formatLat(r.point.lat),
     lon: formatLon(r.point.lon),
     headline: head,
-    areaNote: r.modeledArea === 'outside' ? 'Outside the modeled area: the model and the fire reconstruction do not cover this spot. Unknown, not low risk.' : null,
+    areaNote: r.modeledArea === 'outside' ? 'Outside the modeled area: the model and the fire reconstruction do not cover this spot. Unknown, not low.' : null,
     sections,
     summary,
     details: detailsOf(sections, summary.keys),

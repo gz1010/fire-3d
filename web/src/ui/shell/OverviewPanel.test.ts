@@ -7,7 +7,7 @@ import { summaryFixture, wfigsSummaryFixture } from '../../api/fixtures.testutil
 import { MapLegend } from '../../map/MapLegend'
 import { useMapRuntime } from '../../map/mapStore'
 import { EMPTY_CATALOG } from '../../state/catalog'
-import { EMPTY_VIEW, LIST_ABSENCE, LIST_ABSENCE_SHORT, NIFC_LIST_DOWN } from '../../state/overview'
+import { ALL_LISTS_DOWN, ALL_LISTS_DOWN_SHORT, CALFIRE_LIST_DOWN, EMPTY_VIEW, LIST_ABSENCE, LIST_ABSENCE_SHORT, NIFC_LIST_DOWN } from '../../state/overview'
 import { useStore } from '../../state/store'
 import { useWorkspace } from '../../state/workspace'
 import { restoreSsrState, ssrState } from '../ssr.testutil'
@@ -28,7 +28,7 @@ afterEach(() => {
   restoreSsrState()
   useStore.setState({ incidentId: null, catalog: EMPTY_CATALOG })
   useMapRuntime.setState({ viewBox: null })
-  useWorkspace.setState({ overviewFilter: 'season', overviewShowAll: false })
+  useWorkspace.setState({ overviewFilter: 'season', overviewShowAll: false, units: 'us' })
 })
 
 describe('overview list (§14.11)', () => {
@@ -111,10 +111,74 @@ describe('overview list (§14.11)', () => {
   it('a list source reported unavailable shows the §14.14 notice', () => {
     setLists()
     ssrState(useStore, {
-      catalog: { ...useStore.getState().catalog, sources: { live: [{ id: 'wfigs', name: 'NIFC WFIGS (IRWIN)', status: 'unavailable', retrieved_ms: null, reason: 'down' }], season: null, historical: null } },
+      catalog: {
+        ...useStore.getState().catalog,
+        sources: {
+          live: [
+            { id: 'calfire', name: 'CAL FIRE', status: 'available', retrieved_ms: Date.now(), reason: null },
+            { id: 'wfigs', name: 'NIFC WFIGS (IRWIN)', status: 'unavailable', retrieved_ms: null, reason: 'down' },
+          ],
+          season: null,
+          historical: null,
+        },
+      },
     })
     const html = renderToStaticMarkup(createElement(OverviewList, { onPick: () => undefined }))
     expect(has(html, NIFC_LIST_DOWN)).toBe(true)
+  })
+
+  it('both lists down (final verification, panel SR-B1): one notice, no "list no active fires", the source line says so', () => {
+    const reason = 'The fire lists (CAL FIRE and NIFC) could not be reached right now; only fires prepared on this server are listed.'
+    const downSources = [
+      { id: 'calfire' as const, name: 'CAL FIRE', status: 'unavailable' as const, retrieved_ms: null, reason },
+      { id: 'wfigs' as const, name: 'NIFC WFIGS (IRWIN)', status: 'unavailable' as const, retrieved_ms: null, reason },
+    ]
+    setLists([], [])
+    ssrState(useWorkspace, { overviewFilter: 'active' })
+    ssrState(useStore, { catalog: { ...useStore.getState().catalog, sources: { live: downSources, season: null, historical: null } } })
+    const html = renderToStaticMarkup(createElement(OverviewList, { onPick: () => undefined }))
+    expect(has(html, ALL_LISTS_DOWN)).toBe(true)
+    expect(has(html, NIFC_LIST_DOWN)).toBe(false)
+    expect(has(html, CALFIRE_LIST_DOWN)).toBe(false)
+    expect(html).not.toMatch(/list no active fires/)
+    expect(has(html, 'Fire lists unavailable')).toBe(true)
+    expect(html).not.toMatch(/checked just now/)
+    const peek = renderToStaticMarkup(createElement(PeekBar))
+    expect(has(peek, ALL_LISTS_DOWN_SHORT)).toBe(true)
+    expect(peek).not.toMatch(/No active fires/)
+  })
+
+  it('an old copy of a list: the peek and the source line say when it was fetched (panel SR-M1, F2)', () => {
+    setLists()
+    const old = Date.now() - 47 * 60_000
+    ssrState(useWorkspace, { overviewFilter: 'active' })
+    ssrState(useStore, {
+      catalog: {
+        ...useStore.getState().catalog,
+        sources: {
+          live: [
+            { id: 'calfire', name: 'CAL FIRE', status: 'available', retrieved_ms: Date.now(), reason: null, stale: false },
+            { id: 'wfigs', name: 'NIFC WFIGS (IRWIN)', status: 'available', retrieved_ms: old, reason: 'could not be refreshed', stale: true },
+          ],
+          season: null,
+          historical: null,
+        },
+      },
+    })
+    const html = renderToStaticMarkup(createElement(OverviewList, { onPick: () => undefined }))
+    expect(has(html, 'The national fire list (NIFC) could not be refreshed right now; showing the copy fetched 47 min ago.')).toBe(true)
+    expect(html).toMatch(/fetched 47 min ago/)
+    expect(html).not.toMatch(/checked just now/)
+    const peek = renderToStaticMarkup(createElement(PeekBar))
+    expect(peek).toMatch(/list copy from 47 min ago \(could not refresh\)/)
+  })
+
+  it('metric units: the rows show hectares, as the map labels do (panel SR-m4)', () => {
+    setLists([wfigsSummaryFixture({ id: '2026-big-000001', name: 'Big', mode: 'live', is_active: true, year: 2026, acres: 173_000 })], [])
+    ssrState(useWorkspace, { overviewFilter: 'active', units: 'metric' })
+    const html = renderToStaticMarkup(createElement(OverviewList, { onPick: () => undefined }))
+    expect(html).toMatch(/70\.0k ha/)
+    expect(html).not.toMatch(/173k ac/)
   })
 })
 

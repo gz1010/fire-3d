@@ -91,6 +91,8 @@ describe('official additions (brief 2)', () => {
     const opts = { hasIncident: true, demo: false }
     expect(fireWeatherStatusLine({ status: 'not_available_for_past_dates', reason: 'Archive down.' }, null, opts)).toEqual({ tone: 'muted', title: 'NWS fire weather alerts: not available for this time', detail: 'Archive down.' })
     expect(fireWeatherStatusLine({ status: 'unavailable', reason: 'NWS down.' }, null, opts)?.tone).toBe('warn')
+    // the archive could not be reached: unavailable right now (final verification, panel SR-m1)
+    expect(fireWeatherStatusLine({ status: 'not_available_for_past_dates', reason_code: 'upstream_error', reason: 'IEM down.' }, null, opts)).toEqual({ tone: 'warn', title: 'NWS fire weather alerts: unavailable right now', detail: 'IEM down.' })
     expect(fireWeatherStatusLine(null, 'Could not reach the Fire-3d server.', opts)?.tone).toBe('error')
     expect(fireWeatherStatusLine({ status: 'available', reason: null }, null, opts)).toBeNull()
     expect(fireWeatherStatusLine(null, 'x', { hasIncident: false, demo: false })).toBeNull()
