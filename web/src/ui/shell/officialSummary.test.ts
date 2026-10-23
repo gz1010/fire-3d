@@ -3,7 +3,7 @@ import type { CalFireOfficial, EvacuationOfficial, FireWeatherOfficial, Official
 import { calfireLine, evacuationLine, fireWeatherLine, localAlertsLine, officialSummary } from './officialSummary'
 import { setCaliforniaCommandClock } from '../../extras/__fixtures__/clock.testutil'
 import { LOCAL_ARCHIVE_HORSE_GULCH } from '../../official/__fixtures__/localAlerts'
-import { localAlertsState } from '../../official/localAlerts'
+import { localAlertPlace, localAlertsState } from '../../official/localAlerts'
 import { officialBadge } from '../../official/model'
 import { timeFmt } from '../../lib/time'
 
@@ -87,7 +87,7 @@ describe("local officials' alerts in the Public summary and the phone badge (Hor
     expect(l).not.toBeNull()
     expect(l!.label).toBe("Local officials' alerts")
     expect(l!.text).toBe(
-      'Archived alert from MTHelenaPoliceDepartment: “Urgent! Evacuation for Horse Gulch Fire: Residences between Cave Gulch to Magpie Gulch” · sent Jul 10, 2024 5:45 PM MDT · FEMA archive · +2 more in Details',
+      "Archived alert from MTHelenaPoliceDepartment: “Urgent! Evacuation for Horse Gulch Fire: Residences between Cave Gulch to Magpie Gulch” · sent Jul 10, 2024 5:45 PM MDT · FEMA archive · area covers the fire's reported location · +2 more in Details",
     )
     expect(l!.tone).toBe('order') // "Evacuation Immediate", the issuer's own event
     expect(l!.link?.url).toMatch(/^https:\/\/www\.fema\.gov\/api\/open\/v1\/IpawsArchivedAlerts/)
@@ -102,6 +102,22 @@ describe("local officials' alerts in the Public summary and the phone badge (Hor
     const ended = { ...local, alerts: local.alerts.map((a) => ({ ...a, phase: 'expired' as const })) }
     expect(localAlertsLine(ended, MDT12, AT)).toBeNull()
     expect(officialSummary({ evacuation: notAvailable, calfire: { state: 'loading' } as CalFireOfficial, fireWeather: fw({ state: 'none' }) }, AT, false).map((x) => x.key)).toEqual(['evacuation', 'calfire', 'fire-weather'])
+  })
+
+  it("says where the message's area lies, in the full block's words and the viewer's units (review round 2, N1)", () => {
+    const away = { ...local.alerts[0], where: { from: 'fire' as const, covers: false, km: 1.6 } }
+    const one = { ...local, alerts: [away] }
+    expect(localAlertsLine(one, MDT12, AT)!.text).toBe(
+      "Archived alert from MTHelenaPoliceDepartment: “Urgent! Evacuation for Horse Gulch Fire: Residences between Cave Gulch to Magpie Gulch” · sent Jul 10, 2024 5:45 PM MDT · FEMA archive · area 1 mi from the fire's reported location · may be about another fire",
+    )
+    // metric viewers, through the summary the panel uses
+    const lines = officialSummary({ evacuation: notAvailable, calfire: { state: 'loading' } as CalFireOfficial, fireWeather: fw({ state: 'none' }), local: one }, AT, true, MDT12, AT)
+    expect(lines.find((x) => x.key === 'local')!.text).toContain("· area 1.6 km from the fire's reported location · may be about another fire")
+    // matched by county: said so, never a distance
+    const county = { ...local, alerts: [{ ...away, match: 'county' as const, where: { from: 'fire' as const, covers: null, km: null } }] }
+    expect(localAlertsLine(county, MDT12, AT)!.text).toContain('· matched by county, not by an exact area · may be about another fire')
+    // the same words as the full block (OfficialNow's LocalAlertsRow uses localAlertPlace)
+    expect(localAlertsLine(one, MDT12, AT)!.text).toContain(localAlertPlace(away, { metric: false }))
   })
 
   it('a message sent after the replay time says so, never "upcoming" (review UX-m2)', () => {

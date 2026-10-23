@@ -5,12 +5,14 @@
 // own words (zone status, NWS event), each line names its issuer, and every quiet state says it is not an all-clear.
 // Brief 3 (CONTRACT §14.7, integration review UX-M1): while a local officials' message is in effect or sent within the
 // replay's hour, a fourth line quotes it verbatim with its issuer, its own sent time, the channel (relayed by NWS or
-// FEMA's archive) and its link; it is never merged with the evacuation line or with model output.
+// FEMA's archive), where its area lies (as the full block says it: "area 1 mi from the fire's reported location · may
+// be about another fire"; review round 2, N1) and its link; it is never merged with the evacuation line or with model
+// output.
 // Pure (officialSummary.test.ts).
 import { DEFAULT_MARGIN_KM } from '../../extras/client'
 import { fmtWhen } from '../../extras/format'
 import { distanceText } from '../../official/geo'
-import { localPhaseText, sentText, type LocalAlertsOfficial } from '../../official/localAlerts'
+import { localAlertPlace, localPhaseText, sentText, type LocalAlertsOfficial } from '../../official/localAlerts'
 import { evacuationWho, groupZones, localBadgeLevel, notAvailableReason, type CalFireOfficial, type EvacuationOfficial, type FireWeatherOfficial } from '../../official/model'
 import { fmtAcres, fmtNumber } from '../../lib/format'
 import { fmtAt, type TimeFmt } from '../../lib/time'
@@ -112,10 +114,11 @@ export function fireWeatherLine(f: FireWeatherOfficial): SummaryLine {
  * Local officials' messages (CONTRACT §14.7; integration review UX-M1): a line while one is in effect or was sent
  * within the replay's next hour, null otherwise (the full block keeps the none / not checked states). The most
  * relevant message (localAlertOrder) is quoted verbatim after its lead ("Archived alert from <issuer>"), with its own
- * sent time in its area's zone, the channel and its link; "+N more in Details" for the rest. `refMs`: the time the
- * panel is for (the replay time, or now).
+ * sent time in its area's zone, the channel, where its area lies (localAlertPlace, the full block's words, in the
+ * viewer's units; review round 2, N1) and its link; "+N more in Details" for the rest. `refMs`: the time the panel is
+ * for (the replay time, or now).
  */
-export function localAlertsLine(l: LocalAlertsOfficial | null | undefined, tf: TimeFmt, refMs?: number | null): SummaryLine | null {
+export function localAlertsLine(l: LocalAlertsOfficial | null | undefined, tf: TimeFmt, refMs?: number | null, metric = false): SummaryLine | null {
   if (!l || l.state !== 'listed') return null
   const live = l.alerts.filter((a) => a.phase === 'active' || a.phase === 'upcoming')
   const a = live[0]
@@ -125,6 +128,7 @@ export function localAlertsLine(l: LocalAlertsOfficial | null | undefined, tf: T
     sentText(a, tf),
     a.archived ? 'FEMA archive' : 'relayed by NWS',
     localPhaseText(a, refMs),
+    localAlertPlace(a, { metric }),
     live.length > 1 ? `+${live.length - 1} more in Details` : null,
   ]
   const level = localBadgeLevel(a.event)
@@ -145,6 +149,6 @@ export function officialSummary(
   tf?: TimeFmt,
   refMs?: number | null,
 ): SummaryLine[] {
-  const local = localAlertsLine(info.local, tf ?? getTimeFormat(), refMs ?? nowMs)
+  const local = localAlertsLine(info.local, tf ?? getTimeFormat(), refMs ?? nowMs, metric)
   return [evacuationLine(info.evacuation, metric), ...(local ? [local] : []), calfireLine(info.calfire, nowMs, tf), fireWeatherLine(info.fireWeather)]
 }

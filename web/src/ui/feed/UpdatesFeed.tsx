@@ -447,6 +447,7 @@ function FeedDetails({ item, incidentId, command, nowMs }: { item: FeedItem; inc
   const kind = KIND_META[item.kind]
   const loc = item.location
   const coords = loc ? fmtLatLon(loc.lat, loc.lon) : null
+  // the producer's wording, its times already in the panel's clock (feedModel; Public reads 12 h, review round 2, N2)
   const orig = item.original
   const showOrig = orig != null && (orig.detail !== item.detail || orig.title !== item.title) && (command || item.topic !== 'forecast')
   const official = item.kind === 'official'

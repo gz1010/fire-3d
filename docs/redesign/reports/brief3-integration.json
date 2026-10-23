@@ -220,5 +220,67 @@
    "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-review/fixer/search-cottonwood.png"
   ],
   "screenshot_note": "swiftshader at 1440x900 (phone 390x844 @2x); Forensic was not opened; frame rates are not meaningful here."
+ },
+ "part1_review_fixes_round2": {
+  "role": "integration fixer (part 1, round 2), 2026-10-23 about 09:25-09:55 UTC; API 8711, Vite 5181 (both stopped)",
+  "commits": [
+   "brief 3 integration: part 1 review fixes round 2 (this commit: code, tests, CONTRACT 14.11 / 14.15 notes, this report)"
+  ],
+  "issues": {
+   "R1": "fixed (the map-marker path). Verified first with a real click (check_marker.mjs, 1440x900, swiftshader) and a hold trace: the marker click did call showFireCard and set the 'fire-card' hold, but the card's own layout change (safeInsets) restarted the flight with the new padding about 0.1-0.3 s after the click (applySafeInsets: setPadding stops the flight, then fly again); that stop's moveend arrived within USER_INPUT_MS (400 ms) of the click's pointerdown, so onMoveEnd counted it as the user's move and released the hold, and the zoom focus opened the prepared Lower Sugarloaf Fire once the flight ended. The list, picker and search paths were not affected because their clicks are not on the map container. Fix: new web/src/map/userInput.ts MapInput (replaces mapController's pointerDown / lastInputMs / userInputActive): consumeClick() after a click the map handled as a request (fire marker or label: the click is not a camera gesture) and ours(fn) around our own camera commands (fly(), the padding restart of an explicit flight, the padding ease), so a move they end is never the user's; endedByUser(gesture) decides in onMoveEnd. The user's next drag, wheel zoom or zoom button still ends the hold. Browser, real marker clicks on Little Giant (2026-little-giant-091081): national view (z3.58) and regional zoom (z6.6, a plain flight without a hold first): before the fix, +3 s card Little Giant then +6 s / +3 s incidentId 2025-lower-sugarloaf-569fb7 (source zoom), card closed; after the fix, at +3, +6 and +10 s: fireCardId Little Giant, incidentId null, flight source 'fire-card', zoom 8.57, header 'United States · all fires', Little Giant's card on screen (r1-national.png, r1-regional.png; before/*.png show Lower Sugarloaf open). Also with reduced motion (instant flight: same result, r1-national-reduced.png), and a user drag 10 s after the click ends the hold (the zoom then focuses Lower Sugarloaf, as decision 10 says for the user's own move; r1-after-drag.png). The reviewer's other paths re-run (check_r1.mjs: search result click, the reviewer's plain-flight marker case, location card row, R3 search with Horse Gulch open plus Back, list row): all keep Little Giant at 3/6/10 s; Back reopens Horse Gulch (source history). Tests: map/userInput.test.ts (9: gesture, recent input, ours incl. nesting and exceptions, consumeClick, the marker-click sequence with FocusHold before and after, reduced motion, the user's next move, and a source check of the controller wiring).",
+   "N1": "fixed. officialSummary.ts localAlertsLine(l, tf, refMs, metric) adds localAlertPlace (the full block's words, viewer's units) after the channel and phase: Horse Gulch Public desktop, Jul 10, 2024 6:00 PM MDT: '… · sent Jul 10, 2024 5:45 PM MDT · FEMA archive · area covers the fire's reported location · +2 more in Details · source record (FEMA archive)' (n1-hg-public.png); 4:00 PM MDT: '… · sent Jul 10, 2024 3:53 PM MDT · FEMA archive · matched by county, not by an exact area · may be about another fire · +1 more in Details' (n1-hg-public-1720648800000.png). officialSummary passes the panel's metric setting. Tests: officialSummary.test.ts (covers, 'area 1 mi … · may be about another fire', metric 1.6 km through officialSummary, county match, same words as localAlertPlace).",
+   "N2": "fixed by formatting (not hiding): feedModel.ts eventItem's original.detail runs through localizeDetailTimes in the panel's clock and the fire's zone, so the expanded row's 'Original' line reads like the row (Public 12 h, Command 24 h); the producer's other words stay ('persistent GOES detection'). Formatting keeps the line's information in Public (the satellite footprint, the producer's units) where hiding would drop it. Browser: Black Cove Public, 'Original Ignition: Reported by DFR via NIFC WFIGS Mar 19, 3:00 PM EDT. First persistent GOES detection Mar 19, 3:10 PM EDT (GOES-16). … (Suomi NPP, Mar 19, 2:50 PM EDT).' (n2-bc-public-original.png). Test: feedModel.test.ts (Public exact text, Command 18:18 PST).",
+   "N3": "fixed in the store (reset on leaving a fire), with a correction to the finding: the overview location card itself was not affected (with no fire open SelectedPointCard renders OverviewCard, which passes no refMs, so officialBlock measures against now, and useOfficialContext has past=false, refMs=now; LocationCard.tsx:122 belongs to LocationCardBody, shown only while a fire is open). The stale state did matter elsewhere: after closing a past fire, the next fire opened kept the closed fire's mode and replay minute until its own summary and bundle arrived (its location card measured 'sent N min after this time' against that minute meanwhile), a fire without a ready analysis kept them for good (historical mode is always past, so its official answers were asked for the closed fire's replay time), and useLivePolling stopped refreshing /api/live/status on the overview (mode historical). store.ts leaveIncident (close, zoom-out) and the not-found fallback now set overviewClock(): mode 'live', timeMs now, as at start; opening a fire sets its own mode and time as before. Browser: Horse Gulch at Jul 10, 2024 6:00 PM MDT (historical) + a selected point, 'All fires' clicked: store {incidentId null, mode live, time 2026-10-23T09:39:02Z}; the overview card reads 'Local officials' alerts relayed by NWS: none here · not an all-clear', no 'after this time' (n3-after-close.png). Test: store.test.ts (close and zoom-out return to live/now; a fire without an analysis opened next keeps the current time, not 40 h; fails without the fix)."
+  },
+  "new_findings": [
+   "N4 candidate (minor, not fixed: outside this round's four items). A local message whose own effective time is earlier than its sent time is 'in effect' at a replay time before it was sent, and localPhaseText says nothing for in-effect messages: Horse Gulch at Jul 10, 2024 5:00 PM MDT quotes MTHelenaPoliceDepartment's Evacuation Immediate (effective 5:00 PM, sent 5:45 PM; FEMA archive) with 'sent Jul 10, 2024 5:45 PM MDT' and no 'sent 45 min after this time'. The sent time shown is correct and verbatim, but UX-m2's 'sent N min after this time' would apply. Suggested fix: localPhaseText checks sentMs > refMs before the phase (official/localAlerts.ts), with a test."
+  ],
+  "gates": {
+   "backend": "cd backend && uv run pytest -q: 974 passed, 0 failed (92 s, 09:45 UTC).",
+   "web": "npm run typecheck: exit 0; npm run lint: exit 0, 55 warnings, 0 outside src/scene; npm test: 75 files, 1152 passed, 2 skipped (was 74 files, 1140); npm run build: OK.",
+   "time_checker": "node web/scripts/check-time-api.mjs web/src: 303 files, 0 deprecated uses, 0 America/Los_Angeles literals.",
+   "non_get_requests": "0 non-GET requests in the uvicorn access log of API 8711 (347 GET). No build, no 'Prepare analysis'.",
+   "secrets": "count-only scan of the uncommitted diff, the new files and the scratch folder for FIRMS_MAP_KEY: 0 and 0.",
+   "validation_files": "none touched (docs/redesign/contract3/validation.md has validation's own uncommitted edit; not staged). No gate failure attributable to validation's uncommitted work."
+  },
+  "files": [
+   "web/src/map/userInput.ts (new)",
+   "web/src/map/userInput.test.ts (new)",
+   "web/src/map/mapController.ts",
+   "web/src/ui/shell/officialSummary.ts",
+   "web/src/ui/shell/officialSummary.test.ts",
+   "web/src/ui/feed/feedModel.ts",
+   "web/src/ui/feed/feedModel.test.ts",
+   "web/src/ui/feed/UpdatesFeed.tsx (comment)",
+   "web/src/state/store.ts",
+   "web/src/state/store.test.ts",
+   "docs/redesign/CONTRACT.md (14.11 as built, 14.15 round 2 notes)",
+   "docs/redesign/reports/brief3-integration.json"
+  ],
+  "screenshots": [
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix2/after/r1-national.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix2/after/r1-regional.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix2/after/r1-national-reduced.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix2/after/r1-drag.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix2/after/r1-after-drag.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix2/after/n1-hg-public.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix2/after/n1-hg-public-1720648800000.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix2/after/n2-bc-public-original.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix2/after/n3-after-close.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix2/before/r1-national.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix2/before/r1-regional.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix2/paths/r1-search-click.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix2/paths/r1-marker-plain.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix2/paths/r1-loccard.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix2/paths/r3-search-open-fire.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix2/paths/r1-list-click.png"
+  ],
+  "scripts": [
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix2/check_marker.mjs",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix2/check_n.mjs",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix2/debug_marker2.mjs",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix2/check_r1.mjs"
+  ],
+  "screenshot_note": "swiftshader at 1440x900 (1440x1000 for the panel checks); Forensic was not opened."
  }
 }

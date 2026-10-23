@@ -55,6 +55,7 @@ import { buildFeedItems, selectFeedItem } from '../ui/feed/feedModel'
 import type { FeedItem } from '../ui/feed/types'
 import { BUILDINGS_3D_LAYER, HILLSHADE_SOURCE, IMAGERY_SOURCE, loadBasemap, TERRAIN_SOURCE, VECTOR_SOURCE, type DerivedStyle } from './basemapStyle'
 import { maskGeometry } from './contours'
+import { MapInput } from './userInput'
 import { allFocusCandidates, CENTRAL_FRACTION, chipTargets, FocusHold, focusUnlessHeld, FOCUS_DEBOUNCE_MS, FOCUS_OUT_ZOOM, type FocusCurrent, type FocusView } from './focus'
 import { boundsCenter, Framing, goalFor, latestPerimeter, LOWER48_BOUNDS, LOWER48_START, mapCovered, zoomForBounds, type CameraPose, type FrameGoal } from './framing'
 import { drapedLayers, HATCH_IMAGE, hatchImage, LAYER_GROUPS, LYR, SRC, topLayers, type MapTheme } from './layers'
@@ -131,8 +132,6 @@ const FIT_MAX_ZOOM = 15
 const FIT_MS = 1200
 /** The opening fit waits this long for the fire rasters, then frames with the vector data alone. */
 const RASTER_WAIT_MS = 6000
-/** Input on the map within this time before an interruption means the user took the camera. */
-const USER_INPUT_MS = 400
 /** A safe-area change this soon after a completed fit (the layout still settling as data arrives) fits the goal again,
  *  so an instant fit (reduced motion) ends where an animated one does. */
 const SETTLE_MS = 2000
@@ -236,8 +235,8 @@ export class MapController {
   /** The last move on the overview was a fly to a fire (marker or list click): not an overview view to remember. */
   private overviewFireFly = false
   private overviewRefs: { live: unknown; season: unknown; historical: unknown; filter: string; units: string } | null = null
-  private pointerDown = false
-  private lastInputMs = -Infinity
+  /** Input on the map itself: tells the user's camera moves from ours (map/userInput.ts; review round 2, R1). */
+  private readonly input = new MapInput()
   private imageryTimer = 0
   private readonly domUnsubs: Array<() => void> = []
   /** Decision 10: the debounced focus evaluation after the camera settles. */
@@ -818,7 +817,7 @@ export class MapController {
       this.reissueTimer = 0
       const g = this.framing.goal
       if (this.destroyed || this.framing.phase !== 'flying' || !g) return
-      if (this.userInputActive()) {
+      if (this.input.active) {
         this.framing.userGesture()
         this.publishFraming()
         return
@@ -827,10 +826,6 @@ export class MapController {
       if (this.map.isMoving()) return
       this.issueFit(g, true, true)
     }, 0)
-  }
-
-  private userInputActive(): boolean {
-    return this.pointerDown || performance.now() - this.lastInputMs < USER_INPUT_MS
   }
 
   private publishFraming(): void {
@@ -846,18 +841,21 @@ export class MapController {
     const map = this.map
     const duration = animate ? motionMs(1100) : 0
     const padding = this.padding()
-    if (!paddingEquals(map.getPadding(), padding)) map.setPadding(padding)
-    if (f.bounds) {
-      const cam = map.cameraForBounds(f.bounds, { padding: FIT_MARGIN_PX, bearing: map.getBearing(), maxZoom: FIT_MAX_ZOOM })
-      if (cam?.center && Number.isFinite(cam.zoom)) map.flyTo({ center: cam.center, zoom: cam.zoom, bearing: map.getBearing(), duration })
-      else {
-        const el = map.getContainer()
-        map.easeTo({ center: boundsCenter(f.bounds), zoom: zoomForBounds(f.bounds, el.clientWidth, el.clientHeight, FIT_MARGIN_PX, FIT_MAX_ZOOM), padding, duration })
+    // our own camera command: the move it stops (or its own instant move, with reduced motion) is not the user's
+    this.input.ours(() => {
+      if (!paddingEquals(map.getPadding(), padding)) map.setPadding(padding)
+      if (f.bounds) {
+        const cam = map.cameraForBounds(f.bounds, { padding: FIT_MARGIN_PX, bearing: map.getBearing(), maxZoom: FIT_MAX_ZOOM })
+        if (cam?.center && Number.isFinite(cam.zoom)) map.flyTo({ center: cam.center, zoom: cam.zoom, bearing: map.getBearing(), duration })
+        else {
+          const el = map.getContainer()
+          map.easeTo({ center: boundsCenter(f.bounds), zoom: zoomForBounds(f.bounds, el.clientWidth, el.clientHeight, FIT_MARGIN_PX, FIT_MAX_ZOOM), padding, duration })
+        }
+      } else {
+        const zoom = f.zoom ?? Math.max(map.getZoom(), 13)
+        map.easeTo({ center: [f.lon, f.lat], zoom, duration })
       }
-    } else {
-      const zoom = f.zoom ?? Math.max(map.getZoom(), 13)
-      map.easeTo({ center: [f.lon, f.lat], zoom, duration })
-    }
+    })
     // remembered after the call: starting a move ends the previous one, whose moveend clears activeFly
     this.activeFly = duration > 0 && map.isMoving() ? { req: f, animate } : null
   }
@@ -879,8 +877,12 @@ export class MapController {
     if (this.map.isMoving()) {
       const f = this.activeFly
       if (f) {
-        this.map.setPadding(padding)
-        this.fly(f.req, f.animate)
+        // restart our flight with the new padding (setPadding stops it first): that stop is ours, so a fire card's
+        // focus hold survives the card's own layout change (review round 2, R1)
+        this.input.ours(() => {
+          this.map.setPadding(padding)
+          this.fly(f.req, f.animate)
+        })
       } else this.pendingPadding = true
       return
     }
@@ -890,7 +892,7 @@ export class MapController {
       this.issueFit(g, animate, false)
       return
     }
-    this.map.easeTo({ padding, duration: animate ? motionMs(250) : 0 })
+    this.input.ours(() => this.map.easeTo({ padding, duration: animate ? motionMs(250) : 0 }))
   }
 
   private applyPerspective(p: Perspective, animate: boolean): void {
@@ -932,10 +934,13 @@ export class MapController {
     // moves that issueFit interrupts (or its own instant jump) are handled by issueFit itself
     if (this.issuing) return
     // a gesture that stopped the opening flight shows up as an input on the map just before this moveend
-    if (!byUser && this.framing.phase === 'flying' && this.userInputActive()) this.framing.userGesture()
+    // (never a move one of our own camera commands ended: restarting a flight with the new padding stops it first)
+    const user = this.input.endedByUser(byUser)
+    if (!byUser && this.framing.phase === 'flying' && user) this.framing.userGesture()
     // MapLibre starts a wheel zoom without an originalEvent (only its moveend carries the wheel event): a move the user
-    // made ends an official area's focus hold, and on the overview it is the user's view (not a fly to a fire)
-    if (byUser || this.userInputActive()) {
+    // made ends an official area's or a fire card's focus hold, and on the overview it is the user's view (not a fly to
+    // a fire)
+    if (user) {
       this.focusHold.release()
       if (useStore.getState().incidentId == null) this.overviewFireFly = false
     }
@@ -1039,7 +1044,7 @@ export class MapController {
   private evaluateFocus(): void {
     // the decision needs only the camera and the lists (not the style); a move or gesture in progress re-schedules it
     // at its end
-    if (this.destroyed || this.map.isMoving() || this.userInputActive()) return
+    if (this.destroyed || this.map.isMoving() || this.input.active) return
     const phase = this.framing.phase
     if (phase === 'waiting' || phase === 'flying') return
     const v = this.focusView()
@@ -1246,16 +1251,9 @@ export class MapController {
 
   /** Input on the map itself (not on the chrome): tells a user gesture from a programmatic interruption. */
   private bindInputEvents(container: HTMLElement): void {
-    const down = () => {
-      this.pointerDown = true
-      this.lastInputMs = performance.now()
-    }
-    const up = () => {
-      this.pointerDown = false
-    }
-    const input = () => {
-      this.lastInputMs = performance.now()
-    }
+    const down = () => this.input.pointerDown()
+    const up = () => this.input.pointerUp()
+    const input = () => this.input.input()
     const opts = { capture: true, passive: true } as const
     container.addEventListener('pointerdown', down, opts)
     container.addEventListener('touchstart', down, opts)
@@ -1341,6 +1339,8 @@ export class MapController {
     // a fire marker or label (at every zoom, decision 10) opens its card (I3) and flies to it, never a location select
     const fireId = this.fireAt(e.point)
     if (fireId) {
+      // a request, not a camera gesture: the moves that follow are the flight's and the card's (review round 2, R1)
+      this.input.consumeClick()
       this.openFireFromOverview(fireId)
       return
     }

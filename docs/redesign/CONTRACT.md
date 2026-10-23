@@ -2583,6 +2583,14 @@ From `us-web.md` (M2, cut line b/c, review round 1).
   open closes first (an ordinary history step: Back returns to it), so the header, the updates and the coordinate
   strip never describe a fire other than the one the map shows with its card; the close comes before the flight,
   because the map releases the hold whenever the open fire changes. Forensic only opens the card.
+- **Part 1 review fixes, round 2 (R1, the map marker):** the hold also survives the marker click itself
+  (`map/userInput.ts` `MapInput`). The map tells the user's moves from Fire-3d's own by input on the map within 400 ms
+  of a move's end; the card's own layout change restarted the flight with the new safe-area padding within that time
+  after the click, and that restart's moveend counted as the user's move and ended the hold (the zoom focus then
+  opened Lower Sugarloaf at both the national view and regional zoom). Now a click handled as a request (a fire's
+  marker or label) is not a camera gesture (`consumeClick`), and a move that one of our own camera commands ends (the
+  padding restart, an explicit flight, an instant flight with reduced motion) is ours (`ours`). The user's next drag,
+  wheel zoom or zoom button still ends the hold.
 
 ### 14.12 Pipeline interfaces (`us-pipeline` unless noted)
 
@@ -2841,9 +2849,9 @@ them into this section as "14.x as built" sub-headings.
   reads "Evacuation zones: not available for past dates" (was "Evacuation orders: not shown for past dates").
 - 14.9: the fire-start text the build writes ("Reported by DFR via NIFC WFIGS Mar 19, 15:00 EDT") is shown in the
   panel's clock and the fire's zone (`feedModel.ts` `localizeDetailTimes`: Public "Mar 19, 3:00 PM EDT"); the
-  `original` wording keeps the producer's text. `zoneLine(tf, ms, whose, alsoMs?)`: a replay's panel names the
-  abbreviation at the replay time first and today's too when it differs ("Times: Pacific Time (PST/PDT), the fire's
-  local time" for the Eaton replay read in October).
+  `original` wording keeps the producer's words, its times in the panel's clock too (round 2, N2).
+  `zoneLine(tf, ms, whose, alsoMs?)`: a replay's panel names the abbreviation at the replay time first and today's
+  too when it differs ("Times: Pacific Time (PST/PDT), the fire's local time" for the Eaton replay read in October).
 - 14.10: fire results in the search say where each fire is with its state (`fireResultFacts`, the overview's
   `fireWhere`: "Lincoln Co., NE · 2026 · 129,253 acres · 100% contained"); when nothing matches, the message covers
   fires ("No listed fire, US city, town, county or ZIP code matches …", the geocoder's hint kept). Only the listed
@@ -2851,6 +2859,19 @@ them into this section as "14.x as built" sub-headings.
   opens by its link only.
 - 14.11: see "14.11 as built" (one `showFireCard` for every path; another open fire closes first).
 - Build: `vite.config.ts` also bundles `extras-dev.html`, so the build gate covers every page.
+
+**Integration part 1 review fixes, round 2 (2026-10-23; report key `part1_review_fixes_round2`).**
+- 14.11: a click on an unprepared fire's map marker keeps its card and the zoom focus hold (see "14.11 as built").
+- 14.7: Public's short "Local officials' alerts" line says where the quoted message's area lies, in the full block's
+  words and the viewer's units (`localAlertPlace`): "… · FEMA archive · area covers the fire's reported location ·
+  +2 more in Details", "… · matched by county, not by an exact area · may be about another fire".
+- 14.9: the expanded feed row's "Original" line (`FeedItem.original`, the producer's wording) shows the times the
+  build wrote into it in the panel's clock (Public "Mar 19, 3:00 PM EDT", Command "Mar 19, 15:00 EDT").
+- Shell store (CONTRACT §13 shell): leaving a fire (close, zoom-out, the not-found fallback) returns the store to the
+  overview's clock, live mode at the current time, as at start. Before, a closed past fire's replay mode and minute
+  stayed: the next fire opened kept them until its own data arrived (one without a ready analysis kept them for
+  good, so its official answers were for the closed fire's replay time), and `/api/live/status` stopped refreshing on
+  the overview.
 
 **Folded (integration part 1, 2026-10-23):** `us-catalog.md`, `us-official.md`, `us-pipeline.md` and `us-web.md` are
 summarised in the "14.0 as built" to "14.14 as built" sub-headings above (what differs from the text, the deviations

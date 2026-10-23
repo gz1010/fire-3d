@@ -287,7 +287,9 @@ function eventItem(e: FireEvent, c: Ctx): FeedItem {
     location,
     seekable: true,
     eventId: e.id,
-    original: { title: e.title, detail: e.detail || null, source: e.source },
+    // the producer's own wording, with the times the build wrote into it in the panel's clock and the fire's zone like
+    // the row's text (Public's expanded row shows it as "Original"; review round 2, N2)
+    original: { title: e.title, detail: e.detail ? localizeDetailTimes(e.detail, c.tf, e.t_ms) : null, source: e.source },
     facts: copy.facts ?? [],
     approximate: location ? (copy.approximate ?? e.confidence !== 'observed') : false,
     locationLabel: location ? (copy.locationLabel ?? null) : null,

@@ -450,6 +450,15 @@ describe('fire-start times in the panel clock (review UX-M3)', () => {
     expect(start?.detail).toContain('Reported by CAL FIRE Jan 7, 6:18 PM PST')
     expect(start?.detail).not.toContain('18:18')
   })
+  it('the expanded row\'s "Original" line uses the panel clock too (review round 2, N2): Public 12 h, Command 24 h', () => {
+    const pub = buildFeedItems({ manifest: manifest(), events: EVENTS, annotations: [], tf: timeFmt('America/Los_Angeles', '12h') }).find((i) => i.topic === 'ignition')
+    // the producer's own words stay as written ("persistent GOES detection"); only the times follow the panel clock
+    expect(pub?.original?.detail).toBe('Reported by CAL FIRE Jan 7, 6:18 PM PST. First persistent GOES detection Jan 7, 6:30 PM PST (GOES-18).')
+    expect(pub?.original?.title).toBe('Ignition')
+    const cmd = buildFeedItems({ manifest: manifest(), events: EVENTS, annotations: [], tf: timeFmt('America/Los_Angeles', '24h') }).find((i) => i.topic === 'ignition')
+    expect(cmd?.original?.detail).toContain('Jan 7, 18:18 PST')
+    expect(cmd?.original?.detail).not.toMatch(/ PM /)
+  })
 })
 
 // Integration part 1 review UX-m2: a local officials' message is never "Upcoming" in the feed.
