@@ -11,8 +11,10 @@ Role: us-web (API 8712, Vite 5182). Scratch: /tmp/claude-0/-home-user-fire-3d/46
 
 - M3: time migration (0 and 0 with --role us-web; checker skips lib/time.test.ts too), zone lines, DataCredits local year, geo lookup hook (coverage notice, place zone) early from M5. Eaton Command after M3 = baseline strings.
 
+- M4: FireCard records (recordBlocks, complexes, id line, own zone), accuracy store + templates + card label, skill table relabel, credits. Tests: FireCard.test.ts (9), accuracy.test.ts (8).
+
 ## Next
-- M4 records + accuracy (FireCard rewrite, state/accuracy.ts, templates, skill table, dataCredits names, id lines).
+- M5 search (usStates, search.ts, SearchBox, geocodeClient, types), geodesy lat/lon order.
 
 ## Decisions
 - fmtAt/fmtDayDate default year 'never' (keeps CA strings).

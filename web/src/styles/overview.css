@@ -216,6 +216,69 @@
   font-size: var(--m-fs-sm);
   color: var(--m-text-2);
 }
+/* brief 3 (§14.5): records that differ, a complex's members, the agency's incident id */
+.fc-records {
+  font-size: var(--m-fs-sm);
+  color: var(--m-text-2);
+}
+.fc-records-head {
+  margin: 0 0 3px;
+}
+.fc-records ul {
+  margin: 0;
+  padding-left: 16px;
+}
+.fc-records li.is-active {
+  color: var(--m-text);
+}
+.fc-record-name {
+  font-weight: 600;
+}
+.fc-members,
+.fc-id,
+.fc-complex {
+  margin: 0;
+  font-size: var(--m-fs-sm);
+  color: var(--m-text-2);
+}
+.fc-id {
+  overflow-wrap: anywhere;
+}
+.fc-link.is-inline {
+  display: inline;
+}
+/* brief 3 (§14.4): the model's accuracy in the fire's region (model information, outside the official record) */
+.fc-accuracy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px dashed var(--m-border-strong);
+  border-radius: var(--m-radius-sm);
+  font-size: var(--m-fs-sm);
+  color: var(--m-text);
+}
+.fc-accuracy p {
+  margin: 0;
+}
+.fc-accuracy-sub,
+.fc-accuracy-always {
+  color: var(--m-text-2);
+}
+.fc-accuracy-more {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--m-fs-sm);
+}
+.fc-accuracy-more svg.is-open {
+  transform: rotate(180deg);
+}
+.mw-tag.is-model {
+  color: var(--m-forecast, var(--m-text-2));
+  border-color: currentColor;
+}
 .fc-actions {
   display: flex;
   flex-wrap: wrap;

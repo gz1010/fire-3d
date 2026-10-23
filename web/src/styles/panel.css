@@ -1114,3 +1114,7 @@ button.ac-row:hover {
     padding-left: 10px;
   }
 }
+/* brief 3 (V-R13): skill bars carry no verdict colour */
+.sbar-fill.tone-neutral {
+  background: var(--text-3, rgba(255, 255, 255, 0.45));
+}

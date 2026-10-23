@@ -127,3 +127,44 @@ As §14.9.4: `clockFor`, `useClock`, `useTimeFormat`, `useTimeFormatFor`, `useZo
 - Years in the zone: `ui/DataCredits.tsx` uses `localYear(started_ms, summary zone)`.
 - Not yet passed (us-official's §14.9.6 shims do not exist yet; they fall back to `getTimeFormat()`): see the report's
   `notes_for_integrator` for each call site.
+
+## 14.4 / 14.5 Records and accuracy on the fire card (M4)
+
+- `ui/shell/FireCard.tsx` reads the summary only (no official fetch) through `recordIssuerLabel` / `recordBlocks`
+  (`api/records.ts`, imported, never re-implemented):
+  - `.fc-official` (aria-label "<issuer> official record"): "<issuer> incident record", size / containment / status,
+    "Updated by <issuer> <time>" (active) or "<issuer> record last edited <time> · contained <day>" in the fire's own
+    zone (`useTimeFormatFor(fire.time_zone)`, the preset's clock, the year only when not this year), the record link
+    ("CAL FIRE incident page" / "NIFC WFIGS record"), and the id line `agencyIdLine` ("Incident ID (CAL FIRE): …" /
+    "Incident ID (NIFC WFIGS): …").
+  - When `recordBlocks` returns more than one block: "The agencies' records differ on whether the fire is active; each
+    is shown as published:" then one line per block, `recordBlockText`: "Active (USFS via NIFC WFIGS, updated Oct 22,
+    9:05 AM PDT)" / "Not listed as active (CAL FIRE, updated …)", with each record's link and a member's name.
+  - `complex_members` → "Includes (NIFC WFIGS names): 2-2, 2-7", each linked to its `other_records` entry's https
+    `url` (matched by name, `complexMembers`); the heading, acres, containment and times stay CAL FIRE's.
+  - `complex_name` → "Part of the {X} Complex" under the title. The title line shows `fireWhere` ("Garfield Co., CO").
+  - FireCard no longer imports `fmtStatusTime` (us-official's).
+- Accuracy (§14.4): `state/accuracy.ts` (`useAccuracyStore`, `useAccuracyRegions()` loads `/api/accuracy-regions`
+  once; `findRegion`). Templates in `lib/plainLanguage.ts`: `accuracyLabel(region, method)` → `{ status, publicLine,
+  publicDetail, commandLine, fuelCaveat, always }`, `lfmMethodWords`, `ACCURACY_*` constants. Rules as built:
+  - every number from the file; Public one decimal with the range, Command two decimals (growth ratio as few digits
+    as needed: 1.85, 2.1); `+12-72 h` from the region's `by_lead` keys, else `method.leads_h`;
+  - "starts during main growth" (Command) and "started during the fires' main growth and" (Public detail) only when
+    `method.starts` mentions "main growth" (a clause the file does not support is left out; the seed line of §14.4
+    has no such clause);
+  - growth ratio ≥ 1.05: "about 2.1× too much growth"; 0.95-1.05: "about as much growth as really happened"; below:
+    "about 60% of the real growth" ("half" for 45-55 %);
+  - limited Command bracket from `fires[0]`; untested Command adds the region name only when the file names one;
+  - a load failure says "The accuracy of the model in this region could not be loaded right now." (never "untested").
+- The label (`AccuracyNote`, class `fc-accuracy`) sits after `.fc-official` and before `.fc-note`; Public shows the
+  line, the fuel caveat and a "How was it tested?" disclosure (`aria-expanded`); Command shows the score line and the
+  fuel caveat; both end with "Outside the modeled area is unknown, not low."
+- Per-run skill table (`ui/AnalysisTab.tsx`, V-R13): a "Growth" column first when any `skill[].growth_sorensen` is
+  present, the total relabelled "Total-area overlap (includes the area already burned at the start)" and no
+  green/amber/red tone (neutral bars); without growth values: "The growth score (new spread only) is not stored for
+  this run."
+- Other record wording: `IncidentOverview.tsx` (link "CAL FIRE" / "NIFC WFIGS", id tooltip `agencyIdLine`, state in
+  the location), `MapHeader.tsx` id chip tooltip `agencyIdLine`, `lib/dataCredits.ts` credits "NIFC WFIGS (IRWIN)"
+  for a data source named "NIFC WFIGS incident record …", `plainLanguage.sourceName` keeps "USFS via NIFC WFIGS"
+  issuers, the Forensic telemetry ignition column says "NIFC" for a WFIGS start, the not-prepared notice and the map
+  hovers use the issuer label.

@@ -283,17 +283,20 @@ function RunSummary({ manifest, forecast }: { manifest: IncidentManifest; foreca
   )
 }
 
-function skillTone(s: number): string {
-  return s >= 0.7 ? 'ok' : s >= 0.5 ? 'warn' : 'danger'
-}
-
+/** The per-run skill table (brief 3, V-R13, CONTRACT §14.4): the growth score first when the run has it (the new spread
+ *  only), the total relabelled as total-area overlap (it includes the area already burned at the start), and no
+ *  green / amber / red tone (a colour would read as a verdict on the model). */
 function SkillTable({ forecast }: { forecast: ForecastManifest }) {
   const skill = forecast.skill ?? []
+  const growth = skill.some((k) => typeof k.growth_sorensen === 'number')
   return (
     <Section
       title="Hindcast skill"
       aside={
-        <span className="muted small" data-tip="Sørensen = 2|F∩O| / (|F|+|O|) between the forecast P50 burned area and the observed burned area at start + lead">
+        <span
+          className="muted small"
+          data-tip="Sørensen = 2|F∩O| / (|F|+|O|). Growth: the new spread after the start only (forecast P50 vs observed). Total-area overlap: the whole burned area, including what had already burned at the start."
+        >
           Sørensen <Info size={11} />
         </span>
       }
@@ -302,7 +305,8 @@ function SkillTable({ forecast }: { forecast: ForecastManifest }) {
         <thead>
           <tr>
             <th>Lead</th>
-            <th>Sørensen</th>
+            {growth && <th>Growth</th>}
+            <th>{growth ? 'Total-area overlap' : 'Total-area overlap (includes the area already burned at the start)'}</th>
             <th className="r">Observed</th>
             <th className="r">P50</th>
             <th className="r">Bias</th>
@@ -311,27 +315,41 @@ function SkillTable({ forecast }: { forecast: ForecastManifest }) {
         <tbody>
           {skill.map((k) => {
             const bias = k.observed_acres > 0 ? ((k.forecast_acres_p50 - k.observed_acres) / k.observed_acres) * 100 : null
+            const g = typeof k.growth_sorensen === 'number' && Number.isFinite(k.growth_sorensen) ? k.growth_sorensen : null
             return (
               <tr key={k.lead_h}>
                 <td className="mono">+{k.lead_h} h</td>
+                {growth && (
+                  <td>
+                    {g != null ? (
+                      <span className="sbar">
+                        <span className="sbar-track">
+                          <i className="sbar-fill tone-neutral" style={{ width: `${Math.max(0, Math.min(1, g)) * 100}%` }} />
+                        </span>
+                        <span className="mono">{g.toFixed(2)}</span>
+                      </span>
+                    ) : (
+                      <span className="muted mono">—</span>
+                    )}
+                  </td>
+                )}
                 <td>
                   <span className="sbar">
                     <span className="sbar-track">
-                      <i className={`sbar-fill tone-${skillTone(k.sorensen)}`} style={{ width: `${Math.max(0, Math.min(1, k.sorensen)) * 100}%` }} />
+                      <i className="sbar-fill tone-neutral" style={{ width: `${Math.max(0, Math.min(1, k.sorensen)) * 100}%` }} />
                     </span>
-                    <span className={`mono ${skillTone(k.sorensen)}`}>{k.sorensen.toFixed(2)}</span>
+                    <span className="mono secondary">{k.sorensen.toFixed(2)}</span>
                   </span>
                 </td>
                 <td className="mono r">{fmtNumber(k.observed_acres)}</td>
                 <td className="mono r">{fmtNumber(k.forecast_acres_p50)}</td>
-                <td className={`mono r ${bias == null ? 'muted' : Math.abs(bias) > 50 ? 'warn' : 'secondary'}`}>
-                  {bias == null ? '—' : `${bias > 0 ? '+' : bias < 0 ? '−' : '±'}${fmtNumber(Math.abs(bias))}%`}
-                </td>
+                <td className="mono r secondary">{bias == null ? '—' : `${bias > 0 ? '+' : bias < 0 ? '−' : '±'}${fmtNumber(Math.abs(bias))}%`}</td>
               </tr>
             )
           })}
         </tbody>
       </table>
+      {growth ? null : <p className="muted small">The growth score (new spread only) is not stored for this run.</p>}
       <p className="muted small">Scored against the reconstructed observed arrival time (acres).</p>
     </Section>
   )

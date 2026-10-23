@@ -211,6 +211,10 @@ describe('names and sources', () => {
     expect(sourceName('USGS 3DEP terrain + observed arrival')).toBe('Fire-3d analysis (USGS 3DEP terrain + reconstructed spread)')
     expect(sourceName('CAL FIRE + FIRMS GOES')).toBe('CAL FIRE report + NASA FIRMS (GOES)')
     expect(sourceName('CAL FIRE (100% contained)')).toBe('CAL FIRE')
+    // brief 3: the record's issuer outside California, never "CAL FIRE"
+    expect(sourceName('USFS via NIFC WFIGS + FIRMS GOES')).toBe('USFS via NIFC WFIGS report + NASA FIRMS (GOES)')
+    expect(sourceName('USFS via NIFC WFIGS (100% contained)')).toBe('USFS via NIFC WFIGS')
+    expect(sourceName('NIFC WFIGS (IRWIN)')).toBe('NIFC WFIGS (IRWIN)')
     expect(sourceName('NIFC WFIGS')).toBe('NIFC WFIGS')
     expect(sourceName('Something new')).toBe('Something new')
   })

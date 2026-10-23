@@ -1,9 +1,11 @@
 // Incident Overview card (SPEC 9.4): name, incident ID, location, start, end / containment, total acres, cause and
-// analysis status. The CAL FIRE feed has no cause field, so "Cause" shows a value only when the summary carries one.
+// analysis status. The agencies' feeds give no cause field, so "Cause" shows a value only when the summary carries one.
 import { ExternalLink } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import type { IncidentManifest, IncidentSummary, JobStatus } from '../api/types'
 import { fmtAcres, fmtLatLon } from '../lib/format'
+import { recordIssuerLabel } from '../api/records'
+import { agencyIdLine } from '../lib/recordText'
 import { fmtAt, fmtDuration, zoneAbbr } from '../lib/time'
 import { useStore } from '../state/store'
 import { useTimeFormat } from '../state/timeZone'
@@ -64,7 +66,10 @@ export function IncidentOverview() {
   const start = manifest?.ignition?.t_ms ?? summary.started_ms
   const contained = summary.contained_ms
   const live = summary.mode === 'live'
-  const loc = [summary.location, summary.county ? `${summary.county} County` : null].filter(Boolean).join(', ')
+  const loc = [summary.location, summary.county ? `${summary.county} County` : null, summary.state ?? null].filter(Boolean).join(', ')
+  const wfigs = (summary.record_source ?? 'calfire') === 'wfigs'
+  const issuer = recordIssuerLabel(summary)
+  const idLine = agencyIdLine(summary)
   const mapped = manifest?.stats.final_acres_observed
   const c = cause(summary)
   return (
@@ -76,8 +81,8 @@ export function IncidentOverview() {
       defaultOpen={typeof window === 'undefined' || window.innerHeight >= 960}
       aside={
         summary.url ? (
-          <a className="card-link" href={summary.url} target="_blank" rel="noreferrer" data-tip="Open the CAL FIRE incident page">
-            CAL FIRE <ExternalLink size={11} />
+          <a className="card-link" href={summary.url} target="_blank" rel="noreferrer" data-tip={`Open the ${issuer} incident record`}>
+            {wfigs ? 'NIFC WFIGS' : 'CAL FIRE'} <ExternalLink size={11} />
           </a>
         ) : undefined
       }
@@ -86,7 +91,7 @@ export function IncidentOverview() {
         <dt>Incident</dt>
         <dd className="ov-name ellipsis">{summary.name}</dd>
         <dt>Incident ID</dt>
-        <dd className="mono ellipsis" data-tip={`CAL FIRE UID ${summary.calfire_uid}`}>
+        <dd className="mono ellipsis" data-tip={idLine ?? 'Fire-3d incident identifier'}>
           {summary.id}
         </dd>
         <dt>Location</dt>
@@ -120,7 +125,7 @@ export function IncidentOverview() {
           )}
         </dd>
         <dt>Cause</dt>
-        <dd className={c ? '' : 'muted'} data-tip={c ? undefined : 'The CAL FIRE incident feed does not report a cause'}>
+        <dd className={c ? '' : 'muted'} data-tip={c ? undefined : "The agency's incident record does not report a cause"}>
           {c ?? 'Not reported'}
         </dd>
         <dt>Analysis</dt>
