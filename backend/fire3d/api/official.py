@@ -378,6 +378,8 @@ def _statewide(out: dict[str, Any], at_ms: int | None, now: int) -> dict[str, An
     out.update(alerts=placed, zones=zones, retrieved_ms=ans.fetched_ms, source_updated_ms=ans.updated_ms,
                states_checked=list(ans.states), alert_states=nws.alert_states(placed))
     out["caveats"] += cav
+    out["caveats"].append(f"Checked: every National Weather Service Red Flag Warning and Fire Weather Watch in effect in "
+                          f"{SCOPE_WORDS} ({len(ans.states)} areas, including DC), in one request.")
     if _quiet(placed):
         out["caveats"].append("No Red Flag Warning or Fire Weather Watch from the National Weather Service is in "
                               f"effect in {SCOPE_WORDS} right now. That is not an all-clear: follow local officials.")
@@ -510,7 +512,10 @@ def _archive_channel(ref: IncidentRef | None, at: int, now: int, area: BBox, poi
     if not ARCHIVE_ENABLED:
         return _channel("openfema_archive", "not_checked", ARCHIVE_NOT_BUILT_REASON), [], []
     credit = [ARCHIVE_CAVEAT, f"{openfema.CREDIT}: {openfema.NOTICE}."]
-    window = openfema.incident_window(ref.started_ms, ref.end_ms if ref.mode == "historical" else None, at, now)
+    end = ref.end_ms if ref.mode == "historical" else None
+    if ref.mode == "historical" and end is None and ref.started_ms:
+        end = int(ref.started_ms) + openfema.HISTORICAL_DEFAULT_SPAN_MS      # a past fire without a known end
+    window = openfema.incident_window(ref.started_ms, end, at, now)
     try:
         status, doc, why = openfema.ensure(window, now=now)
     except nws.SourceBusy as e:

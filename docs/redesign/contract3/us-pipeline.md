@@ -131,7 +131,7 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
   `at_ms` within 24 h → `not_checked` "FEMA publishes its archive about a day later; messages of the last 24 hours
   come from the National Weather Service."; older (incident form) → `openfema.ensure(incident_window(...))`:
   `available` from the disk cache; on a miss one background fetch per window (deduplicated) and a wait of at most
-  `openfema.REQUEST_WAIT_S` = 4 s, then `pending` ("FEMA's archive is being fetched; ask again in a minute.");
+  `openfema.REQUEST_WAIT_S` = 3 s (the catalog lookup of an incident without a bundle can add about 2 s), then `pending` ("FEMA's archive is being fetched; ask again in a minute.");
   `unavailable` ("… that does not mean there were none.") when the window's last fetch failed less than 10 min ago.
   `official.ARCHIVE_ENABLED = True` (False gives the fallback `not_checked` "The FEMA archive is not checked in
   this version."). When the archive channel is consulted the caveats add "Archived copy from FEMA (OpenFEMA, published
@@ -139,7 +139,8 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
   "FEMA IPAWS archive via OpenFEMA: This product uses the Federal Emergency Management Agency's OpenFEMA API, but is
   not endorsed by FEMA."
 - Archive windows (`openfema.incident_window(started, end, at, now)`): one window per incident covering
-  `[day(start − 1 d), day(end + 1 d)]` (end = now for a live fire; at most 75 days; never past today 00:00 UTC), so
+  `[day(start − 1 d), day(end + 1 d)]` (end = now for a live fire, start + 14 d for a past fire without an end; at
+  most 22 days, about 1,000 national messages; never past today 00:00 UTC), so
   every replay time of a fire is served by one fetch; outside the record, the UTC days around `[at − 24 h, at + 1 h]`.
   Stored parsed (no `_geom`, no `sender`) in `DATA_DIR/official/openfema/window_<lo>_<hi>.json`; fresh for 1 h when
   the window ends within 3 days of now, else 30 days. The answer lists the stored messages sent in
@@ -169,7 +170,8 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
   alerts are not checked for this time: " + the channels' reasons).
 - `sources/openfema.py`: `API_URL`, `record_url(identifier)` (`…/IpawsArchivedAlerts?$filter=identifier%20eq%20%27<id>%27`),
   `window_params`, `fetch_window(start, end)` (one date window `status eq 'Actual' and sent ge … and sent lt …`,
-  `$select=identifier,sent,msgType,status,info,originalMessage`, pages of 1000, at most 10 pages; TTL 1 h for windows
+  `$select=identifier,sent,msgType,status,info`, then a second query `msgType ne 'Alert'` with
+  `$select=identifier,originalMessage` for the updates' references; pages of 1000, at most 10 pages; TTL 1 h for windows
   ending within 3 days, else 30 days; `OPENFEMA_LIMITER` 20/min), `references_of(originalMessage)` (regex on
   `<references>`, identifiers only), `parse_record` / `parse_records`, `archive_window(at_ms)` (`[at−24 h, at+1 h]`
   in whole hours), `archived_alerts(at_ms)`; `CREDIT`, `NOTICE`, `TERMS_URL`, `SOURCE`.

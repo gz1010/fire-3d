@@ -79,7 +79,9 @@ def test_window_params_and_archive_window() -> None:
     a, b = iso_to_ms("2026-10-09T21:00:00Z"), iso_to_ms("2026-10-10T03:00:00Z")
     p = openfema.window_params(a, b, 2000)
     assert p["$filter"] == "status eq 'Actual' and sent ge '2026-10-09T21:00:00.000Z' and sent lt '2026-10-10T03:00:00.000Z'"
-    assert p["$skip"] == "2000" and p["$top"] == "1000" and "originalMessage" in p["$select"] and p["$orderby"] == "sent"
+    assert p["$skip"] == "2000" and p["$top"] == "1000" and "originalMessage" not in p["$select"] and p["$orderby"] == "sent"
+    r = openfema.window_params(a, b, refs=True)
+    assert r["$select"] == "identifier,originalMessage" and r["$filter"].endswith(" and msgType ne 'Alert'")
     at = iso_to_ms("2026-10-10T00:30:00Z")
     lo, hi = openfema.archive_window(at)
     assert lo == iso_to_ms("2026-10-09T00:00:00Z") and hi == iso_to_ms("2026-10-10T02:00:00Z")
@@ -90,10 +92,13 @@ def test_fetch_window_pages_and_errors(tmp_data_dir, monkeypatch: pytest.MonkeyP
     calls: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(request)
+        refs = "originalMessage" in request.url.params["$select"]
+        rows = [r for r in ROWS if r["msgType"] != "Alert"] if refs else [{k: v for k, v in r.items() if k != "originalMessage"} for r in ROWS]
+        if not refs:
+            calls.append(request)
         skip = int(request.url.params["$skip"])
-        page = ROWS[skip:skip + 10]
-        return httpx.Response(200, json={"metadata": {"count": len(ROWS)}, "IpawsArchivedAlerts": page})
+        page = rows[skip:skip + 10]
+        return httpx.Response(200, json={"metadata": {"count": len(rows)}, "IpawsArchivedAlerts": page})
 
     monkeypatch.setattr(fhttp, "_transport", httpx.MockTransport(handler))
     monkeypatch.setattr(openfema, "PAGE_SIZE", 10)
@@ -101,6 +106,9 @@ def test_fetch_window_pages_and_errors(tmp_data_dir, monkeypatch: pytest.MonkeyP
     a, b = iso_to_ms("2026-10-09T21:00:00Z"), iso_to_ms("2026-10-10T03:00:00Z")
     recs, fetched, truncated = openfema.fetch_window(a, b, now=iso_to_ms("2026-10-23T00:00:00Z"))
     assert len(recs) == len(ROWS) and not truncated and len(calls) == 2 and fetched > 0
+    upd = next(r for r in recs if r["msgType"] == "Update")
+    assert openfema.references_of(upd.get("originalMessage")) == ["2780357279770323"]        # merged from the 2nd query
+    assert all("originalMessage" not in r for r in recs if r["msgType"] == "Alert")
     assert [c.url.params["$skip"] for c in calls] == ["0", "10"]
     assert all(c.url.params["$filter"].startswith("status eq 'Actual' and sent ge") for c in calls)
     openfema.fetch_window(a, b, now=iso_to_ms("2026-10-23T00:00:00Z"))
@@ -165,14 +173,14 @@ def test_ensure_fetches_in_the_background_and_stores_on_disk(tmp_data_dir, monke
     t0 = time.monotonic()
     assert openfema.ensure(w, now=now) == ("pending", None, None)
     assert openfema.ensure(w, now=now)[0] == "pending"
-    assert time.monotonic() - t0 < 2.0 and len(calls) == 1                    # one fetch, deduplicated
+    assert time.monotonic() - t0 < 2.0 and len(calls) == 1                    # one fetch (still waiting), deduplicated
     gate.set()
     for _ in range(100):
         if openfema.load_cached(w, now) is not None:
             break
         time.sleep(0.05)
     status, doc, _ = openfema.ensure(w, now=now)
-    assert status == "available" and doc is not None and len(calls) == 1
+    assert status == "available" and doc is not None and len(calls) == 2      # the messages + the updates' XML
     assert openfema.cache_file(w).is_file() and openfema.cache_file(w).parent.name == "openfema"
     assert openfema.cache_file(w).is_relative_to(tmp_data_dir)
     stored = openfema.load_cached(w, now)

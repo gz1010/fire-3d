@@ -295,6 +295,7 @@ def test_overview_checks_the_lower_48(upstream: Upstream, client: TestClient, mo
     d = r.json()
     assert len(d["states_checked"]) == 49 and set(d["alert_states"]) == {"MT", "WY"}
     assert len(d["alerts"]) == 3 and all(a["time_zone"] == "America/Denver" for a in d["alerts"])
+    assert any(c.startswith("Checked: every National Weather Service") and "lower 48 states" in c for c in d["caveats"])
     assert any("could not be placed" in c for c in d["caveats"])       # outlines 404 here: listed, never dropped
     upstream.active = {"type": "FeatureCollection", "features": [], "updated": "2026-10-23T00:40:12+00:00"}
     nws.reset_state()
@@ -462,7 +463,8 @@ def test_local_alerts_30h_ago_from_both_channels_one_per_cap_id(upstream: Upstre
     assert "sender" not in keys_anywhere(d)
     assert any(c.startswith("Archived copy from FEMA (OpenFEMA, published about a day later)") for c in d["caveats"])
     assert any(openfema.NOTICE in c for c in d["caveats"])
-    assert upstream.count("/alerts/active") == 0 and upstream.count("/alerts?") == 1 and upstream.count("IpawsArchivedAlerts") == 1
+    assert upstream.count("/alerts/active") == 0 and upstream.count("/alerts?") == 1
+    assert upstream.count("IpawsArchivedAlerts") == 2                      # the messages, then the updates' XML
 
 
 def test_archive_path_answers_pending_within_5_s(upstream: Upstream, client: TestClient, tmp_data_dir: Path,
@@ -487,4 +489,4 @@ def test_archive_path_answers_pending_within_5_s(upstream: Upstream, client: Tes
             break
         time.sleep(0.05)
     again = client.get("/api/official/local-alerts", params=params).json()
-    assert again["channels"][1]["status"] == "available" and upstream.count("IpawsArchivedAlerts") == 1
+    assert again["channels"][1]["status"] == "available" and upstream.count("IpawsArchivedAlerts") == 2

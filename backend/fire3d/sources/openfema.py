@@ -58,15 +58,17 @@ SOURCE: dict[str, str] = {
 ARCHIVE_DELAY_MS = 24 * HOUR_MS        # OpenFEMA publishes IPAWS messages about a day later
 PAGE_SIZE = 1000
 MAX_PAGES = 10
-SELECT = "identifier,sent,msgType,status,info,originalMessage"
+SELECT = "identifier,sent,msgType,status,info"
+REFS_SELECT = "identifier,originalMessage"      # only for updates and cancellations (their <references>)
 TIMEOUT_S = 60.0
 RETRIES = 1
 RECENT_TTL_S = 3600.0                  # a window that ended less than 3 days ago may still be filling
 PAST_TTL_S = 30 * 86400.0
 OPENFEMA_LIMITER = fhttp.RateLimiter(20, 60.0, "official: OpenFEMA")
-REQUEST_WAIT_S = 4.0                   # the request path never waits longer for the archive (CONTRACT 14.7: 5 s)
+REQUEST_WAIT_S = 3.0                   # the request path never waits longer for the archive (CONTRACT 14.7: 5 s in all)
 RETRY_AFTER_S = 600.0                  # a failed window is not asked again for 10 min
-INCIDENT_SPAN_MAX_MS = 75 * DAY_MS     # one incident window covers at most this much (like the IEM archive)
+INCIDENT_SPAN_MAX_MS = 22 * DAY_MS     # one incident window covers at most this much (~1,000 national messages)
+HISTORICAL_DEFAULT_SPAN_MS = 14 * DAY_MS   # a past fire without a known end
 CACHE_SUBDIR = ("official", "openfema")
 CACHE_VERSION = 1
 _NAME = "FEMA's IPAWS archive (OpenFEMA)"
@@ -83,11 +85,13 @@ def _iso(ms: int) -> str:
     return ms_to_dt(ms).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
-def window_params(start_ms: int, end_ms: int, skip: int = 0) -> dict[str, str]:
-    """OData parameters of one page of the ``[start_ms, end_ms)`` window (sent time, actual messages only)."""
+def window_params(start_ms: int, end_ms: int, skip: int = 0, *, refs: bool = False) -> dict[str, str]:
+    """OData parameters of one page of the ``[start_ms, end_ms)`` window (sent time, actual messages only); with
+    ``refs`` the updates and cancellations only, with their CAP XML (for ``references``)."""
+    flt = f"status eq 'Actual' and sent ge '{_iso(start_ms)}' and sent lt '{_iso(end_ms)}'"
     return {
-        "$filter": f"status eq 'Actual' and sent ge '{_iso(start_ms)}' and sent lt '{_iso(end_ms)}'",
-        "$select": SELECT,
+        "$filter": flt + (" and msgType ne 'Alert'" if refs else ""),
+        "$select": REFS_SELECT if refs else SELECT,
         "$orderby": "sent",
         "$top": str(PAGE_SIZE),
         "$skip": str(skip),
@@ -100,15 +104,29 @@ def window_ttl_s(end_ms: int, now: int) -> float:
 
 
 def fetch_window(start_ms: int, end_ms: int, *, now: int | None = None, timeout: float = TIMEOUT_S) -> tuple[list[dict], int, bool]:
-    """Every actual IPAWS message sent in ``[start_ms, end_ms)``: ``(records, fetched_ms, truncated)``. Raises
-    ``nws.SourceError`` (unreachable, unreadable) or ``nws.SourceBusy`` (Fire-3d's own limit)."""
+    """Every actual IPAWS message sent in ``[start_ms, end_ms)``: ``(records, fetched_ms, truncated)``; updates and
+    cancellations also carry their ``originalMessage`` (a second, smaller query) so their references can be read.
+    Raises ``nws.SourceError`` (unreachable, unreadable) or ``nws.SourceBusy`` (Fire-3d's own limit)."""
+    recs, fetched, truncated = _fetch_pages(start_ms, end_ms, now=now, timeout=timeout, refs=False)
+    try:
+        xml, _, _ = _fetch_pages(start_ms, end_ms, now=now, timeout=timeout, refs=True)
+        by_id = {str(r.get("identifier")): r.get("originalMessage") for r in xml}
+        for r in recs:
+            if r.get("msgType") != "Alert" and str(r.get("identifier")) in by_id:
+                r["originalMessage"] = by_id[str(r.get("identifier"))]
+    except nws.SourceError as e:     # references are optional: the messages themselves are shown
+        log.info("openfema: references unavailable for %s..%s: %s", _iso(start_ms), _iso(end_ms), e)
+    return recs, fetched, truncated
+
+
+def _fetch_pages(start_ms: int, end_ms: int, *, now: int | None, timeout: float, refs: bool) -> tuple[list[dict], int, bool]:
     t_now = now if now is not None else now_ms()
     ttl = window_ttl_s(end_ms, t_now)
     out: list[dict] = []
     fetched: list[int] = []
     total = None
     for page in range(MAX_PAGES):
-        params = window_params(start_ms, end_ms, page * PAGE_SIZE)
+        params = window_params(start_ms, end_ms, page * PAGE_SIZE, refs=refs)
         hit = fhttp.peek_cache("GET", API_URL, params, ttl)
         if hit is None and not OPENFEMA_LIMITER.try_acquire():
             raise nws.SourceBusy(f"{_NAME}: Fire-3d's request limit is reached; try again in a minute")
@@ -276,9 +294,9 @@ def _ceil_day(ms: int) -> int:
 
 def incident_window(started_ms: int | None, end_ms: int | None, at_ms: int, now: int) -> tuple[int, int]:
     """The archive window answering ``at_ms`` for an incident: its whole record ``[day(start − 1 d), day(end + 1 d)]``
-    (end = now for a fire that has not ended; at most 75 days; never past today's 00:00 UTC, since the archive is a
-    day late) when ``at_ms`` falls in it, so one fetch serves every replay time (and a live fire one fetch a day);
-    else the UTC days around :func:`archive_window`."""
+    (end None = an ongoing fire: now; at most 22 days; never past today's 00:00 UTC, since the archive is a day late)
+    when ``at_ms`` falls in it, so one fetch serves every replay time (and a live fire one fetch a day); else the UTC
+    days around :func:`archive_window`."""
     today = _floor_day(now)
     if started_ms:
         lo = _floor_day(int(started_ms) - DAY_MS)
