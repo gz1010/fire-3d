@@ -56,6 +56,11 @@ FBFM40_CODES = frozenset(
 NONBURNABLE_FILL = 99
 
 
+class LandfireNoData(RasterFetchError):
+    """The edition has no fuel codes at all in the AOI (LANDFIRE 2025 is not yet released in much of the South and
+    East): the caller switches to the next older edition with :func:`switch_warning`."""
+
+
 def federal_fy(ms: int) -> int:
     """US federal fiscal year of a UTC instant (FY2025 = Oct 1 2024 .. Sep 30 2025)."""
     d = datetime.fromtimestamp(int(ms) / 1000.0, tz=timezone.utc)
@@ -157,7 +162,7 @@ def fetch_layer(grid: Grid, edition: str, layer: str, seasonal: str | None = Non
     if layer == "FBFM40":
         valid = np.isin(out, list(FBFM40_CODES))
         if valid.mean() < 0.005:
-            raise RasterFetchError(f"{what}: no fuel codes in the AOI (outside LANDFIRE CONUS coverage?)")
+            raise LandfireNoData(f"{what}: no fuel codes in the AOI (outside LANDFIRE CONUS coverage?)")
     return out, info
 
 

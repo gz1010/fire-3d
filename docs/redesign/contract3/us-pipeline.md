@@ -14,6 +14,7 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
 | M2 build anywhere (§14.2 gate, §14.12.3/5/6/8/10, §14.9.7) | `brief 3 us-pipeline: M2 build anywhere` | done |
 | Cut-line (b) weighted Open-Meteo counter, soft cap, hourly live refetch | `brief 3 us-pipeline: M4 cut-line b and d` | done |
 | Cut-line (d) `SkillEntry.growth_sorensen` writer | `brief 3 us-pipeline: M4 cut-line b and d` | done |
+| Cut-line (c) 3rd smoke build | fallback used: recorded LANDFIRE window test | no active Southern/Eastern fire of 1,000 ac or more on 2026-10-23 (0 of 22 non-CA fires >= 1,000 ac); test `test_recorded_black_cove_window_switches_lf2025_to_lf2024` on `tests/data/pipeline_us/landfire_black_cove_*_fbfm40.tif` |
 | M4 smoke builds (§14.12.11) | - | in progress |
 
 ## §14.12.2 Weather quota (as built, M1)
@@ -227,7 +228,10 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
   `NOT_RELEASED_LF2025 = "LANDFIRE 2025 is not released here yet; LANDFIRE 2024 used"`, `OUTSIDE_COVERAGE =
   "outside fuel data coverage: not modeled (unknown, not low)"`.
 - `aoi.fetch_fuels`: a failed edition falls back to the next **older** edition only (LF2025 → LF2024 → LF2023;
-  never forward); the vegetation layers are refetched for the edition used.
+  never forward); the vegetation layers are refetched for the edition used. An edition with no fuel code at all in
+  the AOI raises `landfire.LandfireNoData` (a `RasterFetchError`) and its switch uses the same warning as below
+  ("LANDFIRE 2025 is not released here yet; LANDFIRE 2024 used"): at Black Cove, NC, LF2025 has no data in any
+  cell (checked 2026-10-23), so a live build there takes this path.
 - `aoi.land_masks(fire, elev)`: `land` = cell centres inside the lower-48 + DC state polygons (`regions.in_lower48`,
   every 4th cell, upsampled) with fire-grid elevation above 0.5 m (3DEP answers ~0 m over the sea, which the
   polygons partly include); `abroad` = ground above 0.5 m outside them. `aoi.choose_fuels` switches the whole

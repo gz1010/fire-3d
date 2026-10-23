@@ -358,3 +358,49 @@ def test_forecast_skill_carries_growth_sorensen(tmp_data_dir, monkeypatch) -> No
     assert [s.growth_sorensen for s in fm.skill] == [r["sorensen_growth"] for r in rows]
     assert validate.skill_entry({"lead_h": 12.0, "sorensen": 0.5, "observed_acres": 1.0, "forecast_acres_p50": 2.0}) == {
         "lead_h": 12.0, "sorensen": 0.5, "observed_acres": 1.0, "forecast_acres_p50": 2.0}
+
+
+# ----------------------------------------------------------------------------------------------------------------
+# LF2025 NoData -> LF2024 on a recorded LANDFIRE window near Black Cove, NC (cut-line item c fallback, 14.12.11)
+# ----------------------------------------------------------------------------------------------------------------
+LF_DIR = Path(__file__).parent / "data" / "pipeline_us"
+
+
+def _black_cove_window():
+    """The recorder's grid (scripts/record_test_samples_official.py landfire_window_grid): 64 x 64 cells of 30 m."""
+    from fire3d.grid import Grid
+
+    _, fire = make_aoi(-82.2975, 35.2856, None, "live", acres=3500.0)
+    return Grid(fire.epsg, fire.center_e, fire.center_n, 64 * 30.0, 64, 64)
+
+
+def test_recorded_black_cove_window_switches_lf2025_to_lf2024(monkeypatch) -> None:
+    from fire3d.sources.terrain import FetchInfo, RasterFetchError, read_geotiff
+
+    grid = _black_cove_window()
+    tif = {ed: (LF_DIR / f"landfire_black_cove_{ed.lower()}_fbfm40.tif").read_bytes() for ed in ("LF2025", "LF2024")}
+    asked: list[str] = []
+
+    def export(url, params, *, kind, what, timeout, retries=3):
+        ed = "LF2025" if "LF2025" in url else "LF2024" if "LF2024" in url else "LF2023"
+        asked.append(f"{ed}:{url.split('_')[-2] if '_CONUS' in url else url}")
+        if ed == "LF2023":
+            raise RasterFetchError("not recorded")
+        return tif[ed], FetchInfo(url, 1, True, 0.0)
+
+    monkeypatch.setattr(landfire, "fetch_export", export)
+    monkeypatch.setattr(landfire, "fetch_evt_physiognomy", lambda: (_ for _ in ()).throw(RasterFetchError("offline")))
+    raw25 = read_geotiff(tif["LF2025"], grid, what="LF2025")[0][0]
+    assert float(np.isin(raw25, list(landfire.FBFM40_CODES)).mean()) == 0.0              # LF2025: no data here
+    with pytest.raises(landfire.LandfireNoData):
+        landfire.fetch_layer(grid, "LF2025", "FBFM40")
+    ff = aoi.fetch_fuels(grid, "LF2025")
+    assert ff.edition == "LF2024" and ff.notes == ["LANDFIRE 2025 is not released here yet; LANDFIRE 2024 used"]
+    assert float(np.isin(ff.raw["FBFM40"], list(landfire.FBFM40_CODES)).mean()) > 0.95
+    assert not any(a.startswith("LF2023") for a in asked)
+    # the same window through the land-mask rule (all of it is North Carolina ground)
+    land, abroad = aoi.land_masks(grid, np.full(grid.shape, 300.0, np.float32))
+    assert land.all() and not abroad.any()
+    nodata25 = aoi.FuelsFetch({"FBFM40": raw25.astype(np.int16)}, {}, "LF2025", None)
+    out, notes = aoi.choose_fuels(grid, nodata25, land, fetch=lambda g, ed, seasonal=None: aoi.fetch_fuels(g, ed))
+    assert out.edition == "LF2024" and notes == ["LANDFIRE 2025 is not released here yet; LANDFIRE 2024 used"]

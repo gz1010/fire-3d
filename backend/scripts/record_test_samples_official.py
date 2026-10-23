@@ -440,12 +440,53 @@ def check_perimeters(docs: dict[str, dict]) -> None:
         need(d["expected_object_ids"] == d["recorded_object_ids"], f"{key}: replay equals the live answer")
 
 
+# ------------------------------------------------------------------------------------------------------------------
+# Brief 3: a LANDFIRE window near Black Cove, NC, where LF2025 has no data (cut-line item c fallback, CONTRACT 14.12.11)
+# ------------------------------------------------------------------------------------------------------------------
+BLACK_COVE = (-82.2975, 35.2856)                 # lon, lat (WFIGS point of origin)
+LF_WINDOW_N = 64
+LF_WINDOW_RES_M = 30.0
+
+
+def landfire_window_grid():
+    from fire3d.grid import Grid, make_aoi
+
+    _, fire = make_aoi(BLACK_COVE[0], BLACK_COVE[1], None, "live", acres=3500.0)
+    return Grid(fire.epsg, fire.center_e, fire.center_n, LF_WINDOW_N * LF_WINDOW_RES_M, LF_WINDOW_N, LF_WINDOW_N)
+
+
+def build_landfire() -> dict[str, bytes]:
+    from fire3d.sources import landfire, terrain
+
+    grid = landfire_window_grid()
+    out: dict[str, bytes] = {}
+    for ed in ("LF2025", "LF2024"):
+        time.sleep(PAUSE_S)
+        content, _ = terrain.fetch_export(landfire.service_url(ed, "FBFM40"), landfire.layer_params(grid), kind="tiff",
+                                          what=f"LANDFIRE {ed} FBFM40", timeout=120.0, retries=2)
+        print(f"  GET LANDFIRE {ed} FBFM40 {LF_WINDOW_N}x{LF_WINDOW_N} ({len(content):,} B)")
+        out[ed] = content
+    return out
+
+
+def check_landfire(tiffs: dict[str, bytes]) -> None:
+    import numpy as np
+
+    from fire3d.sources import landfire, terrain
+
+    grid = landfire_window_grid()
+    a25, _ = terrain.read_geotiff(tiffs["LF2025"], grid, what="LF2025")
+    a24, _ = terrain.read_geotiff(tiffs["LF2024"], grid, what="LF2024")
+    need(float(np.isin(a25[0], list(landfire.FBFM40_CODES)).mean()) < 0.005, "LF2025 has no fuel codes at Black Cove")
+    need(float(np.isin(a24[0], list(landfire.FBFM40_CODES)).mean()) > 0.95, "LF2024 has fuel codes at Black Cove")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--dry-run", action="store_true", help="fetch, trim and check; write nothing")
     ap.add_argument("--cache-dir", type=Path, help="keep the HTTP cache here between runs (never under data/)")
-    ap.add_argument("--only", choices=("all", "existing", "national", "perimeters"), default="all",
-                    help="record everything, only the brief-2 samples, or only the brief-3 national or perimeter samples")
+    ap.add_argument("--only", choices=("all", "existing", "national", "perimeters", "landfire"), default="all",
+                    help="record everything, only the brief-2 samples, or only one group of brief-3 samples")
     args = ap.parse_args()
     if args.cache_dir:
         cache = args.cache_dir.resolve()
@@ -482,17 +523,27 @@ def main() -> int:
         check_perimeters(docs)
         files.update({PIPELINE_US_DIR / f"perimeters_{k}.json": json.dumps(d, separators=(",", ":"), sort_keys=True) + "\n"
                       for k, d in docs.items()})
+    binaries: dict[Path, bytes] = {}
+    if args.only in ("all", "landfire"):
+        tiffs = build_landfire()
+        check_landfire(tiffs)
+        binaries = {PIPELINE_US_DIR / f"landfire_black_cove_{ed.lower()}_fbfm40.tif": b for ed, b in tiffs.items()}
     key = config.FIRMS_MAP_KEY
     if key and any(key in body for body in files.values()):
         raise SystemExit("the FIRMS key reached a sample: nothing written")
     for path, body in files.items():
         print(f"{path.relative_to(BACKEND)}: {len(body.encode()):,} bytes")
+    for path, data in binaries.items():
+        print(f"{path.relative_to(BACKEND)}: {len(data):,} bytes")
     if args.dry_run:
         return 0
     for path, body in files.items():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(body, encoding="utf-8")
-    print(f"wrote {len(files)} files")
+    for path, data in binaries.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+    print(f"wrote {len(files) + len(binaries)} files")
     return 0
 
 

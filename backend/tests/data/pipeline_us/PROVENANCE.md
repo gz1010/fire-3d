@@ -21,3 +21,16 @@ Read by `backend/tests/test_us_pipeline_perimeters.py` (the California perimeter
 - **Set by hand:** nothing besides the geometry simplification above (applied offline to the recorded answers; the
   replay was re-checked after it).
 - **Terms:** NIFC WFIGS open data (public; "NIFC WFIGS" credited in the app).
+
+## `landfire_black_cove_lf2025_fbfm40.tif`, `landfire_black_cove_lf2024_fbfm40.tif`
+
+Read by `tests/test_us_pipeline_build.py::test_recorded_black_cove_window_switches_lf2025_to_lf2024` (the fallback of
+us-pipeline's cut-line item (c): no active Southern or Eastern fire of 1,000 ac or more existed on 2026-10-23).
+
+- **Recorded:** 2026-10-23, about 01:45 UTC, with `uv run python scripts/record_test_samples_official.py --only
+  landfire` (2 requests to `lfps.usgs.gov`, no key).
+- **What:** the raw GeoTIFF answers of LANDFIRE's `exportImage` for FBFM40 of LF2025 and LF2024 on a 64 x 64 grid of
+  30 m cells (1.92 km square, EPSG:32617) centred on the Black Cove Fire's NIFC WFIGS point of origin (35.2856 N,
+  82.2975 W, Polk County, North Carolina), exactly as `landfire.fetch_layer` asks for them. LF2025 has no fuel code
+  in any cell (LANDFIRE 2025 is not released there yet); LF2024 has a fuel code in every cell. Nothing was edited.
+- **Terms:** LANDFIRE products are public domain (as credited in the app).

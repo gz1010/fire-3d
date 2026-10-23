@@ -289,7 +289,10 @@ def fetch_fuels(fire: Grid, edition: str, seasonal: str | None = None) -> FuelsF
                 raw, infos, _ = landfire.fetch_landfire_info(fire, alt, landfire.CORE_LAYERS)
             except RasterFetchError:
                 raise StaticLayerError(f"LANDFIRE fuels unavailable: {e}") from None
-            notes.append(f"{edition} unavailable ({e}); used {alt} instead")
+            if isinstance(e, landfire.LandfireNoData):      # no data at all here (not a failure): CONTRACT 14.12.3
+                notes.append(landfire.switch_warning(edition, alt, 1.0))
+            else:
+                notes.append(f"{edition} unavailable ({e}); used {alt} instead")
             edition = alt
             veg_futs = {name: veg_pool.submit(landfire.fetch_layer, fire, edition, name) for name in landfire.VEG_LAYERS}
         used_seasonal = seasonal if seasonal and "Seasonal_Fuels" in infos["FBFM40"].url else None
