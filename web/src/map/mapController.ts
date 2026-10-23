@@ -50,7 +50,7 @@ import { findFire, overviewFires, PAST_YEAR, SEASON_YEAR, type OverviewCatalog }
 import { readUrlParams } from '../state/runtime'
 import { useStore } from '../state/store'
 import { getTimeFormat } from '../state/timeZone'
-import { useWorkspace, type Basemap, type MapFlyTo, type MapLayerKey, type Perspective, type SafeInsets } from '../state/workspace'
+import { pendingMapFlyTo, useWorkspace, type Basemap, type MapFlyTo, type MapLayerKey, type Perspective, type SafeInsets } from '../state/workspace'
 import { buildFeedItems, selectFeedItem } from '../ui/feed/feedModel'
 import type { FeedItem } from '../ui/feed/types'
 import { BUILDINGS_3D_LAYER, HILLSHADE_SOURCE, IMAGERY_SOURCE, loadBasemap, TERRAIN_SOURCE, VECTOR_SOURCE, type DerivedStyle } from './basemapStyle'
@@ -301,6 +301,9 @@ export class MapController {
     // whatever is ready now is framed without a flight (the overview, or an incident already loaded)
     this.offerGoal(false)
     this.updateCamera()
+    // a flight requested moments before this map existed (a search sent right after page load) is still flown
+    const pending = pendingMapFlyTo(ws.mapFlyTo, Date.now())
+    if (pending) this.flyRequested(pending)
   }
 
   destroy(): void {
@@ -322,6 +325,20 @@ export class MapController {
     useMapRuntime.setState({ map: null, camera: null, terrainOn: false, aoiInView: null, actions: null, framing: 'idle', framedKind: null, fireBounds: null, viewBox: null })
   }
 
+  /** A requested flight (search, a fire in the overview list, return to incident, an official area). */
+  private flyRequested(req: MapFlyTo): void {
+    this.flyNonce = req.nonce
+    // a requested target is the user's choice: data arriving later keeps it
+    this.framing.explicit()
+    if (useStore.getState().incidentId == null) this.overviewFireFly = true
+    // showing an official area (an evacuation zone, an NWS alert's zones) never changes the open fire, even when the
+    // area touches another prepared fire: the focus rule waits for the user's next move
+    this.focusHold.flight(req.source)
+    if (this.focusHold.active) this.keepShownFocus()
+    this.fly(req)
+    this.publishFraming()
+  }
+
   // ------------------------------------------------------------------------------------------------ subscriptions
   private subscribe(): void {
     this.unsubs.push(
@@ -329,19 +346,7 @@ export class MapController {
         if (s.basemap !== p.basemap) void this.applyBasemap(s.basemap)
         if (s.perspective !== p.perspective) this.applyPerspective(s.perspective, true)
         if (s.selection !== p.selection || s.mapLayers.selection !== p.mapLayers.selection) this.updatePin()
-        if (s.mapFlyTo && s.mapFlyTo.nonce !== this.flyNonce) {
-          this.flyNonce = s.mapFlyTo.nonce
-          // a requested target (search, a fire in the overview list, return to incident) is the user's choice: data
-          // arriving later keeps it
-          this.framing.explicit()
-          if (useStore.getState().incidentId == null) this.overviewFireFly = true
-          // showing an official area (an evacuation zone, an NWS alert's zones) never changes the open fire, even when
-          // the area touches another prepared fire: the focus rule waits for the user's next move
-          this.focusHold.flight(s.mapFlyTo.source)
-          if (this.focusHold.active) this.keepShownFocus()
-          this.fly(s.mapFlyTo)
-          this.publishFraming()
-        }
+        if (s.mapFlyTo && s.mapFlyTo.nonce !== this.flyNonce) this.flyRequested(s.mapFlyTo)
         if (s.mapLayers !== p.mapLayers) this.applyLayerVisibility(p.mapLayers)
         if (s.safeInsets !== p.safeInsets) this.applySafeInsets(true)
         if (s.fireCardId !== p.fireCardId) this.updateFireCardRing()
