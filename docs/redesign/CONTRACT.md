@@ -2366,7 +2366,9 @@ From `us-official.md` (M2, M3, review round 1).
 - Cameras outside California: `state_not_available` with `sources: []` (review R5) and the 14.14 sentence.
 - Web: `official/model.ts` `EvacuationState 'not-available'` ("Not available in this state (Nevada)"), sources per
   answer, `checkedBy`; the zone hover names the state source from `sources[]` (us-web review R2). `insideCalifornia`
-  was removed by the integration.
+  was removed by the integration. **Integration:** at a past time, a point inside the open fire's area in a state
+  without a feed reads "Evacuation zones: not available in this state" (the fire's own answer is
+  `state_not_available`), as the fire's panel says, instead of "not shown for past dates" (Horse Gulch, MT).
 
 ### 14.9 Time zones and the mixed clock (`us-web` owns `lib/time.ts` and `state/timeZone.ts`; backend `timeutil.py` is `us-pipeline`'s)
 
@@ -2564,6 +2566,10 @@ From `us-web.md` (M2, cut line b/c, review round 1).
   (Home, End, arrows over the whole list); W15 phone fixes (the search message never pushes the map controls; framing
   keeps the last usable padding while the list sheet covers the map).
 - The empty view or empty filter carries the list-absence line itself, so the footer is not repeated.
+- **Integration:** a flight to an unprepared fire's card (`showFireCard`, list row or marker) carries
+  `MapFlyTo.source: 'fire-card'`, which holds the zoom focus like an official flight (`map/focus.ts` `FocusHold`)
+  until the user moves the map: picking Little Giant (WA) opened the prepared Lower Sugarloaf Fire, whose analysis
+  area the card's view covered, instead of Little Giant's card. A prepared fire is still opened by the zoom.
 
 ### 14.12 Pipeline interfaces (`us-pipeline` unless noted)
 
