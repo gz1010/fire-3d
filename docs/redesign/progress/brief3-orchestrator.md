@@ -17,6 +17,17 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
 - Reference fires built in the cloud: 2025-eaton-fire-dbfa57 (60 s), 2025-palisades-fire-abfed7 (50 s).
 - Audit A3 evacuations done (6670f47).
 
+## Stage status
+- Stage A audits: done and each revised after an independent critic (2026-10-22).
+- User questions: round 2 (8 answers) and round 3 (4 answers) recorded in BRIEF-3.md.
+- Stage B plan: done (e021731), reviewed by two critics (41 problems), revised twice (d0f82a7, 02a4e00).
+- Stage C wave 1 started 2026-10-23 00:30 UTC. Schedule change from CONTRACT §14.0 (orchestrator decision, to
+  shorten the critical path to validation by about 4 h): first batch = us-catalog, us-web, us-pipeline;
+  us-official takes the first free slot; then review+fix per role in finish order, us-pipeline's first.
+  Consequence: us-web does not pass tf to us-official's 14.9.6 shims (they do not exist yet); the call sites are
+  listed in us-web's notes_for_integrator for the integration to wire.
+- Lesson: never SendMessage a workflow agent (it starts a second copy); relay through files or Agent-tool agents.
+
 ## Carry-over items for later stages (integration unless a role owns the file)
 - `web/src/data/rasters.test.ts`: add tests for (a) useRasterSet reloading when the key changes (needs an
   effect-running harness; no new dependency), (b) a single layer larger than the 256 MiB cap stays cached,
