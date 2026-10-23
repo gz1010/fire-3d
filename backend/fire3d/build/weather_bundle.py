@@ -70,7 +70,7 @@ INTERIM_LFM_WARNING = ("Live fuel moisture outside California uses California's 
                        "method is tested; experimental.")
 # Never silent (14.12.10): a bundle outside California without its GSI series uses California's values and says so.
 INTERIM_LFM_NOTE = "Live fuel moisture: California's seasonal values (GSI series unavailable); experimental."
-LFM_GSI_JSON = "sim/lfm_gsi.json"         # backend-only daily GSI inputs outside California (hindcasts never fetch)
+LFM_GSI_JSON = "sim/lfm_gsi.json"         # backend-only daily GSI inputs outside California (builds and live forecasts fetch it; hindcasts never do)
 LFM_GSI_METHOD = "gsi_nfdrs2016"
 LFM_CA_TABLE = "ca_month_table"
 LFM_CA_DROUGHT = "ca_month_table_drought"
@@ -381,15 +381,20 @@ def _california_moisture(bdir: Path, manifest: dict, start_ms: int, gw: GridWeat
 
 
 def live_moisture_detail(bdir: Path, manifest: dict, start_ms: int, gw: GridWeather | None = None, *,
-                         fetch: bool = True) -> dict:
+                         fetch: bool = True, fetch_gsi: bool | None = None) -> dict:
     """``{herb, woody, note, method, gsi}`` for a forecast (or hour) starting at ``start_ms`` (CONTRACT 14.12.10).
 
     * California (``summary.state == "CA"``): the month table with the drought adjustment, exactly as before brief 3
-      (``method`` ``ca_month_table_drought``, or ``ca_month_table`` without a water-year total).
-    * Elsewhere: the NFDRS 2016 GSI (``gsi_nfdrs2016``) from ``sim/lfm_gsi.json`` (fetched first when missing and
-      ``fetch``; hindcasts pass ``fetch=False``). Never silent: without the series, or without the 21 days before
-      ``start_ms``, California's values with the note :data:`INTERIM_LFM_NOTE` and the California ``method``.
-      ``config.LFM_FORCE_CALIFORNIA`` (validation ablation only) forces California's rule outside California."""
+      (``method`` ``ca_month_table_drought``, or ``ca_month_table`` without a water-year total; ``fetch`` lets it
+      fetch the water-year total, as before).
+    * Elsewhere: the NFDRS 2016 GSI (``gsi_nfdrs2016``) from ``sim/lfm_gsi.json``, fetched first when missing and
+      ``fetch_gsi`` (default: ``fetch``). Hindcasts never fetch it: ``member_weathers`` passes ``fetch_gsi`` only for
+      a live bundle, and ``members_from_weather_json`` passes ``fetch=False``. Never silent: without the series, or
+      without the 21 days before ``start_ms``, California's values with the note :data:`INTERIM_LFM_NOTE` and the
+      California ``method``. ``config.LFM_FORCE_CALIFORNIA`` (validation ablation only) forces California's rule
+      outside California."""
+    if fetch_gsi is None:
+        fetch_gsi = fetch
     summary = manifest.get("summary") or {}
     if is_california(summary):
         return _california_moisture(bdir, manifest, start_ms, gw, fetch, "")
@@ -397,7 +402,7 @@ def live_moisture_detail(bdir: Path, manifest: dict, start_ms: int, gw: GridWeat
         return _california_moisture(bdir, manifest, start_ms, gw, fetch, "Live fuel moisture: California's seasonal "
                                     "values (validation ablation); experimental. ")
     doc = load_lfm_gsi(bdir)
-    if doc is None and fetch:
+    if doc is None and fetch_gsi:
         stored = gw if gw is not None else load_grid_weather(bdir)
         if stored is not None and not stored.synthetic:
             try:
@@ -416,10 +421,11 @@ def live_moisture_detail(bdir: Path, manifest: dict, start_ms: int, gw: GridWeat
     return {"herb": herb, "woody": woody, "note": note, "method": LFM_GSI_METHOD, "gsi": g["gsi"]}
 
 
-def live_moisture_for(bdir: Path, manifest: dict, start_ms: int, gw: GridWeather | None = None, *, fetch: bool = True) -> tuple[float, float, str]:
+def live_moisture_for(bdir: Path, manifest: dict, start_ms: int, gw: GridWeather | None = None, *, fetch: bool = True,
+                      fetch_gsi: bool | None = None) -> tuple[float, float, str]:
     """``(herb, woody, note)`` of :func:`live_moisture_detail` (California: the month's live fuel moisture with the
     drought adjustment; elsewhere the NFDRS 2016 GSI, never silently California's values)."""
-    d = live_moisture_detail(bdir, manifest, start_ms, gw, fetch=fetch)
+    d = live_moisture_detail(bdir, manifest, start_ms, gw, fetch=fetch, fetch_gsi=fetch_gsi)
     return d["herb"], d["woody"], d["note"]
 
 
@@ -471,18 +477,41 @@ def load_lfm_gsi(bdir: Path) -> dict | None:
     return d if isinstance(d, dict) and d.get("method") == LFM_GSI_METHOD and d.get("days") else None
 
 
-def gsi_at(doc: dict | None, t_ms: int) -> dict | None:
+def gsi_at(doc: dict | None, t_ms: int, *, hold_last: bool = False) -> dict | None:
     """``{gsi, days, first, last}``: the 21-day mean GSI for a start at ``t_ms``, over the local days before the day
-    of ``t_ms`` (recomputed from the stored inputs with ``config.GSI_*``); None unless all 21 days are stored."""
+    of ``t_ms`` (recomputed from the stored inputs with ``config.GSI_*``); None unless all 21 days are stored.
+
+    ``hold_last`` (the hourly behaviour annotation only): for a day after the day that follows the series' last stored
+    day (a live series ends today, so the weather window's +48..+96 h; a historical series ends ``ERA5_DELAY_DAYS``
+    before now), the latest computable 21-day mean is held, as a forecast holds live fuel moisture over its run; the
+    result then also has ``held_from`` (that day). Gaps inside the series are never bridged."""
     if not doc:
         return None
-    lat = float(doc.get("lat") or 0.0)
-    tz = doc.get("time_zone")
     from ..timeutil import local_dt
 
-    day = local_dt(int(t_ms), tz).date()
-    want = [(day - timedelta(days=k)).isoformat() for k in range(int(config.GSI_MA_DAYS), 0, -1)]
     by = {str(r.get("date")): r for r in doc.get("days") or [] if isinstance(r, dict)}
+    day = local_dt(int(t_ms), doc.get("time_zone")).date()
+    g = _gsi_for_day(doc, by, day)
+    if g is not None or not hold_last:
+        return g
+    stored = []
+    for d in by:
+        try:
+            stored.append(date.fromisoformat(d))
+        except ValueError:
+            continue
+    if not stored:
+        return None
+    nxt = max(stored) + timedelta(days=1)          # the last day whose 21 days before it can all be stored
+    if day <= nxt:
+        return None
+    g = _gsi_for_day(doc, by, nxt)
+    return None if g is None else {**g, "held_from": nxt.isoformat()}
+
+
+def _gsi_for_day(doc: dict, by: dict[str, dict], day: date) -> dict | None:
+    lat = float(doc.get("lat") or 0.0)
+    want = [(day - timedelta(days=k)).isoformat() for k in range(int(config.GSI_MA_DAYS), 0, -1)]
     vals = []
     for d in want:
         r = by.get(d)
@@ -776,7 +805,8 @@ def member_weathers(bundle_dir: Path, start_ms: int, horizon_h: int, ensemble: s
     elif kind == "none":
         raw = [("deterministic", _member_fields(gw))]
     k0 = int((t0 - a) // HOUR_MS)
-    herb, woody, moist_note = live_moisture_for(bdir, manifest, int(start_ms), gw)
+    # the GSI series is fetched for a live bundle only (a hindcast never fetches; California keeps its own rule)
+    herb, woody, moist_note = live_moisture_for(bdir, manifest, int(start_ms), gw, fetch_gsi=(mode == "live"))
     warnings.append(moist_note)
     out = MemberList(source=label_source, ensemble=kind, warnings=warnings)
     t_out = gw.t_ms[k0:].copy()

@@ -71,7 +71,22 @@ def test_collect_skips_failed_checks(vf, tmp_path: Path) -> None:
     assert [f["id"] for f in spec["fires"]] == ["2025-emigrant-241e2b"]
     f = spec["fires"][0]
     assert f["lfm_method"] == "gsi_nfdrs2016" and f["region"] == "NWCC" and f["year"] == 2025 and f["replaced"] is None
-    assert spec["region_caveats"]["NWCC"][0].startswith("Two fires") and spec["in_sample_regions"] == ["OSCC"]
+    assert spec["region_caveats"]["NWCC"][0] == "One fire only: not a regional value (that fire scored 0.40)."
+    assert spec["in_sample_regions"] == ["OSCC"] and spec["region_caveats"]["OSCC"] == [vf.OSCC_CAVEAT]
+
+
+def test_few_fires_caveat_is_built_from_the_scores(vf) -> None:
+    """Review W-M3: the sample-size caveat states the fires' own scores, not a guessed "±0.05"."""
+    assert vf.few_fires_caveat([0.492, 0.189]) == "Two fires only: a rough value (the two fires scored 0.19 and 0.49)."
+    assert vf.few_fires_caveat([0.355, 0.348]) == "Two fires only: a rough value (both fires scored about 0.35)."
+    assert vf.few_fires_caveat([0.4, 0.3, 0.5]) == "Three fires only: a rough value (the three fires scored 0.30, 0.40 and 0.50)."
+    assert vf.few_fires_caveat([]) is None
+    rows = lambda s: [{"lead_h": 12.0, "sorensen": 0.8, "sorensen_growth": s, "area_ratio": 1.0}]   # noqa: E731
+    caveats = vf.region_caveats([{"region": "SACC-SP", "rows": rows(0.299)}, {"region": "SACC-SP", "rows": rows(0.49)},
+                                 {"region": "OSCC", "rows": rows(0.4)}])
+    assert caveats["SACC-SP"][0] == "Two fires only: a rough value (the two fires scored 0.30 and 0.49)."
+    assert caveats["SACC-SP"][1:] == vf.REGION_CAVEATS["SACC-SP"] and caveats["OSCC"] == [vf.OSCC_CAVEAT]
+    assert "uncertain by up to a day" in vf.REGION_CAVEATS["SACC-SP"][0]
 
 
 def test_ignition_rows_reuse_label_starts(vf, tmp_path: Path) -> None:

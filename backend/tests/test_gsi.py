@@ -286,6 +286,117 @@ def test_behaviour_annotation_uses_gsi_outside_california(mt_ctx, monkeypatch) -
     assert f_ca(t) == mo.live_fuel_moisture(7, 150.0)
 
 
+def test_gsi_at_holds_the_latest_value_after_the_series_only_when_asked() -> None:
+    rows = _rows("2025-03-01", 30)                                              # Mar 01 .. Mar 30 (local days)
+    for k, r in enumerate(rows):
+        r["tmin_c"] = -2.0 + 0.3 * k                                            # warming: every 21-day window differs
+    doc = {"method": "gsi_nfdrs2016", "lat": 35.0, "time_zone": "America/New_York", "days": rows}
+    last = WB.gsi_at(doc, iso_to_ms("2025-03-31T16:00:00Z"))                   # Mar 31: Mar 10..30, all stored
+    assert last["first"] == "2025-03-10" and last["last"] == "2025-03-30" and "held_from" not in last
+    for t in ("2025-04-01T16:00:00Z", "2025-04-03T03:00:00Z"):                  # after the series
+        assert WB.gsi_at(doc, iso_to_ms(t)) is None                             # the ensemble path: unchanged
+        held = WB.gsi_at(doc, iso_to_ms(t), hold_last=True)
+        assert held["gsi"] == last["gsi"] and held["held_from"] == "2025-03-31" and held["last"] == "2025-03-30"
+    assert WB.gsi_at(doc, iso_to_ms("2025-03-31T16:00:00Z"), hold_last=True) == last
+    assert WB.gsi_at(doc, iso_to_ms("2025-03-10T16:00:00Z"), hold_last=True) is None    # before 21 days: no hold
+    gap = {**doc, "days": rows[:19] + rows[20:]}                                # Mar 20 missing: never bridged
+    assert WB.gsi_at(gap, iso_to_ms("2025-03-25T16:00:00Z"), hold_last=True) is None
+    assert WB.gsi_at(gap, iso_to_ms("2025-04-02T16:00:00Z"), hold_last=True) is None
+
+
+def _live_series_bundle(tmp_path: Path, now_iso: str, tz: str, state: str = "TX") -> tuple[Path, dict, int]:
+    """A bundle whose GSI series is shaped like a live one (forecast host, past_days=28 + forecast_days=1: local
+    days today - 28 .. today), cold and dry (GSI well below green-up), as review M1's reproduction."""
+    from datetime import timedelta
+
+    from fire3d.timeutil import local_dt
+
+    now = iso_to_ms(now_iso)
+    today = local_dt(now, tz).date()
+    days = [{"date": (today - timedelta(days=k)).isoformat(), "tmin_c": -1.0, "tmax_c": 12.0, "rhmin_pct": 20.0,
+             "hours": 24, "daylight_s": None} for k in range(28, -1, -1)]
+    bdir = tmp_path / "live-gsi"
+    (bdir / "sim").mkdir(parents=True)
+    bundle.write_json(bdir / WB.LFM_GSI_JSON, {"method": "gsi_nfdrs2016", "lat": 35.63, "lon": -101.85, "time_zone": tz,
+                                               "days": days, "source": "test"})
+    man = {"summary": {"state": state, "time_zone": tz}, "warnings": []}
+    return bdir, man, now
+
+
+def test_behaviour_annotation_holds_gsi_over_a_live_window(tmp_path) -> None:
+    """Review M1: the live series ends today while the weather runs to now + 96 h; every hour keeps the GSI value
+    (held from the last computable day), never California's green-winter table (herb/woody 120 %)."""
+    tz = "America/Chicago"
+    bdir, man, now = _live_series_bundle(tmp_path, "2024-02-27T18:00:00Z", tz)
+    f = behavior._live_moisture_by_hour(bdir, man, tz, 120.0)
+    doc = WB.load_lfm_gsi(bdir)
+    expect_now = mo.gsi_live_fuel_moisture(WB.gsi_at(doc, now)["gsi"])
+    expect_late = mo.gsi_live_fuel_moisture(WB.gsi_at(doc, now + 24 * HOUR_MS)["gsi"])
+    assert expect_now == (0.3, 0.6)                                             # below green-up
+    assert f(now) == expect_now and f(now + 24 * HOUR_MS) == expect_late
+    for h in (48, 72, 96):
+        assert WB.gsi_at(doc, now + h * HOUR_MS) is None                         # the 21 days are not all stored
+        assert f(now + h * HOUR_MS) == expect_late                               # held, not (1.2, 1.2)
+    assert mo.live_fuel_moisture(2, 120.0) != expect_late and f.fallback == {}
+
+
+def test_behaviour_annotation_fallback_is_never_silent(tmp_path) -> None:
+    """A day with no GSI value outside California (no series, or a gap) uses California's values and the manifest
+    says so; the warning is replaced on every annotation and never added on top of the build's interim warning."""
+    tz = "America/Chicago"
+    bdir, man, now = _live_series_bundle(tmp_path, "2024-02-27T18:00:00Z", tz)
+    doc = WB.load_lfm_gsi(bdir)
+    doc["days"] = [d for d in doc["days"] if d["date"] != "2024-02-20"]          # a gap inside the series
+    bundle.write_json(bdir / WB.LFM_GSI_JSON, doc)
+    f = behavior._live_moisture_by_hour(bdir, man, tz, None)
+    for h in range(0, 30):
+        f(now + h * HOUR_MS)
+    assert sum(f.fallback.values()) == 30 and len(f.fallback) == 2              # Feb 27 and Feb 28 (CST)
+    msg = behavior._behavior_lfm_warning(f.fallback)
+    assert msg == ("Fire behaviour charts (2024-02-27..2024-02-28, 30 h): live fuel moisture uses California's "
+                   "seasonal values (GSI series unavailable); experimental.")
+    bundle.save_manifest(bdir, {"id": "x", "warnings": ["Other: keep me", "Fire behaviour charts (2024-01-01, 3 h): old"]})
+    behavior._record_behavior_lfm_warning(bdir, bundle.load_manifest(bdir), msg)
+    assert bundle.load_manifest(bdir)["warnings"] == ["Other: keep me", msg]
+    behavior._record_behavior_lfm_warning(bdir, bundle.load_manifest(bdir), None)          # all hours have GSI now
+    assert bundle.load_manifest(bdir)["warnings"] == ["Other: keep me"]
+    bundle.save_manifest(bdir, {"id": "x", "warnings": [WB.INTERIM_LFM_WARNING]})
+    behavior._record_behavior_lfm_warning(bdir, bundle.load_manifest(bdir), msg)
+    assert bundle.load_manifest(bdir)["warnings"] == [WB.INTERIM_LFM_WARNING]   # the build's warning says it already
+    ca = behavior._live_moisture_by_hour(bdir, {"summary": {"state": "CA"}}, tz, None)
+    ca(now)
+    assert ca.fallback == {}                                                    # California's own rule: no warning
+
+
+def test_annotation_records_the_fallback_in_the_manifest(tmp_path) -> None:
+    from test_spread_support import make_bundle
+
+    bdir = make_bundle(tmp_path, iid="mt-no-series")
+    bundle.update_manifest(bdir, lambda m: m["summary"].update(state="MT", time_zone="America/Denver"))
+    behavior.annotate_weather_with_behavior(bdir)                               # outside California, no series
+    ws = bundle.load_manifest(bdir)["warnings"]
+    assert len(ws) == 1 and ws[0].startswith("Fire behaviour charts (") and "GSI series unavailable" in ws[0]
+    bundle.update_manifest(bdir, lambda m: m["summary"].update(state="CA"))
+    behavior.annotate_weather_with_behavior(bdir)                               # California: the warning goes
+    assert bundle.load_manifest(bdir)["warnings"] == []
+
+
+def test_hindcasts_never_fetch_the_gsi_series(mt_ctx, monkeypatch) -> None:
+    """Review m4: member_weathers fetches a missing series for a live bundle only."""
+    monkeypatch.setattr(WB, "gsi_inputs", _fake_gsi_inputs(_rows("2025-06-20", 60)))
+    WB.build_weather(mt_ctx, source=FakeSource(mt_ctx.fire_grid))
+    (mt_ctx.bundle_dir / WB.LFM_GSI_JSON).unlink()                              # a bundle built before GSI
+    fake = _fake_gsi_inputs(_rows("2025-06-20", 60))
+    monkeypatch.setattr(WB, "gsi_inputs", fake)
+    mws = WB.member_weathers(mt_ctx.bundle_dir, iso_to_ms("2025-08-01T00:00:00Z"), 12, "none",
+                             source=FakeSource(mt_ctx.fire_grid))
+    assert fake.calls == [] and not (mt_ctx.bundle_dir / WB.LFM_GSI_JSON).exists()
+    assert any(w.startswith(WB.INTERIM_LFM_NOTE) for w in mws.warnings)          # never silent
+    bundle.update_manifest(mt_ctx.bundle_dir, lambda m: m.update(mode="live"))
+    WB.member_weathers(mt_ctx.bundle_dir, iso_to_ms("2025-08-01T00:00:00Z"), 12, "none", source=FakeSource(mt_ctx.fire_grid))
+    assert len(fake.calls) == 1 and fake.calls[0][3] is True                     # live: fetched (forecast host)
+
+
 # ----------------------------------------------------------------------------------------------------------------
 # California unchanged by the GSI code (14.12.10): Eaton, Palisades, Madre (when present) and fixture-demo
 # ----------------------------------------------------------------------------------------------------------------

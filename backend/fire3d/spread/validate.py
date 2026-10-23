@@ -345,6 +345,43 @@ def fire_score(rows: Sequence[dict]) -> dict:
     }
 
 
+GROWTH_OVER = 1.05             # a growth ratio >= 1.05 is "too much growth", <= 0.95 "too little" (the web's words)
+GROWTH_UNDER = 0.95
+
+
+def growth_direction(ratio: float) -> str:
+    """``"over"`` (too much growth), ``"under"`` (too little) or ``"about"`` (about right) for a growth ratio."""
+    return "over" if ratio >= GROWTH_OVER else "under" if ratio <= GROWTH_UNDER else "about"
+
+
+def _ratio_words(x: float) -> str:
+    return f"×{float(f'{x:.2f}'):g}"
+
+
+def growth_split(fire_ratios: Sequence[tuple[str, float]], pooled: float | None) -> tuple[bool, str | None]:
+    """``(keep, caveat)`` for a region's growth ratio from its fires' median growth ratios ``(name, ratio)``.
+
+    When some fires forecast too much growth and others too little, the pooled median hides it (review W-M1: the
+    Northern Rockies' x0.73 pooled Horse Gulch x1.78 with Island Creek x0.63). Then the caveat names each fire's ratio,
+    and ``keep`` is False (the file gives no region ratio) unless more than half of the fires err the same way as
+    the pooled median. Otherwise ``(True, None)``."""
+    over = [(n, x) for n, x in fire_ratios if growth_direction(x) == "over"]
+    under = [(n, x) for n, x in fire_ratios if growth_direction(x) == "under"]
+    if not over or not under:
+        return True, None
+
+    def names(fs: list[tuple[str, float]]) -> str:
+        parts = [f"{n} ({_ratio_words(x)})" for n, x in fs]
+        return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
+
+    same = {"over": len(over), "under": len(under)}.get(growth_direction(pooled), 0) if pooled is not None else 0
+    keep = same * 2 > len(fire_ratios)
+    tail = (f"; the region's growth ratio ({_ratio_words(pooled)}, the median over all leads) follows most of them"
+            if keep and pooled is not None else "; no single growth ratio is given for this region")
+    return keep, (f"The fires erred in opposite directions: too much growth on {names(over)}, too little on "
+                  f"{names(under)}{tail}.")
+
+
 def region_accuracy(region_id: str, name: str, fires: Sequence[dict], *, in_sample: bool = False,
                     caveats: Sequence[str] = ()) -> dict:
     """One region of ``regional_accuracy.json`` from its fires.
@@ -355,7 +392,9 @@ def region_accuracy(region_id: str, name: str, fires: Sequence[dict], *, in_samp
     fire means** (one fire with more starts cannot dominate); ``pooled_leads`` is the mean over all leads,
     ``by_lead`` the per-lead means over all leads ("12"/"24"/"48"/"72"), ``ignition_relative`` the mean of the fire
     means of the ignition rows, ``range`` the min-max of the fire means, ``growth_ratio_median`` the median of the
-    per-lead forecast / observed growth ratios. Fires without a scored lead are not counted."""
+    per-lead forecast / observed growth ratios, or None when the fires err in opposite directions and no majority
+    errs the pooled way (:func:`growth_split`, which then adds a caveat naming each fire's median ratio). Fires
+    without a scored lead are not counted."""
     scored = []
     for f in fires:
         sc = fire_score(f.get("rows") or [])
@@ -378,6 +417,10 @@ def region_accuracy(region_id: str, name: str, fires: Sequence[dict], *, in_samp
     for r in all_rows:
         by.setdefault(str(int(round(float(r["lead_h"])))), []).append(float(r["sorensen_growth"]))
     ratios = [x for _, sc in scored for x in sc["growth_ratios"]]
+    pooled_ratio = float(np.median(ratios)) if ratios else None
+    keep_ratio, split_caveat = growth_split(
+        [(str(f.get("name") or f.get("id")), float(np.median(sc["growth_ratios"]))) for f, sc in scored if sc["growth_ratios"]],
+        pooled_ratio)
     ign = [fire_score(f.get("ignition_rows") or []) for f, _ in scored]
     ign_means = [s["growth_sorensen"] for s in ign if s["n_leads"] > 0]
     methods = sorted({str(f.get("lfm_method")) for f, _ in scored if f.get("lfm_method")})
@@ -388,12 +431,13 @@ def region_accuracy(region_id: str, name: str, fires: Sequence[dict], *, in_samp
         "pooled_leads": _r(np.mean([float(r["sorensen_growth"]) for r in all_rows])),
         "ignition_relative": _r(np.mean(ign_means)) if ign_means else None,
         "by_lead": {k: _r(np.mean(v)) for k, v in sorted(by.items(), key=lambda kv: float(kv[0]))},
-        "growth_ratio_median": _r(np.median(ratios), 2) if ratios else None,
+        "growth_ratio_median": _r(pooled_ratio, 2) if pooled_ratio is not None and keep_ratio else None,
         "years": sorted({int(f["year"]) for f, _ in scored if f.get("year") is not None}),
         "lfm_method": methods[0] if len(methods) == 1 else "+".join(methods) if methods else None,
         "fuels_editions": sorted({str(f["fuels_edition"]) for f, _ in scored if f.get("fuels_edition")}),
         "fuel_groups_tested": sorted({str(g) for f, _ in scored for g in (f.get("fuel_groups") or [])}),
-        "caveats": list(caveats) + [c for f, _ in scored for c in (f.get("caveats") or [])],
+        "caveats": list(caveats) + ([split_caveat] if split_caveat else [])
+        + [c for f, _ in scored for c in (f.get("caveats") or [])],
         "fires": [],
     })
     for f, sc in scored:

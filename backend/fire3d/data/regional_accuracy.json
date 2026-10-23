@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_ms": 1792763445678,
+  "generated_ms": 1792765441275,
   "model": {
     "engine": "pyretechnics 2026.8.10",
     "settings": "config.FORECAST_* (multiplier 0.5 with the 12 h decay, held inactive perimeter, growth-coincident activity) @ b501d96"
@@ -67,7 +67,7 @@
         "timber"
       ],
       "caveats": [
-        "Two fires: a rough value (about ±0.05).",
+        "Two fires only: a rough value (the two fires scored 0.23 and 0.28).",
         "Lower Sugarloaf has no perimeter from Sep 19 to Sep 22 during its run: its later leads are timed by satellite detections."
       ],
       "fires": [
@@ -119,7 +119,7 @@
         "48": 0.38,
         "72": 0.384
       },
-      "growth_ratio_median": 0.73,
+      "growth_ratio_median": null,
       "years": [
         2024,
         2025
@@ -135,7 +135,8 @@
         "timber"
       ],
       "caveats": [
-        "Two fires: a rough value (about ±0.05)."
+        "Two fires only: a rough value (the two fires scored 0.19 and 0.49).",
+        "The fires erred in opposite directions: too much growth on Horse Gulch (×1.78), too little on Island Creek (×0.63); no single growth ratio is given for this region."
       ],
       "fires": [
         {
@@ -200,7 +201,7 @@
         "timber"
       ],
       "caveats": [
-        "Two fires: a rough value (about ±0.05)."
+        "Two fires only: a rough value (the two fires scored 0.22 and 0.28)."
       ],
       "fires": [
         {
@@ -265,7 +266,7 @@
         "timber"
       ],
       "caveats": [
-        "Two fires: a rough value (about ±0.05)."
+        "Two fires only: a rough value (both fires scored about 0.35)."
       ],
       "fires": [
         {
@@ -329,8 +330,8 @@
         "grass"
       ],
       "caveats": [
-        "Two fires: a rough value (about ±0.05).",
-        "Windy Deuce's run is timed by satellite detections: WFIGS has one perimeter during it.",
+        "Two fires only: a rough value (the two fires scored 0.30 and 0.49).",
+        "Windy Deuce: WFIGS's own polygon time puts about 65 % of the area before the first start, while the satellite reconstruction puts most of the growth after it (6 % burned at the first start), so this fire's score depends on a timing that is uncertain by up to a day.",
         "Rush's first two starts come before its first perimeter; their leads are timed by satellite detections."
       ],
       "fires": [
@@ -394,7 +395,7 @@
         "timber"
       ],
       "caveats": [
-        "Two fires: a rough value (about ±0.05)."
+        "Two fires only: a rough value (the two fires scored 0.17 and 0.21)."
       ],
       "fires": [
         {
@@ -476,7 +477,8 @@
         "shrub"
       ],
       "caveats": [
-        "The model's settings (multiplier 0.5, 12 h decay, held perimeter) were fitted on these three fires: in-sample, a best case."
+        "The model's settings (multiplier 0.5, 12 h decay, held perimeter) were fitted on these three fires: in-sample, a best case.",
+        "The fires erred in opposite directions: too much growth on Eaton Fire (×1.74) and Madre Fire (×2.2), too little on Palisades Fire (×0.57); the region's growth ratio (×1.85, the median over all leads) follows most of them."
       ],
       "fires": [
         {

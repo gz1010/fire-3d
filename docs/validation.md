@@ -40,7 +40,8 @@ covers the spread forecast in `backend/fire3d/spread/` with the defaults in `bac
   6,932 -> 6,434 ac. No fire got worse. Small, actively burning fires (Cooley) remain an open question.
 - **Outside California (section 10, brief 3).** The model was re-run on 12 past fires, two in each of six regions,
   with starts and a regional live fuel moisture method (the NFDRS 2016 Growing Season Index) fixed in advance. Mean
-  growth Sørensen per region (two fires each): Northwest 0.26, Northern Rockies 0.34, Great Basin 0.25, Southwest
+  growth Sørensen per region (two fires each, so rough: two fires of a region differ by about 0.1 on average):
+  Northwest 0.26, Northern Rockies 0.34, Great Basin 0.25, Southwest
   0.35, Southern Plains 0.39, Southeast 0.19, against 0.43 in Southern California, where the settings were fitted.
   Outside California the model usually forecasts too little new growth (8 of 12 fires), the opposite of California;
   a faster spread setting would help those fires but makes California worse, so nothing was changed. Rocky
@@ -866,7 +867,7 @@ Reading these:
   Horse Gulch (1.8) and Trout (1.4) grew too much, as California's fires do; France Canyon was about right (1.0).
   Horse Gulch and Rush, two-day runs scored from their first hours, have the best scores (0.49).
 - The lowest scores are the two Appalachian hardwood-litter fires (Black Cove 0.17, Table Rock 0.21), where the
-  model forecast about a fifth to a half of the real growth (growth ratio 0.22 and 0.46), and Island Creek's run
+  model forecast about a fifth to a half of the real growth (growth ratio 0.46 and 0.22), and Island Creek's run
   after a quiet spell (0.19).
 - The 31 weather members barely move the median: the p50 and the deterministic member differ by at most
   0.006 on any fire.
@@ -1041,7 +1042,7 @@ Region value = the mean of the fire means (each fire counts once, whatever its n
 | region | status | fires (leads) | growth Sørensen | fires' range | pooled | +12 h | +24 h | +48 h | +72 h | growth ratio (median) | ignition-relative | fuel groups | fuels | live fuel moisture |
 |---|---|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---|---|---|
 | NWCC Northwest | tested | 2 (24) | **0.255** | 0.231-0.279 | 0.255 | 0.214 | 0.277 | 0.279 | 0.251 | 0.26 | 0.167 | timber | LF2024 | gsi_nfdrs2016 |
-| NRCC Northern Rockies | tested | 2 (24) | **0.341** | 0.189-0.492 | 0.341 | 0.258 | 0.341 | 0.380 | 0.384 | 0.73 | 0.313 | grass, shrub, timber | LF2023, LF2024 | gsi_nfdrs2016 |
+| NRCC Northern Rockies | tested | 2 (24) | **0.341** | 0.189-0.492 | 0.341 | 0.258 | 0.341 | 0.380 | 0.384 | – (pooled 0.73; fires 0.63 and 1.78) | 0.313 | grass, shrub, timber | LF2023, LF2024 | gsi_nfdrs2016 |
 | GBCC Great Basin | tested | 2 (28) | **0.247** | 0.218-0.275 | 0.251 | 0.202 | 0.247 | 0.268 | 0.286 | 0.83 | 0.213 | grass, shrub, timber | LF2024 | gsi_nfdrs2016 |
 | SWCC Southwest | tested | 2 (32) | **0.351** | 0.348-0.355 | 0.351 | 0.313 | 0.345 | 0.365 | 0.382 | 1.84 | 0.304 | grass, shrub, timber | LF2024 | gsi_nfdrs2016 |
 | SACC-SP Southern Plains | tested | 2 (24) | **0.394** | 0.299-0.490 | 0.394 | 0.344 | 0.390 | 0.423 | 0.419 | 0.69 | 0.397 | grass | LF2023, LF2024 | gsi_nfdrs2016 |
@@ -1058,8 +1059,23 @@ Reading these:
   against 0.43 in Southern California. California's value is in-sample (the settings were fitted there, a best case);
   these are not (`in_sample: false`: nothing was fitted to them).
 - **Two fires are a small sample.** In the Northern Rockies the two fires differ by 0.30 (Island Creek 0.19, Horse
-  Gulch 0.49), so the region value says little about the next fire there; the app always shows the range. Two-fire
-  values carry about ±0.05 of noise even when the fires agree.
+  Gulch 0.49), so the region value says little about the next fire there. Measured on these results (corrected after
+  review; the earlier "about ±0.05" was the audit's guess from before any score): two fires of the same region differ
+  by about 0.1 on average (0.01 to 0.30; pooled standard deviation between fires of a region 0.09, from the 15 fire
+  means), so a two-fire value is uncertain by about ±0.07 (one standard error), about ±0.13 at 95 %, and about ±0.15
+  (one standard error) in the Northern Rockies alone. Each region's caveat in the file states its two fires' scores
+  ("Two fires only: a rough value (the two fires scored 0.19 and 0.49)."). Command shows the range; Public shows it
+  under "How was it tested?" (the location card shows the one-line label only).
+- **Growth ratio.** The region's growth ratio is the median over all its leads. In the Northern Rockies the two fires
+  erred in opposite directions (Horse Gulch ×1.78 too much growth, Island Creek ×0.63 too little; 11 of the 24 leads
+  too much), so the pooled 0.73 would read as a steady under-forecast. The file therefore gives no region ratio there
+  (`growth_ratio_median` null) and a caveat names each fire's; the rule (`validate.growth_split`): a region ratio is
+  given unless the fires err in opposite directions and no majority errs the pooled way. Southern California keeps its
+  1.85 (Eaton ×1.74 and Madre ×2.2 too much, Palisades ×0.57 too little; its caveat says so).
+- **The Southern Plains value depends on Windy Deuce's timing** (section 10.3): WFIGS's own polygon time puts about
+  65 % of its area before the first start, while the satellite reconstruction puts most of the growth after it (6 %
+  burned at the first start). Its score (0.30, one of the two fire means behind the region's 0.39) measures the run
+  as VIIRS timed it, and that timing is uncertain by up to a day. Nothing was changed after the scores; the file's caveat says this.
 - **Fuels tested** are those of these fires only (timber in the Northwest and the Southeast, grass in the Southern
   Plains, mixed elsewhere); a region's other fuels are untested, and the app adds that sentence.
 - These re-runs started during the fires' main growth with archived HRRR weather; live forecasts use forecast weather
@@ -1203,14 +1219,16 @@ different grid.
 
 ### 10.10 Caveats
 
-- **Small samples.** Two fires per region and 12-16 leads per fire. A two-fire value is rough (about ±0.05 even
-  when the fires agree; the Northern Rockies' two fires differ by 0.30). The label always shows the fires' range.
+- **Small samples.** Two fires per region and 12-16 leads per fire. A two-fire value is rough: two fires of a region
+  differ by about 0.1 on average (section 10.5: about ±0.07 as one standard error, ±0.13 at 95 %), and the Northern
+  Rockies' two fires differ by 0.30. Command shows the fires' range; Public shows it under "How was it tested?" (the
+  location card shows the one-line label only).
 - **Starts during the main growth, archived weather.** The label starts were chosen from the perimeter record before
   any run, during each fire's main growth, and the weather is archived HRRR (a near-perfect forecast). Live forecasts
   start from the latest observation with forecast weather and usually do worse (section 10.8; section 2).
 - **The truth has errors.** It is the reconstruction of section 1 (VIIRS, MODIS, Landsat, WFIGS perimeters, GOES
   timing). Where perimeters are sparse the timing comes from satellite passes: Windy Deuce (one perimeter during its
-  run, see 10.3), Rush's first two starts (before its first perimeter), Lower Sugarloaf's later leads (no perimeter
+  run, and WFIGS's own polygon time a day earlier than the reconstruction, see 10.3 and 10.5), Rush's first two starts (before its first perimeter), Lower Sugarloaf's later leads (no perimeter
   from Sep 19 to Sep 22). The perimeter reader dates re-edited WFIGS polygons by their edit time, which changes the
   timing of some fires compared with the audit's reading.
 - **Fuels.** LANDFIRE LF2023 for the two federal fiscal year 2024 fires (Horse Gulch, Windy Deuce) and LF2024 for
@@ -1224,7 +1242,26 @@ different grid.
   accuracy for a given fire, and it is never a statement about safety. Outside the modeled area is unknown, not low.
   Experimental: follow local officials.
 
-### 10.11 Reproduce (outside California)
+### 10.11 Review fixes (2026-10-23, after the scores; no score changed)
+
+An independent review of this section found these; each was checked against the code and the stored outputs first.
+- **Fire behaviour charts outside California** (`spread/behavior.py`). The hourly flame-length and spread-potential
+  annotation took each local day's GSI, but a live bundle's series ends today while its weather runs to +96 h (and a
+  historical one ends 5 days before now), so from about +48 h it quietly used California's month table (herb and
+  woody 120 % in February in Texas instead of 30 % / 60 %), with no warning. Now days after the series hold its latest
+  21-day value, as a forecast holds live fuel moisture over its run (`gsi_at(..., hold_last=True)`); any hour that
+  still has no GSI value (no series, or a gap inside it) uses California's values and the manifest says so ("Fire
+  behaviour charts (dates, hours): live fuel moisture uses California's seasonal values (GSI series unavailable);
+  experimental."). The forecasts and every score here were not affected: forecasts take the GSI at their start, and
+  the 12 scored bundles' series cover their whole weather windows.
+- **Hindcasts never fetch the series** (section 10.1). `member_weathers` fetched a missing series for any bundle; it now
+  fetches it for a live bundle only, so the code matches 10.1 (the 12 scored bundles all had their series).
+- **Region caveats** (`regional_accuracy.json`, regenerated from the stored per-fire rows with `validate regional`, no
+  re-run): the guessed "about ±0.05" became each region's two scores (section 10.5); Windy Deuce's caveat names its
+  timing problem; the Northern Rockies' growth ratio is null with a caveat naming each fire's (section 10.5).
+- Section 10.4: the two Appalachian growth ratios were listed in the wrong order (Black Cove 0.46, Table Rock 0.22).
+
+### 10.12 Reproduce (outside California)
 
 ```bash
 cd backend

@@ -356,10 +356,54 @@ def run_hindcast(fid: str, what: str, out_dir: Path, workers: int | None = None)
 REGION_CAVEATS: dict[str, list[str]] = {
     "NWCC": ["Lower Sugarloaf has no perimeter from Sep 19 to Sep 22 during its run: its later leads are timed by "
              "satellite detections."],
-    "SACC-SP": ["Windy Deuce's run is timed by satellite detections: WFIGS has one perimeter during it.",
+    # review m1: name the timing problem (docs/validation.md 10.3); no score changed
+    "SACC-SP": ["Windy Deuce: WFIGS's own polygon time puts about 65 % of the area before the first start, while the "
+                "satellite reconstruction puts most of the growth after it (6 % burned at the first start), so this "
+                "fire's score depends on a timing that is uncertain by up to a day.",
                 "Rush's first two starts come before its first perimeter; their leads are timed by satellite detections."],
 }
-COMMON_CAVEAT = "Two fires: a rough value (about ±0.05)."
+OSCC_CAVEAT = ("The model's settings (multiplier 0.5, 12 h decay, held perimeter) were fitted on these three fires: "
+               "in-sample, a best case.")
+_COUNT_WORDS = {1: "One", 2: "Two", 3: "Three"}
+
+
+def few_fires_caveat(means: list[float]) -> str | None:
+    """The sample-size caveat of a region outside California, built from its fire means (review W-M3: no guessed
+    "±0.05"; the measured spread between two fires of a region is about 0.1 on average, docs/validation.md 10.5):
+    "Two fires only: a rough value (the two fires scored 0.19 and 0.49)." None without a scored fire."""
+    vals = sorted(round(float(m), 2) for m in means if m is not None)
+    n = len(vals)
+    if not n:
+        return None
+    if n == 1:
+        return f"One fire only: not a regional value (that fire scored {vals[0]:.2f})."
+    word = _COUNT_WORDS.get(n, str(n))
+    if vals[0] == vals[-1]:
+        scored = f"{'both' if n == 2 else 'all'} fires scored about {vals[0]:.2f}"
+    else:
+        listed = [f"{v:.2f}" for v in vals]
+        scored = f"the {word.lower()} fires scored {', '.join(listed[:-1])} and {listed[-1]}"
+    return f"{word} fires only: a rough value ({scored})."
+
+
+def region_caveats(fires: list[dict]) -> dict[str, list[str]]:
+    """``region_caveats`` of the collection: per region outside California the data-built sample-size caveat, then
+    :data:`REGION_CAVEATS`; California the in-sample sentence."""
+    from fire3d.spread import validate as V
+
+    by: dict[str, list[float]] = {}
+    for f in fires:
+        sc = V.fire_score(f.get("rows") or [])
+        if sc["n_leads"] > 0:
+            by.setdefault(str(f["region"]), []).append(float(sc["growth_sorensen"]))
+    out: dict[str, list[str]] = {}
+    for rid in sorted({str(f["region"]) for f in fires}):
+        if rid == "OSCC":
+            out[rid] = [OSCC_CAVEAT]
+            continue
+        few = few_fires_caveat(by.get(rid, []))
+        out[rid] = ([few] if few else []) + REGION_CAVEATS.get(rid, [])
+    return out
 
 
 def _load_rows(run_dir: Path, fid: str, what: str) -> list[dict] | None:
@@ -416,9 +460,8 @@ def collect(run_dir: Path, checks: list[dict], california_meta: dict) -> dict:
                       "era5_hours": meta.get("era5_hours", 0), "gfs_fill_hours": meta.get("gfs_fill_hours", 0),
                       "weather_source": meta.get("weather_source"), "replaced": None,
                       "fuel_groups": meta.get("fuel_groups") or [], "caveats": []})
-    caveats = {rid: [COMMON_CAVEAT] + REGION_CAVEATS.get(rid, []) for rid in {f["region"] for f in fires} if rid != "OSCC"}
-    caveats["OSCC"] = ["The model's settings (multiplier 0.5, 12 h decay, held perimeter) were fitted on these three "
-                       "fires: in-sample, a best case."]
+    caveats = region_caveats(fires)
+    caveats.setdefault("OSCC", [OSCC_CAVEAT])
     return {"fires": fires, "region_caveats": caveats, "in_sample_regions": ["OSCC"],
             "starts": "pre-registered (docs/validation.md section 10.1), during main growth; California: ignition + "
                       "6/12/24 h (Madre + 24/48 h)",
