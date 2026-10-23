@@ -23,8 +23,11 @@ national search). Ports API 8711, Vite 5181. Started 2026-10-23 ~00:20 UTC.
 - M4: api/records.py (incident-record, accuracy-regions), regional_accuracy.json seed, wfigs.record_by_irwin,
   tests/test_us_catalog_records.py.
 
+- M5: national gazetteer (places + counties + ZCTAs; cut line (a) done), geocode.py national parsing and fields.
+
 ## Next
-- M5 gazetteer (national places), geocode.py. Then cut-line items, SPEC prose, curl acceptance on 8711.
+- Cut-line items (b) ca_county_gacc, (e) nwcg codes, (d) SPEC prose, (c) KD-tree?, (f) id pinning; then gates,
+  curl acceptance on 8711, wording scan, report.
 
 ## Decisions
 - §14.1 before-validator implemented as an after-validator using model_fields_set (a before-validator breaks strict

@@ -210,6 +210,29 @@ milestone commit; other roles read it instead of guessing. Kept current at every
   recomputed from its counts (`tested` >= 2 fires and >= 16 leads, else `limited` with >= 1 fire, else `untested`),
   plus `served_ms`; `Cache-Control: no-cache`; 503 when the file is unreadable.
 
+## M5: national search (commit `brief 3 us-catalog: M5 ...`)
+
+- `backend/scripts/build_gazetteer.py` -> `backend/fire3d/data/gazetteer_us.json` (3.7 MB, 1.1 MB gzipped; 2026
+  Census Gazetteer national place, county and ZCTA files): 35,585 places and counties (city 10,253, town 4,317,
+  village 3,716, borough 1,215, cdp 12,557, county 3,222, comunidad 214, zona urbana 78, municipality 7, government 6)
+  and 33,791 ZIP areas, every state, DC and Puerto Rico (Alaska, Hawaii and territory rows kept). Place rows
+  `[name, type, state, lat, lon, land_km2, county, alias]`; ZIP rows `[zip, state, lat, lon, land_km2]` (state from
+  the lower-48 polygons, else the ZIP prefix). `gazetteer_ca.json` is removed. Cut-line item (a) (ZCTA and county
+  rows) is therefore done too.
+- `GET /api/geocode` local matches gain `state`, `state_name`, `county` (name or null), `supported` (false in Alaska,
+  Hawaii, territories) and `note` per match (the §14.14 sentence when not supported); `name` and `matched_address`
+  read "<Name>, <ST>" / "ZIP <zip>, <ST>"; `place_type` is the LSAD in plain words (`city`, `town`, `village`,
+  `borough`, `municipality`, `government` = consolidated city-county, `county`, `cdp`, `comunidad`, `zona_urbana`,
+  ZIP matches `zip`) with `place_type_label`. Parsing (`geocode.split_query`): "Springfield, IL", "Springfield IL",
+  "Springfield, Illinois", "83702 ID", "ID 83702", "Ada County, ID", "Washington, DC"; a bare "Springfield" lists the
+  largest matches across states (exact first, then city > town > village > county > CDP, then land area); a state
+  word alone is a name ("Washington", "California"). No match: "No US city, town, county or ZIP code matches
+  '<q>'." + what is searched with the national examples "e.g. 600 E Mariposa St, Altadena; Boise, ID; 83702"; the
+  400 messages use the same examples. Census names are kept: "Boise, ID" finds "Boise City, ID" (exact, through the
+  alias "Boise"), "Nashville, TN" finds "Nashville-Davidson, TN".
+- For us-web: the local match's `name` now carries the state ("Altadena, CA"); `near` stays a bare place name of the
+  same state.
+
 ## Deviations
 - `coverage_at` uses a **1 km** tolerance around the state polygons, not 5 km: the TIGERweb state polygons already
   include near-shore water, and 5 km would put central Tijuana (2.0 km south of the border; §14.3 requires
