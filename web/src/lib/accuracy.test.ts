@@ -10,7 +10,7 @@ const file = (): AccuracyRegionsResponse => JSON.parse(fixtureText) as AccuracyR
 const label = (f: AccuracyRegionsResponse, id: Parameters<typeof findRegion>[1]) => accuracyLabel(findRegion(f, id), f.method)
 
 describe('accuracy label (§14.4)', () => {
-  it('OSCC from the seed values: the exact Public and Command lines, in-sample', () => {
+  it('OSCC from the seed values (the real seed: 0.433, method starts "during main growth …", seed: true): the exact §14.4 lines, in-sample', () => {
     const l = label(file(), 'OSCC')
     expect(l.status).toBe('tested')
     expect(l.publicLine).toBe(
@@ -41,7 +41,6 @@ describe('accuracy label (§14.4)', () => {
 
   it('a tested region outside California: years, fuels, lead span from by_lead, GSI, fuel editions; main growth from the method', () => {
     const f = file()
-    f.method.starts = 'pre-registered, during main growth'
     const l = label(f, 'NWCC')
     expect(l.publicLine).toBe('Tested on 2 past fires in this region (2024-2025; timber fires).')
     expect(l.commandLine).toBe(
@@ -55,7 +54,13 @@ describe('accuracy label (§14.4)', () => {
   it('a clause whose value the file lacks is left out (no fuels, no editions, no leads: no guess)', () => {
     const l = label(file(), 'SWCC')
     expect(l.publicLine).toBe('Tested on 2 past fires in this region (2024).')
-    expect(l.commandLine).toBe('Hindcast growth score 0.30 (fires 0.25-0.36; 2 fires, 20 leads, +12-72 h; growth ×0.6; live fuel moisture GSI).')
+    expect(l.commandLine).toBe('Hindcast growth score 0.30 (fires 0.25-0.36; 2 fires, 20 leads, +12-72 h; growth ×0.6; starts during main growth; live fuel moisture GSI).')
+    // a method that does not say when the re-runs started: no such clause anywhere
+    const f = file()
+    f.method.starts = 'fixed per fire'
+    const l2 = label(f, 'SWCC')
+    expect(l2.commandLine).not.toContain('main growth')
+    expect(l2.publicDetail).toContain('These re-runs used archived weather')
     expect(l.fuelCaveat).toBeNull()
     expect(l.publicDetail).toContain('It usually predicted about 60% of the real growth.')
   })

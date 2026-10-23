@@ -3,7 +3,7 @@
 // grids) and are worded by describeLocation in four short blocks: near here; official information (always present,
 // from useOfficialAtPoint, I5); the main reasons, each tagged, with the model as a dated sentence (Command keeps the
 // figure, the model run and the arrival quantiles); updated and reliability. The details disclosure (remembered per
-// preset) holds the sources, periods, explanations and, in Command, the original scientific values. On the California
+// preset) holds the sources, periods, explanations and, in Command, the original scientific values. On the national
 // overview (no fire open) the card shows the official line and the nearest fires (OverviewCard).
 // Brief 3 (§14.9): every time is in the fire's own zone with the preset's clock, and the reliability block names the
 // zone ("Times: Mountain Time (MDT), the fire's local time").

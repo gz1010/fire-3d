@@ -168,3 +168,31 @@ As §14.9.4: `clockFor`, `useClock`, `useTimeFormat`, `useTimeFormatFor`, `useZo
   for a data source named "NIFC WFIGS incident record …", `plainLanguage.sourceName` keeps "USFS via NIFC WFIGS"
   issuers, the Forensic telemetry ignition column says "NIFC" for a WFIGS start, the not-prepared notice and the map
   hovers use the issuer label.
+
+## 14.10 Search and coverage (M5)
+
+- `lib/usStates.ts`: `L48_STATES` (48 + DC), `UNSUPPORTED_STATES` (AK, HI, PR, VI, GU, AS, MP: recognised so search can
+  say so), `stateCode(word)` (codes, names, common abbreviations such as "Calif.", "Wash."), `stateName`,
+  `isLower48`, `stateWords`.
+- `location/search.ts`: `looksLikeZip` strips leading / trailing state words, multi-word names included ("83702 ID",
+  "ID 83702", "83702, Idaho", "87501 New Mexico"); `queryState` ("Boise, ID", "Springfield IL", "Raleigh North
+  Carolina"; a lower-case two-letter word without a comma is not a state); "Town, ST" queries go to the local lookup
+  as typed (the backend parses them); `searchIncidents` matches the state code and name and the record's own name;
+  `likelyMissingWestSign` uses the lower-48 box; messages `noPlaceMessage(q)` = "No US city, town, county or ZIP code
+  matches “q”." (curly quotes, as the other search messages), the invalid-input message with "Boise, ID",
+  `NOT_SUPPORTED_NOTE`, `OUTSIDE_LOWER48_WARNING`, `SEARCH_EXAMPLES`; `placeName` / `areaLabel` / `areaSub` show the
+  state ("Boise, ID (town center, approximate)", "ZIP 83702, ID near Boise …", "city · Ada County · …") and keep an
+  Alaska or Hawaii row with the not-supported note.
+- `location/types.ts`: `GeocodeMatch` gains `state`, `state_name`, `county`, `supported`; `PlaceType` widened to the
+  Census LSAD words.
+- `lib/geodesy.ts` (W8): a bare pair with both values within ±90° takes the order inside `LOWER48_BOX`
+  (`[-124.85, 24.4, -66.89, 49.38]`); inside neither, latitude first and `ParsedLatLon.outsideLower48 = true`, and the
+  search box warns "This point is outside the area Fire-3d covers (the lower 48 states)." Letters and labels decide
+  as before. `inLower48Box` is exported for the search heuristics only.
+- `SearchBox.tsx`: "Searching US towns and ZIP codes…", the hint with "Boise, ID; 83702", "east longitude, far from the
+  lower 48 states", a not-supported match flies there and warns with the §14.14 sentence.
+- Coverage (W9, built in M3): `location/geoLookup.ts` (`useGeoLookup`, `lookupPoint` cache, `coverageText`,
+  `lookupPlace`, `NOT_SUPPORTED_TEXT`, `OUTSIDE_US_TEXT`); `CoverageNotice` in `CardParts.tsx`; `OverviewCard.tsx` and
+  `LocationCard.tsx` show it from `/api/geo/lookup` only (no client boxes). `OverviewCard`: "Nearest fires (official
+  records)", the place's county and state, "Fire lists: CAL FIRE and NIFC WFIGS, checked …", the zone line "Times:
+  Mountain Time (MDT), local time at this place".

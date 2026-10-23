@@ -1,14 +1,16 @@
-// Search planning and state for the "Check an address" box (owner: location; CONTRACT §5.1, brief 2 C-R1/R3/R4/R5).
-// Pure. Order:
+// Search planning and state for the "Check an address" box (owner: us-web; CONTRACT §5.1, brief 2 C-R1/R3/R4/R5;
+// brief 3 §14.10: every lower-48 state, "Town, ST" and "83702 ID", US wording). Pure. Order:
 // 1. pasted coordinates (parsed locally, never sent anywhere);
 // 2. an exact incident name ("Eaton Fire", or "Eaton" when no town of that name exists) opens that fire; other
 //    incident matches are only listed, and an unprepared fire is never built without asking;
 // 3. everything else goes to /api/geocode: a street address (house number first) to the Census Geocoder, a town or
-//    ZIP code to the local Census Gazetteer index (no upstream call).
+//    ZIP code to the local Census Gazetteer index (no upstream call; the backend parses "Springfield, IL",
+//    "Springfield IL", "83702 ID" and "ID 83702", and lists a bare "Springfield" across states with their state).
 // No autocomplete, no POI search, no Nominatim. The state machine below gives every lookup a sequence number: Escape,
 // edits, Clear, an outside click, a map click and a new selection cancel it, and a reply with an old number is dropped.
 import type { IncidentSummary } from '../api/types'
-import { parseLatLonDetailed, type ParsedLatLon } from '../lib/geodesy'
+import { LOWER48_BOX, parseLatLonDetailed, type ParsedLatLon } from '../lib/geodesy'
+import { stateCode, stateName, stateWords } from '../lib/usStates'
 import type { GeocodeMatch, GeocodeResponse } from './types'
 
 export interface IncidentHit {
@@ -46,15 +48,53 @@ export function looksLikeAddress(text: string): boolean {
   return /^\s*(?:[NSEW]\s?)?\d+[A-Z]?(?:[-/]\d+[A-Z]?)?\s+[A-Za-z0-9]/i.test(text) && /[A-Za-z]{2,}/.test(text)
 }
 
-/** "91001", "91001-1234", "CA 91001", "91001, California". */
+/** "91001", "91001-1234", "CA 91001", "83702 ID", "ID 83702", "83702, Idaho", "87501 New Mexico". */
 export function looksLikeZip(text: string): boolean {
-  const w = fold(text)
-    .split(' ')
-    .filter((x) => x && !STATE_WORDS.has(x))
+  const w = stripStateWords(fold(text)).split(' ').filter(Boolean)
   return (w.length === 1 && /^\d{5}$/.test(w[0])) || (w.length === 2 && /^\d{5}$/.test(w[0]) && /^\d{4}$/.test(w[1]))
 }
 
-const STATE_WORDS = new Set(['ca', 'calif', 'california', 'usa', 'us'])
+/** Every state word (codes, names, common abbreviations; folded) plus "us" / "usa", longest first. */
+const STATE_PHRASES: readonly string[] = [...new Set([...stateWords().map(fold), 'usa', 'us', 'united states'])].filter(Boolean).sort((a, b) => b.length - a.length)
+
+/** The folded text without leading or trailing state words ("83702 id" → "83702", "new mexico 87501" → "87501"). */
+export function stripStateWords(folded: string): string {
+  let t = ` ${folded} `
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const p of STATE_PHRASES) {
+      if (t.startsWith(` ${p} `)) {
+        t = t.slice(p.length + 1)
+        changed = true
+      }
+      if (t.endsWith(` ${p} `)) {
+        t = t.slice(0, t.length - p.length - 1)
+        changed = true
+      }
+    }
+  }
+  return t.trim()
+}
+
+/** "Boise, ID" / "Springfield IL" / "Raleigh, North Carolina": the state the query names at its end, else null (a
+ *  bare "Springfield"). A two-letter code without a comma must be upper case ("Boise ID"), so "fire in" is not
+ *  Indiana. */
+export function queryState(text: string): string | null {
+  const t = text.trim()
+  const comma = t.lastIndexOf(',')
+  if (comma >= 0) return stateCode(t.slice(comma + 1).trim())
+  const words = t.split(/\s+/)
+  if (words.length < 2) return null
+  for (const n of [2, 1]) {
+    if (words.length <= n) continue
+    const tail = words.slice(-n).join(' ')
+    if (n === 1 && tail.length === 2 && tail !== tail.toUpperCase()) continue
+    const code = stateCode(tail)
+    if (code) return code
+  }
+  return null
+}
 
 /** Incident matches: every query word must start a word of the name, county, location, unit, id or year. Ranked:
  *  exact name > name prefix > all words in the name > other fields; then active first, then size. */
@@ -69,7 +109,7 @@ export function searchIncidents(text: string, pool: readonly IncidentSummary[], 
     seen.add(s.id)
     const name = fold(s.name)
     const nameWords = name.split(' ')
-    const other = fold([s.county, s.location, s.admin_unit, s.id, String(s.year)].filter(Boolean).join(' ')).split(' ')
+    const other = fold([s.county, s.location, s.admin_unit, s.id, String(s.year), s.state, stateName(s.state), s.source_name].filter(Boolean).join(' ')).split(' ')
     const all = [...nameWords, ...other]
     if (!words.every((w) => all.some((t) => t.startsWith(w)))) continue
     // "eaton fire 2025": a trailing year that is the incident's own year is part of an exact name
@@ -99,16 +139,23 @@ export function planSearch(text: string, pool: readonly IncidentSummary[]): Sear
   if (exact.length === 1) return { kind: 'incident', hit: exact[0], incidents }
   if (looksLikeAddress(q)) return { kind: 'lookup', query: q, expect: 'address', incidents, candidate: null }
   if (!looksLikeZip(q) && !/[A-Za-zÀ-ɏ]/.test(q))
-    return { kind: 'invalid', message: 'Enter a street address with a house number, a California town or a ZIP code, or paste coordinates.' }
+    return { kind: 'invalid', message: 'Enter a street address with a house number, a US town ("Boise, ID") or a ZIP code, or paste coordinates.' }
   const bare = exact.length ? [] : incidents.filter((h) => h.bare)
   return { kind: 'lookup', query: q, expect: 'local', incidents, candidate: bare.length === 1 ? bare[0] : null }
 }
 
-/** California-looking latitude with a positive (east) longitude that would be in California if negated: the minus
- *  sign was probably dropped ("34.2, 118.1"). */
+/** A positive (east) longitude that would be inside the lower-48 box if negated: the minus sign was probably dropped
+ *  ("34.2, 118.1", "33.75, 84.39"). The box is a parsing heuristic, never a coverage claim. */
 export function likelyMissingWestSign(p: { lat: number; lon: number }): boolean {
-  return p.lat >= 32 && p.lat <= 42.5 && p.lon >= 113.5 && p.lon <= 125
+  const [w, s, e, n] = LOWER48_BOX
+  return p.lat >= s && p.lat <= n && p.lon >= -e && p.lon <= -w
 }
+
+/** CONTRACT §14.10 / §14.14 search messages. */
+export const NOT_SUPPORTED_NOTE = 'Fire-3d does not support Alaska, Hawaii or US territories yet.'
+export const OUTSIDE_LOWER48_WARNING = 'This point is outside the area Fire-3d covers (the lower 48 states).'
+export const SEARCH_EXAMPLES = 'e.g. 600 E Mariposa St, Altadena; Boise, ID; 83702'
+export const noPlaceMessage = (q: string) => `No US city, town, county or ZIP code matches “${q}”.`
 
 // ------------------------------------------------------------------------------------------------- incidents
 /** Whether an incident's analysis can be opened now. Only 'ready' (or a build in progress) opens without asking. */
@@ -184,24 +231,36 @@ export function decide(plan: Extract<SearchPlan, { kind: 'lookup' }>, res: Geoco
   }
   const exact = ms.filter((m) => m.exact)
   if (candidate && !exact.length) return { kind: 'incident', hit: candidate }
-  if (!ms.length && !incidents.length) return { kind: 'none', message: res.note ?? `No California town or ZIP code matches “${plan.query}”.` }
+  if (!ms.length && !incidents.length) return { kind: 'none', message: res.note ?? noPlaceMessage(plan.query) }
   // one match, or one exact name whose other matches are only partial: go there and keep the rest listed
   const go = ms.length === 1 ? ms[0] : exact.length === 1 ? exact[0] : null
   if (go && (!incidents.length || !candidate)) return { kind: 'area', match: go, others: splitMatches(res, incidents, go) }
-  const message = ms.length ? null : `No California town or ZIP code matches “${plan.query}”. Fires that match are listed.`
+  const message = ms.length ? null : `${noPlaceMessage(plan.query)} Fires that match are listed.`
   return { kind: 'list', lists: splitMatches(res, incidents), message }
 }
 
-/** "Altadena (town center, approximate)", "ZIP 91001 near Altadena (ZIP area, approximate)". */
-export function areaLabel(m: GeocodeMatch): string {
-  if (kindOf(m) === 'zip') return `ZIP ${m.zip ?? m.name ?? ''}${m.near ? ` near ${m.near}` : ''} (ZIP area, approximate)`
-  return `${m.name ?? m.matched_address} (town center, approximate)`
+/** A match's display name with its state: "Boise, ID" (the backend's own name when it carries the state). */
+export function placeName(m: Pick<GeocodeMatch, 'name' | 'matched_address' | 'state'>): string {
+  const name = (m.name ?? m.matched_address ?? '').trim()
+  if (!m.state || new RegExp(`,\\s*${m.state}$`).test(name)) return name
+  return `${name}, ${m.state}`
 }
 
-/** Sub-line of a town or ZIP result: "census-designated place · near Bishop" or "ZIP area near Altadena". */
+/** "Boise, ID (town center, approximate)", "ZIP 83702, ID near Boise (ZIP area, approximate)". */
+export function areaLabel(m: GeocodeMatch): string {
+  if (kindOf(m) === 'zip') {
+    const zip = m.zip ?? (m.name ?? '').replace(/^ZIP\s+/i, '').replace(/,\s*[A-Z]{2}$/, '')
+    return `ZIP ${zip}${m.state ? `, ${m.state}` : ''}${m.near ? ` near ${m.near}` : ''} (ZIP area, approximate)`
+  }
+  return `${placeName(m)} (town center, approximate)`
+}
+
+/** Sub-line of a town or ZIP result: "city · Ada County · town center, approximate" or "ZIP area near Boise"; a match
+ *  in Alaska, Hawaii or a territory keeps its row and says Fire-3d does not support it yet (§14.10). */
 export function areaSub(m: GeocodeMatch): string {
-  if (kindOf(m) === 'zip') return `ZIP area${m.near ? ` near ${m.near}` : ''} · approximate`
-  return [m.place_type_label ?? 'place', m.near ? `near ${m.near}` : null, 'town center, approximate'].filter(Boolean).join(' · ')
+  const note = m.supported === false ? NOT_SUPPORTED_NOTE : null
+  if (kindOf(m) === 'zip') return [`ZIP area${m.near ? ` near ${m.near}` : ''} · approximate`, note].filter(Boolean).join(' · ')
+  return [m.place_type_label ?? 'place', m.county ?? null, m.near ? `near ${m.near}` : null, 'town center, approximate', note].filter(Boolean).join(' · ')
 }
 
 /** Map view for a town or ZIP area: a box about the size of its land area (at least 3 km, at most 50 km across). */

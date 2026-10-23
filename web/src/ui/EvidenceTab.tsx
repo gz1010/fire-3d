@@ -1,6 +1,7 @@
 // Evidence tab (SPEC 9.4): data sources with fetch times, detection counts by instrument / satellite, the perimeter
 // list (click jumps the timeline), bundle facts and warnings.
 import { AlertTriangle, Database, ExternalLink, Hexagon, Satellite } from 'lucide-react'
+import { recordIssuerLabel } from '../api/records'
 import { useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { DetectionsFile, IncidentManifest, Instrument, PerimetersFile } from '../api/types'
@@ -196,7 +197,7 @@ function Sources({ manifest, weatherSource }: { manifest: IncidentManifest; weat
       </ul>
       {manifest.summary.url && (
         <a className="ext-link" href={manifest.summary.url} target="_blank" rel="noreferrer">
-          CAL FIRE incident page <ExternalLink size={11} />
+          {recordIssuerLabel(manifest.summary)} incident page <ExternalLink size={11} />
         </a>
       )}
       <DataSourcesNote className="evidence-credits" />

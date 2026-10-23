@@ -14,6 +14,19 @@ export interface ParsedLatLon extends LatLon {
   notation: CoordinateNotation
   /** Read from a map link (Google / Apple / OpenStreetMap style URL). */
   fromLink: boolean
+  /** Brief 3 (W8): a bare pair (no letters or labels, both values within ±90°) that is inside the lower-48 box in
+   *  neither order; it was read as latitude, longitude. A parsing heuristic, never a coverage claim. */
+  outsideLower48?: boolean
+}
+
+/** The lower 48 states' box [w, s, e, n] (CONTRACT §14.10): only to guess the order of a bare pair and a dropped minus
+ *  sign. Coverage at a point comes from /api/geo/lookup, never from this box. */
+export const LOWER48_BOX: readonly [number, number, number, number] = [-124.85, 24.4, -66.89, 49.38]
+
+/** Is (lat, lon) inside the lower-48 box? */
+export function inLower48Box(lat: number, lon: number): boolean {
+  const [w, s, e, n] = LOWER48_BOX
+  return lat >= s && lat <= n && lon >= w && lon <= e
 }
 
 const RAD = Math.PI / 180
@@ -142,8 +155,10 @@ function parseLink(s: string): LatLon | null {
 /** Parse pasted coordinates with how they were read; null when the text is not a latitude/longitude pair.
  *  Accepts "34.2048, -118.1027", "34.2048 N 118.1027 W", "N34.2048 W118.1027", "34°12'17.3"N 118°6'9.7"W",
  *  "34 12.29 N, 118 6.16 W", "34:12:17N 118:06:10W", "lat 34.2 lon -118.1", "-118.1027, 34.2048" (read as
- *  longitude, latitude because 118 > 90), "geo:34.2,-118.1" and map links. Without letters or labels the
- *  order is latitude, longitude. */
+ *  longitude, latitude because 118 > 90), "geo:34.2,-118.1" and map links. Without letters or labels the order is
+ *  latitude, longitude, except (brief 3, W8): when both values are within ±90° the order that lands inside the
+ *  lower-48 box wins ("-84.39, 33.75" is Atlanta, not the Southern Ocean); inside neither, latitude first and
+ *  `outsideLower48` is set so the caller can warn. */
 export function parseLatLonDetailed(text: string): ParsedLatLon | null {
   if (!text || text.length > 200) return null
   const s = clean(text).replace(/^\(|\)$/g, '').replace(/^\[|\]$/g, '').trim()
@@ -159,9 +174,17 @@ export function parseLatLonDetailed(text: string): ParsedLatLon | null {
   if (axA && axB && axA === axB) return null
   if (axA && !axB) axB = axA === 'lat' ? 'lon' : 'lat'
   if (axB && !axA) axA = axB === 'lat' ? 'lon' : 'lat'
+  let outsideLower48 = false
   if (!axA) {
-    // no letters or labels: latitude first, unless the first value cannot be a latitude
-    const swap = Math.abs(a.value) > 90 && Math.abs(b.value) <= 90
+    // no letters or labels: latitude first, unless the first value cannot be a latitude, or (both within ±90°) only
+    // the longitude-first reading lands inside the lower 48
+    let swap = Math.abs(a.value) > 90 && Math.abs(b.value) <= 90
+    if (Math.abs(a.value) <= 90 && Math.abs(b.value) <= 90) {
+      const latFirst = inLower48Box(a.value, b.value)
+      const lonFirst = inLower48Box(b.value, a.value)
+      swap = lonFirst && !latFirst
+      outsideLower48 = !latFirst && !lonFirst
+    }
     axA = swap ? 'lon' : 'lat'
     axB = swap ? 'lat' : 'lon'
   }
@@ -170,7 +193,9 @@ export function parseLatLonDetailed(text: string): ParsedLatLon | null {
   if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null
   const rank = { decimal: 0, dm: 1, dms: 2 } as const
   const notation = rank[a.notation] >= rank[b.notation] ? a.notation : b.notation
-  return { lat, lon, order: axA === 'lat' ? 'lat-lon' : 'lon-lat', notation, fromLink: false }
+  const out: ParsedLatLon = { lat, lon, order: axA === 'lat' ? 'lat-lon' : 'lon-lat', notation, fromLink: false }
+  if (outsideLower48) out.outsideLower48 = true
+  return out
 }
 
 /** Parse pasted coordinates (see parseLatLonDetailed); null when the text is not a latitude/longitude pair. */

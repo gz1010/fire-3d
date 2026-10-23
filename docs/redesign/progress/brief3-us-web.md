@@ -13,8 +13,10 @@ Role: us-web (API 8712, Vite 5182). Scratch: /tmp/claude-0/-home-user-fire-3d/46
 
 - M4: FireCard records (recordBlocks, complexes, id line, own zone), accuracy store + templates + card label, skill table relabel, credits. Tests: FireCard.test.ts (9), accuracy.test.ts (8).
 
+- M5: national search (usStates, search, SearchBox, geocodeClient, types), W8 geodesy order, coverage (done in M3). Accuracy seed check: exact §14.4 OSCC lines from the real seed (seed rule for "starts during main growth").
+
 ## Next
-- M5 search (usStates, search.ts, SearchBox, geocodeClient, types), geodesy lat/lon order.
+- Screenshots (CA after-shots, fixture-east x3, overview x3, northwest, firecard non-CA, search atlanta/boise, anchorage phone), wording scan, report. Then cut-line items.
 
 ## Decisions
 - fmtAt/fmtDayDate default year 'never' (keeps CA strings).

@@ -409,6 +409,8 @@ export interface AccuracyRegionInput {
   name: string
   status: 'tested' | 'limited' | 'untested'
   in_sample?: boolean
+  /** The California seed of §14.4 (docs/validation.md baseline, its starts not pre-registered for this file). */
+  seed?: boolean
   n_fires: number
   n_leads?: number
   growth_sorensen?: number | null
@@ -524,7 +526,9 @@ export function accuracyLabel(region: AccuracyRegionInput | null | undefined, me
   const score = num(region.growth_sorensen) ? region.growth_sorensen : null
   const range = region.range && num(region.range[0]) && num(region.range[1]) ? region.range : null
   const ratio = num(region.growth_ratio_median) ? region.growth_ratio_median : null
-  const mainGrowth = /main growth/i.test(method?.starts ?? '')
+  // "starts during main growth" only when the file's method says so, and not for the California seed (§14.4's exact seed
+  // lines carry no such clause: its starts were set before the regional protocol)
+  const mainGrowth = /main growth/i.test(method?.starts ?? '') && region.seed !== true
   const detailParts: string[] = []
   if (score != null)
     detailParts.push(

@@ -1,5 +1,5 @@
-// Address, town and ZIP lookup through the Fire-3d API (owner: location; CONTRACT §6). Street addresses go to the
-// Census Geocoder proxy; towns and ZIP codes are matched locally by the backend (no upstream call). Coordinates and
+// Address, town and ZIP lookup through the Fire-3d API (owner: us-web; CONTRACT §6, §14.10). Street addresses go to the
+// Census Geocoder proxy; US towns and ZIP codes are matched locally by the backend (no upstream call). Coordinates and
 // incident names are resolved in the browser and never come here. The default timeout outlasts the proxy's own worst
 // case (two 10 s upstream attempts), so a slow Census reply surfaces as the proxy's clear 504 rather than a
 // client-side abort.
@@ -34,7 +34,9 @@ export function plainSearchError(e: unknown): string {
       case 503: {
         const d = detailOf(e)
         if (d) return d.replace(/\s*\(HTTP \d{3}\)/g, '')
-        return e.status === 400 ? 'This search could not be read. Enter a street address with a house number, a California town or a ZIP code.' : 'Town and ZIP search is not available right now. Enter a street address, or click the map.'
+        return e.status === 400
+          ? 'This search could not be read. Enter a street address with a house number, a US town or a ZIP code (e.g. 600 E Mariposa St, Altadena; Boise, ID; 83702).'
+          : 'Town and ZIP search is not available right now. Enter a street address, or click the map.'
       }
       default:
         return e.status >= 500 ? 'The Fire-3d server had a problem with this search. Try again in a moment.' : 'This search could not be completed. Try again, or click the map.'

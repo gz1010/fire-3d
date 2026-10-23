@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bearingDeg, compass16, distanceM, formatDecimalPair, formatDms, formatLat, formatLatLon, formatLon, geodesicInverse, parseLatLon, parseLatLonDetailed } from './geodesy'
+import { bearingDeg, inLower48Box, LOWER48_BOX, compass16, distanceM, formatDecimalPair, formatDms, formatLat, formatLatLon, formatLon, geodesicInverse, parseLatLon, parseLatLonDetailed } from './geodesy'
 
 const close = (a: number, b: number, tol: number) => expect(Math.abs(a - b)).toBeLessThanOrEqual(tol)
 
@@ -174,5 +174,42 @@ describe('geodesic distance and bearing (WGS84, Vincenty)', () => {
   })
   it('names 16 compass points', () => {
     expect([0, 22.5, 45, 90, 180, 202.5, 270, 337.5, 359, -45].map(compass16)).toEqual(['N', 'NNE', 'NE', 'E', 'S', 'SSW', 'W', 'NNW', 'N', 'NW'])
+  })
+})
+
+describe('bare pairs across the lower 48 (brief 3, W8): the order that lands inside the lower 48', () => {
+  const cases: [string, string, number, number][] = [
+    ['Atlanta', '-84.39, 33.75', 33.75, -84.39],
+    ['Miami', '-80.19, 25.76', 25.76, -80.19],
+    ['Boston', '-71.06, 42.36', 42.36, -71.06],
+    ['Houston', '-95.37, 29.76', 29.76, -95.37],
+    ['Los Angeles', '-118.24, 34.05', 34.05, -118.24],
+    ['Seattle', '-122.33, 47.61', 47.61, -122.33],
+  ]
+  it.each(cases)('%s pasted longitude first ("%s")', (_name, text, lat, lon) => {
+    const p = parseLatLonDetailed(text)!
+    expect(p.lat).toBeCloseTo(lat, 6)
+    expect(p.lon).toBeCloseTo(lon, 6)
+    expect(p.order).toBe('lon-lat')
+    expect(p.outsideLower48).toBeUndefined()
+  })
+  it.each(cases)('%s pasted latitude first stays as typed', (_name, _text, lat, lon) => {
+    const p = parseLatLonDetailed(`${lat}, ${lon}`)!
+    expect(p).toMatchObject({ lat, lon, order: 'lat-lon' })
+    expect(p.outsideLower48).toBeUndefined()
+  })
+  it('inside neither order: read as latitude, longitude, flagged for the warning (Paris, the Southern Ocean)', () => {
+    expect(parseLatLonDetailed('48.85, 2.35')).toMatchObject({ lat: 48.85, lon: 2.35, order: 'lat-lon', outsideLower48: true })
+    expect(parseLatLonDetailed('-60, -30')).toMatchObject({ lat: -60, lon: -30, outsideLower48: true })
+  })
+  it('letters and labels still decide the order (never the box)', () => {
+    expect(parseLatLonDetailed('33.75 N 84.39 W')).toMatchObject({ lat: 33.75, lon: -84.39, order: 'lat-lon' })
+    expect(parseLatLonDetailed('lat -84 lon 33')).toMatchObject({ lat: -84, lon: 33 })
+  })
+  it('the box is the lower 48, not California', () => {
+    expect(inLower48Box(33.75, -84.39)).toBe(true)
+    expect(inLower48Box(44.82, -66.95)).toBe(true) // West Quoddy Head
+    expect(inLower48Box(61.2, -149.9)).toBe(false) // Anchorage
+    expect(LOWER48_BOX).toEqual([-124.85, 24.4, -66.89, 49.38])
   })
 })

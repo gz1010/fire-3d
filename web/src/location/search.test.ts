@@ -14,6 +14,12 @@ import {
   incidentAction,
   likelyMissingWestSign,
   looksLikeAddress,
+  noPlaceMessage,
+  NOT_SUPPORTED_NOTE,
+  OUTSIDE_LOWER48_WARNING,
+  placeName,
+  queryState,
+  stripStateWords,
   looksLikeZip,
   planSearch,
   readiness,
@@ -283,10 +289,72 @@ describe('incident pool and nearest fires (overview search)', () => {
 })
 
 describe('likelyMissingWestSign', () => {
-  it('flags California latitudes with an east longitude', () => {
+  it('flags lower-48 latitudes with an east longitude (California, Georgia, Maine)', () => {
     expect(likelyMissingWestSign({ lat: 34.2, lon: 118.1 })).toBe(true)
+    expect(likelyMissingWestSign({ lat: 33.75, lon: 84.39 })).toBe(true)
+    expect(likelyMissingWestSign({ lat: 44.8, lon: 67.0 })).toBe(true)
     expect(likelyMissingWestSign({ lat: 34.2, lon: -118.1 })).toBe(false)
     expect(likelyMissingWestSign({ lat: -33.9, lon: 151.2 })).toBe(false)
+    expect(likelyMissingWestSign({ lat: 61.2, lon: 149.9 })).toBe(false) // not the lower 48
+  })
+})
+
+describe('national search (brief 3, §14.10, W6)', () => {
+  const NATIONAL = [
+    ...POOL,
+    inc('2026-pine-gulch-aaaaaa', 'Pine Gulch', { year: 2026, county: 'Garfield', state: 'CO', lat: 39.5, lon: -108.5 }),
+    inc('2026-big-dry-bbbbbb', 'Big Dry', { year: 2026, county: 'Garfield', state: 'MT', lat: 47.3, lon: -106.9 }),
+    inc('2026-sandy-cccccc', 'Sandy', { year: 2026, county: 'Ada', state: 'ID', lat: 43.6, lon: -116.2 }),
+  ]
+  const plan = (t: string) => planSearch(t, NATIONAL)
+  it('"Town, ST" and "Town ST" go to the local (national Gazetteer) lookup as typed', () => {
+    for (const t of ['Springfield, IL', 'Springfield IL', 'Boise, ID', 'Raleigh, North Carolina']) expect(plan(t)).toMatchObject({ kind: 'lookup', expect: 'local', query: t })
+    expect(queryState('Springfield, IL')).toBe('IL')
+    expect(queryState('Springfield IL')).toBe('IL')
+    expect(queryState('Boise, ID')).toBe('ID')
+    expect(queryState('Boise, Idaho')).toBe('ID')
+    expect(queryState('Raleigh North Carolina')).toBe('NC')
+    expect(queryState('Springfield')).toBeNull()
+    expect(queryState('fire in')).toBeNull() // lower-case two letters without a comma is not a state
+    expect(queryState('Anchorage, AK')).toBe('AK')
+  })
+  it('ZIP codes with a state: "83702 ID", "ID 83702", "83702, Idaho", "87501 New Mexico"', () => {
+    for (const t of ['83702 ID', 'ID 83702', '83702, Idaho', '87501 New Mexico', '83702-1234 id', '30303 GA']) {
+      expect(looksLikeZip(t)).toBe(true)
+      expect(plan(t)).toMatchObject({ kind: 'lookup', expect: 'local' })
+    }
+    expect(stripStateWords('83702 id')).toBe('83702')
+    expect(stripStateWords('new mexico 87501')).toBe('87501')
+    expect(looksLikeZip('Boise 83702')).toBe(false)
+  })
+  it('incident search matches the state ("Garfield, CO" is not "Garfield, MT")', () => {
+    expect(searchIncidents('Garfield CO', NATIONAL).map((h) => h.summary.name)).toEqual(['Pine Gulch'])
+    expect(searchIncidents('Garfield Montana', NATIONAL).map((h) => h.summary.name)).toEqual(['Big Dry'])
+    expect(searchIncidents('Sandy Idaho', NATIONAL).map((h) => h.summary.name)).toEqual(['Sandy'])
+  })
+  it('US wording: no "California" in the messages', () => {
+    expect(planSearch('9100', NATIONAL)).toMatchObject({ kind: 'invalid', message: 'Enter a street address with a house number, a US town ("Boise, ID") or a ZIP code, or paste coordinates.' })
+    const none = decide(lookupPlan('Nowheresville'), res([]))
+    expect(none).toEqual({ kind: 'none', message: 'No US city, town, county or ZIP code matches “Nowheresville”.' })
+    expect(noPlaceMessage('x')).toBe('No US city, town, county or ZIP code matches “x”.')
+    expect(OUTSIDE_LOWER48_WARNING).toBe('This point is outside the area Fire-3d covers (the lower 48 states).')
+  })
+  it('a bare lon-first pair lands in the lower 48 (Atlanta), and the parser flags a pair inside neither order', () => {
+    const atl = planSearch('-84.39, 33.75', NATIONAL)
+    expect(atl).toMatchObject({ kind: 'coords', parsed: { lat: 33.75, lon: -84.39, order: 'lon-lat' } })
+    expect(planSearch('48.85, 2.35', NATIONAL)).toMatchObject({ kind: 'coords', parsed: { outsideLower48: true } })
+  })
+  it('matches carry their state; an Alaska or Hawaii match keeps its row with the not-supported note', () => {
+    const boise: GeocodeMatch = { kind: 'place', matched_address: 'Boise, ID', name: 'Boise', state: 'ID', state_name: 'Idaho', county: 'Ada County', supported: true, place_type: 'city', place_type_label: 'city', lat: 43.6, lon: -116.2, land_km2: 220, tiger_line_id: null, side: null }
+    expect(placeName(boise)).toBe('Boise, ID')
+    expect(placeName({ ...boise, name: 'Boise, ID' })).toBe('Boise, ID')
+    expect(areaLabel(boise)).toBe('Boise, ID (town center, approximate)')
+    expect(areaSub(boise)).toBe('city · Ada County · town center, approximate')
+    const zip: GeocodeMatch = { kind: 'zip', matched_address: 'ZIP 83702, ID', name: '83702', zip: '83702', state: 'ID', near: 'Boise', lat: 43.6, lon: -116.2, tiger_line_id: null, side: null }
+    expect(areaLabel(zip)).toBe('ZIP 83702, ID near Boise (ZIP area, approximate)')
+    const anc: GeocodeMatch = { ...boise, name: 'Anchorage', state: 'AK', state_name: 'Alaska', county: null, supported: false, matched_address: 'Anchorage, AK' }
+    expect(areaSub(anc)).toBe(`city · town center, approximate · ${NOT_SUPPORTED_NOTE}`)
+    expect(NOT_SUPPORTED_NOTE).toBe('Fire-3d does not support Alaska, Hawaii or US territories yet.')
   })
 })
 
