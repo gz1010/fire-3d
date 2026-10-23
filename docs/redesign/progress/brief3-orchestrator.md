@@ -77,6 +77,11 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
   its re-check found a regression (phase decided at the start of the hour, not the replay time): round 4 runs.
   Left as designed (mention in the final summary): zooming in on an open fire card can switch to a nearby prepared
   fire, per the brief-2 zoom-focus rule.
+- 13:57 UTC: VALIDATION DONE (108ec83). California unchanged (0.438 over 32 leads, every lead identical after
+  GSI). Regions (mean of 2 fires' 31-member p50 growth Sorensen): Northwest 0.255, Northern Rockies 0.341, Great Basin
+  0.247, Southwest 0.351, Southern Plains 0.394, Southeast 0.193; Southern California 0.433 (tuned, best case).
+  Faster-spread variant helped the 12 fires but lowered California, so not adopted (pre-registered rule). An
+  independent science + wording review of validation runs before integration part 2.
 - Lesson: never SendMessage a workflow agent (it starts a second copy); relay through files or Agent-tool agents.
 
 ## Carry-over items for later stages (integration unless a role owns the file)
