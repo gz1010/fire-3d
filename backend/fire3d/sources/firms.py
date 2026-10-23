@@ -647,13 +647,31 @@ def load_live_us(days: float = 7, *, refresh: bool = False) -> pd.DataFrame:
     return _load_live(days, L48_FIRMS_BOX, refresh)
 
 
+LIVE_FEED_TIMEOUT_S = 30.0     # read timeout; the live list's request path must stay under the web's 30 s
+LIVE_FEED_CONNECT_S = 5.0
+LIVE_FEED_RETRIES = 1
+FEEDS_KEY = "firms-feeds"
+feeds_down_memo = fhttp.DownMemo("FIRMS live feeds")   # a host that failed is not asked again for 60 s (CONTRACT 14.16)
+
+
 def _load_live(days: float, bbox: Sequence[float], refresh: bool) -> pd.DataFrame:
     window = _live_window(days)
     frames, sources, warnings = [], [], []
     for dir_, prefix, source in LIVE_FEEDS:
         url = LIVE_FEED_URL.format(dir=dir_, prefix=prefix, window=window)
         try:
-            resp = fhttp.request("GET", url, ttl_s=1e-6 if refresh else TTL_LIVE_FEED_S, timeout=60.0)
+            hit = None if refresh else fhttp.peek_cache("GET", url, None, TTL_LIVE_FEED_S)
+            if hit is None and feeds_down_memo.down(FEEDS_KEY):
+                warnings.append(f"FIRMS live feed {prefix}_{window}: the FIRMS feeds could not be reached a moment ago")
+                continue
+            try:
+                resp = hit or fhttp.request("GET", url, ttl_s=1e-6 if refresh else TTL_LIVE_FEED_S, timeout=LIVE_FEED_TIMEOUT_S,
+                                            retries=LIVE_FEED_RETRIES, connect_timeout=LIVE_FEED_CONNECT_S)
+            except fhttp.HttpError as e:
+                if e.status is None:          # connection error or timeout: the host, not one feed
+                    feeds_down_memo.mark(FEEDS_KEY)
+                raise
+            feeds_down_memo.clear(FEEDS_KEY)
             fetched = int(resp.fetched_ms)
             df = parse_firms_csv(resp.content, source)
         except FirmsError as e:

@@ -96,7 +96,7 @@ def live_status() -> LiveStatus:
     return LiveStatus(
         last_refresh_ms=st.last_refresh_ms,
         next_refresh_ms=st.next_refresh_ms if st.running else None,
-        active_incidents=int(st.active_incidents or 0),
+        active_incidents=st.active_incidents,      # None: unknown (the fire lists could not be reached)
         detections_24h_ca=st.detections_24h_ca,
         auto_build=bool(st.running and config.AUTO_BUILD_LIVE),
         detections_24h=st.detections_24h,
@@ -126,6 +126,7 @@ def _refresh_counts() -> None:
     try:
         STATE.active_incidents = len(catalog.get_catalog("live"))
     except Exception as e:
+        STATE.active_incidents = None          # unknown, never 0 (final verification, panel SR-m2)
         log.info("live counts: catalog unavailable: %s", config.mask_secrets(e))
     try:
         n = detections_24h_ca()
@@ -515,6 +516,7 @@ async def live_refresh_loop(jobs: JobManager | None = None, interval_s: float | 
             except asyncio.CancelledError:
                 raise
             except Exception as e:  # keep looping; the next cycle retries
+                STATE.active_incidents = None      # the lists could not be read: the count is unknown, never 0
                 STATE.last_error = config.mask_secrets(f"{type(e).__name__}: {e}")[:300]
                 log.warning("live refresh cycle failed: %s", STATE.last_error)
             STATE.last_refresh_ms = now_ms()

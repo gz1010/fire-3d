@@ -16,6 +16,9 @@ import numpy as np
 
 HOUR_MS = 3_600_000
 DAY_MS = 24 * HOUR_MS
+# The latest time a query parameter may name (2100-01-01T00:00:00Z): larger values answer 422, never a 500 from an
+# integer that overflows a datetime or a 64-bit field (final verification, panel F5).
+MAX_QUERY_MS = 4_102_444_800_000
 
 
 def now_ms() -> int:

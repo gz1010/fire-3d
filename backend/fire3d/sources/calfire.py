@@ -10,8 +10,10 @@ snake_case fields:
   ``county`` / ``location`` / ``admin_unit`` / ``url`` (str or None).
 
 Requests go through :mod:`fire3d.http` (live list cached 10 min, the current year's list 30 min, past years 24 h).
-When CAL FIRE is unreachable a stale cached copy is served (with a warning) before giving up. :func:`fetched_ms` says
-when the copy last returned for a list was fetched from CAL FIRE (for "checked ..." times).
+When CAL FIRE is unreachable a stale cached copy is served (with a warning; :func:`is_stale` says so) before giving
+up, and the failure is remembered for ``fhttp.DOWN_HOLD_S`` (60 s, :data:`down_memo`), so the request path does not
+wait on a dead host again (CONTRACT 14.16). :func:`fetched_ms` says when the copy last returned for a list was fetched
+from CAL FIRE (for "checked ..." times).
 """
 
 from __future__ import annotations
@@ -35,10 +37,16 @@ LIVE_TTL_S = 600.0            # 10 min
 YEAR_TTL_S = 86400.0          # 24 h (past years)
 CURRENT_YEAR_TTL_S = 1800.0   # 30 min: the current season's list changes as fires grow and are contained
 REFRESH_TTL_S = 1e-6          # any cached copy counts as stale -> refetch, and the fresh copy is cached
+TIMEOUT_S = 30.0              # read timeout (seconds without data): the request path must stay under the web's 30 s
+CONNECT_TIMEOUT_S = 5.0
+LIST_RETRIES = 1              # one retry when no copy is cached; none when one is (stale-if-error answers at once)
+SOURCE_KEY = "calfire"        # down_memo key of the whole source (after a connection error or a timeout)
+down_memo = fhttp.DownMemo("CAL FIRE")
 
 _WS = re.compile(r"\s+")
 _fetched_lock = threading.Lock()
 _fetched: dict[str, int] = {}   # list key ("live" | "year:2026") -> fetch time (ms) of the copy last returned
+_stale: dict[str, bool] = {}    # list key -> the copy last returned is an older one served because CAL FIRE failed
 
 
 class CalFireError(RuntimeError):
@@ -129,32 +137,67 @@ def fetched_ms(key: str) -> int | None:
         return _fetched.get(key)
 
 
-def _get_list(params: dict, ttl_s: float | None, retries: int = fhttp.DEFAULT_RETRIES) -> list:
-    """GET + parse; a 2xx answer that is not a JSON list is evicted from the cache and raised as CalFireError."""
-    resp = fhttp.request("GET", LIST_URL, params=params, ttl_s=ttl_s, timeout=45.0, retries=retries)
+def is_stale(key: str) -> bool:
+    """True when the copy of list ``key`` last returned is an older cached copy served because CAL FIRE could not be
+    reached (or answered an error) when it was due for a refresh."""
+    with _fetched_lock:
+        return bool(_stale.get(key))
+
+
+def _parse_list(resp: fhttp.Response, params: dict) -> list:
     try:
         data = resp.json()
     except ValueError as e:                       # HTML/garbage with status 200 (orjson.JSONDecodeError)
-        evict_http_cache(LIST_URL, params)
+        fhttp.evict_bad_answer(resp, "GET", LIST_URL, params)
         raise CalFireError(f"CAL FIRE incident list {params}: invalid JSON ({e})") from None
     if not isinstance(data, list):
-        evict_http_cache(LIST_URL, params)
+        fhttp.evict_bad_answer(resp, "GET", LIST_URL, params)
         raise CalFireError(f"CAL FIRE incident list {params}: unexpected response type {type(data).__name__}")
-    with _fetched_lock:
-        _fetched[list_key(params)] = int(resp.fetched_ms)
     return data
 
 
-def _fetch(params: dict, ttl_s: float, refresh: bool) -> list[dict]:
-    """GET the list (cached); on failure serve any cached copy (stale-if-error)."""
+def _get_list(params: dict, ttl_s: float | None) -> tuple[list, int]:
+    """``(rows, fetched_ms)``: the cached copy while it is fresh, else GET + parse, unless CAL FIRE (or this list)
+    failed less than a minute ago (then :class:`CalFireError` at once). A 2xx answer that is not a JSON list is
+    evicted from the cache and raised as CalFireError; a failure is remembered (:data:`down_memo`)."""
+    key = list_key(params)
+    hit = fhttp.peek_cache("GET", LIST_URL, params, ttl_s)
+    if hit is not None:
+        return _parse_list(hit, params), int(hit.fetched_ms)
+    if down_memo.down(SOURCE_KEY, key):
+        raise CalFireError(f"CAL FIRE incident list {params}: CAL FIRE could not be reached a moment ago")
+    retries = 0 if fhttp.has_cache("GET", LIST_URL, params) else LIST_RETRIES
     try:
-        data = _get_list(params, REFRESH_TTL_S if refresh else ttl_s)
+        resp = fhttp.request("GET", LIST_URL, params=params, ttl_s=ttl_s, timeout=TIMEOUT_S, retries=retries,
+                             connect_timeout=CONNECT_TIMEOUT_S, expect_json=True)
+        data = _parse_list(resp, params)
+    except fhttp.HttpError as e:
+        down_memo.mark(SOURCE_KEY if e.status is None else key)   # a bad body answers fast: not remembered
+        raise
+    down_memo.clear(SOURCE_KEY)
+    down_memo.clear(key)
+    return data, int(resp.fetched_ms)
+
+
+def _fetch(params: dict, ttl_s: float, refresh: bool) -> list[dict]:
+    """GET the list (cached); on failure serve any cached copy (stale-if-error, :func:`is_stale`)."""
+    key = list_key(params)
+    stale = False
+    try:
+        data, t = _get_list(params, REFRESH_TTL_S if refresh else ttl_s)
     except (fhttp.HttpError, CalFireError) as e:
+        hit = fhttp.peek_cache("GET", LIST_URL, params, None)        # any age; never the network
         try:
-            data = _get_list(params, None, retries=0)    # any age; network only if never cached
-            log.warning("CAL FIRE list %s unavailable (%s); serving the cached copy", params, e)
-        except (fhttp.HttpError, CalFireError):
+            if hit is None:
+                raise CalFireError("no cached copy")
+            data, t = _parse_list(hit, params), int(hit.fetched_ms)
+        except CalFireError:
             raise CalFireError(f"CAL FIRE incident list unavailable ({params}): {e}") from None
+        stale = True
+        log.warning("CAL FIRE list %s unavailable (%s); serving the cached copy", params, e)
+    with _fetched_lock:
+        _fetched[key] = t
+        _stale[key] = stale
     return [normalize_incident(r) for r in data if isinstance(r, dict)]
 
 

@@ -51,7 +51,7 @@ from fastapi.responses import Response
 from .. import bundle, config, regions
 from .. import http as fhttp
 from ..sources import evacuations as evac
-from ..timeutil import DAY_MS, HOUR_MS, now_ms
+from ..timeutil import DAY_MS, HOUR_MS, MAX_QUERY_MS, now_ms
 
 log = logging.getLogger(__name__)
 
@@ -687,7 +687,7 @@ def evacuations_payload(ctx: AreaContext) -> dict[str, Any]:
 
 
 @router.get("/api/extras/evacuations")
-def get_evacuations(bbox: str | None = None, incident: str | None = None, at_ms: int | None = Query(None, ge=0),
+def get_evacuations(bbox: str | None = None, incident: str | None = None, at_ms: int | None = Query(None, ge=0, le=MAX_QUERY_MS),
                     margin_km: float = Query(DEFAULT_MARGIN_KM, ge=0, le=60)) -> Response:
     """Official evacuation zones (current status only) intersecting ``bbox`` or the incident's area."""
     ctx = area_context(bbox, incident, at_ms, margin_km)
@@ -873,7 +873,7 @@ def cameras_payload(ctx: AreaContext) -> dict[str, Any]:
 
 
 @router.get("/api/extras/cameras")
-def get_cameras(bbox: str | None = None, incident: str | None = None, at_ms: int | None = Query(None, ge=0),
+def get_cameras(bbox: str | None = None, incident: str | None = None, at_ms: int | None = Query(None, ge=0, le=MAX_QUERY_MS),
                 margin_km: float = Query(25.0, ge=0, le=60)) -> Response:
     """Public wildfire (ALERTCalifornia) and traffic (Caltrans) cameras in the area (live context only)."""
     ctx = area_context(bbox, incident, at_ms, margin_km)
@@ -1496,7 +1496,7 @@ def imagery_payload(ctx: AreaContext, families: list[str]) -> dict[str, Any]:
 
 
 @router.get("/api/extras/imagery")
-def get_imagery(bbox: str | None = None, incident: str | None = None, at_ms: int | None = Query(None, ge=0),
+def get_imagery(bbox: str | None = None, incident: str | None = None, at_ms: int | None = Query(None, ge=0, le=MAX_QUERY_MS),
                 margin_km: float = Query(5.0, ge=0, le=30), families: str | None = None) -> Response:
     """Recently acquired satellite images (acquired at or before ``at_ms`` / now) for the area."""
     fams = [f.strip() for f in (families or ",".join(IMAGERY_FAMILIES)).split(",") if f.strip()]

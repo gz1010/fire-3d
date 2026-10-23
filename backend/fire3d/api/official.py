@@ -36,7 +36,7 @@ from fastapi.responses import Response
 
 from .. import bundle, catalog, config
 from ..sources import calfire, calfire_history, nws, openfema
-from ..timeutil import DAY_MS, HOUR_MS, now_ms
+from ..timeutil import DAY_MS, HOUR_MS, MAX_QUERY_MS, now_ms
 from .extras import expand_bbox
 
 log = logging.getLogger(__name__)
@@ -641,7 +641,7 @@ def get_calfire(incident: str = Query(..., min_length=1, max_length=160)) -> Res
 @router.get("/api/official/local-alerts")
 def get_local_alerts(incident: str | None = Query(None, min_length=1, max_length=160),
                      bbox: str | None = Query(None, min_length=1, max_length=120),
-                     at_ms: int | None = Query(None, ge=0),
+                     at_ms: int | None = Query(None, ge=0, le=MAX_QUERY_MS),
                      margin_km: float = Query(DEFAULT_MARGIN_KM, ge=0, le=60)) -> Response:
     """Local officials' messages relayed by NWS near the incident (or in ``bbox``), with FEMA's archive for past
     days (CONTRACT 14.7)."""
@@ -650,7 +650,7 @@ def get_local_alerts(incident: str | None = Query(None, min_length=1, max_length
 
 @router.get("/api/official/fire-weather")
 def get_fire_weather(incident: str | None = Query(None, min_length=1, max_length=160),
-                     at_ms: int | None = Query(None, ge=0),
+                     at_ms: int | None = Query(None, ge=0, le=MAX_QUERY_MS),
                      margin_km: float = Query(DEFAULT_MARGIN_KM, ge=0, le=60)) -> Response:
     """NWS Red Flag Warnings and Fire Weather Watches near the incident (archive for past times), or statewide."""
     return _json(fire_weather_payload(incident, at_ms, margin_km))

@@ -8,6 +8,7 @@ import threading
 import time
 import warnings
 
+import orjson
 import pytest
 
 with warnings.catch_warnings():     # the installed Starlette deprecates httpx in its TestClient (not our code)
@@ -133,32 +134,56 @@ def test_incident_list_year_and_bbox(client, fake):
     assert client.get("/api/incidents", params={"mode": "historical", "year": 1999}).status_code == 422
 
 
-def test_incident_list_year_fallback_uses_bundles_of_that_year(client, fixtures_dir, monkeypatch):
-    def broken(*a, **k):
-        raise ConnectionError("CAL FIRE unreachable")
+def _fallback_dir(tmp_data_dir, monkeypatch):
+    """A data dir with fixture-demo / fixture-live (synthetic) and copies of their manifests under listed-form ids
+    (``2025-demo-fire-aaaaaa``, ``2026-live-fire-bbbbbb``), as on a server with prepared real fires."""
+    import shutil
 
-    monkeypatch.setattr(catalog, "get_catalog", broken)
+    if not (FIXTURE_ROOT / "fixture-demo" / "manifest.json").is_file():
+        pytest.skip("fixture bundles missing: run scripts/make_fixture.py")
+    inc = tmp_data_dir / "incidents"
+    for name, real in (("fixture-demo", "2025-demo-fire-aaaaaa"), ("fixture-live", "2026-live-fire-bbbbbb")):
+        (inc / name).mkdir()
+        shutil.copy(FIXTURE_ROOT / name / "manifest.json", inc / name / "manifest.json")
+        m = orjson.loads((FIXTURE_ROOT / name / "manifest.json").read_bytes())
+        m["summary"]["id"] = real
+        m["summary"]["year"] = int(real[:4])
+        (inc / real).mkdir()
+        (inc / real / "manifest.json").write_bytes(orjson.dumps(m))
+    monkeypatch.setattr(catalog, "get_catalog", lambda *a, **k: (_ for _ in ()).throw(ConnectionError("CAL FIRE unreachable")))
+    return inc
+
+
+def test_incident_list_year_fallback_uses_bundles_of_that_year(client, tmp_data_dir, monkeypatch):
+    _fallback_dir(tmp_data_dir, monkeypatch)
     y2026 = client.get("/api/incidents", params={"mode": "historical", "year": 2026}).json()["incidents"]
-    assert "fixture-live" in [s["id"] for s in y2026] and all(s["year"] == 2026 for s in y2026)
+    assert [s["id"] for s in y2026] == ["2026-live-fire-bbbbbb"] and all(s["year"] == 2026 for s in y2026)
     assert all(s["bbox_lonlat"] and len(s["bbox_lonlat"]) == 4 for s in y2026)
     y2025 = client.get("/api/incidents", params={"mode": "historical", "year": 2025}).json()["incidents"]
-    assert "fixture-demo" in [s["id"] for s in y2025] and "fixture-live" not in [s["id"] for s in y2025]
+    assert [s["id"] for s in y2025] == ["2025-demo-fire-aaaaaa"]
 
 
-def test_incident_list_falls_back_to_bundles(client, fixtures_dir, monkeypatch):
-    def broken(*a, **k):
-        raise ConnectionError("CAL FIRE unreachable")
-
-    monkeypatch.setattr(catalog, "get_catalog", broken)
-    hist = client.get("/api/incidents", params={"mode": "historical"}).json()["incidents"]
-    assert "fixture-demo" in [s["id"] for s in hist] and all(s["mode"] == "historical" for s in hist)
-    live_rows = client.get("/api/incidents", params={"mode": "live"}).json()["incidents"]
-    assert "fixture-live" in [s["id"] for s in live_rows]
-    # each row keeps its bundle's own status (data/incidents may also hold a bundle being built or a failed one)
-    for s in hist + live_rows:
-        m = bundle.load_manifest(bundle.bundle_dir(s["id"]))
-        assert m is not None and s["bundle_status"] == m["summary"]["bundle_status"], s["id"]
-    assert all(s["bundle_status"] == "ready" for s in hist + live_rows if s["id"].startswith("fixture-"))
+def test_incident_list_falls_back_to_bundles(client, tmp_data_dir, monkeypatch):
+    """Both lists down: only prepared fires of listed ids are listed (never a synthetic fixture as an agency's fire;
+    final verification, panel SR-B1), each source says why, and a historical list without a year is the default
+    year's (panel F6)."""
+    _fallback_dir(tmp_data_dir, monkeypatch)
+    r = client.get("/api/incidents", params={"mode": "historical"})
+    assert r.status_code == 200 and contract_problems(IncidentListResponse, r.content) == []
+    body = r.json()
+    assert body["year"] == catalog.default_year()
+    assert all(s["year"] == catalog.default_year() for s in body["incidents"])
+    assert {x["status"] for x in body["sources"]} == {"unavailable"}
+    assert all("only fires prepared on this server are listed" in x["reason"] for x in body["sources"])
+    live = client.get("/api/incidents", params={"mode": "live"}).json()
+    assert [s["id"] for s in live["incidents"]] == ["2026-live-fire-bbbbbb"]
+    for b in (body, live):
+        assert not any(s["id"].startswith("fixture-") for s in b["incidents"])
+        for s in b["incidents"]:
+            m = bundle.load_manifest(bundle.bundle_dir(s["id"]))
+            assert m is not None and s["bundle_status"] == m["summary"]["bundle_status"], s["id"]
+    # the synthetic bundles themselves still open by id (read-only)
+    assert client.get("/api/incidents/fixture-live").json()["summary"]["id"] == "fixture-live"
 
 
 def test_incident_detail(client, fake):

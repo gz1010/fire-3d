@@ -332,6 +332,7 @@ def test_lists_unreachable_answer_503_never_a_local_bundle(world, tmp_data_dir: 
     world["cal_down"] = False
     world["srv"].down = False
     catalog.clear_cache()
+    fhttp.reset_down_memos()                     # a failure is remembered for a minute (CONTRACT 14.16)
     assert catalog.resolve_listed(pine_id).id == pine_id                     # back: resolved again
 
 

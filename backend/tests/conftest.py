@@ -34,6 +34,7 @@ def _refuse(request: httpx.Request) -> httpx.Response:
 def _offline_http(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
     if request.node.get_closest_marker("network") is None:
         monkeypatch.setattr(fhttp, "_transport", httpx.MockTransport(_refuse))
+    fhttp.reset_down_memos()        # a failure remembered by one test never leaks into the next
 
 
 @pytest.fixture

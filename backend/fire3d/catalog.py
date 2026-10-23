@@ -40,6 +40,7 @@ import math
 import re
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -67,6 +68,7 @@ DEFAULT_MIN_ACRES = 300.0
 WFIGS_YEAR_FLOOR_ACRES = 100.0      # WFIGS year lists are never fetched below this size (a year has ~40,000 wildfires)
 FIRE_TYPES = frozenset({"wildfire", "fire"})
 LIVE_CACHE_S = 300.0
+DEGRADED_CACHE_S = 60.0        # a list built while a source failed is rebuilt after this long (CONTRACT 14.16)
 HISTORICAL_CACHE_S = 3600.0
 CURRENT_YEAR_CACHE_S = 600.0
 DET_RADIUS_MIN_M = 5000.0
@@ -105,6 +107,8 @@ CALFIRE_NAME = "CAL FIRE"
 WFIGS_NAME = "NIFC WFIGS (IRWIN)"
 WFIGS_DOWN = "The national fire list (NIFC) is unavailable right now; only California fires (CAL FIRE) are listed."
 CALFIRE_DOWN = "CAL FIRE's list is unavailable right now; California fires are listed from NIFC WFIGS."
+WFIGS_STALE = "The national fire list (NIFC) could not be refreshed right now; the copy shown was fetched earlier."
+CALFIRE_STALE = "CAL FIRE's list could not be refreshed right now; the copy shown was fetched earlier."
 ACCURACY_REGIONS = frozenset({"NWCC", "NRCC", "GBCC", "SWCC", "RMCC", "EACC", "ONCC", "OSCC"})
 SOUTHERN_PLAINS = frozenset({"TX", "OK"})
 
@@ -690,9 +694,28 @@ def _is_duplicate(a: dict, b: dict) -> bool:
 # ------------------------------------------------------------------------------------------------------------------
 # The lists
 # ------------------------------------------------------------------------------------------------------------------
-def _source(sid: str, ok: bool, retrieved_ms: int | None, reason: str | None) -> dict:
+def _source(sid: str, ok: bool, retrieved_ms: int | None, reason: str | None, stale: bool = False) -> dict:
+    """One ``ListSource`` (CONTRACT 14.1): ``stale`` when the list could not be refreshed and an older cached copy was
+    used (``retrieved_ms`` is that copy's fetch time; CONTRACT 14.16)."""
+    stale = bool(ok and stale)
+    stale_reason = CALFIRE_STALE if sid == "calfire" else WFIGS_STALE
     return {"id": sid, "name": CALFIRE_NAME if sid == "calfire" else WFIGS_NAME, "status": "available" if ok else "unavailable",
-            "retrieved_ms": retrieved_ms if ok else (retrieved_ms or None), "reason": None if ok else reason}
+            "retrieved_ms": retrieved_ms if ok else (retrieved_ms or None), "stale": stale,
+            "reason": (stale_reason if stale else None) if ok else reason}
+
+
+def _side_by_side(f_cal, f_wf) -> tuple[tuple[Any, BaseException | None], tuple[Any, BaseException | None]]:
+    """Run the CAL FIRE and the NIFC WFIGS fetches at the same time, so an outage of one never adds its wait to the
+    other's: ``((cal_value, cal_error), (wf_value, wf_error))``."""
+    def outcome(fut):
+        try:
+            return fut.result(), None
+        except Exception as e:  # noqa: BLE001 - the caller decides what each failure means
+            return None, e
+
+    with ThreadPoolExecutor(max_workers=2, thread_name_prefix="fire-lists") as ex:
+        a, b = ex.submit(f_cal), ex.submit(f_wf)
+        return outcome(a), outcome(b)
 
 
 def _wfigs_rows(rows: list[dict]) -> list[tuple[dict, str]]:
@@ -711,20 +734,15 @@ def _live_base(refresh: bool) -> tuple[list[IncidentSummary], list[dict]]:
     from . import regions
     from .sources import calfire, firms, wfigs
 
-    cal_err = wf_err = None
     cal_live: list[dict] = []
-    try:
-        raw = calfire.list_live(refresh=refresh)
+    (raw, cal_err), (current, wf_err) = _side_by_side(lambda: calfire.list_live(refresh=refresh), lambda: wfigs.list_current(refresh=refresh))
+    if cal_err is not None and not isinstance(cal_err, calfire.CalFireError):
+        raise cal_err
+    if cal_err is None:
         record_history(raw, "live")
         _record_left_live(raw)
         cal_live = [r for r in _fire_records(raw) if r.get("is_active")]
-    except calfire.CalFireError as e:
-        cal_err = e
-    current: list[dict] = []
-    try:
-        current = wfigs.list_current(refresh=refresh)
-    except Exception as e:  # noqa: BLE001 - any failure of the national list degrades to California only
-        wf_err = e
+    current = current if wf_err is None else []      # any failure of the national list degrades to California only
     if cal_err is not None and wf_err is not None:
         raise calfire.CalFireError(f"CAL FIRE and NIFC WFIGS lists unavailable: {cal_err}; {config.mask_secrets(wf_err)}")
     if wf_err is not None:
@@ -781,8 +799,9 @@ def _live_base(refresh: bool) -> tuple[list[IncidentSummary], list[dict]]:
         log.warning("live catalog: FIRMS 24h feeds unavailable, detections_24h = None (%s)", e)
     out = [x.model_copy(update={"detections_24h": k}) for x, k in zip(summaries, counts)]
     out.sort(key=lambda x: (-(x.detections_24h if x.detections_24h is not None else -1), -(x.acres or 0.0), x.name))
-    sources = [_source("calfire", cal_err is None, calfire.fetched_ms("live"), CALFIRE_DOWN),
-               _source("wfigs", wf_err is None, wfigs.fetched_ms(wfigs.list_key(wfigs.CURRENT_URL, wfigs.current_where())), WFIGS_DOWN)]
+    wf_key = wfigs.list_key(wfigs.CURRENT_URL, wfigs.current_where())
+    sources = [_source("calfire", cal_err is None, calfire.fetched_ms("live"), CALFIRE_DOWN, calfire.is_stale("live")),
+               _source("wfigs", wf_err is None, wfigs.fetched_ms(wf_key), WFIGS_DOWN, wfigs.is_stale(wf_key))]
     return out, sources
 
 
@@ -790,17 +809,12 @@ def _historical_base(refresh: bool, year: int, wf_min: float) -> tuple[list[Inci
     from .sources import calfire, wfigs
 
     year = int(year)
-    cal_err = wf_err = None
-    cal: list[dict] = []
-    try:
-        cal = _fire_records(year_records(year, refresh=refresh))
-    except calfire.CalFireError as e:
-        cal_err = e
-    rows: list[dict] = []
-    try:
-        rows = wfigs.list_year(year, wf_min, refresh=refresh)
-    except Exception as e:  # noqa: BLE001 - any failure of the national list degrades to California only
-        wf_err = e
+    (cal, cal_err), (rows, wf_err) = _side_by_side(lambda: _fire_records(year_records(year, refresh=refresh)),
+                                                   lambda: wfigs.list_year(year, wf_min, refresh=refresh))
+    if cal_err is not None and not isinstance(cal_err, calfire.CalFireError):
+        raise cal_err
+    cal = cal if cal_err is None else []
+    rows = rows if wf_err is None else []            # any failure of the national list degrades to California only
     if cal_err is not None and wf_err is not None:
         raise calfire.CalFireError(f"CAL FIRE and NIFC WFIGS {year} lists unavailable: {cal_err}; {config.mask_secrets(wf_err)}")
     active: set[str] = set()
@@ -832,9 +846,10 @@ def _historical_base(refresh: bool, year: int, wf_min: float) -> tuple[list[Inci
     for r, st in wf_rows:
         out.append(summary_from_wfigs(r, "historical", active, st))
     out.sort(key=lambda x: (-(x.acres or 0.0), x.name))
-    sources = [_source("calfire", cal_err is None, calfire.fetched_ms(calfire.list_key({"inactive": "true", "year": year})), CALFIRE_DOWN),
-               _source("wfigs", wf_err is None, wfigs.fetched_ms(wfigs.list_key(wfigs.YTD_URL if year >= time.gmtime().tm_year else wfigs.ALL_YEARS_URL,
-                                                                                    wfigs.year_where(year, wf_min))), WFIGS_DOWN)]
+    cal_key = calfire.list_key({"inactive": "true", "year": year})
+    wf_key = wfigs.list_key(wfigs.YTD_URL if year >= time.gmtime().tm_year else wfigs.ALL_YEARS_URL, wfigs.year_where(year, wf_min))
+    sources = [_source("calfire", cal_err is None, calfire.fetched_ms(cal_key), CALFIRE_DOWN, calfire.is_stale(cal_key)),
+               _source("wfigs", wf_err is None, wfigs.fetched_ms(wf_key), WFIGS_DOWN, wfigs.is_stale(wf_key))]
     return out, sources
 
 
@@ -852,7 +867,9 @@ def _base(mode: Mode, refresh: bool, year: int | None = None, wf_min: float = DE
         ttl = CURRENT_YEAR_CACHE_S if yr >= time.gmtime().tm_year else HISTORICAL_CACHE_S
     with _lock:
         hit = _cache.get(key)
-        if hit is not None and not refresh and time.monotonic() - hit[0] < ttl:
+        # a list built while a source failed (unavailable, or an old copy) is rebuilt after a minute, not 5-60 min
+        degraded = hit is not None and any(x.get("status") != "available" or x.get("stale") for x in hit[2])
+        if hit is not None and not refresh and time.monotonic() - hit[0] < (min(ttl, DEGRADED_CACHE_S) if degraded else ttl):
             return hit[1], hit[2]
     rows, sources = _live_base(refresh) if mode == "live" else _historical_base(refresh, yr, wf_min)
     with _lock:

@@ -35,6 +35,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
 
 from .. import bundle, catalog, config
+from .. import regions as regions_mod
 from ..build import pipeline
 from ..contracts import AircraftResponse, ForecastRequest, HealthResponse, IncidentSummary, dump
 from ..http import _MaskSecretsFilter
@@ -265,10 +266,14 @@ def _list_row(s: dict, m: dict | None = None) -> dict:
 
 def _bundle_rows(mode: str, min_acres: float | None, year: int | None = None) -> list[dict]:
     """Fallback incident list from bundles on disk (catalog unavailable). ``year`` (historical lists asked for one
-    year): the bundles of that year in either mode, since a year list also holds that year's active fires."""
+    year): the bundles of that year in either mode, since a year list also holds that year's active fires. Only
+    bundles of listed fires (an id of the form ``<year>-<name>-<uid6>``): synthetic and local bundles such as
+    ``fixture-live`` are never listed as an agency's fire (final verification, panel SR-B1)."""
     rows = []
     for m in bundle.list_bundles():
         if not isinstance(m.get("summary"), dict):
+            continue
+        if catalog.parse_incident_id(str(m["summary"].get("id") or "")) is None:
             continue
         if year is None and m.get("mode") != mode:
             continue
@@ -415,6 +420,13 @@ async def _lists_unavailable(request: Request, exc: catalog.ListsUnavailable) ->
     disk) is 503 "The fire lists could not be reached right now; try again later.", never 404 or a local bundle."""
     return JSONResponse({"detail": catalog.LISTS_UNAVAILABLE_TEXT}, status_code=503)
 
+@app.exception_handler(regions_mod.RegionsUnavailable)
+async def _regions_unavailable(request: Request, exc: Exception) -> Response:
+    """A broken installation (a bundled region file missing or unreadable): 503 in plain words, never a 500."""
+    log.error("%s: %s", request.url.path, exc)
+    return JSONResponse({"detail": regions_mod.REGIONS_UNAVAILABLE_TEXT}, status_code=503)
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$",
@@ -450,8 +462,12 @@ def _maybe_gzip(body: bytes, request: Request | None, headers: dict[str, str] | 
     return Response(body, media_type="application/json", headers=h)
 
 
+LISTS_DOWN_FALLBACK = ("The fire lists (CAL FIRE and NIFC) could not be reached right now; only fires prepared on this "
+                       "server are listed, with their records as saved when each was prepared.")
+
+
 def _bundle_sources(reason: str) -> list[dict]:
-    return [{"id": sid, "name": name, "status": "unavailable", "retrieved_ms": None, "reason": reason}
+    return [{"id": sid, "name": name, "status": "unavailable", "retrieved_ms": None, "stale": False, "reason": reason}
             for sid, name in (("calfire", "CAL FIRE"), ("wfigs", "NIFC WFIGS (IRWIN)"))]
 
 
@@ -479,9 +495,9 @@ def list_incidents(
             raw = [x for x in raw if (getattr(x, "state", None) or "").upper() == st]
     except Exception as e:
         log.warning("catalog.list_incidents(%s) failed (%s); listing bundles on disk", mode, config.mask_secrets(e))
-        rows = [r for r in _bundle_rows(mode, lo, yr) if st is None or (r.get("state") or "").upper() == st]
-        sources = _bundle_sources("The fire lists (CAL FIRE and NIFC) are unavailable right now; only fires with a "
-                                  "bundle on this server are listed.")
+        fb_year = yr if yr is not None or mode != "historical" else catalog.default_year()
+        rows = [r for r in _bundle_rows(mode, lo, fb_year) if st is None or (r.get("state") or "").upper() == st]
+        sources = _bundle_sources(LISTS_DOWN_FALLBACK)
     else:
         rows = []
         for s in raw:

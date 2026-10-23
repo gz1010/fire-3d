@@ -509,7 +509,8 @@ class ListSource(ContractModel):
     name: str                           # "CAL FIRE" | "NIFC WFIGS (IRWIN)"
     status: Literal["available", "unavailable"]
     retrieved_ms: int | None            # when Fire-3d fetched that list (never an issue time)
-    reason: str | None                  # plain words when unavailable
+    reason: str | None                  # plain words when unavailable, or when stale
+    stale: bool = False                 # CONTRACT 14.16: the list could not be refreshed; an older copy is shown
 
 
 class IncidentListResponse(ContractModel):
@@ -544,7 +545,7 @@ class AircraftResponse(ContractModel):
 class LiveStatus(ContractModel):
     last_refresh_ms: int | None
     next_refresh_ms: int | None
-    active_incidents: int
+    active_incidents: int | None        # null: unknown (the fire lists could not be reached; CONTRACT 14.16)
     detections_24h_ca: int | None       # kept for one release (brief 3)
     auto_build: bool
     detections_24h: int | None          # brief 3 (14.1): FIRMS feed rows of the last 24 h in the lower-48 states

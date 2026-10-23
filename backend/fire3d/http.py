@@ -12,6 +12,9 @@
 * Every request to ``firms.modaps.eosdis.nasa.gov/api/`` first takes a slot from :data:`firms_limiter`
   (150 per rolling 10 min); cache hits don't count.
 * URLs in logs and exceptions always go through :func:`fire3d.config.mask_secrets`.
+* :class:`DownMemo` remembers a failed upstream for a short time (60 s), so request paths that would ask the same dead
+  host again (the fire lists, resolution of ids) answer from a cached copy, or say "unavailable", at once
+  (brief 3 final verification; CONTRACT 14.16).
 
 Everything here is synchronous and thread-safe; from async code call it via ``run_in_threadpool``/``to_thread``.
 """
@@ -63,18 +66,20 @@ def quota_period(text: str | bytes | None) -> str | None:
     return m.group(1).lower() if m else None
 
 
-def is_error_body(content: bytes, content_type: str = "") -> bool:
+def is_error_body(content: bytes, content_type: str = "", expect_json: bool = False) -> bool:
     """True when a 2xx body is an error in disguise and must not be cached: Open-Meteo's "Unexpected error while
     streaming data" (anywhere in the last 1 KB, or a short body), JSON that does not parse or is cut off, or a
-    top-level JSON object whose ``error`` is ``true`` or an object (Open-Meteo, ArcGIS)."""
+    top-level JSON object whose ``error`` is ``true`` or an object (Open-Meteo, ArcGIS). ``expect_json``: the caller
+    asked for JSON, so any body that is not JSON (an HTML maintenance page) is an error body too, and a good cached
+    copy is never overwritten by it."""
     if not content:
-        return False
+        return expect_json
     if _STREAM_ERROR in content[-1024:] or (len(content) <= 4096 and _STREAM_ERROR in content):
         return True
     head = content[:64].lstrip()
     looks_json = "json" in (content_type or "").lower() or head[:1] in (b"{", b"[")
     if not looks_json:
-        return False
+        return expect_json
     if len(content) > ERROR_BODY_PARSE_MAX:      # too big to be an error answer; only catch a cut-off body
         tail = content.rstrip()[-1:]
         return head[:1] in (b"{", b"[") and tail not in (b"}", b"]")
@@ -179,6 +184,54 @@ class RateLimiter:
 
 
 firms_limiter = RateLimiter(config.FIRMS_MAX_REQUESTS_PER_10MIN, 600.0, name="FIRMS API limiter")
+
+DOWN_HOLD_S = 60.0
+_memos: list["DownMemo"] = []
+
+
+class DownMemo:
+    """A short memory of failed upstreams: after :meth:`mark` (a request failed after its retries), :meth:`down` is
+    True for ``hold_s`` seconds, so a request path answers from a cached copy (or says "unavailable") at once instead
+    of waiting on a dead host again for every request; a success :meth:`clear`s it. Keys are the caller's (a list key,
+    or a whole source after a connection error or timeout)."""
+
+    def __init__(self, name: str, hold_s: float = DOWN_HOLD_S):
+        self.name = name
+        self.hold_s = float(hold_s)
+        self._until: dict[str, float] = {}
+        self._lock = threading.Lock()
+        _memos.append(self)
+
+    def mark(self, key: str) -> None:
+        with self._lock:
+            self._until[key] = time.monotonic() + self.hold_s
+
+    def clear(self, key: str) -> None:
+        with self._lock:
+            self._until.pop(key, None)
+
+    def down(self, *keys: str) -> bool:
+        """True when any of ``keys`` failed less than ``hold_s`` seconds ago."""
+        now = time.monotonic()
+        with self._lock:
+            for k in keys:
+                t = self._until.get(k)
+                if t is None:
+                    continue
+                if now < t:
+                    return True
+                self._until.pop(k, None)
+        return False
+
+    def reset(self) -> None:
+        with self._lock:
+            self._until.clear()
+
+
+def reset_down_memos() -> None:
+    """Forget every remembered failure (tests; a manual refresh)."""
+    for m in _memos:
+        m.reset()
 
 _semaphore = threading.Semaphore(config.HTTP_MAX_CONCURRENCY)
 _tls = threading.local()
@@ -315,6 +368,19 @@ def peek_cache(method: str, url: str, params: Params = None, ttl_s: float | None
     return _cache_read(cache_key(method.upper(), url, params), ttl_s)
 
 
+def has_cache(method: str, url: str, params: Params = None) -> bool:
+    """True when a cached copy (any age) of this bodyless request exists (cheap: no body is read)."""
+    return _cache_paths(cache_key(method.upper(), url, params))[0].is_file()
+
+
+def evict_bad_answer(resp: Response, method: str, url: str, params: Params = None) -> None:
+    """Drop an unusable 2xx answer from the cache, but only when it is the one stored there: an answer served from the
+    cache, or a fresh one that :func:`request` stored (one that is not JSON was never stored, and evicting would then
+    drop the last good copy, which stale-if-error needs)."""
+    if resp.from_cache or not is_error_body(resp.content, resp.content_type, expect_json=True):
+        evict_cache(method, url, params)
+
+
 def evict_cache(method: str, url: str, params: Params = None) -> None:
     """Drop one cache entry, e.g. a 2xx answer that turned out to be unusable (the cache stores every 2xx)."""
     for p in _cache_paths(cache_key(method.upper(), url, params)):
@@ -353,8 +419,12 @@ def request(
     ttl_s: float | None = DEFAULT_TTL_S,
     timeout: float = DEFAULT_TIMEOUT_S,
     retries: int = DEFAULT_RETRIES,
+    connect_timeout: float | None = None,
+    expect_json: bool = False,
 ) -> Response:
-    """Perform a cached request and return a 2xx :class:`Response`; raise :class:`HttpError` otherwise."""
+    """Perform a cached request and return a 2xx :class:`Response`; raise :class:`HttpError` otherwise.
+    ``connect_timeout`` (default ``min(15, timeout)``) bounds the connection; ``expect_json``: a 2xx body that is not
+    JSON is returned but never cached (see :func:`is_error_body`)."""
     method = method.upper()
     body = orjson.dumps(json_body, option=orjson.OPT_SORT_KEYS) if json_body is not None else data
     shown = display_url(url, params)
@@ -376,13 +446,14 @@ def request(
         retry_after: str | None = None
         try:
             with _semaphore:
-                r = _client().request(method, url, params=norm, content=body, headers=hdrs, timeout=httpx.Timeout(timeout, connect=min(15.0, timeout)))
+                ct_s = min(15.0, timeout) if connect_timeout is None else min(connect_timeout, timeout)
+                r = _client().request(method, url, params=norm, content=body, headers=hdrs, timeout=httpx.Timeout(timeout, connect=ct_s))
                 content = r.content
             status = r.status_code
             if 200 <= status < 300:
                 resp = Response(status, shown, content, r.headers.get("content-type", ""), False, int(time.time() * 1000))
                 if use_cache:
-                    if is_error_body(content, resp.content_type):
+                    if is_error_body(content, resp.content_type, expect_json):
                         log.warning("%s %s -> %d with an error body; not cached", method, shown, status)
                     else:
                         _cache_write(key, resp)

@@ -12,7 +12,9 @@ Every request filters server-side to wildfires (``IncidentTypeCategory='WF'``; y
 min``), names its ``outFields``, asks ``outSR=4326`` and goes through :mod:`fire3d.http` (cache, polite rate,
 identifying User-Agent). Rows are returned as cleaned dicts (:func:`normalize`): the raw attribute keys plus
 snake_case fields (``irwin_id`` upper case without braces, ``state`` USPS, times in epoch ms, ``lat`` / ``lon``).
-When WFIGS is unreachable a stale cached copy is served (with a warning) before :class:`WfigsError` is raised.
+When WFIGS is unreachable a stale cached copy is served (with a warning; :func:`is_stale` says so, for
+``ListSource.stale``) before :class:`WfigsError` is raised. A failure is remembered for ``fhttp.DOWN_HOLD_S`` (60 s,
+:data:`down_memo`): until then requests answer from the cached copy, or fail, at once (CONTRACT 14.16).
 """
 
 from __future__ import annotations
@@ -44,7 +46,11 @@ YTD_TTL_S = 1800.0             # 30 min
 ALL_YEARS_TTL_S = 86400.0      # 24 h
 REFRESH_TTL_S = 1e-6
 PAGE = 2000                    # the layers' maxRecordCount
-TIMEOUT_S = 90.0
+TIMEOUT_S = 30.0               # read timeout (seconds without data); the request path must stay under the web's 30 s
+CONNECT_TIMEOUT_S = 5.0
+LIST_RETRIES = 1               # one retry when no copy is cached; none when one is (stale-if-error answers at once)
+SOURCE_KEY = "wfigs"           # down_memo key of the whole source (after a connection error or a timeout)
+down_memo = fhttp.DownMemo("NIFC WFIGS")
 
 OUT_FIELDS = (
     "IrwinID", "UniqueFireIdentifier", "IncidentName", "IncidentTypeCategory", "IncidentSize", "PercentContained",
@@ -56,6 +62,7 @@ WILDFIRE = "WF"
 _BRACES = re.compile(r"[{}\s]")
 _fetched_lock = threading.Lock()
 _fetched: dict[str, int] = {}     # list key -> fetch time (ms) of the copy last returned
+_stale: dict[str, bool] = {}      # list key -> the copy last returned is an old one served because WFIGS failed
 
 
 class WfigsError(RuntimeError):
@@ -165,6 +172,13 @@ def fetched_ms(key: str) -> int | None:
         return _fetched.get(key)
 
 
+def is_stale(key: str) -> bool:
+    """True when the copy of list ``key`` last returned is an older cached copy served because WFIGS could not be
+    reached (or answered an error) when it was due for a refresh."""
+    with _fetched_lock:
+        return bool(_stale.get(key))
+
+
 def last_fetched_ms() -> int | None:
     """The newest fetch time of any WFIGS list this process returned (for ``ListSource.retrieved_ms``)."""
     with _fetched_lock:
@@ -176,42 +190,69 @@ def _params(where: str, offset: int) -> dict[str, str]:
             "orderByFields": "OBJECTID", "resultOffset": str(offset), "resultRecordCount": str(PAGE)}
 
 
-def _get_page(url: str, params: dict, ttl_s: float | None, retries: int = fhttp.DEFAULT_RETRIES) -> tuple[list, bool, int]:
-    resp = fhttp.request("GET", url, params=params, ttl_s=ttl_s, timeout=TIMEOUT_S, retries=retries)
+def _parse(resp: fhttp.Response, url: str, params: dict) -> tuple[list, bool, int]:
     try:
         data = resp.json()
     except ValueError as e:
-        fhttp.evict_cache("GET", url, params)
+        fhttp.evict_bad_answer(resp, "GET", url, params)
         raise WfigsError(f"WFIGS: invalid JSON ({e})") from None
     if not isinstance(data, dict) or "features" not in data:
-        fhttp.evict_cache("GET", url, params)
+        fhttp.evict_bad_answer(resp, "GET", url, params)
         msg = (data.get("error") or {}).get("message") if isinstance(data, dict) else None
         raise WfigsError(f"WFIGS: unexpected answer ({msg or type(data).__name__})")
     return list(data["features"]), bool(data.get("exceededTransferLimit")), int(resp.fetched_ms)
 
 
+def _get_page(url: str, params: dict, ttl_s: float | None, key: str) -> tuple[list, bool, int]:
+    """One page: the cached copy while it is fresh, else the network, unless WFIGS (or this list) failed less than
+    a minute ago (then :class:`WfigsError` at once). A failure is remembered (:data:`down_memo`)."""
+    hit = fhttp.peek_cache("GET", url, params, ttl_s)
+    if hit is not None:
+        return _parse(hit, url, params)
+    if down_memo.down(SOURCE_KEY, key):
+        raise WfigsError("NIFC WFIGS could not be reached a moment ago")
+    retries = 0 if fhttp.has_cache("GET", url, params) else LIST_RETRIES
+    try:
+        resp = fhttp.request("GET", url, params=params, ttl_s=ttl_s, timeout=TIMEOUT_S, retries=retries,
+                             connect_timeout=CONNECT_TIMEOUT_S, expect_json=True)
+        out = _parse(resp, url, params)
+    except fhttp.HttpError as e:
+        down_memo.mark(SOURCE_KEY if e.status is None else key)   # a bad body answers fast: not remembered
+        raise
+    down_memo.clear(SOURCE_KEY)
+    down_memo.clear(key)
+    return out
+
+
 def _query(url: str, where: str, ttl_s: float, refresh: bool) -> list[dict]:
-    """Every page of a query (cached per page); on failure any cached copy (stale-if-error)."""
+    """Every page of a query (cached per page); on failure any cached copy (stale-if-error, :func:`is_stale`)."""
+    key = list_key(url, where)
     feats: list[dict] = []
     fetched: list[int] = []
+    stale = False
     offset = 0
     while True:
         params = _params(where, offset)
         try:
-            page, more, t = _get_page(url, params, REFRESH_TTL_S if refresh else ttl_s)
+            page, more, t = _get_page(url, params, REFRESH_TTL_S if refresh else ttl_s, key)
         except (fhttp.HttpError, WfigsError) as e:
+            hit = fhttp.peek_cache("GET", url, params, None)        # any age; never the network
             try:
-                page, more, t = _get_page(url, params, None, retries=0)    # any age; network only if never cached
-                log.warning("WFIGS list unavailable (%s); serving the cached copy", config.mask_secrets(e))
-            except (fhttp.HttpError, WfigsError):
+                if hit is None:
+                    raise WfigsError("no cached copy")
+                page, more, t = _parse(hit, url, params)
+            except WfigsError:
                 raise WfigsError(f"NIFC WFIGS list unavailable: {config.mask_secrets(e)}") from None
+            stale = True
+            log.warning("WFIGS list unavailable (%s); serving the cached copy", config.mask_secrets(e))
         feats += page
         fetched.append(t)
         if not more or not page or offset > 50 * PAGE:
             break
         offset += len(page)
     with _fetched_lock:
-        _fetched[list_key(url, where)] = min(fetched)
+        _fetched[key] = min(fetched)
+        _stale[key] = stale
     return [r for r in (normalize(f) for f in feats) if r is not None]
 
 

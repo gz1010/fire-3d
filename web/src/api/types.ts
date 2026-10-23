@@ -363,7 +363,9 @@ export interface ListSource {
   name: string // "CAL FIRE" | "NIFC WFIGS (IRWIN)"
   status: 'available' | 'unavailable'
   retrieved_ms: number | null // when Fire-3d fetched that list (never an issue time)
-  reason: string | null // plain words when unavailable
+  reason: string | null // plain words when unavailable, or when stale
+  /** CONTRACT 14.16: the list could not be refreshed and an older copy is shown (`retrieved_ms` is that copy's time). */
+  stale?: boolean
 }
 
 export interface IncidentListResponse {
@@ -403,7 +405,8 @@ export interface AircraftResponse {
 export interface LiveStatus {
   last_refresh_ms: number | null
   next_refresh_ms: number | null
-  active_incidents: number
+  /** null: unknown (the fire lists could not be reached; CONTRACT 14.16), never 0. */
+  active_incidents: number | null
   /** @deprecated Brief 3: kept for one release; use `detections_24h` (lower 48). */
   detections_24h_ca: number | null
   auto_build: boolean
