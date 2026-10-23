@@ -59,6 +59,9 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
   validation does the end-to-end checks on the validation fires.
 - ~06:35 UTC: us-official review done (fix rounds 18808f4, 14f126d; one minor left, passed to integration part 1).
   Wave 1 complete: all four roles reviewed and fixed.
+- ~07:25 UTC: integration part 1 done (6072b83..4bdaceb; backend 956, web 1,116; deprecated exports removed, (R)
+  fields required, CONTRACT §14 as-built folded, 2 browser bugs fixed). Part-2 list is in its report's part2 key.
+  An adversarial review of part 1 (code + user-facing lenses) runs while validation continues (7 of 12 built).
 - Lesson: never SendMessage a workflow agent (it starts a second copy); relay through files or Agent-tool agents.
 
 ## Carry-over items for later stages (integration unless a role owns the file)
