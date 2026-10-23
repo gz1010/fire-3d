@@ -28,6 +28,10 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
   listed in us-web's notes_for_integrator for the integration to wire.
 - 01:40 UTC: us-catalog finished (73 min; 829 backend, 835 web tests). us-official started in its slot.
   Review order: us-catalog, then the others as they finish (us-pipeline first among those).
+- ~02:15 UTC: us-pipeline finished (Horse Gulch MT smoke build ready; Black Cove NC pending quota, handed to its
+  review fixer). ~02:45: us-web finished. Reviews: us-catalog running, us-pipeline running; us-official still building.
+- Open-Meteo in the cloud: refusals are intermittent (daily-limit 429 at 02:04, success at 02:13); host blocks are
+  in-process only, so a fresh CLI build can retry. Validation must re-probe every ~10 min, not wait for midnight.
 - Lesson: never SendMessage a workflow agent (it starts a second copy); relay through files or Agent-tool agents.
 
 ## Carry-over items for later stages (integration unless a role owns the file)
