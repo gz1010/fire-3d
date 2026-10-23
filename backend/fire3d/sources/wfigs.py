@@ -34,11 +34,12 @@ SERVICE = "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services"
 CURRENT_URL = SERVICE + "/WFIGS_Incident_Locations_Current/FeatureServer/0/query"
 YTD_URL = SERVICE + "/WFIGS_Incident_Locations_YearToDate/FeatureServer/0/query"
 ALL_YEARS_URL = SERVICE + "/WFIGS_Incident_Locations/FeatureServer/0/query"
-DATASET_URL = "https://data-nifc.opendata.arcgis.com/datasets/nifc::wfigs-incident-locations"
+DATASET_URL = "https://data-nifc.opendata.arcgis.com/datasets/nifc::wildland-fire-incident-locations"   # item b4402f78...
 NAME = "NIFC WFIGS (IRWIN)"
 CREDIT = "NIFC WFIGS (IRWIN)"
 
 CURRENT_TTL_S = 300.0          # 5 min (WFIGS refreshes from IRWIN every 5 min)
+RECORD_TTL_S = 600.0           # 10 min: one record by IRWIN id (the incident-record endpoint)
 YTD_TTL_S = 1800.0             # 30 min
 ALL_YEARS_TTL_S = 86400.0      # 24 h
 REFRESH_TTL_S = 1e-6
@@ -247,3 +248,14 @@ def find_irwin_prefix(prefix: str, refresh: bool = False) -> list[dict]:
         return []
     where = f"IrwinID LIKE '{{{p}%' AND IncidentTypeCategory='{WILDFIRE}'"
     return _query(ALL_YEARS_URL, where, ALL_YEARS_TTL_S, refresh)
+
+
+def record_by_irwin(irwin_id: str, refresh: bool = False) -> dict | None:
+    """One record of the all-years layer by its exact IRWIN id (any incident type; cached 10 min), cleaned; None when
+    WFIGS has no such record. Raises :class:`WfigsError` when WFIGS is unreachable and nothing is cached."""
+    irwin = clean_irwin(irwin_id)
+    if not re.fullmatch(r"[0-9A-F-]{8,64}", irwin):
+        return None
+    rows = _query(ALL_YEARS_URL, "IrwinID='{" + irwin + "}'", RECORD_TTL_S, refresh)
+    rows = [r for r in rows if r["irwin_id"] == irwin]
+    return max(rows, key=lambda r: r.get("updated_ms") or 0) if rows else None

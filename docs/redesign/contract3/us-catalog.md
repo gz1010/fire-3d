@@ -184,6 +184,32 @@ milestone commit; other roles read it instead of guessing. Kept current at every
   catalog.resolve_listed(incident_id) is not None` (§14.2) plus `catalog.is_supported`; `refresh_live`
   (`pipeline.py:677`) should call `firms.load_live_us(days=2)`.
 
+## M4: incident records and accuracy regions (commit `brief 3 us-catalog: M4 ...`)
+
+### `GET /api/official/incident-record?incident=<id>` (`backend/fire3d/api/records.py`, included by `api/app.py`)
+- Exactly `IncidentRecordResponse` (§14.5). Resolution: `catalog.resolve_listed`, else the bundle manifest (then
+  `not_covered` "This is synthetic or local data; it has no agency record."); unknown id 404; invalid id 400.
+- A CAL FIRE complex row (`complex_members` non-empty): `not_covered` "This is a CAL FIRE complex; NIFC WFIGS lists its
+  member fires separately." (`irwin_id` and `current` null). A California row without `irwin_id`: `not_covered`
+  "NIFC WFIGS has no record matched to this fire.".
+- The record: `wfigs.record_by_irwin(irwin)` (all-years layer, exact `IrwinID='{...}'`, cached 10 min).
+  `current.is_active` = in the Current layer with `PercentContained` null or < 100. `source.url` = the record page;
+  `incident_url` = the all-years `f=html` query; `dataset_url` =
+  https://data-nifc.opendata.arcgis.com/datasets/nifc::wildland-fire-incident-locations (checked: HTTP 200; item
+  b4402f7887ca4ea9a6189443f220ef28, licence text a disclaimer only). WFIGS down: `upstream_error` with
+  "NIFC WFIGS could not be reached; the agency record is not shown.". `agency` is null until the NWCG code file lands
+  (cut line (e)); `agency_code` verbatim. `Cache-Control: no-store`.
+
+### `GET /api/accuracy-regions` and the seed
+- `backend/fire3d/data/regional_accuracy.json` (schema 1): OSCC `tested`, `in_sample`, `seed`, 3 fires, 32 leads,
+  `growth_sorensen` 0.433 (mean of fire means; renders 0.43), `range` [0.395, 0.467], `pooled_leads` 0.438, `by_lead`
+  {"12": 0.349, "24": 0.432, "48": 0.481, "72": 0.49}, `growth_ratio_median` 1.85, `years` [2025], `lfm_method`
+  "ca_month_table_drought", `fuel_groups_tested` ["chaparral", "grass"], two caveats; no `fuels_editions` and no
+  `fires` (their per-fire `era5_hours` is not known, and a value is never guessed). The other nine `untested`, 0 fires.
+- The endpoint serves the file with every region (fixed order NWCC ... OSCC; a missing one `untested`), each `status`
+  recomputed from its counts (`tested` >= 2 fires and >= 16 leads, else `limited` with >= 1 fire, else `untested`),
+  plus `served_ms`; `Cache-Control: no-cache`; 503 when the file is unreadable.
+
 ## Deviations
 - `coverage_at` uses a **1 km** tolerance around the state polygons, not 5 km: the TIGERweb state polygons already
   include near-shore water, and 5 km would put central Tijuana (2.0 km south of the border; §14.3 requires

@@ -20,8 +20,11 @@ national search). Ports API 8711, Vite 5181. Started 2026-10-23 ~00:20 UTC.
   Hay Creek members, POOState cases, Horse Gulch/Black Cove by IRWIN, feed box, Montana keyless).
   Live-loop guard added to my TestClient tests (lifespan would auto-build).
 
+- M4: api/records.py (incident-record, accuracy-regions), regional_accuracy.json seed, wfigs.record_by_irwin,
+  tests/test_us_catalog_records.py.
+
 ## Next
-- M4 records endpoint + accuracy seed/endpoint. M5 gazetteer.
+- M5 gazetteer (national places), geocode.py. Then cut-line items, SPEC prose, curl acceptance on 8711.
 
 ## Decisions
 - §14.1 before-validator implemented as an after-validator using model_fields_set (a before-validator breaks strict

@@ -27,7 +27,7 @@ def feature(name: str, irwin: str, state: str | None, lon: float, lat: float, *,
     st = (state or "US-XX")[3:] if (state or "").startswith("US-") else (state or "XX")
     return {
         "attributes": {
-            "IrwinID": "{" + irwin.lower() + "}", "UniqueFireIdentifier": ufi or f"{year}-{st}XXX-{irwin[:6].upper()}",
+            "IrwinID": "{" + irwin.upper() + "}", "UniqueFireIdentifier": ufi or f"{year}-{st}XXX-{irwin[:6].upper()}",
             "IncidentName": name, "IncidentTypeCategory": typ, "IncidentSize": size, "PercentContained": pct,
             "FireDiscoveryDateTime": iso_to_ms(discovered), "ContainmentDateTime": iso_to_ms(contained) if contained else None,
             "ControlDateTime": iso_to_ms(controlled) if controlled else None, "FireOutDateTime": iso_to_ms(out) if out else None,

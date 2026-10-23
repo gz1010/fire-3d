@@ -1,9 +1,10 @@
 """FastAPI application (SPEC 6), served as ``fire3d.api.app:app`` on port 8710. Owner: api agent.
 
-Routes: health; incident list (``year=`` for historical lists, ``bbox_lonlat`` on rows) + detail; build and
-forecast jobs; job status; bundle files (gzip, ETag, ``Cache-Control: no-cache``, traversal-safe); live aircraft
-(10 s cache per incident); live status. Routers: geocode, extras (optional map sources), official (CAL FIRE status
-history and NWS fire weather alerts, ``api/official.py``).
+Routes: health; incident list (``year=`` / ``state=`` filters, ``bbox_lonlat`` on rows, ``sources``, gzip) + detail;
+build and forecast jobs; job status; bundle files (gzip, ETag, ``Cache-Control: no-cache``, traversal-safe); live
+aircraft (10 s cache per incident); live status; point lookup (``/api/geo/lookup``, brief 3). Routers: geocode, extras
+(optional map sources), official (CAL FIRE status history, NWS fire weather and local alerts, ``api/official.py``),
+records (NIFC WFIGS incident records and accuracy regions, ``api/records.py``).
 Startup (lifespan) starts the live refresh loop when FIRE3D_LIVE=1 (``config.LIVE_ENABLED``).
 
 Blocking work never runs on the event loop: route functions that touch the network or disk are plain ``def``
@@ -44,6 +45,7 @@ from . import live
 from . import extras as extras_routes
 from . import geocode as geocode_routes
 from . import official as official_routes
+from . import records as records_routes
 
 log = logging.getLogger(__name__)
 
@@ -415,6 +417,7 @@ app.add_middleware(
 app.include_router(geocode_routes.router)
 app.include_router(extras_routes.router)
 app.include_router(official_routes.router)       # BRIEF-2: CAL FIRE status history, NWS fire weather alerts
+app.include_router(records_routes.router)        # brief 3: NIFC WFIGS incident records, accuracy regions (14.4, 14.5)
 
 
 @app.get("/api/health")
