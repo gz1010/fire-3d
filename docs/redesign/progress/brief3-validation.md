@@ -68,6 +68,13 @@ Hindcast log: scratchpad validation/logs/hq.log (runner hq2.sh, jobs from mkjobs
 | Greer | 08:34:52 | 74 s | ready, checks ok |
 Then chain.sh: Table Rock (q6) and the Horse Gulch swap build.
 
+## Label runs (31-member p50, final bundles), as of 10:50Z
+Emigrant 0.279, Lower Sugarloaf 0.231, Island Creek 0.189, Horse Gulch 0.492, France Canyon 0.218, Cottonwood Peak
+0.275, Trout 0.355, Greer 0.348, Windy Deuce 0.299, Table Rock 0.212, Rush 0.490, Black Cove 0.174 (all done).
+Remaining at 13:05Z (usage stop killed the runner at ~10:5x; restarted 13:05): det/ablation for 6 fires, ignition
+p50 for Cottonwood Peak, Table Rock, Trout, pseudo-live for 7, California det + Madre ignition, multiplier
+sensitivity (15). Assembly: scratchpad tools/assemble.py (needs doc_10_5/6/7/8 reading files and doc_10_9.md).
+
 ## Bug fix after the first non-California scores (protocol: before/after for every fire)
 - 07:57 Windy Deuce failed checks (area ratio 0.78, fire at the AOI edge; AOI 36 km). Cause: catalog._estimate called
   perimeters.fetch_perimeters without the WFIGS identity -> California-only query -> no perimeter outside CA -> AOI
