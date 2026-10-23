@@ -19,11 +19,19 @@ validation's progress/report, tests that test only those.
 - 3021449 N2 backend (local alerts outside the lower 48: state_not_available, not_checked) and N3 (box answer lists
   every message at the point).
 
+- 5c3085c credits TIGERweb / NTAD / NWCG in an open fire's data sources; rasters.test.ts carry-over already done by
+  us-web (three tests present).
+- 7955e6b SPEC (required fields, local alerts outside the lower 48, MultiPolygon, daily re-check, prefetch).
+- 991e780 removed fill_from_calfire and overpass.la_time.
+- c4f1175 CONTRACT §14 "14.x as built" fold-in + §14.5/§14.7/§14.12.2 fixes; Public summary keeps the year of a past
+  record's update time.
+- Screenshots batch 1 (overview x6) and 2 (fires x10) taken and viewed; wording scan 48 hits, all justified; key scan
+  0 (scratch logs, my commits, tracked files).
+
 ## Next
-1. Baseline gates.
-2. Code: credits when a fire is open (NWCG / NTAD), rasters.test.ts check, minor review notes.
-3. Docs: CONTRACT §14 "as built" fold-in + contract fixes; SPEC lag.
-4. Verification screenshots; gates; report with part2 list.
+1. Batch 3 screenshots (search, location cards, fire cards, prepare card, Emigrant retake); keyboard and reduced
+   motion checks.
+2. Full gates; report with part2 list.
 
 ## Decisions
 - IncidentSummary (R) fields keep a Python default (old manifests are filled on read) but are always dumped; TS
@@ -31,5 +39,7 @@ validation's progress/report, tests that test only those.
   forecast manifests lack it).
 - Brief-2 official TS leniency kept for envelope kind / incident_id / caveats (parity test ENVELOPE_LENIENT).
 - Location card: the point's own live box answer lists all its messages (they are not in Updates).
+- §14.12.2: the hourly re-check of a daily Open-Meteo block is accepted and written into the contract.
+- Emigrant is in Oregon (America/Los_Angeles, UTM 10), not Montana as the task list said.
 
 ## Open problems
