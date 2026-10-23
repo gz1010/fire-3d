@@ -158,7 +158,7 @@ def test_wfigs_ids_and_fields(world) -> None:
     assert p.id == f"2026-pine-{ID['E1E2E3E4'][:6].lower()}" and p.calfire_uid == "" and p.uid == ID["E1E2E3E4"]
     assert p.irwin_id == ID["E1E2E3E4"] and p.unique_fire_id.startswith("2026-") and p.source_name == "PINE"
     assert p.url == wfigs.record_url(ID["E1E2E3E4"]) and p.url.startswith("https://") and "f=html" in p.url
-    assert p.agency is None and p.agency_code == "USFS" and p.record_issuer == "USFS via NIFC WFIGS"
+    assert p.agency == "USDA Forest Service" and p.agency_code == "USFS" and p.record_issuer == "USFS via NIFC WFIGS"
     assert p.admin_unit == "XXUNF" and p.location is None and p.active_sources == ["wfigs"]
     nf = by["North Fork"]
     assert nf.id.startswith("2026-north-fork-1a1a1a")
@@ -283,3 +283,35 @@ def test_build_gate_text_for_local_bundles(world, tmp_data_dir: Path) -> None:
 def test_config_year_floor() -> None:
     assert catalog._wf_min(None) == 300 and catalog._wf_min(100) == 100 and catalog._wf_min(0) == catalog.WFIGS_YEAR_FLOOR_ACRES
     assert config.CA_BBOX
+
+
+def test_id_pinning_keeps_the_bundle_id(world, tmp_data_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """CONTRACT 14.2 "Id pinning": a fire built while it was WFIGS-only keeps its WFIGS id when CAL FIRE lists it later
+    (before/after pair: the McCovey row of this world, then a CAL FIRE record of the same fire)."""
+    from fire3d.api.app import app
+
+    before = {r.name: r for r in catalog.get_catalog("live")}["Mccovey"]
+    wid = before.id
+    d = tmp_data_dir / "incidents" / wid
+    d.mkdir(parents=True)
+    (d / "manifest.json").write_text(json.dumps({"status": "ready", "built_ms": 7, "mode": "live",
+                                                 "summary": before.model_dump(mode="json")}))
+    mc = cal("McCovey Fire", "ee77ff88-0000-4000-8000-000000000009", 38.0011, -120.4909, "2026-10-10T19:30:00Z", active=True, acres=60)
+    monkeypatch.setattr(__import__(__name__), "CAL_LIVE", CAL_LIVE + [mc])
+    monkeypatch.setattr(__import__(__name__), "CAL_2026", CAL_2026 + [mc])
+    catalog.clear_cache()
+    after = {r.name: r for r in catalog.get_catalog("live", refresh=True)}          # refetch (the HTTP cache holds the old list)
+    row = after["McCovey Fire"]
+    cal_id = catalog.make_incident_id(2026, "McCovey Fire", "ee77ff88")
+    assert row.record_source == "calfire" and row.id == wid and row.aliases == [cal_id]
+    assert row.bundle_status == "ready" and "Mccovey" not in after
+    assert catalog.resolve_listed(cal_id).id == wid and catalog.resolve_listed(wid).id == wid
+    with TestClient(app) as client:
+        r = client.post(f"/api/incidents/{cal_id}/build")
+        assert r.status_code == 409 and r.json()["detail"] == f"'{cal_id}' is listed as '{wid}'."
+        assert client.get(f"/api/incidents/{cal_id}").json()["summary"]["id"] == wid
+    shutil_rm = __import__("shutil").rmtree
+    shutil_rm(d)
+    catalog.clear_cache()
+    plain = {r.name: r for r in catalog.get_catalog("live")}["McCovey Fire"]
+    assert plain.id == cal_id and plain.aliases == []                     # without a bundle: the CAL FIRE id

@@ -141,7 +141,8 @@ milestone commit; other roles read it instead of guessing. Kept current at every
   California merge; WFIGS year lists are never fetched below 100 ac (`WFIGS_YEAR_FLOOR_ACRES`; `min_acres=0` lists
   CAL FIRE of every size plus WFIGS >= 100 ac); `complex_name` is the complex's display name (title-cased when ALL
   CAPS) and usually already ends in "Complex" ("Montana Lightning Complex"): the card should not add "Complex" again.
-- `agency` stays null on WFIGS rows (the NWCG code file is below the cut line); `record_issuer` shows the code verbatim.
+- `agency` on WFIGS rows: from `nwcg_agency_codes.json` once that landed (cut-line item (e), done; see below); `record_issuer` always
+  shows the code verbatim ("USFS via NIFC WFIGS").
 
 ### `api/app.py`
 - `GET /api/incidents`: `state=` (two letters; 422 otherwise), `year` default `catalog.default_year()`, `sources[]`
@@ -198,7 +199,7 @@ milestone commit; other roles read it instead of guessing. Kept current at every
   https://data-nifc.opendata.arcgis.com/datasets/nifc::wildland-fire-incident-locations (checked: HTTP 200; item
   b4402f7887ca4ea9a6189443f220ef28, licence text a disclaimer only). WFIGS down: `upstream_error` with
   "NIFC WFIGS could not be reached; the agency record is not shown.". `agency` is null until the NWCG code file lands
-  (cut line (e)); `agency_code` verbatim. `Cache-Control: no-store`.
+  (cut line (e), since done: names from `nwcg_agency_codes.json`); `agency_code` verbatim. `Cache-Control: no-store`.
 
 ### `GET /api/accuracy-regions` and the seed
 - `backend/fire3d/data/regional_accuracy.json` (schema 1): OSCC `tested`, `in_sample`, `seed`, 3 fires, 32 leads,
@@ -233,7 +234,39 @@ milestone commit; other roles read it instead of guessing. Kept current at every
 - For us-web: the local match's `name` now carries the state ("Altadena, CA"); `near` stays a bare place name of the
   same state.
 
+## Cut-line items done
+
+- (a) ZCTA and county rows of the gazetteer: done in M5.
+- (b) `backend/scripts/build_ca_county_gacc.py` -> `backend/fire3d/data/ca_county_gacc.json` (1 GET: WFIGS all-years
+  statistics of California wildfires >= 10 ac by `POOCounty` and `GACC`): 57 counties; exactly the six of §14.4 are
+  null (Alpine, Imperial, Mono, San Joaquin, Sierra, Stanislaus). `catalog.ca_county_region(lon, lat)` gives a CAL FIRE
+  row its region when no WFIGS record is matched (county from `regions.county_at`); `gacc` stays null (no GACC is
+  claimed for the record).
+- (d) SPEC prose: §0 scope (lower 48), §2 rows for every §14.13 source, §4.1 UTM rule, §4.2 local time with its zone
+  (Public 12-hour, Command and Forensic 24-hour), §4.4 ids (CAL FIRE and WFIGS), §8.7 national live list.
+- (e) `backend/fire3d/data/nwcg_agency_codes.json`: 28 codes named as NWCG's "Standards for Unit Identifiers, PMS 931"
+  (September 2022, https://www.nwcg.gov/publications/pms931, section 4 "Tier 2 (Organizational Unit Agency)") names
+  them, checked 2026-10-23; terms (PMS 931): "Publications and training materials produced by NWCG are in the public
+  domain. Use of public domain information, including copying, is permitted. Use of NWCG information within another
+  document is permitted if NWCG information is accurately credited to NWCG." Credit "Agency names: NWCG unit
+  identifiers". IRWIN spellings mapped to PMS 931 codes and recorded in `meta.equivalents`: USFS (PMS 931 "FS" under
+  USDA) "USDA Forest Service", USFWS ("FWS") "U.S. Fish and Wildlife Service", CAL FIRE ("CDF") "California Department
+  of Forestry and Fire Protection". Codes PMS 931 does not name (INTER, SHP, TRIBE, USMC) stay verbatim
+  (`meta.not_named`). `catalog.agency_name(code)` fills `agency` on WFIGS rows, `OtherRecord.agency` and the incident
+  record's `agency`.
+- (f) Id pinning: `catalog.pinned_id(rec)` / `wfigs_id(rec)`; a CAL FIRE row matched (rule 2, one record) to a WFIGS
+  record with a bundle under its WFIGS id keeps that id, lists its CAL FIRE id in `aliases`; both resolve; a build by
+  the alias answers 409 "'{alias}' is listed as '{id}'." Tested with a before/after pair built from the synthetic
+  McCovey row and a hand-made CAL FIRE record of the same fire (no real before/after pair exists in the samples).
+
+## Cut-line item not done
+
+- (c) The scipy KD-tree in `catalog.assign_detections`: not done; the dense matching (now first cut to the fires'
+  combined box) runs on the national feed in well under 2 s (synthetic 300 fires x 20,000 detections in the test;
+  the national-sized case of 235 fires x 11,792 detections takes 0.57 s here; `_live_base` logs the time of each run).
+
 ## Deviations
+- Id pinning is tested with a synthetic before/after pair, not a recorded one (none exists in the samples).
 - `coverage_at` uses a **1 km** tolerance around the state polygons, not 5 km: the TIGERweb state polygons already
   include near-shore water, and 5 km would put central Tijuana (2.0 km south of the border; §14.3 requires
   `outside_us`) and Windsor, ON (2.8 km from Detroit) in the United States. `state_at` keeps `max_km=5.0` (filling a

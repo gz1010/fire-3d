@@ -12,7 +12,11 @@ Do **not** use the name "FireTrace" anywhere. The app is called **Fire-3d**, tag
 
 ## 0. Product
 
-A 3D wildfire analysis app for **California**, built on real data:
+A 3D wildfire analysis app for the **lower 48 US states and DC** (brief 3; it started with California), built on
+real data. Alaska, Hawaii and US territories are not supported yet: their fires are not listed, and a point there says
+"Fire-3d does not support Alaska, Hawaii or US territories yet." The national fire list comes from NIFC WFIGS (IRWIN);
+in California CAL FIRE stays the record and WFIGS adds only the fires CAL FIRE does not list
+(docs/redesign/CONTRACT.md §14.1-14.2). The brief-2 text below describes California, where it still holds:
 
 - **Live mode:** incidents CAL FIRE currently lists as active, plus satellite fire detections, perimeters, weather, a
   72-hour **ensemble** fire-spread forecast (burn probability), and live firefighting aircraft from ADS-B.
@@ -69,6 +73,15 @@ A 3D wildfire analysis app for **California**, built on real data:
 | ADS-B | `https://api.adsb.lol/v2/point/{lat}/{lon}/{radius_nm}`, `https://api.adsb.lol/v2/type/{ICAO type}`; fallback `https://opendata.adsb.fi/api/v2/lat/{lat}/lon/{lon}/dist/{nm}` (free for non-commercial use) when adsb.lol is unreachable | Response `{ac:[…], now, total}` (adsb.fi: `{aircraft:[…], now (s), resultCount}`). Aircraft fields: `hex`, `flight` (callsign, space-padded), `r` (registration), `t` (ICAO type), `lat`, `lon`, `alt_baro` (ft, or the string "ground"), `alt_geom`, `gs` (kt), `track`, `category`, `seen`, `squawk`. |
 | NWS fire weather alerts (no key; added 2026-10-18) | `GET https://api.weather.gov/alerts/active?area=CA&event=Red%20Flag%20Warning,Fire%20Weather%20Watch` (header `User-Agent: Fire-3d/0.1 (research prototype)`, `Accept: application/geo+json`); zone polygons `GET https://api.weather.gov/zones/fire/{UGC}` | GeoJSON CAP alerts; fire weather alerts carry `geometry: null` and list their fire weather zones in `geocode.UGC` / `affectedZones`; P-VTEC in `parameters.VTEC` (e.g. `/O.CON.KLOX.FW.W.0005.000000T0000Z-261018T0300Z/`). Open data, free to use; a User-Agent is required (optional contact via `FIRE3D_NWS_CONTACT`). NWS keeps no archive: past dates answer an empty list. Cached 2 min (alerts) / 30 days (zones). |
 | NWS alert archive (Iowa Environmental Mesonet, no key; added 2026-10-18) | `GET https://mesonet.agron.iastate.edu/json/vtec_events_bypoint.py?lat=&lon=&sdate=YYYY-MM-DD&edate=`, `/json/vtec_event.py?wfo=LOX&year=2025&phenomena=FW&significance=W&etn=1`, `/geojson/vtec_event.py?…` (same query) | Public domain ("may be used freely by anyone for any lawful purpose"), an archived copy of NWS products, not an NWS source. bypoint lists events by their start date (look back about 14 days); `vtec_event` gives per-zone `utc_product_issue`, `utc_issue`, `utc_expire` (final; a watch upgraded or cancelled before it began ends before it begins) and the original text products (`report`, `svs[]`); the geojson features' `id` is the UGC. Cached 30 days (30 min while the window touches the last day). |
+| NIFC WFIGS Incident Locations (no key; brief 3) | `https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Incident_Locations{_Current,_YearToDate,}/FeatureServer/0/query` with `IncidentTypeCategory='WF'` (+ `UniqueFireIdentifier LIKE '<year>-%' AND IncidentSize>=<min>` for year lists), explicit `outFields`, `outSR=4326`, `f=json`, 2,000 rows per page | The national fire list and each fire's agency record (`sources/wfigs.py`; Current 5 min, YearToDate 30 min, all years 24 h, one record by IRWIN id 10 min). Item licence is a disclaimer only, no use restriction (checked 2026-10-22/23). Credit "NIFC WFIGS (IRWIN)". |
+| NWCG Unit Identifier codes (brief 3) | PMS 931 (Sep 2022), https://www.nwcg.gov/publications/pms931 | Plain names of protecting-agency codes, `backend/fire3d/data/nwcg_agency_codes.json`. NWCG publications are public domain, use permitted when credited to NWCG (checked 2026-10-23). Credit "Agency names: NWCG unit identifiers". |
+| USDOT BTS NTAD Time Zones (brief 3) | `https://services.arcgis.com/xOi1kZaI0eWDREZv/arcgis/rest/services/NTAD_Time_Zones/FeatureServer/0` | Time zone at a point (`backend/fire3d/data/us_timezones.geojson`, built offline by `scripts/build_us_regions.py`). "Available for unrestricted public use" (the layer's own text, checked 2026-10-23). Credit "Time zones: USDOT BTS NTAD". |
+| Census TIGERweb states, counties, AIANNH (brief 3) | `https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/{State_County/MapServer/0,1, AIANNHA/MapServer/2}` | State, county, Navajo Nation and Hopi Reservation (`us_states.geojson`, `us_counties.geojson`, `us_timezones.geojson`). Public domain, "Source: U.S. Census Bureau". Credit "Boundaries: U.S. Census Bureau TIGERweb". |
+| Census 2026 Gazetteer Files, national (brief 3) | `https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2026_Gazetteer/2026_Gaz_{place,counties,zcta}_national.zip` | Towns, counties and ZIP areas of every state for `/api/geocode` (`backend/fire3d/data/gazetteer_us.json`). Public domain. Credit "U.S. Census Bureau Gazetteer Files". |
+| NWS API alerts, national (brief 3, us-pipeline) | `GET https://api.weather.gov/alerts/active?area=<the 48 states + DC>` | Fire weather and the local officials' messages NWS relays. Public domain (weather.gov/disclaimer). Credit "National Weather Service". |
+| OpenFEMA IPAWS Archived Alerts v1 (brief 3, us-pipeline) | `https://www.fema.gov/api/open/v1/IpawsArchivedAlerts` | Local officials' messages of past days, labelled archived. OpenFEMA terms (2025-01-22): the notice "This product uses the Federal Emergency Management Agency's OpenFEMA API, but is not endorsed by FEMA" is required; no FEMA or DHS logos. Credit "FEMA IPAWS archive via OpenFEMA". |
+| Oregon OEM "Evacuation Areas Public" (brief 3, us-official) | Oregon Department of Emergency Management ArcGIS layer | Evacuation zones in Oregon. Licence field "Public"; no further terms published (checked 2026-10-22). Credit "Oregon Department of Emergency Management". |
+| LANDFIRE LF2023 (brief 3, us-pipeline) | the LANDFIRE service above with ED `LF2023` | Pre-fire fuels of federal fiscal year 2024 fires. Public domain. Credit "LANDFIRE" (edition named). |
 | Satellite passes (NASA CMR, no key; added 2026-10-17) | `GET https://cmr.earthdata.nasa.gov/search/granules.json?short_name={SN}&version={V}&point={lon},{lat}&temporal={iso},{iso}&sort_key=-start_date&page_size=200` (header `Client-Id: fire3d`) | Granules of the active-fire products FIRMS is made from. Live (LANCE NRT): `VNP14IMG_NRT` v2 (Suomi NPP), `VJ114IMG_NRT` v2 (NOAA-20), `VJ214IMG_NRT` v2 (NOAA-21), `MOD14` v6.1NRT (Terra), `MYD14` v6.1NRT (Aqua). Archive: `VNP14IMG`/`VJ114IMG`/`VJ214IMG` v002, `MOD14`/`MYD14` v061. Fields used: `time_start`/`time_end` (6-min VIIRS, 5-min MODIS granules; FIRMS `acq_time` falls inside), `day_night_flag`, `updated` (publication, 0.75–3 h after acquisition). A granule containing the fire's point is a pass over it (§8.3). |
 
 ## 3. Repo layout
@@ -116,8 +129,10 @@ Fire-3d/
 ## 4. Conventions (Contract)
 
 ### 4.1 Coordinates
-- Each incident has an **AOI**: a square in the incident's UTM zone. Use EPSG:32610 if the center longitude is
-  < −120°, else EPSG:32611. It is centered at (`center_e`, `center_n`) with side `extent_m`.
+- Each incident has an **AOI**: a square in the incident's standard UTM zone (brief 3): EPSG
+  `32600 + floor((lon + 180) / 6) + 1` of the centre longitude, zones 10-19 across the lower 48. California is
+  unchanged: EPSG:32610 if the centre longitude is < −120°, else EPSG:32611. It is centered at (`center_e`,
+  `center_n`) with side `extent_m`.
 - Two grids cover exactly that extent:
   - **render grid** 1024 × 1024: elevation and trees.
   - **fire grid** M × M: fuels, canopy, burn scar, every fire raster and the simulation.
@@ -137,14 +152,19 @@ Fire-3d/
 - Raster time values are float32 **hours since `manifest.time_origin_ms`**. **NEVER = 1.0e6** marks a pixel that
   never burns.
 - `time_origin_ms = floor_to_hour(started_ms) − 3_600_000`.
-- The UI displays America/Los_Angeles time, e.g. "Aug 14, 17:02".
+- The UI shows each fire's local time with its zone (`summary.time_zone`, never assumed to be Pacific; a point
+  without a fire uses `/api/geo/lookup`'s zone; the viewer's zone only as a labelled fallback). Public 12-hour
+  ("Aug 14, 5:02 PM PDT"), Command and Forensic 24-hour ("Aug 14, 17:02 PDT") (brief 3, CONTRACT §14.9).
 
 ### 4.3 Raster files
 `.bin` files are raw little-endian with no header. dtype and shape come from the `LayerInfo` in the manifest.
 dtypes: `float32`, `uint8`, `uint16`, `int16`. The API serves them gzip-compressed.
 
 ### 4.4 Incident IDs
-`f"{year}-{slug(name)}-{calfire_uid[:6].lower()}"`, e.g. `2025-eaton-fire-72660a`.
+CAL FIRE rows: `f"{year}-{slug(name)}-{calfire_uid[:6].lower()}"` (year of `Started`), e.g. `2025-eaton-fire-dbfa57`.
+NIFC WFIGS rows (brief 3): `f"{UFI year}-{slug(name)}-{IRWIN id[:6].lower()}"` (the `UniqueFireIdentifier` year and
+the IRWIN id without braces), e.g. `2025-black-cove-95c3c8`. Every California id keeps resolving; ids nobody lists
+(fixtures, local bundles) are served read-only from their manifest and never rebuilt.
 `slug`: lowercase, strip, non-alphanumerics → `-`, collapse repeats, trim `-`.
 The fixture uses id `fixture-demo`.
 
@@ -751,10 +771,13 @@ provider is skipped for 5 min after a failure and paused 30 s after HTTP 429). R
 Only fire aircraft are returned unless `all=1`. `agl_m` uses the DEM when the aircraft is inside the AOI.
 
 ### 8.7 Live refresh (`api/live.py`)
-An asyncio loop every 15 min refreshes the CAL FIRE live list and the FIRMS 7d feeds. Then:
-- every ready live bundle's `manifest.summary` follows CAL FIRE (acres, containment, update time, active flag,
-  location fields, `detections_24h`): an atomic manifest update, no rebuild, `built_ms` unchanged. An incident that
-  left the live list is looked up in CAL FIRE's year list (cached 24 h);
+An asyncio loop every 15 min refreshes the national live list (every active wildfire of the lower 48: CAL FIRE in
+California, NIFC WFIGS elsewhere; brief 3) and the national FIRMS 7d feeds (`firms.load_live_us(days=7)`, the
+lower-48 box with a 0.5° margin). Then:
+- every ready live bundle's `manifest.summary` follows its records (acres, containment, update time, active flag,
+  location fields, `detections_24h`, and since brief 3 `active_sources`, `other_records`, `complex_members`,
+  `irwin_id`, `gacc`, `accuracy_region`): an atomic manifest update, no rebuild, `built_ms` unchanged. An incident
+  that left the live list is looked up in its year list;
 - for each built live bundle with detections newer than `now_ms` (or built > 3 h ago, which picks up quiet
   satellite passes):
   - re-run `build_observed` and `build_weather`;
@@ -765,7 +788,9 @@ An asyncio loop every 15 min refreshes the CAL FIRE live list and the FIRMS 7d f
 Max 1 forecast job at a time.
 
 Auto-build on startup (env `FIRE3D_AUTO_BUILD_LIVE=1`, default on): up to 4 live incidents with ≥ 100 acres and
-detections in the last 48 h. Builds run sequentially.
+detections in the last 48 h, chosen from the whole lower-48 live list (brief 3, round 2 item 4). Builds run
+sequentially. `LiveStatus.detections_24h` counts the feed's last 24 h inside the lower-48 state polygons
+(`detections_24h_ca`, California, stays for one release).
 
 ## 9. Frontend
 

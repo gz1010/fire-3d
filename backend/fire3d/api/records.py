@@ -138,7 +138,7 @@ def incident_record_payload(incident_id: str) -> dict[str, Any]:
         status="available", reason_code=None, reason=None,
         source={**RECORD_SOURCE, "url": wfigs.record_url(irwin)},
         source_updated_ms=rec.get("updated_ms"),
-        unique_fire_id=rec.get("unique_fire_id"), agency_code=rec.get("agency_code"), agency=None,
+        unique_fire_id=rec.get("unique_fire_id"), agency_code=rec.get("agency_code"), agency=catalog.agency_name(rec.get("agency_code")),
         protecting_unit=rec.get("protecting_unit"), state=st, county=rec.get("county"), time_zone=tz,
         current={
             "name": rec.get("source_name") or "", "acres": rec.get("acres"), "percent_contained": rec.get("percent_contained"),

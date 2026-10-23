@@ -49,7 +49,7 @@ def test_wfigs_row_record_available(world, client) -> None:
     world["srv"].all_years = list(world["srv"].current)
     d = _record(client, pine.id)
     assert d["status"] == "available" and d["reason_code"] is None
-    assert d["irwin_id"] == ID["E1E2E3E4"] and d["agency_code"] == "USFS" and d["agency"] is None
+    assert d["irwin_id"] == ID["E1E2E3E4"] and d["agency_code"] == "USFS" and d["agency"] == "USDA Forest Service"
     assert d["incident_url"].startswith("https://") and "f=html" in d["incident_url"] and d["dataset_url"].startswith("https://")
     assert d["current"]["name"] == "PINE" and d["current"]["is_active"] is True and d["current"]["acres"] == 1200
     assert d["current"]["updated_ms"] and d["source_updated_ms"] == d["current"]["updated_ms"] and d["retrieved_ms"]
@@ -132,3 +132,37 @@ def test_region_status_rule(tmp_path: Path) -> None:
     assert len(d["regions"]) == 10 and d["regions"][0]["status"] == "limited"
     assert {x["status"] for x in d["regions"][1:]} == {"untested"}
     assert contract_problems(AccuracyRegionsResponse, d) == []
+
+
+def test_california_county_gacc_fallback() -> None:
+    import orjson
+
+    raw = orjson.loads(catalog.CA_COUNTY_GACC_FILE.read_bytes())
+    nulls = sorted(v["name"] for v in raw["counties"].values() if v["gacc"] is None)
+    assert nulls == ["Alpine", "Imperial", "Mono", "San Joaquin", "Sierra", "Stanislaus"]
+    assert raw["meta"]["credit"] == "NIFC WFIGS (IRWIN)" and raw["meta"]["retrieved"]
+    assert catalog.ca_county_region(-118.07, 34.20) == "OSCC"          # Los Angeles County (Altadena)
+    assert catalog.ca_county_region(-122.39, 40.59) == "ONCC"          # Shasta County (Redding)
+    assert catalog.ca_county_region(-120.99, 37.64) is None            # Stanislaus County (Modesto): mixed
+    assert catalog.ca_county_region(-116.2, 43.6) is None              # not California
+    from fire3d.sources.calfire import normalize_incident
+
+    rec = normalize_incident({"Name": "Test Fire", "UniqueId": "abcdef12-0000", "Started": "2026-07-01T20:00:00Z",
+                              "Latitude": 34.2, "Longitude": -118.07, "IsActive": False, "Type": "Wildfire", "AcresBurned": 500})
+    s = catalog.summary_from_record(rec, "historical")
+    assert s.accuracy_region == "OSCC" and s.gacc is None              # region from the county table, no GACC claimed
+
+
+def test_nwcg_agency_names() -> None:
+    import orjson
+
+    raw = orjson.loads(catalog.AGENCY_CODES_FILE.read_bytes())
+    assert "PMS 931" in raw["meta"]["source"] and "public domain" in raw["meta"]["terms"] and raw["meta"]["checked"]
+    assert catalog.agency_name("USFS") == "USDA Forest Service" and catalog.agency_name("C&L") == "County and Local"
+    assert catalog.agency_name("DNR") == "Department of Natural Resources" and catalog.agency_name("BLM") == "Bureau of Land Management"
+    assert catalog.agency_name("USMC") is None and catalog.agency_name(None) is None      # unknown: shown verbatim
+    rows = [r for r in __import__("json").loads((__import__("pathlib").Path(__file__).parent / "data" / "firedata" /
+                                                  "us_wfigs_current.json").read_text())["features"]]
+    used = {r["attributes"]["POOProtectingAgency"] for r in rows if r["attributes"]["POOProtectingAgency"]}
+    named = {c for c in used if catalog.agency_name(c)}
+    assert len(named) >= 0.75 * len(used)                                 # most codes in use have a plain name

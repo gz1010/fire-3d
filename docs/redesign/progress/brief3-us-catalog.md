@@ -25,16 +25,20 @@ national search). Ports API 8711, Vite 5181. Started 2026-10-23 ~00:20 UTC.
 
 - M5: national gazetteer (places + counties + ZCTAs; cut line (a) done), geocode.py national parsing and fields.
 
+- Acceptance on API 8711 (FIRE3D_LIVE=0): live 235 rows / 23 states / 0 outside; 2026 1,192; 2025 856; OR 85; gzip 13.5 %;
+  detections_24h 10,816 vs _ca 199; geo lookup ID/AK/Tijuana ok; accuracy 10 regions; record available; fixture-east ok.
+- Web gates: typecheck 0, lint 55 (scene), vitest 64 files / 835 tests, build ok.
+- Cut line: (a) in M5, (b) ca_county_gacc, (d) SPEC prose, (e) nwcg_agency_codes, (f) id pinning done; (c) KD-tree not done
+  (dense 235x11,792 in 0.57 s).
+
 ## Next
-- Cut-line items (b) ca_county_gacc, (e) nwcg codes, (d) SPEC prose, (c) KD-tree?, (f) id pinning; then gates,
-  curl acceptance on 8711, wording scan, report.
+- Final gates, wording scan, key scan, report.
 
 ## Decisions
 - §14.1 before-validator implemented as an after-validator using model_fields_set (a before-validator breaks strict
   JSON tuple checks for bbox_lonlat). Same effect. Recorded in contract3/us-catalog.md "Deviations".
 
 ## Open problems
-- tests/test_official_calfire.py:224 (us-pipeline) asserts default year 2025; fails since M3 (contract default
-  year = current UTC year). Exact fix in contract3/us-catalog.md "Changes other roles need".
+- (resolved: tests/test_official_calfire.py now passes at HEAD.)
 - tests/test_official_nws.py::test_endpoint_live_alert_near_a_fire fails in the shared tree with us-pipeline's
   uncommitted nws.py/official.py/test_official_nws.py edits (not my files); rerun after their next commit.

@@ -1,0 +1,52 @@
+{
+ "meta": {
+  "source": "NWCG Standards for Unit Identifiers, PMS 931 (September 2022), section 4 'Tier 2 (Organizational Unit Agency)'",
+  "url": "https://www.nwcg.gov/publications/pms931",
+  "pdf": "https://fs-prod-nwcg.s3.us-gov-west-1.amazonaws.com/s3fs-public/publication/pms931.pdf",
+  "checked": "2026-10-23",
+  "terms": "PMS 931: 'Publications and training materials produced by NWCG are in the public domain. Use of public domain information, including copying, is permitted. Use of NWCG information within another document is permitted if NWCG information is accurately credited to NWCG.' (no NWCG logo is used)",
+  "credit": "Agency names: NWCG unit identifiers",
+  "scope": "The protecting-agency codes NIFC WFIGS (IRWIN) uses in POOProtectingAgency, named as PMS 931 names them; any other code is shown verbatim.",
+  "equivalents": {
+   "USFS": "PMS 931 'FS' (Forest Service) under Tier 1 'USDA' (Department of Agriculture)",
+   "USFWS": "PMS 931 'FWS' (Fish & Wildlife Service) under Tier 1 'DOI'",
+   "CAL FIRE": "PMS 931 'CDF' (California Department of Forestry & Fire Protection)"
+  },
+  "not_named": [
+   "INTER",
+   "SHP",
+   "TRIBE",
+   "USMC"
+  ]
+ },
+ "codes": {
+  "BIA": "Bureau of Indian Affairs",
+  "BLM": "Bureau of Land Management",
+  "BOR": "Bureau of Reclamation",
+  "C&L": "County and Local",
+  "CAL FIRE": "California Department of Forestry and Fire Protection",
+  "DFF": "Division of Forestry Fire & State Lands",
+  "DFR": "Division of Forest Resources",
+  "DL": "Department of Lands",
+  "DNR": "Department of Natural Resources",
+  "DNRC": "Department of Natural Resources and Conservation",
+  "DOF": "Department of Forestry",
+  "DVF": "Division of Forestry",
+  "DWF": "Division of Wildland Fire",
+  "FC": "Forestry Commission",
+  "FFC": "Bureau of Forest Fire Control",
+  "FFS": "Forest Fire Service",
+  "NPS": "National Park Service",
+  "OF": "Office of Forestry",
+  "PRI": "Private",
+  "SF": "State Forestry",
+  "SFS": "State Forest Service",
+  "TNC": "The Nature Conservancy",
+  "USA": "United States Army",
+  "USACE": "United States Army Corps of Engineers",
+  "USAF": "United States Air Force",
+  "USFS": "USDA Forest Service",
+  "USFWS": "U.S. Fish and Wildlife Service",
+  "USN": "United States Navy"
+ }
+}

@@ -40,6 +40,7 @@ import math
 import re
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -189,6 +190,25 @@ def bundle_status_for(incident_id: str) -> tuple[str, int | None]:
     return st, (int(built) if isinstance(built, (int, float)) and st != "building" else None)
 
 
+_AGENCY_NAMES: dict[str, str] | None = None
+AGENCY_CODES_FILE = Path(__file__).resolve().parent / "data" / "nwcg_agency_codes.json"
+
+
+def agency_name(agency_code: str | None) -> str | None:
+    """The plain name of a protecting-agency code as NWCG's Unit Identifier standard (PMS 931) names it
+    (``data/nwcg_agency_codes.json``: "USFS" -> "USDA Forest Service", "C&L" -> "County and Local"); None for a code
+    the table does not name (the code is then shown verbatim)."""
+    global _AGENCY_NAMES
+    if _AGENCY_NAMES is None:
+        try:
+            _AGENCY_NAMES = dict(orjson.loads(AGENCY_CODES_FILE.read_bytes()).get("codes") or {})
+        except (OSError, ValueError, AttributeError) as e:
+            log.info("nwcg_agency_codes.json unavailable (%s): agency codes are shown verbatim", e)
+            _AGENCY_NAMES = {}
+    code = " ".join(str(agency_code or "").split())
+    return _AGENCY_NAMES.get(code) if code else None
+
+
 def issuer_for(agency_code: str | None) -> str:
     """CONTRACT 14.2 issuer text of a WFIGS record: "<CODE verbatim> via NIFC WFIGS", else "NIFC WFIGS (IRWIN)"."""
     code = " ".join(str(agency_code or "").split())
@@ -211,6 +231,31 @@ def accuracy_region_for(gacc: str | None, state: str | None) -> str | None:
     if g == "SACC":
         return "SACC-SP" if str(state or "").upper() in SOUTHERN_PLAINS else "SACC-SE"
     return g if g in ACCURACY_REGIONS else None
+
+
+_CA_COUNTY_GACC: dict[str, str | None] | None = None
+CA_COUNTY_GACC_FILE = Path(__file__).resolve().parent / "data" / "ca_county_gacc.json"
+
+
+def ca_county_region(lon: float, lat: float) -> str | None:
+    """CONTRACT 14.4 fallback for a California fire no WFIGS record matches: the GACC of its county when that
+    county's WFIGS fires are >= 80 % one GACC (``data/ca_county_gacc.json``, ``scripts/build_ca_county_gacc.py``);
+    None for the six mixed counties, outside California, or without the file."""
+    global _CA_COUNTY_GACC
+    from . import regions
+
+    if _CA_COUNTY_GACC is None:
+        try:
+            raw = orjson.loads(CA_COUNTY_GACC_FILE.read_bytes())
+            _CA_COUNTY_GACC = {k: v.get("gacc") for k, v in (raw.get("counties") or {}).items()}
+        except (OSError, ValueError, AttributeError) as e:
+            log.info("ca_county_gacc.json unavailable (%s): California fires without a WFIGS record get no region", e)
+            _CA_COUNTY_GACC = {}
+    c = regions.county_at(lon, lat)
+    if c is None or c.state != "CA":
+        return None
+    key = " ".join(c.name.lower().replace("county", " ").split())
+    return accuracy_region_for(_CA_COUNTY_GACC.get(key), "CA")
 
 
 def is_supported(summary: IncidentSummary | dict | None) -> bool:
@@ -261,7 +306,7 @@ def active_irwin_ids(current_rows: list[dict]) -> set[str]:
 def other_record(rec: dict, current_irwins: set[str]) -> OtherRecord:
     """A WFIGS record as an ``other_records`` entry of a CAL FIRE row (its own name, issuer, numbers, status, time)."""
     return OtherRecord(source="wfigs", id=rec["irwin_id"], name=rec.get("source_name") or "", issuer=issuer_for(rec.get("agency_code")),
-                       agency=None, agency_code=rec.get("agency_code"), acres=rec.get("acres"),
+                       agency=agency_name(rec.get("agency_code")), agency_code=rec.get("agency_code"), acres=rec.get("acres"),
                        percent_contained=rec.get("percent_contained"), is_active=wfigs_active(rec, current_irwins),
                        updated_ms=rec.get("updated_ms"), url=rec.get("url"))
 
@@ -306,6 +351,7 @@ def summary_from_record(rec: dict, mode: Mode, detections_24h: int | None = None
         time_zone=tz,
         agency=CALFIRE_NAME,
         source_name=rec.get("Name") or rec["name"],
+        accuracy_region=ca_county_region(lon, lat) if state == "CA" else None,
         active_sources=["calfire"] if rec.get("is_active") else [],
     )
 
@@ -346,7 +392,7 @@ def summary_from_wfigs(rec: dict, mode: Mode, current_irwins: set[str], state: s
         record_issuer=issuer_for(rec.get("agency_code")),
         state=st,
         time_zone=tz,
-        agency=None,
+        agency=agency_name(rec.get("agency_code")),
         agency_code=rec.get("agency_code"),
         irwin_id=rec["irwin_id"],
         unique_fire_id=rec.get("unique_fire_id"),
@@ -566,8 +612,9 @@ def enrich_calfire(s: IncidentSummary, matched: list[dict], members: list[dict],
     srcs = (["calfire"] if cal_active else []) + (["wfigs"] if wf_active else [])
     active = {"either": cal_active or wf_active, "calfire": cal_active, "wfigs": wf_active}.get(CA_ACTIVE_RULE, cal_active or wf_active)
     gacc = _common([r.get("gacc") for r in recs])
+    region = accuracy_region_for(gacc, s.state) or (ca_county_region(s.lon, s.lat) if s.state == "CA" else None)
     upd: dict[str, Any] = {"other_records": ors, "active_sources": srcs, "is_active": active, "gacc": gacc,
-                           "accuracy_region": accuracy_region_for(gacc, s.state)}
+                           "accuracy_region": region}
     primary = None
     if not (members or is_complex):
         same_name = [r for r in matched if name_tokens(r.get("source_name")) == name_tokens(s.name)]
@@ -578,7 +625,23 @@ def enrich_calfire(s: IncidentSummary, matched: list[dict], members: list[dict],
             upd["complex_members"] = [r.get("source_name") or "" for r in members]
     else:
         upd.update(irwin_id=primary["irwin_id"], unique_fire_id=primary.get("unique_fire_id"))
+        pinned = pinned_id(primary)
+        if pinned is not None and pinned != s.id:
+            upd.update(id=pinned, aliases=sorted({*(s.aliases or []), s.id}))
     return s.model_copy(update=upd)
+
+
+def wfigs_id(rec: dict) -> str:
+    """The id a WFIGS row is (or was) listed under: ``{UFI year}-{slug(display name)}-{IRWIN hex[:6]}``."""
+    return make_incident_id(int(rec["year"]), display_name(rec.get("source_name")), rec["irwin_id"])
+
+
+def pinned_id(rec: dict) -> str | None:
+    """CONTRACT 14.2 "Id pinning": the WFIGS id of a record CAL FIRE now lists, when a bundle already exists under that
+    id (built while the fire was WFIGS-only). The merged CAL FIRE row then keeps that id, so the bundle is never
+    orphaned or built twice; its CAL FIRE id becomes an alias. None when no bundle exists (the CAL FIRE id is used)."""
+    wid = wfigs_id(rec)
+    return wid if bundle_status_for(wid)[0] != "none" else None
 
 
 def dedupe_wfigs(rows: list[tuple[dict, str]]) -> list[tuple[dict, str]]:
@@ -686,8 +749,8 @@ def _live_base(refresh: bool) -> tuple[list[IncidentSummary], list[dict]]:
         summaries.append(summary_from_wfigs(r, "live", active, st))
     counts: list[int | None] = [None] * len(summaries)
     try:
-        t0 = time.monotonic()
         det = firms.load_live_us(1, refresh=refresh)
+        t0 = time.monotonic()
         lat, lon = det["lat"].to_numpy(), det["lon"].to_numpy()
         w, s_, e, n = config.CA_BBOX
         in_box = (lon >= w) & (lon <= e) & (lat >= s_) & (lat <= n)
