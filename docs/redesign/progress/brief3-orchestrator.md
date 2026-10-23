@@ -96,6 +96,12 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
   503 on list outages, Lucas same-name records merged, accuracy labels from real results in words/score per
   decision 7, 5 small bugs fixed). Final verification started: a two-reviewer read-only panel, then the
   final-verification agent (live national loop, one prepared fire, README, report), then a clean re-check.
+- ~17:30 UTC: final verification done (6b65a82..2587835): panel of 2 reviewers found 13 issues (1 blocker: with
+  both fire lists down the web contradicted itself and showed a fixture as an official fire; outages took up to
+  273 s), all fixed; live national loop: 228 active fires in 23 states, auto-build cap held (exactly 4, chosen
+  nationally) but Open-Meteo's daily limit refused all four builds and the one Prepare press (Sand Creek, MT), as
+  designed; README rewritten for the lower 48; gates: pytest 1005, vitest 1,197. Clean re-check: 9 minor findings
+  (official record time label, README accuracy, agency names, list wording, chip overlap): last fix round runs.
 - Lesson: never SendMessage a workflow agent (it starts a second copy); relay through files or Agent-tool agents.
 
 ## Carry-over items for later stages (integration unless a role owns the file)
