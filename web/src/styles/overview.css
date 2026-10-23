@@ -755,6 +755,7 @@
 }
 .os-text {
   color: var(--m-text);
+  overflow-wrap: anywhere; /* verbatim sender names can be one long word */
 }
 .os-src {
   color: var(--m-text-2);

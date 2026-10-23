@@ -72,6 +72,9 @@ describe('evacuation summary line (brief 3)', () => {
     expect(evacuationLine({ ...na, reason: 'Fire-3d covers the lower 48 states only. Follow local officials.' }, false).text).toBe('Fire-3d covers the lower 48 states only.')
     expect(evacuationLine({ state: 'none-listed', zones: [], checkedMs: 1, sourceUpdatedMs: 1, sourceUrl: null, caveat: '', checkedBy: 'Oregon OEM' }, false).source).toBe('Oregon OEM')
     expect(evacuationLine({ state: 'none-listed', zones: [], checkedMs: 1, sourceUpdatedMs: 1, sourceUrl: null, caveat: '' }, false).source).toBe('Cal OES') // brief-2 shape
+    // still checking (no answer): no source is guessed, in any state (Black Cove, NC read "Checking… (Cal OES)")
+    expect(evacuationLine({ state: 'loading', zones: [], checkedMs: null, sourceUpdatedMs: null, sourceUrl: null, caveat: '' }, false)).toMatchObject({ text: 'Checking…', source: null })
+    expect(evacuationLine({ state: 'unavailable', zones: [], checkedMs: null, sourceUpdatedMs: null, sourceUrl: null, caveat: '' }, false).source).toBeNull()
   })
 })
 

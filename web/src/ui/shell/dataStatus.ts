@@ -191,7 +191,7 @@ export function officialRows(inp: Pick<DataStatusInput, 'summary' | 'official'>,
       tip:
         ev.state === 'not-available'
           ? 'Fire-3d found no free, official, public, machine-readable state evacuation feed for this state (checked Oct 22, 2026). Follow local officials.'
-          : `${srcTips.length ? srcTips.join(' ') : tips.caloes_evacuations} Fire-3d checks every 2 minutes while live.`,
+          : `${srcTips.length ? `${srcTips.join(' ')} ` : ''}Fire-3d checks every 2 minutes while live.`,
     })
   }
 

@@ -704,6 +704,7 @@
   margin: 0;
   line-height: 1.35;
   color: var(--m-text);
+  overflow-wrap: anywhere; /* verbatim sender names can be one long word ("AZApacheCountyEmergencyManagement…") */
 }
 .on-line strong {
   font-weight: 600;
@@ -713,6 +714,7 @@
   font-size: var(--m-fs-xs);
   line-height: 1.35;
   color: var(--m-text-2);
+  overflow-wrap: anywhere;
 }
 .on-quote {
   margin: 2px 0 0;

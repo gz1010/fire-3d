@@ -144,7 +144,12 @@ export function evacuationWho(e: Pick<EvacuationOfficial, 'state' | 'checkedBy' 
   if (e.state === 'not-available') return null
   if (e.checkedBy) return e.checkedBy
   const names = [...new Set((e.sources ?? []).map((s) => s.aggregator))]
-  return names.length ? names.join(' and ') : e.sources ? null : 'Cal OES'
+  if (names.length) return names.join(' and ')
+  if (e.sources) return null
+  // a brief-2 answer (no `sources`: California only) was Cal OES's; with no answer yet (loading, an outage, a past
+  // date) the source is not known and never guessed (it named Cal OES for a fire in North Carolina while checking;
+  // integration part 2)
+  return e.state === 'listed' || e.state === 'none-listed' ? 'Cal OES' : null
 }
 export const NOT_ALL_CLEAR = 'That is not an all-clear: follow local officials.'
 const PAST_DATE_CAVEAT = 'Official evacuation status is published as current status only, so none is shown for past dates.'
