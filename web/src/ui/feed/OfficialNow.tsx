@@ -67,6 +67,13 @@ const join = (parts: (string | null | undefined | false)[]) => parts.filter(Bool
 
 const capital = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s)
 
+/** A reason as one sentence before "Follow local officials." (never said twice, always with its full stop). */
+function reasonSentence(reason: string | null | undefined): string {
+  const t = (reason ?? '').replace(/\s*:?\s*follow local officials\.?\s*$/i, '').trim()
+  if (!t) return ''
+  return /[.!?]$/.test(t) ? `${t} ` : `${t}. `
+}
+
 function EvacuationRow({ e, nowMs, wallMs, metric }: { e: EvacuationOfficial; nowMs: number; wallMs: number; metric: boolean }) {
   const highlightId = useOfficialRuntime((s) => s.highlight?.id ?? null)
   const groups = useMemo(() => groupZones(e.zones), [e.zones])
@@ -133,7 +140,7 @@ function EvacuationRow({ e, nowMs, wallMs, metric }: { e: EvacuationOfficial; no
     return (
       <Row icon={icon} label={label} source={e.state === 'unavailable' ? source : null} tone="muted" more={counties ?? undefined}>
         <p className="on-line">
-          <strong>{e.state === 'unavailable' ? 'Unavailable right now.' : 'Not checked.'}</strong> {e.reason ?? ''} Follow local officials.
+          <strong>{e.state === 'unavailable' ? 'Unavailable right now.' : 'Not checked.'}</strong> {reasonSentence(e.reason)}Follow local officials.
         </p>
       </Row>
     )

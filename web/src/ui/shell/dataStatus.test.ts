@@ -169,3 +169,15 @@ describe('official rows and freshness (brief 2, U-R9)', () => {
     expect([fmtAge(30_000), fmtAge(40 * 60_000), fmtAge(50 * H)]).toEqual(['1 min', '40 min', '2 d'])
   })
 })
+
+describe('evacuation row outside California (brief 3)', () => {
+  const oem = { id: 'or_oem_evacuations', aggregator: 'Oregon OEM', credit: 'Oregon Department of Emergency Management', url: 'https://www.arcgis.com/home/item.html?id=dd2bee51e3004dc4b1004df34fbd9e29', homeState: 'OR', answered: true, checkedMs: T0 - 60_000, updatedMs: T0 - 2 * H, reason: null }
+  it('names Oregon OEM with its own time; a state without a feed says so', () => {
+    const or = byKey(buildDataStatus({ ...input('live'), official: { evacuation: { state: 'none-listed', checkedMs: T0 - 60_000, sourceUpdatedMs: T0 - 2 * H, sources: [oem], checkedBy: 'Oregon OEM', zones: [] } } }, T0))
+    expect(or.evacuation.value).toMatch(/^Oregon OEM /)
+    expect(or.evacuation.tip).toMatch(/^Oregon OEM recalculates its statewide evacuation layer every 15 minutes/)
+    const na = byKey(buildDataStatus({ ...input('live'), official: { evacuation: { state: 'not-available', reason: 'Not available in this state (Montana)', sources: [] } } }, T0))
+    expect(na.evacuation).toMatchObject({ value: 'Not available in this state', detail: 'Not available in this state (Montana); follow local officials' })
+    expect(JSON.stringify(na.evacuation)).not.toMatch(/Cal OES/)
+  })
+})

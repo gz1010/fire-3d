@@ -76,3 +76,40 @@ fetching, envelope).
   description into `backend/tests/data/evacuations/` with `PROVENANCE.md`. Terms re-read 2026-10-23: item
   `licenseInfo` "Public", `accessInformation` "Oregon Department of Emergency Management".
 - Tests: `backend/tests/test_evacuations_sources.py` (40 cases) and `test_extras.py` unchanged.
+
+## 14.8.5 Evacuations, web (M3)
+
+- Types (`extras/types.ts`, optional until the integration): `ExtrasReasonCode` + `'state_not_available'`;
+  `ExtrasSource` + the §14.8.2 per-source fields and **`aggregator`** ("Cal OES" / "Oregon OEM"; an additive backend
+  field, see deviations); `EvacZoneProps` + the ten §14.8.2 props; `EvacStateEntry`, `EvacuationsResponse.states`.
+- `extras/evacuation.ts` (source-neutral): `zoneSourceId`, `aggregatorOf`, `sourceHomeState`, `answeredSources`,
+  `answeredNames`, `notFireSpecific(aggregator)` (`NOT_FIRE_SPECIFIC` kept, `@deprecated`), `statusLabel` (OEM's
+  definition for a non-verbatim level), `statusLevelNote`, `hazardNote` ("Evacuation for: Other, as recorded by Oregon
+  OEM"), `incidentNameNote` ("Fire name as recorded by Oregon OEM: …; a name match is not proof it is this fire"),
+  `zoneTimes` (+ `listedMs`, `basis`), `zoneListedPhrase` ("listed by Cal OES" / "added to the Oregon state layer"),
+  `zoneTimeText` and `zoneDetail` per `time_basis`, `evacuationSourceUrl` (first answered zone source), feed items
+  "<issuer> via <aggregator>" with "Oregon OEM's level" facts; `evacuationCredits` per listed source ("Evacuation
+  zones: local officials via Oregon Department of Emergency Management"); `EvacuationPanel` wording and per-source
+  freshness; `envelopeStatusLine` → "<what>: not available in this state" for `state_not_available` (cameras too).
+- `official/model.ts`: `EvacuationState` 'not-available' with `reason` "Not available in this state (Nevada)"
+  (outside the lower 48: the backend's coverage sentence), `notAvailableIn`, `sources: EvacuationSourceInfo[]` (per
+  source aggregator, credit, url, times, answered), `checkedBy` ("Oregon OEM", "Cal OES and Oregon OEM"),
+  `evacuationWho`. `OfficialZone` + `sourceId`, `aggregator`, `listedPhrase`, `verbatim`, `levelNote`, `hazardNote`,
+  `incidentNote`, `state` (all optional). **`insideCalifornia` left every path** (kept `@deprecated`, unused):
+  `needsPointQuery` asks the backend for any point outside the fire's area at the current time; a border answer
+  (several states, not all checked) decides by the point's state (`pointState` from `/api/geo/lookup`; `loading`
+  while unknown). NWS: `needsStatewideFireWeather` has no state gate; `fireWeatherAtPointState` decides "checked"
+  from `states_checked` (missing → `["CA"]`) and the point's state only (`statesChecked`, `coversLower48`,
+  `checkedScope`, `LOWER48_CODES`); the overview quiet caveat names `checkedScope` ("California" today, "the lower 48
+  states" with all 49 codes).
+- `official/hooks.ts`: `useOfficialAtPoint` looks the point up (`useGeoLookup`, us-web's `location/geoLookup.ts`) and
+  adds `place: OfficialPlace` to `OfficialInfo` (§14.9.6); `placeState`.
+- Card lines (`location/official.ts`): none listed "No evacuation order or warning listed here · {Oregon OEM}, checked
+  … · not an all-clear"; not available "Evacuation zones: not available in this state" (sub: the reason); Oregon zones
+  show OEM's definition with "Oregon OEM level; definition by Oregon OEM" and "issuer time not given; added to the
+  Oregon state layer <time>"; links are the answered sources' pages (no Cal OES link outside California).
+- Official now, compact summary, data status: the source names, times and tips per source; not available rows use
+  the §14.14 full sentence once (fixes us-pipeline's Horse Gulch note "Not available in this state. Not available in
+  this state (Montana) Follow local officials."); reasons end with a full stop before "Follow local officials."
+- Fixtures: `web/src/extras/__fixtures__/samplesUs.ts` (`OR_EVAC_MEDFORD` from the recorded OEM sample,
+  `OR_EVAC_KLAMATH_NONE`, `EVAC_RENO_NOT_AVAILABLE`), generated offline from the backend with simplified outlines.

@@ -49,3 +49,11 @@ describe('Public official summary lines', () => {
     expect(lines.map((l) => l.key)).toEqual(['evacuation', 'calfire', 'fire-weather'])
   })
 })
+
+describe('evacuation summary line (brief 3)', () => {
+  it('a state without a feed: "Not available in this state." with no source tag; Oregon names Oregon OEM', () => {
+    expect(evacuationLine({ state: 'not-available', zones: [], checkedMs: null, sourceUpdatedMs: null, sourceUrl: null, caveat: '', sources: [] }, false)).toMatchObject({ text: 'Not available in this state.', source: null })
+    expect(evacuationLine({ state: 'none-listed', zones: [], checkedMs: 1, sourceUpdatedMs: 1, sourceUrl: null, caveat: '', checkedBy: 'Oregon OEM' }, false).source).toBe('Oregon OEM')
+    expect(evacuationLine({ state: 'none-listed', zones: [], checkedMs: 1, sourceUpdatedMs: 1, sourceUrl: null, caveat: '' }, false).source).toBe('Cal OES') // brief-2 shape
+  })
+})

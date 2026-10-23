@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { EVAC_SAMPLE } from './__fixtures__/samples'
 import {
+  answeredNames,
+  evacuationSourceUrl,
+  hazardNote,
   EVAC_LAYERS,
   EVAC_PATTERN_IDS,
   evacDisplayData,
