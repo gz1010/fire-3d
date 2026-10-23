@@ -1750,10 +1750,12 @@ export class MapController {
     // perimeters
     const per = m && layers.perimeters ? (s.perimeters?.perimeters ?? []) : []
     const shownPer = per.filter((p) => p.t_ms <= t).length
-    const perKey = `${m?.id}|${per.length}|${shownPer}`
+    const tf = getTimeFormat()
+    // the labels carry times in the fire's zone and the preset's clock: a preset switch relabels them
+    const perKey = `${m?.id}|${per.length}|${shownPer}|${tf.tz}|${tf.clock}`
     if (perKey !== this.keys.perim) {
       this.keys.perim = perKey
-      const { fc, latest } = m ? perimeterFeatures(per, m.grid, t) : { fc: EMPTY, latest: null }
+      const { fc, latest } = m ? perimeterFeatures(per, m.grid, t, tf) : { fc: EMPTY, latest: null }
       this.setData(SRC.perimeters, fc)
       patchOverlays({ perimeter: { latestMs: latest?.t_ms ?? null, count: fc.features.length } })
     }

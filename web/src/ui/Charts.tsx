@@ -12,9 +12,10 @@ import type { ForecastManifest, IncidentManifest } from '../api/types'
 import { fmtAxis, fmtNumber } from '../lib/format'
 import { sampleBilinear, sampleNearest } from '../lib/geo'
 import { loadForecastLayer, loadLayer } from '../lib/raster'
-import { HOUR_MS, fmtDateTime, laWallTicks, tickStepHours, tzLabel } from '../lib/time'
+import { HOUR_MS, fmtAt, localWallTicks, tickStepHours, zoneAbbr } from '../lib/time'
 import { interpAt, lastIndexAtOrBefore } from '../state/selectors'
 import { useStore, type TimeWindow } from '../state/store'
+import { useTimeFormat } from '../state/timeZone'
 import { useWorkspace } from '../state/workspace'
 import { MenuItem, Popover } from './controls'
 import { useElementSize } from './hooks'
@@ -189,11 +190,12 @@ function YGrid({ y, ticks, w, fmt = fmtCompact }: { y: Lin; ticks: number[]; w: 
 }
 
 function TimeAxis({ x, win, w, h }: { x: Lin; win: TimeWindow; w: number; h: number }) {
+  const tf = useTimeFormat()
   const ticks = useMemo(() => {
     const step = tickStepHours(win.endMs - win.startMs, w - M.l - M.r, 54)
-    const list = laWallTicks(win.startMs, win.endMs, step)
+    const list = localWallTicks(win.startMs, win.endMs, step, tf)
     return list.map((t) => ({ t: t.t, label: step >= 24 || t.day ? t.dayLabel : t.timeLabel, day: t.day }))
-  }, [win.startMs, win.endMs, w])
+  }, [win.startMs, win.endMs, w, tf])
   return (
     <g className="ax ax-x">
       <line x1={M.l} x2={w - M.r} y1={h - M.b} y2={h - M.b} className="base" />
@@ -229,6 +231,7 @@ function TimeHover({
   win: TimeWindow
   rows: (t: number) => ReadoutRow[]
 }) {
+  const tf = useTimeFormat()
   const [hx, setHx] = useState<number | null>(null)
   const drag = useRef(false)
   const toT = (px: number) => Math.round(x.invert(clamp(px, M.l, w - M.r)) / HOUR_MS) * HOUR_MS
@@ -267,7 +270,7 @@ function TimeHover({
           <span className="xhair" style={{ left: x(t) - M.l }} />
           <div className={`readout ${left ? 'is-left' : ''}`} style={{ left: x(t) - M.l }}>
             <div className="ro-time mono">
-              {fmtDateTime(t)} <span className="muted">{tzLabel(t)}</span>
+              {fmtAt(t, tf)} <span className="muted">{zoneAbbr(t, tf.tz)}</span>
             </div>
             {rs.map((r) => (
               <div key={r.label} className="ro-row">
@@ -918,6 +921,7 @@ function BurnOverlay({
 }
 
 function ProfileHover({ samples, manifest, x, y, w, h }: { samples: ProfileSamples; manifest: IncidentManifest; x: Lin; y: Lin; w: number; h: number }) {
+  const tf = useTimeFormat()
   const [k, setK] = useState<number | null>(null)
   const n = samples.d.length
   const onMove = (e: RPointerEvent<HTMLDivElement>) => {
@@ -969,7 +973,7 @@ function ProfileHover({ samples, manifest, x, y, w, h }: { samples: ProfileSampl
             {samples.arr && (
               <div className="ro-row">
                 <i className="rk rk-band" style={{ ['--c' as string]: 'var(--fire)' }} />
-                <span className="ro-val mono">{arr != null && arr < NEVER_H ? fmtDateTime(manifest.time_origin_ms + arr * HOUR_MS) : 'unburned'}</span>
+                <span className="ro-val mono">{arr != null && arr < NEVER_H ? fmtAt(manifest.time_origin_ms + arr * HOUR_MS, tf) : 'unburned'}</span>
                 <span className="ro-label">{arr != null && arr < NEVER_H ? 'fire arrival' : ''}</span>
               </div>
             )}

@@ -5,9 +5,10 @@ import { useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { DetectionsFile, IncidentManifest, Instrument, PerimetersFile } from '../api/types'
 import { fmtAcres, fmtNumber, satelliteName } from '../lib/format'
-import { fmtDateTime, fmtDateTimeYearTz, fmtRelative, tzLabel } from '../lib/time'
+import { fmtAt, fmtRelative, zoneAbbr } from '../lib/time'
 import { lastIndexAtOrBefore } from '../state/selectors'
 import { useStore } from '../state/store'
+import { useTimeFormat } from '../state/timeZone'
 import { EmptyNote, Section } from './controls'
 import { useNow } from './hooks'
 import { DataSourcesNote } from './DataCredits'
@@ -54,6 +55,7 @@ interface InstrumentRow {
 }
 
 function Detections({ file }: { file: DetectionsFile | null }) {
+  const tf = useTimeFormat()
   // count up to the current time in coarse (hourly) steps so playback doesn't re-render every frame
   const hour = useStore((s) => Math.floor(s.timeMs / 3_600_000))
   const rows = useMemo<InstrumentRow[]>(() => {
@@ -98,7 +100,7 @@ function Detections({ file }: { file: DetectionsFile | null }) {
           </div>
           {rows.map((r) => (
             <div key={r.instrument} className="det-group">
-              <div className="det-row" data-tip={`${INSTRUMENT_NOTE[r.instrument]}${r.first ? ` · ${fmtDateTime(r.first)} → ${fmtDateTime(r.last!)}` : ''}`}>
+              <div className="det-row" data-tip={`${INSTRUMENT_NOTE[r.instrument]}${r.first ? ` · ${fmtAt(r.first, tf)} → ${fmtAt(r.last!, tf)}` : ''}`}>
                 <span className="det-name">
                   <i className={`det-dot det-${r.instrument.toLowerCase()}`} />
                   <span>{r.instrument === 'LANDSAT' ? 'Landsat' : r.instrument}</span>
@@ -128,6 +130,7 @@ function Detections({ file }: { file: DetectionsFile | null }) {
 }
 
 function Perimeters({ file }: { file: PerimetersFile | null }) {
+  const tf = useTimeFormat()
   const list = useMemo(() => file?.perimeters ?? [], [file])
   const t = useMemo(() => list.map((p) => p.t_ms), [list])
   const current = useStore((s) => lastIndexAtOrBefore(t, s.timeMs))
@@ -153,7 +156,7 @@ function Perimeters({ file }: { file: PerimetersFile | null }) {
             >
               <span className="perim-dot" />
               <span className="mono perim-t">
-                {fmtDateTime(p.t_ms)} <span className="muted">{tzLabel(p.t_ms)}</span>
+                {fmtAt(p.t_ms, tf)} <span className="muted">{zoneAbbr(p.t_ms, tf.tz)}</span>
               </span>
               <span className="mono perim-a">{fmtAcres(p.acres)}</span>
               <span className="perim-src muted ellipsis">{/final/i.test(p.source) ? 'final' : 'daily'}</span>
@@ -166,6 +169,7 @@ function Perimeters({ file }: { file: PerimetersFile | null }) {
 }
 
 function Sources({ manifest, weatherSource }: { manifest: IncidentManifest; weatherSource: string | null }) {
+  const tf = useTimeFormat()
   const now = useNow(60_000)
   return (
     <Section title="Data sources" aside={<span className="mono muted">{manifest.data_sources.length}</span>}>
@@ -174,7 +178,7 @@ function Sources({ manifest, weatherSource }: { manifest: IncidentManifest; weat
           <li key={i} className="source">
             <div className="source-top">
               <span className="source-name">{d.name}</span>
-              <span className="mono muted" data-tip={`Fetched ${fmtDateTimeYearTz(d.fetched_ms)}`}>
+              <span className="mono muted" data-tip={`Fetched ${fmtAt(d.fetched_ms, tf, { year: 'always', zone: true })}`}>
                 {fmtRelative(d.fetched_ms, now)}
               </span>
             </div>
@@ -201,6 +205,7 @@ function Sources({ manifest, weatherSource }: { manifest: IncidentManifest; weat
 }
 
 function BundleFacts({ manifest }: { manifest: IncidentManifest }) {
+  const tf = useTimeFormat()
   const g = manifest.grid
   const now = useNow(60_000)
   return (
@@ -209,7 +214,7 @@ function BundleFacts({ manifest }: { manifest: IncidentManifest }) {
         <dt>ID</dt>
         <dd className="mono ellipsis">{manifest.id}</dd>
         <dt>Built</dt>
-        <dd className="mono" data-tip={fmtDateTimeYearTz(manifest.built_ms)}>
+        <dd className="mono" data-tip={fmtAt(manifest.built_ms, tf, { year: 'always', zone: true })}>
           {fmtRelative(manifest.built_ms, now)}
         </dd>
         <dt>AOI</dt>
@@ -232,7 +237,7 @@ function BundleFacts({ manifest }: { manifest: IncidentManifest }) {
         <dd className="ellipsis" data-tip={manifest.ignition?.source}>
           {manifest.ignition ? (
             <>
-              <span className="mono">{fmtDateTime(manifest.ignition.t_ms)}</span> <span className="muted">· {manifest.ignition.source}</span>
+              <span className="mono">{fmtAt(manifest.ignition.t_ms, tf)}</span> <span className="muted">· {manifest.ignition.source}</span>
             </>
           ) : (
             '—'

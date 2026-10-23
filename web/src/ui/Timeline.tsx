@@ -5,7 +5,8 @@ import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type RefObject } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { ForecastManifest, IncidentManifest, TimeseriesFile } from '../api/types'
-import { HOUR_MS, fmtDateTime, fmtDay, fmtTPlus, laWallTicks, tickStepHours, tzLabel } from '../lib/time'
+import { HOUR_MS, fmtAt, fmtDayDate, fmtTPlus, localWallTicks, tickStepHours, zoneAbbr, zoneLine } from '../lib/time'
+import { useTimeFormat, useZoneSource } from '../state/timeZone'
 import { useIncidentAnnotations } from '../state/annotations'
 import { SPEEDS_HOURS_PER_SEC, getTimeBounds, nowMarkerMs, useStore, type TimeWindow, type WindowPreset } from '../state/store'
 import { IconButton, Segmented, SelectMenu } from './controls'
@@ -29,6 +30,8 @@ export function Timeline() {
       incidentId: s.incidentId,
     })),
   )
+  const tf = useTimeFormat()
+  const zoneSource = useZoneSource()
   const notes = useIncidentAnnotations(incidentId)
   const items = useMemo(() => mergeEvents(events?.events, notes), [events, notes])
   const win = useTimelineWindow()
@@ -73,8 +76,8 @@ export function Timeline() {
           ]}
         />
         {win && (
-          <span className="tl-range mono" data-tip={`Window shown · times in ${tzLabel(win.startMs)}`}>
-            {fmtDateTime(win.startMs)} – {fmtDateTime(win.endMs)}
+          <span className="tl-range mono" data-tip={`Window shown · ${zoneLine(tf, win.startMs, zoneSource)}`}>
+            {fmtAt(win.startMs, tf)} – {fmtAt(win.endMs, tf)}
           </span>
         )}
       </div>
@@ -89,6 +92,7 @@ export function Timeline() {
 
 function TimeReadout({ manifest, forecast }: { manifest: IncidentManifest | null; forecast: ForecastManifest | null }) {
   const minute = useStore((s) => Math.floor(s.timeMs / 60_000))
+  const tf = useTimeFormat()
   if (!manifest) return <span className="tl-now mono muted">—</span>
   const t = minute * 60_000
   const ign = manifest.ignition?.t_ms ?? manifest.time_range.start_ms
@@ -99,7 +103,7 @@ function TimeReadout({ manifest, forecast }: { manifest: IncidentManifest | null
   return (
     <span className="tl-now">
       <span className="mono gold-strong">
-        {fmtDateTime(t)} <span className="tl-tz">{tzLabel(t)}</span>
+        {fmtAt(t, tf)} <span className="tl-tz">{zoneAbbr(t, tf.tz)}</span>
       </span>
       <span className="mono muted" data-tip="Time since ignition">
         {fmtTPlus((t - ign) / HOUR_MS)}
@@ -239,10 +243,11 @@ const TrackSvg = memo(function TrackSvg({
   const bounds = { startMs: b0, endMs: b1 }
   const BAR_Y = 24
   const BAR_H = 6
+  const tf = useTimeFormat()
   const ticks = useMemo(() => {
     const step = tickStepHours(win.endMs - win.startMs, w - 2 * PAD, 46)
-    return { step, list: laWallTicks(win.startMs, win.endMs, step) }
-  }, [win.startMs, win.endMs, w])
+    return { step, list: localWallTicks(win.startMs, win.endMs, step, tf) }
+  }, [win.startMs, win.endMs, w, tf])
   // hourly activity strip: growth (acres/h) normalised by the window max, sqrt-compressed
   const strip = useMemo(() => {
     if (!timeseries) return null
@@ -289,7 +294,7 @@ const TrackSvg = memo(function TrackSvg({
         const x = xOf(tk.t)
         const major = tk.day
         // dates on the first line (day boundaries, plus the first tick for context), times on the second
-        const date = major || i === 0 ? fmtDay(tk.t) : ''
+        const date = major || i === 0 ? fmtDayDate(tk.t, tf.tz) : ''
         return (
           <g key={tk.t} className={major ? 'tl-tick is-day' : 'tl-tick'}>
             <line x1={x} x2={x} y1={BAR_Y + BAR_H + 2} y2={BAR_Y + BAR_H + (major ? 8 : 5)} />
@@ -337,6 +342,7 @@ function spreadPositions(xs: number[], minGap: number): number[] {
 
 function Markers({ items, xOf, win }: { items: TimelineItem[]; xOf: (t: number) => number; win: TimeWindow }) {
   const selected = useStore((s) => s.selectedEventId)
+  const tf = useTimeFormat()
   const visible = items.filter((it) => it.t >= win.startMs && it.t <= win.endMs)
   const xs = spreadPositions(
     visible.map((it) => xOf(it.t)),
@@ -352,8 +358,8 @@ function Markers({ items, xOf, win }: { items: TimelineItem[]; xOf: (t: number) 
             type="button"
             className={`tl-marker glyph-${style.glyph} ${selected === it.id ? 'is-selected' : ''}`}
             style={{ left: xs[i], color: style.color }}
-            data-tip={`${it.title} · ${fmtDateTime(it.t)}`}
-            aria-label={`${it.title}, ${fmtDateTime(it.t)}`}
+            data-tip={`${it.title} · ${fmtAt(it.t, tf)}`}
+            aria-label={`${it.title}, ${fmtAt(it.t, tf)}`}
             onClick={() => goToItem(it)}
           >
             <Glyph kind={style.glyph} />
@@ -410,30 +416,32 @@ export function Glyph({ kind, size = 10 }: { kind: string; size?: number }) {
 const edgeClass = (x: number, w: number, half = 48) => (x < half ? 'is-left' : x > w - half ? 'is-right' : '')
 
 function HoverGhost({ x, t, w }: { x: number; t: number; w: number }) {
+  const tf = useTimeFormat()
   return (
     <div className={`tl-ghost ${edgeClass(x, w, 44)}`} style={{ left: x }}>
-      <span className="mono">{fmtDateTime(t)}</span>
+      <span className="mono">{fmtAt(t, tf)}</span>
     </div>
   )
 }
 
 function Handle({ xOf, win, trackRef, w }: { xOf: (t: number) => number; win: TimeWindow; trackRef: RefObject<HTMLDivElement | null>; w: number }) {
   const timeMs = useStore((s) => s.timeMs)
+  const tf = useTimeFormat()
   const inside = timeMs >= win.startMs && timeMs <= win.endMs
   // keep the slider's ARIA value current without re-rendering the track
   useEffect(() => {
     const el = trackRef.current
     if (!el) return
     el.setAttribute('aria-valuenow', String(Math.round(timeMs)))
-    el.setAttribute('aria-valuetext', `${fmtDateTime(timeMs)} ${tzLabel(timeMs)}`)
-  }, [timeMs, trackRef])
+    el.setAttribute('aria-valuetext', fmtAt(timeMs, tf, { zone: true }))
+  }, [timeMs, trackRef, tf])
   const x = xOf(clamp(timeMs, win.startMs, win.endMs))
   const x0 = xOf(win.startMs)
   return (
     <>
       <div className="tl-played" style={{ left: x0, width: Math.max(0, x - x0) }} />
       <div className={`tl-handle ${inside ? '' : 'is-out'} ${edgeClass(x, w)}`} style={{ left: x }}>
-        <span className="tl-bubble mono">{fmtDateTime(timeMs)}</span>
+        <span className="tl-bubble mono">{fmtAt(timeMs, tf)}</span>
         <span className="tl-knob" />
       </div>
     </>

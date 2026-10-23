@@ -4,8 +4,9 @@ import { ExternalLink } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import type { IncidentManifest, IncidentSummary, JobStatus } from '../api/types'
 import { fmtAcres, fmtLatLon } from '../lib/format'
-import { fmtDateTimeYear, fmtDuration, tzLabel } from '../lib/time'
+import { fmtAt, fmtDuration, zoneAbbr } from '../lib/time'
 import { useStore } from '../state/store'
+import { useTimeFormat } from '../state/timeZone'
 import { Card, Spinner } from './controls'
 import { ContainmentBar } from './IncidentPicker'
 
@@ -57,6 +58,7 @@ function AnalysisStatus({ summary, manifest, job }: { summary: IncidentSummary; 
 }
 
 export function IncidentOverview() {
+  const tf = useTimeFormat()
   const { summary, manifest, job } = useStore(useShallow((s) => ({ summary: s.summary, manifest: s.manifest, job: s.job })))
   if (!summary) return null
   const start = manifest?.ignition?.t_ms ?? summary.started_ms
@@ -93,7 +95,7 @@ export function IncidentOverview() {
         </dd>
         <dt>{manifest?.ignition ? 'Start (est.)' : 'Start'}</dt>
         <dd className="mono">
-          {fmtDateTimeYear(start)} <span className="muted">{tzLabel(start)}</span>
+          {fmtAt(start, tf, { year: 'always' })} <span className="muted">{zoneAbbr(start, tf.tz)}</span>
         </dd>
         <dt>{live ? 'Containment' : 'Contained'}</dt>
         <dd className="mono">
@@ -101,7 +103,7 @@ export function IncidentOverview() {
             <ContainmentBar pct={summary.percent_contained} />
           ) : contained ? (
             <>
-              {fmtDateTimeYear(contained)} <span className="muted">· {fmtDuration(contained - start)}</span>
+              {fmtAt(contained, tf, { year: 'always' })} <span className="muted">· {fmtDuration(contained - start)}</span>
             </>
           ) : (
             <span className="muted">not reported</span>

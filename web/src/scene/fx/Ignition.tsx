@@ -5,8 +5,9 @@
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
-import { fmtDateTime, tzLabel } from '../../lib/time'
+import { fmtAt } from '../../lib/time'
 import { useStore } from '../../state/store'
+import { useTimeFormat } from '../../state/timeZone'
 import type { IncidentAssets } from '../assets'
 import { GLSL_COMMON, GLSL_OUTPUT, GLSL_VERT, HEX, HOUR_MS, ORDER, fxUniforms, makeHeightSampler, prefersReducedMotion, useLayer } from './common'
 import { GLSL_RIBBON_FRAG, GLSL_RIBBON_VERT, GLSL_SPRITE_VERT, drape, ribbonGeometry, spriteGeometry } from './lines'
@@ -86,6 +87,7 @@ export function Ignition({ assets }: { assets: IncidentAssets }) {
   const { visible, opacity } = useLayer('ignition')
   const telemetry = useLayer('telemetry')
   const style = useStore((s) => s.visualStyle)
+  const tf = useTimeFormat()
   const ign = assets.manifest.ignition
   const hs = useMemo(() => makeHeightSampler(assets.elevation, assets.extent), [assets.elevation, assets.extent])
   const elev = ign ? hs(ign.x, ign.z) : 0
@@ -176,7 +178,7 @@ export function Ignition({ assets }: { assets: IncidentAssets }) {
         <InOverlay>
         <ScreenLabel
           anchor={anchor}
-          text={`IGNITION\n${fmtDateTime(ign.t_ms)} ${tzLabel(ign.t_ms)}`}
+          text={`IGNITION\n${fmtAt(ign.t_ms, tf, { zone: true })}`}
           offset={[18, 12]}
           fontPx={11.5}
           color="#F2E3BF"

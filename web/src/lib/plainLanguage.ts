@@ -9,7 +9,8 @@ import type { EnsembleKind, ForecastManifest, Mode } from '../api/types'
 import type { LatticeField } from '../state/store'
 import type { Units } from '../state/workspace'
 import { CHAIN_M, FT_PER_M, MPH_PER_MS, cardinal, satelliteName } from './format'
-import { HOUR_MS, fmtDateTime, fmtDateTimeYear, fmtRelative, tzLabel } from './time'
+import { getTimeFormat } from '../state/timeZone'
+import { HOUR_MS, fmtAt, fmtRelative, zoneAbbr, type TimeFmt } from './time'
 
 export interface PlainValue {
   /** Primary everyday text, e.g. "0.4 mph". "—" when unknown. */
@@ -188,21 +189,22 @@ type ForecastPeriodInput = Pick<ForecastManifest, 'start_ms' | 'horizon_h'>
 
 export const forecastEndMs = (f: ForecastPeriodInput): number => f.start_ms + f.horizon_h * HOUR_MS
 
-const when = (ms: number) => `${fmtDateTime(ms)} ${tzLabel(ms)}`
+const when = (ms: number, tf: TimeFmt) => fmtAt(ms, tf, { zone: true })
 
-/** The period a forecast covers: "Jan 8, 00:18 – Jan 11, 00:18 PST (72 h)" (both zones when DST changes inside). */
-export function forecastPeriod(f: ForecastPeriodInput): string {
+/** The period a forecast covers in the fire's zone and the preset's clock: "Jan 8, 00:18 – Jan 11, 00:18 PST (72 h)"
+ *  (both zones when DST changes inside). `tf` defaults to `getTimeFormat()` (the open fire's zone). */
+export function forecastPeriod(f: ForecastPeriodInput, tf: TimeFmt = getTimeFormat()): string {
   const end = forecastEndMs(f)
-  const z0 = tzLabel(f.start_ms)
-  const z1 = tzLabel(end)
-  return `${fmtDateTime(f.start_ms)}${z0 !== z1 ? ` ${z0}` : ''} – ${fmtDateTime(end)} ${z1} (${f.horizon_h} h)`
+  const z0 = zoneAbbr(f.start_ms, tf.tz)
+  const z1 = zoneAbbr(end, tf.tz)
+  return `${fmtAt(f.start_ms, tf)}${z0 !== z1 ? ` ${z0}` : ''} – ${fmtAt(end, tf)} ${z1} (${f.horizon_h} h)`
 }
 
 /** Burn probability for its real period (the whole horizon, never "next 24 h"):
  *  "12% of model runs (4 of 31) burned this spot by Jan 11, 00:18 PST (72 h after Jan 8, 00:18 PST)". */
-export function burnProbabilityText(fraction: number, f: ForecastPeriodInput, members?: number): string {
+export function burnProbabilityText(fraction: number, f: ForecastPeriodInput, members?: number, tf: TimeFmt = getTimeFormat()): string {
   const end = forecastEndMs(f)
-  const period = `by ${when(end)} (${f.horizon_h} h after ${when(f.start_ms)})`
+  const period = `by ${when(end, tf)} (${f.horizon_h} h after ${when(f.start_ms, tf)})`
   const n = members != null && members > 0 ? members : null
   if (!(fraction > 0)) return `None of the ${n != null ? `${n} ` : ''}model runs burned this spot ${period}`
   const pct = fraction >= 1 ? '100%' : fraction > 0.995 ? 'Over 99%' : fraction < 0.005 ? 'Under 1%' : `${Math.round(fraction * 100)}%`
@@ -285,17 +287,18 @@ export const keepUnits = (s: string): string => s.replace(/(\d) (h|min|days)\b/g
 export function forecastDescription(
   f: Pick<ForecastManifest, 'start_ms' | 'horizon_h' | 'issued_ms' | 'weather'>,
   mode: Mode,
-  opts: { plain?: boolean } = {},
+  opts: { plain?: boolean; tf?: TimeFmt } = {},
 ): ForecastDescription {
+  const tf = opts.tf ?? getTimeFormat()
   const end = forecastEndMs(f)
   const n = f.weather.members
   const hind = mode === 'historical'
   return {
     title: keepUnits(`${hind ? (opts.plain ? 'Model re-run on past weather' : 'Hindcast') : 'Spread forecast'} (${f.horizon_h} h)`),
-    period: keepUnits(forecastPeriod(f)),
-    issued: hind ? `Model re-run ${fmtDateTimeYear(f.issued_ms)} ${tzLabel(f.issued_ms)}, after the fire, to compare with what happened` : `Issued ${when(f.issued_ms)}`,
+    period: keepUnits(forecastPeriod(f, tf)),
+    issued: hind ? `Model re-run ${fmtAt(f.issued_ms, tf, { year: 'always', zone: true })}, after the fire, to compare with what happened` : `Issued ${when(f.issued_ms, tf)}`,
     runs: ensemblePhrase(f.weather.ensemble, n),
-    probability: `Chances are shares of the ${n} model runs. Inside the period the map shades where at least 10%, 50% or 90% of the runs had reached by the time shown; a spot's burn chance covers the whole period, until ${when(end)}. They describe this model ensemble, not a guarantee.`,
+    probability: `Chances are shares of the ${n} model runs. Inside the period the map shades where at least 10%, 50% or 90% of the runs had reached by the time shown; a spot's burn chance covers the whole period, until ${when(end, tf)}. They describe this model ensemble, not a guarantee.`,
     uncertainty: EXPLAIN.arrivalQuantiles,
     weather: weatherSourceName(f.weather.source),
     caveat: EXPLAIN.experimental,

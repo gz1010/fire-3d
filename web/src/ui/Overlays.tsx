@@ -5,8 +5,9 @@ import { Component, useEffect, useRef, useState, type ErrorInfo, type ReactNode 
 import { useShallow } from 'zustand/react/shallow'
 import type { JobStatus } from '../api/types'
 import { fmtAcres } from '../lib/format'
-import { fmtDate } from '../lib/time'
+import { fmtDayDate } from '../lib/time'
 import { useStore } from '../state/store'
+import { useTimeFormat } from '../state/timeZone'
 import { CornerMarks, ProgressBar, Spinner } from './controls'
 import { JobProgress } from './AnalysisTab'
 import { useToasts } from './toast'
@@ -100,13 +101,14 @@ function BuildCard({ name, job }: { name: string; job: JobStatus | null }) {
 }
 
 function NotBuiltCard({ name, acres, started, autoBuild }: { name: string; acres: number | null; started: number; autoBuild: boolean }) {
+  const tf = useTimeFormat()
   return (
     <div className="ov-card glass">
       <CornerMarks />
       <div className="ov-eyebrow eyebrow">Analysis not prepared</div>
       <div className="ov-title">{name}</div>
       <p className="ov-text secondary">
-        <span className="mono">{fmtAcres(acres)}</span> · started <span className="mono">{fmtDate(started)}</span>. Prepare the analysis (incident bundle) to replay the fire in 3D and run
+        <span className="mono">{fmtAcres(acres)}</span> · started <span className="mono">{fmtDayDate(started, tf.tz, { year: 'always' })}</span>. Prepare the analysis (incident bundle) to replay the fire in 3D and run
         forecasts{autoBuild ? '.' : ' (the setting “Prepare analysis when I pick an unprepared fire” is off).'}
       </p>
       <div className="ov-actions">

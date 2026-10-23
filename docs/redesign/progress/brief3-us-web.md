@@ -9,8 +9,10 @@ Role: us-web (API 8712, Vite 5182). Scratch: /tmp/claude-0/-home-user-fire-3d/46
 
 - M2: national overview (frame, wording, 3 sources + clusters, labels, hidden data, legend, in-view list, peek, sources notices, Menus). Scratch injection script inject/national.mjs (1,334 recorded WFIGS points) shows 14 active + 40 other groups at z3.58; NW z5.6 readable; phone z2.09. Gates: tsc 0, lint 55, tests 61 files / 793, build OK.
 
+- M3: time migration (0 and 0 with --role us-web; checker skips lib/time.test.ts too), zone lines, DataCredits local year, geo lookup hook (coverage notice, place zone) early from M5. Eaton Command after M3 = baseline strings.
+
 ## Next
-- M3 time migration (all my files; tf shims of us-official do not exist yet: list call sites).
+- M4 records + accuracy (FireCard rewrite, state/accuracy.ts, templates, skill table, dataCredits names, id lines).
 
 ## Decisions
 - fmtAt/fmtDayDate default year 'never' (keeps CA strings).

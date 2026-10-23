@@ -6,9 +6,10 @@ import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { EnsembleKind, EnsembleRequest, ForecastManifest, ForecastSummary, IncidentManifest, JobStatus } from '../api/types'
 import { fmtAcres, fmtNumber } from '../lib/format'
-import { HOUR_MS, fmtDateTime, fmtDuration, fmtRelative, fmtTPlus, tzLabel } from '../lib/time'
+import { HOUR_MS, fmtAt, fmtDuration, fmtRelative, fmtTPlus } from '../lib/time'
 import { forecastAtLead, observedAreaAt } from '../state/selectors'
 import { useStore } from '../state/store'
+import { useTimeFormat } from '../state/timeZone'
 import { EmptyNote, ProgressBar, Section, Segmented, Spinner } from './controls'
 import { useNow } from './hooks'
 import { ENSEMBLE_LABEL, ENSEMBLE_SHORT } from './options'
@@ -53,6 +54,7 @@ export function Disclaimer() {
 }
 
 function Runner({ manifest, job }: { manifest: IncidentManifest; job: JobStatus | null }) {
+  const tf = useTimeFormat()
   const live = manifest.mode === 'live'
   const [horizon, setHorizon] = useState(72)
   const [ensemble, setEnsemble] = useState<EnsembleRequest>('auto')
@@ -84,7 +86,7 @@ function Runner({ manifest, job }: { manifest: IncidentManifest; job: JobStatus 
           <span className="label">Start</span>
           <span className="runner-start">
             <span className="mono gold">
-              {fmtDateTime(startMs)} {tzLabel(startMs)}
+              {fmtAt(startMs, tf, { zone: true })}
             </span>
             {manifest.ignition && <span className="mono muted">{fmtTPlus((startMs - manifest.ignition.t_ms) / HOUR_MS)}</span>}
           </span>
@@ -159,6 +161,7 @@ function RunList({ manifest }: { manifest: IncidentManifest }) {
 }
 
 function RunRow({ run, selected, now, originIgn }: { run: ForecastSummary; selected: boolean; now: number; originIgn: number | null }) {
+  const tf = useTimeFormat()
   const ready = run.status === 'ready'
   return (
     <button
@@ -168,7 +171,7 @@ function RunRow({ run, selected, now, originIgn }: { run: ForecastSummary; selec
       className={`run ${selected ? 'is-selected' : ''}`}
       disabled={!ready}
       onClick={() => void useStore.getState().selectForecast(run.run_id)}
-      data-tip={`Issued ${fmtDateTime(run.issued_ms)} ${tzLabel(run.issued_ms)} (${fmtRelative(run.issued_ms, now)})`}
+      data-tip={`Issued ${fmtAt(run.issued_ms, tf, { zone: true })} (${fmtRelative(run.issued_ms, now)})`}
     >
       <span className="run-radio" />
       <span className="run-main">
@@ -180,7 +183,7 @@ function RunRow({ run, selected, now, originIgn }: { run: ForecastSummary; selec
           <span className="mono run-h">{run.horizon_h} h</span>
         </span>
         <span className="run-sub mono">
-          {fmtDateTime(run.start_ms)}
+          {fmtAt(run.start_ms, tf)}
           {originIgn != null && <span className="muted"> · {fmtTPlus((run.start_ms - originIgn) / HOUR_MS)}</span>}
         </span>
       </span>
@@ -193,6 +196,7 @@ function RunRow({ run, selected, now, originIgn }: { run: ForecastSummary; selec
 }
 
 function RunSummary({ manifest, forecast }: { manifest: IncidentManifest; forecast: ForecastManifest }) {
+  const tf = useTimeFormat()
   const timeseries = useStore((s) => s.timeseries)
   const base = observedAreaAt(timeseries, forecast.start_ms)
   const leads = HORIZONS.filter((h) => h <= forecast.horizon_h)
@@ -261,7 +265,7 @@ function RunSummary({ manifest, forecast }: { manifest: IncidentManifest; foreca
         </dd>
         <dt>Window</dt>
         <dd className="mono">
-          {fmtDateTime(forecast.start_ms)} → {fmtDateTime(forecast.start_ms + forecast.horizon_h * HOUR_MS)}
+          {fmtAt(forecast.start_ms, tf)} → {fmtAt(forecast.start_ms + forecast.horizon_h * HOUR_MS, tf)}
         </dd>
       </dl>
       {forecast.warnings.length > 0 && (

@@ -1,8 +1,9 @@
 // scene-dev debug panel: time slider + playback, visual style, lattice field, view / quality / DOF / exaggeration,
 // forecast run, every layer (visibility + opacity), camera commands, FPS and the live probe.
 import { useEffect } from 'react'
-import { fmtDateTime } from '../../lib/time'
+import { fmtAt } from '../../lib/time'
 import { getTimeBounds, LAYER_KEYS, SPEEDS_HOURS_PER_SEC, useStore, type LatticeField, type Quality, type VisualStyle } from '../../state/store'
+import { useTimeFormat } from '../../state/timeZone'
 import { useSceneStore } from '../sceneStore'
 import { selectForecastRun } from './loadBundle'
 
@@ -49,6 +50,7 @@ function Seg<T extends string>({ value, options, onChange }: { value: T; options
 
 export function DevPanel() {
   const s = useStore()
+  const tf = useTimeFormat()
   const fps = useSceneStore((x) => x.fps)
   const probe = useSceneStore((x) => x.probe)
   const cam = useSceneStore((x) => x.camera)
@@ -70,7 +72,7 @@ export function DevPanel() {
       {bounds && m && (
         <>
           <div className="sd-row">
-            <span className="sd-time">{fmtDateTime(s.timeMs)}</span>
+            <span className="sd-time">{fmtAt(s.timeMs, tf)}</span>
             <span className="sd-time-sub">T{((s.timeMs - origin) / HOUR).toFixed(1)} h</span>
           </div>
           <input

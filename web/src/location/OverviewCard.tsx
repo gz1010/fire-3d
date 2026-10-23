@@ -1,22 +1,25 @@
-// The location card on the California overview (owner: location; brief 2 O-R9). No fire is open, so there is no
-// fire-area check and no model here: the card shows the official line at the point (useOfficialAtPoint, I5) and the
-// nearest fires, measured from CAL FIRE's reported location of each (not its edge), and never turns a distance into a
-// risk statement. When a prepared fire's analysis area contains the point, it offers "Zoom to the <name> Fire", an
+// The location card on the national overview (owner: us-web; brief 2 O-R9, brief 3 §14.10-14.11). No fire is open, so
+// there is no fire-area check and no model here: the card shows whether Fire-3d covers the point (from
+// /api/geo/lookup only: Alaska, Hawaii, territories and places outside the US say so, §14.14), the official line at the
+// point (useOfficialAtPoint, I5) and the nearest fires, measured from the agency's reported location of each (not its
+// edge), and never turns a distance into a risk statement. Times are local time at the point (the lookup's zone). When a prepared fire's analysis area contains the point, it offers "Zoom to the <name> Fire", an
 // explicit open that frames it (brief 2 decision 10; zooming in focuses it as well); other prepared fires open the
 // same way from their row, and unprepared ones open their card (I3), which asks before preparing an analysis.
 import { ArrowRight, ChevronDown, Flame } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { IncidentSummary } from '../api/types'
 import type { OfficialInfo } from '../official/hooks'
 import { directionWord, distance, area } from '../lib/plainLanguage'
-import { fmtDateTime, fmtRelative, tzLabel } from '../lib/time'
-import { fireFlyTo, fireStatus, isActiveFire } from '../state/overview'
+import { fmtAt, fmtRelative, zoneLine } from '../lib/time'
+import { fireFlyTo, fireStatus, fireWhere, isActiveFire } from '../state/overview'
 import { useStore } from '../state/store'
+import { usePlaceZone, useTimeFormatFor } from '../state/timeZone'
 import { useWorkspace, type SelectedLocation } from '../state/workspace'
 import { useNow } from '../ui/hooks'
 import { detailsFor, useAddressDetails } from './addressStore'
-import { CardFrame, OfficialSection } from './CardParts'
+import { CardFrame, CoverageNotice, OfficialSection } from './CardParts'
+import { coverageText, lookupPlace, useGeoLookup } from './geoLookup'
 import { PROTOTYPE_NOTE } from './describe'
 import { incidentPool, overviewNearby, type NearFire } from './incidents'
 import { checkLocation } from './locationCheck'
@@ -45,7 +48,7 @@ function FireRow({ f, units, label }: { f: NearFire; units: ReturnType<typeof us
   const s = f.summary
   const r = readiness(s)
   const status = fireStatus(s)
-  const facts = [String(s.year), s.acres ? area(s.acres, units).text : null, status.label, READINESS_LABEL[r]].filter(Boolean).join(' · ')
+  const facts = [fireWhere(s), String(s.year), s.acres ? area(s.acres, units).text : null, status.label, READINESS_LABEL[r]].filter(Boolean).join(' · ')
   return (
     <li>
       <button type="button" className="loc-fire-row" onClick={() => openOrShow(s)} title={r === 'ready' || r === 'building' ? `Zoom to ${fireName(s)}` : `Show ${fireName(s)} and its card`}>
@@ -77,6 +80,16 @@ export function OverviewCard({ sel, official }: { sel: SelectedLocation; officia
   const listUpdated = useStore((s) => s.catalog.updatedMs)
   const lastAddress = useAddressDetails((s) => s.details)
   const address = detailsFor(sel, lastAddress)
+  const lookup = useGeoLookup(sel.lon, sel.lat)
+  const geo = lookup.status === 'ok' ? lookup.data : null
+  const coverage = coverageText(geo)
+  // times at a point without a fire: local time at this place (the lookup's zone), else the viewer's, labelled
+  const placeZone = geo?.supported ? geo.time_zone : null
+  const tf = useTimeFormatFor(placeZone)
+  useEffect(() => {
+    usePlaceZone.getState().setPlaceZone(placeZone)
+    return () => usePlaceZone.getState().setPlaceZone(null)
+  }, [placeZone])
   const block = useMemo(() => officialBlock(official, { nowMs, units, fireName: null, incidentUrl: null }), [official, nowMs, units])
   const near = useMemo(() => overviewNearby(pool, sel.lat, sel.lon, isActiveFire), [pool, sel.lat, sel.lon])
   // the point's own description (address type, approximate) without any fire data
@@ -98,6 +111,7 @@ export function OverviewCard({ sel, official }: { sel: SelectedLocation; officia
       approximate={point.approximate}
       command={preset === 'command'}
     >
+      {coverage && <CoverageNotice text={coverage} />}
       {near.inside && (
         <div className="loc-open-analysis">
           {/* an explicit open: it frames the fire and adds a history step (brief 2 decision 10); the point stays */}
@@ -108,7 +122,7 @@ export function OverviewCard({ sel, official }: { sel: SelectedLocation; officia
         </div>
       )}
       <section className="loc-block loc-nearby" aria-label="Nearest fires">
-        <h3 className="loc-block-title">Nearest fires (CAL FIRE)</h3>
+        <h3 className="loc-block-title">Nearest fires (official records)</h3>
         {near.fires.length ? (
           <ul className="loc-fire-list">
             {fires.map((f) => (
@@ -117,9 +131,12 @@ export function OverviewCard({ sel, official }: { sel: SelectedLocation; officia
             {near.active && !compact && <FireRow f={near.active} units={units} label="Nearest active fire" />}
           </ul>
         ) : (
-          <p className="loc-muted-line">No CAL FIRE incidents are loaded yet.</p>
+          <p className="loc-muted-line">No fire list is loaded yet.</p>
         )}
-        <p className="loc-note">Distance from here to where CAL FIRE reported each fire, not to its edge. Distance alone does not tell you the risk.</p>
+        <p className="loc-note">
+          Distance from here to where the agency (CAL FIRE in California, NIFC WFIGS elsewhere) reported each fire, not to its edge. Distance alone does not
+          tell you the risk.
+        </p>
       </section>
       <OfficialSection block={block} compact={compact} />
       {compact ? (
@@ -130,13 +147,15 @@ export function OverviewCard({ sel, official }: { sel: SelectedLocation; officia
         <section className="loc-block loc-reliability" aria-label="Updated and reliability">
           <h3 className="loc-block-title">Updated and reliability</h3>
           <ul>
+            {lookupPlace(geo) && <li>Place: {lookupPlace(geo)}</li>}
             {newest != null && (
               <li>
-                Fire list: CAL FIRE, checked {fmtRelative(newest, nowMs)} ({fmtDateTime(newest)} {tzLabel(newest)})
+                Fire lists: CAL FIRE and NIFC WFIGS, checked {fmtRelative(newest, nowMs)} ({fmtAt(newest, tf, { zone: true })})
               </li>
             )}
             <li className="is-prototype">{PROTOTYPE_NOTE}</li>
           </ul>
+          <p className="loc-zone">{zoneLine(tf, nowMs, placeZone ? 'place' : 'viewer')}</p>
         </section>
       )}
     </CardFrame>

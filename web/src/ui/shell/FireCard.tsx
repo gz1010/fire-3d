@@ -7,9 +7,10 @@ import { useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { IncidentSummary } from '../../api/types'
 import { fmtAcres, fmtNumber } from '../../lib/format'
-import { fmtDate, fmtRelative } from '../../lib/time'
+import { fmtDayDate, fmtRelative } from '../../lib/time'
 import { analysisState, findFire, fireStatus, isActiveFire, type AnalysisState } from '../../state/overview'
 import { useStore } from '../../state/store'
+import { useTimeFormatFor } from '../../state/timeZone'
 import { useWorkspace } from '../../state/workspace'
 import { Spinner } from '../controls'
 import { useNow } from '../hooks'
@@ -43,6 +44,7 @@ function modeChip(f: IncidentSummary): { label: string; cls: string } {
 }
 
 function OfficialRecord({ fire, nowMs }: { fire: IncidentSummary; nowMs: number }) {
+  const tf = useTimeFormatFor(fire.time_zone)
   const status = fireStatus(fire)
   const active = isActiveFire(fire)
   const updated = fire.updated_ms
@@ -78,7 +80,7 @@ function OfficialRecord({ fire, nowMs }: { fire: IncidentSummary; nowMs: number 
               {fire.contained_ms != null && (
                 <>
                   {' '}
-                  · contained <span className="mw-mono">{fmtDate(fire.contained_ms)}</span>
+                  · contained <span className="mw-mono">{fmtDayDate(fire.contained_ms, tf.tz, { year: 'always' })}</span>
                 </>
               )}
             </>
@@ -124,6 +126,8 @@ export function FireCard() {
   const currentId = useStore((s) => s.incidentId)
   const { state, progress } = useAnalysis(fire)
   const nowMs = useNow(30_000)
+  // the card's fire may not be the open one: its times are in its own zone (§14.9.1)
+  const tf = useTimeFormatFor(fire?.time_zone)
   const heading = useRef<HTMLHeadingElement | null>(null)
   const close = () => useWorkspace.getState().setFireCard(null)
   // non-modal: focus moves to the heading when the card opens and back to its opener (a list row) when it closes, or to
@@ -160,7 +164,7 @@ export function FireCard() {
           <p className="fc-sub">
             <span className={`fc-chip ${chip.cls}`}>{chip.label}</span>
             {where && <span className="fc-where">{where}</span>}
-            <span className="fc-started">Started {fmtDate(fire.started_ms)}</span>
+            <span className="fc-started">Started {fmtDayDate(fire.started_ms, tf.tz, { year: 'always' })}</span>
           </p>
         </div>
         <button type="button" className="mw-icon-btn" aria-label="Close the fire card" data-tip="Close (Esc)" onClick={close}>

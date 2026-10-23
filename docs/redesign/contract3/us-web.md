@@ -105,3 +105,25 @@ As §14.9.4: `clockFor`, `useClock`, `useTimeFormat`, `useTimeFormatFor`, `useZo
 - Legend: compact row "Active fire", "Group of active fires", "Small active fire", "Other 2026 fire", "Group of other
   fires" (titles carry the full §14.11 strings) and the short absence line; details carry the exact §14.11 strings
   and `LIST_ABSENCE`.
+
+## 14.9 migration of us-web's files (M3)
+
+- `node web/scripts/check-time-api.mjs --role us-web` → 0 deprecated uses, 0 `America/Los_Angeles` literals; one
+  `tz-ok` opt-out (the checker's own search string). **Deviation:** the checker also skips `web/src/lib/time.test.ts`
+  (the definitions' own test, which checks the deprecated shims until the integration deletes both), as it skips
+  `lib/time.ts`; the contract named only `lib/time.ts`.
+- Components use `useTimeFormat()` (the open fire's zone) or `useTimeFormatFor(row.time_zone)` (the fire card's fire,
+  which may not be the open one). Pure helpers take a `TimeFmt`:
+  - `lib/plainLanguage.ts`: `forecastPeriod(f, tf?)`, `burnProbabilityText(fraction, f, members?, tf?)`,
+    `forecastDescription(f, mode, { plain?, tf? })`: optional (us-official's `ui/feed/feedModel.ts` imports
+    `forecastPeriod`), defaulting to `getTimeFormat()`.
+  - `location/describe.ts`: `DescribeOptions.tf` (required; only `LocationCard.tsx` and the test call it).
+  - `map/overlayModel.ts`: `perimeterFeatures(perimeters, grid, tMs, tf)`; the controller's perimeter key includes the
+    zone and clock, so a preset switch relabels them. `map/nearbyPerimeters.ts`: each other fire's own zone
+    (`NearbyFire.timeZone`).
+- Zone lines (§14.9.1, `zoneLine`): the location card's reliability block (fire / viewer), the overview location card
+  (place / viewer: the place zone comes from `/api/geo/lookup` and is published with `usePlaceZone.setPlaceZone`), the
+  Public/Command timeline's time tooltip, the Forensic timeline's window tooltip, the Command settings menu "Times".
+- Years in the zone: `ui/DataCredits.tsx` uses `localYear(started_ms, summary zone)`.
+- Not yet passed (us-official's §14.9.6 shims do not exist yet; they fall back to `getTimeFormat()`): see the report's
+  `notes_for_integrator` for each call site.

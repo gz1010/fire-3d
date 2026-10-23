@@ -10,7 +10,7 @@
 import type { Detection, ForecastManifest, IncidentManifest, Perimeter } from '../api/types'
 import { HOUR_MS, NEVER_MIN } from '../data/rasters'
 import { localToLonLat, type LonLat, type UtmGrid } from '../lib/reproject'
-import { fmtDateTimeTz } from '../lib/time'
+import { fmtAt, type TimeFmt } from '../lib/time'
 
 /** --m-* tokens used by map paint (keep equal to styles/map-tokens.css). */
 export const TOKENS = {
@@ -249,8 +249,9 @@ function perimeterRings(p: Perimeter, grid: UtmGrid): LonLat[][] {
   return r
 }
 
-/** Agency perimeters published by tMs: the latest flagged `latest`, each labelled with its time, acres and source. */
-export function perimeterFeatures(perimeters: readonly Perimeter[], grid: UtmGrid, tMs: number): { fc: FeatureCollection; latest: Perimeter | null } {
+/** Agency perimeters published by tMs: the latest flagged `latest`, each labelled with its time (in `tf`: the fire's
+ *  zone and the preset's clock), acres and source. */
+export function perimeterFeatures(perimeters: readonly Perimeter[], grid: UtmGrid, tMs: number, tf: TimeFmt): { fc: FeatureCollection; latest: Perimeter | null } {
   const shown = perimeters.filter((p) => p.t_ms <= tMs).sort((a, b) => a.t_ms - b.t_ms)
   const latest = shown.length ? shown[shown.length - 1] : null
   const features: Feature<Geometry>[] = shown.map((p, i) => ({
@@ -260,7 +261,7 @@ export function perimeterFeatures(perimeters: readonly Perimeter[], grid: UtmGri
     properties: {
       t: p.t_ms,
       latest: p === latest,
-      label: `Perimeter ${fmtDateTimeTz(p.t_ms)} · ${Math.round(p.acres).toLocaleString('en-US')} ac`,
+      label: `Perimeter ${fmtAt(p.t_ms, tf, { zone: true })} · ${Math.round(p.acres).toLocaleString('en-US')} ac`,
       source: p.source,
     },
   }))
