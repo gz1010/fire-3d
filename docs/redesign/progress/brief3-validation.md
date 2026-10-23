@@ -43,6 +43,12 @@ Role `validation` (wave 2). Ports: API 8716, no Vite. Scratch: session scratchpa
 | 06:30:32 | probe (archive, hf ok) -> Lower Sugarloaf | **ready** in 370 s; checks ok (ratio 1.006) |
 | 06:36:56 | probe overall ok -> Madre (CA) | **ready** in 394 s; 225 h HRRR, antecedent 207 mm, 81,938 ac |
 | 06:43:52 | probe (hf, archive ok) -> Emigrant | **ready** in 48 s; 424 h HRRR, 33,132 ac |
+| 06:45:01 | probe (archive unreachable; hf ok) -> Island Creek | **ready** in 1,095 s (slow FIRMS 504 retries); 937 h HRRR |
+| 07:03:39 | probe (hf unreachable, archive ok) -> France Canyon | **ready** in 1,342 s; 529 h HRRR, 35,251 ac |
+
+Hindcast log: scratchpad validation/logs/hq.log (runner hq2.sh, jobs from mkjobs.py; checks via refresh.sh).
+- 06:53 CA step 1 (pre-GSI worktree 29f0e2d) = section 5.1 exactly; 07:14 step 2 (post-GSI) = step 1 (max |d| 0.0).
+- 07:16-07:25 label p50 / det / ablation / ignition / live for Black Cove, Emigrant, Lower Sugarloaf, Island Creek.
 
 ## Open problems
 - none yet
