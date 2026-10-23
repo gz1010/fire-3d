@@ -19,19 +19,24 @@ export interface ExtrasSource {
   attribution: string
   disclaimer: string | null
   cadence: string
-  // ---- brief 3 per-source fields of the evacuation answer (CONTRACT §14.8.2; optional until the integration)
+}
+
+/** A `sources[]` entry of the evacuation answer: the §14.8.2 per-source fields (brief 3; required since the
+ *  integration: every evacuation answer of the backend carries them, `api/extras.py` `_source_entry`). Camera and
+ *  imagery answers keep plain `ExtrasSource` entries. */
+export interface EvacSource extends ExtrasSource {
   /** When Fire-3d fetched this source for the answer (null = not fetched). */
-  retrieved_ms?: number | null
+  retrieved_ms: number | null
   /** The source layer's own last update (ArcGIS `dataLastEditDate`). */
-  updated_ms?: number | null
-  status?: 'available' | 'unavailable'
-  reason?: string | null
+  updated_ms: number | null
+  status: 'available' | 'unavailable'
+  reason: string | null
   /** USPS code of the state the source covers ("CA", "OR"). */
-  home_state?: string
+  home_state: string
   /** Credit line ("Cal OES", "Oregon Department of Emergency Management"). */
-  credit?: string
-  /** Short name used in sentences ("Cal OES", "Oregon OEM"); us-official addition, falls back to a known id. */
-  aggregator?: string
+  credit: string
+  /** Short name used in sentences ("Cal OES", "Oregon OEM"); us-official addition (additive to §14.8.2). */
+  aggregator: string
 }
 
 /** Fields shared by the evacuation, camera and imagery responses. */
@@ -76,28 +81,28 @@ export interface EvacZoneProps {
   status_updated_ms: number | null
   /** When Cal OES last copied it into the statewide layer (Cal OES only; null for other sources). */
   aggregated_ms: number | null
-  // ---- brief 3 (CONTRACT §14.8.2; optional until the integration)
+  // ---- brief 3 (CONTRACT §14.8.2; required since the integration)
   /** USPS code of the zone's state (Oregon OEM lists one California county, Del Norte). */
-  state?: string | null
+  state: string | null
   /** Which source listed it ('caloes_evacuations', 'or_oem_evacuations'). */
-  source_id?: string
+  source_id: string
   /** False when `status` is Fire-3d's rendering of the source's value (Oregon's level number: "Level 3"). */
-  status_verbatim?: boolean
+  status_verbatim: boolean
   /** The source's own value (Cal OES STATUS text; Oregon's level integer). */
-  status_raw?: string | number | null
+  status_raw: string | number | null
   /** The source's own definition of the level ("Level 3: GO NOW – Leave Immediately!", Oregon OEM). */
-  status_label?: string | null
+  status_label: string | null
   /** Where that definition is published (https). */
-  status_label_source?: string | null
+  status_label_source: string | null
   /** The incident name as the source records it (a name match is not proof it is this fire). */
-  incident_name?: string | null
+  incident_name: string | null
   /** Hazard type as the source records it ("Fire", "Other"). */
-  hazard_type?: string | null
+  hazard_type: string | null
   /** When the zone entered the state layer (Oregon `created_date`; Cal OES: its copy time). */
-  listed_ms?: number | null
+  listed_ms: number | null
   /** What the zone's time means: the issuer's, when it was added to the state layer, the state layer's last edit,
    *  a date without a time, or none. */
-  time_basis?: 'issuer' | 'state_layer_added' | 'state_layer_edit' | 'date_only' | 'none'
+  time_basis: 'issuer' | 'state_layer_added' | 'state_layer_edit' | 'date_only' | 'none'
 }
 
 export type GeoJsonPolygon = { type: 'Polygon'; coordinates: number[][][] } | { type: 'MultiPolygon'; coordinates: number[][][][] }
@@ -137,8 +142,10 @@ export interface EvacuationsResponse extends ExtrasEnvelope {
   zones: { type: 'FeatureCollection'; features: EvacZoneFeature[] }
   counts: Partial<Record<EvacStatusKey, number>>
   coverage: EvacCountyCoverage[]
-  /** Brief 3: every state the area touches (optional until the integration). */
-  states?: EvacStateEntry[]
+  /** Brief 3: the evacuation sources of the area with their §14.8.2 per-source fields. */
+  sources: EvacSource[]
+  /** Brief 3 (required since the integration): every state the area touches. */
+  states: EvacStateEntry[]
 }
 
 // ---- cameras --------------------------------------------------------------------------------------------------
