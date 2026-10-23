@@ -1789,10 +1789,20 @@ From `us-catalog.md` (M3, cut-line f, review round 1) and `us-pipeline.md` (§14
   404 "unknown incident '<id>'"; 422 "Fire-3d does not support Alaska, Hawaii or US territories yet."; 409 "'<id>' is
   a local or synthetic bundle; it cannot be rebuilt."; 409 "'<alias>' is listed as '<id>'."; plus `landfire_gate`
   (14.12.3). The `test_api.py` hand-off was done by the integration: the API tests assert these texts.
-- Open (part 2 of the integration, `catalog.py` is validation's file while it runs): when the source lists cannot be
-  reached, `resolve_listed` returns None and the gate calls a real listed fire "a local or synthetic bundle"
-  (us-pipeline review R8); the Lucas Fire (2026) is matched to two WFIGS records both named LUCAS and so gets the
-  several-records answer of 14.5 (us-catalog review note N2): merge or pick such same-name records.
+- **Source lists unreachable** (integration part 2; us-pipeline review R8): `resolve_listed` raises
+  `catalog.ListsUnavailable` (a `LookupError`) when no list that answered knows the id and at least one lookup failed
+  (CAL FIRE's live or year list, the WFIGS lists or the IRWIN prefix query); bundle-only ids never ask the lists and
+  stay None. `get_summary` still answers from a bundle on disk; without one it raises. Every API path answers **HTTP
+  503 "The fire lists could not be reached right now; try again later."** (`catalog.LISTS_UNAVAILABLE_TEXT`): the build
+  gate (`pipeline.gate_refusal`, `build_incident` as `BuildRefused(503, …)`, `api/app.py` `_not_buildable`), a 503
+  handler for `ListsUnavailable` in `api/app.py` (`GET /api/incidents/{id}` of an unbuilt listed fire), the incident
+  record (14.5) and `/api/extras/*` by incident. Never "a local or synthetic bundle" and never 404 for an outage. The
+  web's `describeError` reads a 503 as "Unavailable right now: <the server's sentence> (HTTP 503)".
+- **Same-name records** (integration part 2; us-catalog review N2): several WFIGS records matched to one CAL FIRE fire
+  that all carry its name (the Lucas Fire, 2026: LUCAS from CAL FIRE MEU, 1,099 ac, and from CAL FIRE LNU, 4,128 ac)
+  are one fire's records: `catalog.same_name_primary` picks the largest reported size, then the most recently
+  modified, as the row's `irwin_id` / `unique_fire_id`; every record stays in `other_records` with its own issuer,
+  numbers, status and time. Records with other names keep the Dale rule; none with the fire's name: `irwin_id` null.
 
 ### 14.3 Regions: state, county, time zone and coverage (`us-catalog`)
 
@@ -1881,10 +1891,11 @@ From `us-catalog.md` (M2).
 
 ```ts
 export type AccuracyStatus = 'tested' | 'limited' | 'untested'
-export interface AccuracyFire { id: string; name: string; state: string; n_leads: number; growth_sorensen: number; fuels_edition: string; lfm_method: string; era5_hours: number; gfs_fill_hours?: number; weather_source?: string; replaced?: string | null }
+export interface AccuracyFire { id: string; name: string; state: string; n_leads: number; growth_sorensen: number; fuels_edition: string; lfm_method: string; era5_hours: number; gfs_fill_hours?: number; weather_source?: string; replaced?: string | null; growth_ratio_median?: number | null }
 // gfs_fill_hours: hours of the model window where HRRR was missing and GFS filled it (0 for pure HRRR);
 // weather_source: the bundle's verbatim source ("open-meteo:historical-forecast:gfs_hrrr");
-// replaced: the V §3 fire this one replaced and the failed check, else null (validation step 3)
+// replaced: the V §3 fire this one replaced and the failed check, else null (validation step 3);
+// growth_ratio_median: this fire's own median forecast / observed growth ratio (integration part 2)
 export interface AccuracyRegion {
   id: AccuracyRegionId; name: string; status: AccuracyStatus; in_sample?: boolean; seed?: boolean
   n_fires: number; n_leads?: number
@@ -1953,8 +1964,7 @@ export const getAccuracyRegions: (opts?: FetchOptions) => Promise<AccuracyRegion
 
 #### 14.4 as built
 
-From `us-catalog.md` (M4) and `us-web.md` (M4, cut line a/f). Validation's as-built note (the regional results and
-GSI) is folded in part 2 of the integration.
+From `us-catalog.md` (M4), `us-web.md` (M4, cut line a/f) and `validation.md` (folded in integration part 2, below).
 - Seed `backend/fire3d/data/regional_accuracy.json` (schema 1): OSCC `tested`, `in_sample`, `seed`, 3 fires, 32 leads,
   `growth_sorensen` 0.433 (renders 0.43), `range` [0.395, 0.467]; no `fires` or `fuels_editions` (per-fire
   `era5_hours` unknown, never guessed); the other nine `untested`. Validation replaces the file.
@@ -1970,6 +1980,50 @@ GSI) is folded in part 2 of the integration.
   includes the area already burned at the start." (review R3); without growth values the full header and "The growth
   score (new spread only) is not stored for this run." `SkillEntry.growth_sorensen` stays optional (forecast manifests
   built before brief 3 lack it).
+- **Validation's file** (folded from `contract3/validation.md`, integration part 2): `regional_accuracy.json` is written
+  by `python -m fire3d.spread.validate regional <fires.json> --out …` (`fires.json` from `backend/scripts/
+  validate_us_fires.py collect`); it never writes `seed`. All six test regions are `tested` (2 fires each, 24-32
+  leads); RMCC, EACC and ONCC `untested`; OSCC re-measured after GSI with the same values, `in_sample: true`, the others
+  `false`. Results (31-member p50 growth Sørensen, mean of the fire means): NWCC 0.255, NRCC 0.341, GBCC 0.247, SWCC
+  0.351, SACC-SP 0.394, SACC-SE 0.193, OSCC 0.433. `growth_ratio_median` is the median of the per-lead forecast /
+  observed growth ratios, **null** when the fires err in opposite directions (one ≤ 0.95 and one ≥ 1.05 by their own
+  median) and no majority errs the pooled way (`validate.growth_split`, which adds the caveat "The fires erred in
+  opposite directions: …"): NRCC is null; OSCC keeps 1.85 with that caveat (Palisades ×0.57). Each fire carries its own
+  `growth_ratio_median` (added in part 2; the file was regenerated from validation's `fires_review_fixes.json` with
+  only these 15 values added). `fuel_groups_tested`: the fires' fuel words (grass / shrub / timber whose LANDFIRE FBFM40
+  family shares reach 25 % of the fire's burnable burned area). `caveats`: "Two fires only: a rough value (the two
+  fires scored A and B)." per region, plus named problems (Windy Deuce's timing, Rush, Lower Sugarloaf); they are served
+  but not shown in the app.
+- **Wording, amended by the integration (part 2; validation review W-M2, W-m1..m4, W-m7, m5).** Round 2 decision 7
+  is kept: Public shows words with the score one tap away; Command shows the score. Templates (`accuracyLabel`):
+  - Public line (tested): "Tested on {2} past fires in the {Northwest} region ({2025})." then one outcome sentence in
+    words, no number, from each fire's own `growth_ratio_median` (else the region's): "In those tests the forecast
+    showed {less | much less | more | much more | about as much} new spread than really happened." ("much" when the
+    region ratio is ≤ 0.5 or ≥ 2), or, when the fires erred both ways, "… showed too much new spread on one fire and too
+    little on the other." / "… on 2 of the 3 fires and too little on the other."; no ratio at all: no sentence. The
+    fuels are named once: in the caveat ("Tested on timber fires only; other fuels here are untested."), or, when the
+    fires span grass, shrub and timber, in the line ("(2025; grass, shrub and timber fires)") with the caveat "Only 2
+    fires were tested here: most fuel and weather conditions in this region are untested." In-sample adds the fixed
+    sentence as before.
+  - Public "How was it tested?": "When re-run on these fires, the predicted new spread matched the real new spread
+    with a score of about {0.26} out of 1 (1 = perfect, 0 = none). The test fires scored {Emigrant, OR 0.28 and Lower
+    Sugarloaf, WA 0.23}." (two decimals, as Command; without per-fire values "the fires ranged {lo-hi}", "both fires
+    {x}" when the ends are equal: never "0.2-0.2"), then the growth: "It usually predicted about {26%} of the real
+    growth ({Emigrant: about 20%; Lower Sugarloaf: about 40%})." ("Overall it predicted …" when a fire was about
+    right; "It predicted too much growth on {Horse Gulch (about 1.8 times the real growth)} and too little on {Island
+    Creek (about 63% of the real growth)}." when the region has no ratio; "Overall it predicted about 1.9 times as much
+    growth as really happened, but not on every fire: …" when the majority kept it), then "These re-runs started during
+    the fires' main growth and used the weather that really happened; live forecasts must use predicted weather and
+    usually do worse. Experimental: follow local officials."
+  - Command (tested): "Hindcast growth score {0.26} of 1 in the {Northwest} region (fires {0.23-0.28} | both fires
+    {0.35}; {2} fires, {24} leads, +12-72 h; forecast/real growth ×{0.26} [(×{0.57-2.2} by fire) when the fires split] |
+    forecast/real growth ×{0.63-1.78} by fire [no region ratio]; starts during main growth; live fuel moisture GSI
+    (NFDRS growing-season index); fuels {LF2024}[; in-sample: settings fitted on these fires])."
+  - Limited, untested, the always line and the banned words: unchanged.
+  - Fire card (W-m8): "Analysis ready: spread reconstruction and the experimental model" only when the open bundle
+    holds a model run; "Analysis ready: spread reconstruction (no model run yet)" without one (the 12 test fires,
+    Eaton); "Analysis ready: spread reconstruction" for a prepared fire that is not open (`state/overview.ts`
+    `analysisReadyText`).
 
 ### 14.5 Official fire records (`us-catalog` new endpoint; `us-pipeline` CAL FIRE endpoint; `us-official` web; `us-web` fire card)
 
@@ -2006,7 +2060,9 @@ interface IncidentRecordResponse extends OfficialEnvelope {           // kind 'i
   row without one: `unavailable` + `not_covered`, reason "NIFC WFIGS has no record matched to this fire." A California
   row matched to two or more WFIGS records none of which has its name (`irwin_id` null, `other_records` non-empty;
   added by the integration): `unavailable` + `not_covered`, reason "NIFC WFIGS lists this fire under several records
-  ({names}), so no single record is shown here." (the records' names verbatim, joined by ", "). A CAL FIRE
+  ({names}), so no single record is shown here." (the records' names verbatim, joined by ", "). Several records that
+  all carry the fire's name are one record (14.2 as built, "Same-name records"): the Lucas Fire shows its LUCAS
+  record, never "several records (LUCAS, LUCAS)". The source lists unreachable: HTTP 503 (14.2 as built). A CAL FIRE
   complex row (14.2, `complex_members` non-empty): `unavailable` + `not_covered`, reason "This is a CAL FIRE complex;
   NIFC WFIGS lists its member fires separately." (never one member's record). A bundle-only or synthetic id
   (`fixture-demo`, `fixture-east`, any id that `get_summary` answers only from a manifest): `unavailable` +
@@ -2288,6 +2344,16 @@ From `us-pipeline.md` (§14.7, review round 1) and `us-official.md` (M5, review 
   request every minute of scrubbing). Horse Gulch: 5:50 PM all three in effect, the short line quotes the 5:45 PM
   evacuation, badge 3; 2:50 PM the Fire Warning in effect, badge 1; 5:00 PM and 6:00 PM as in round 3 (badge 2 and
   3); 7:50 PM the 5:45 PM message has ended (its expiry 7:45 PM), badge 2.
+- **One time for the feed and the panels** (integration part 2, the orchestrator's carry-over of round 4): the panels
+  decide at the replay minute while the feed split its list at the exact timeline time, so for up to 59 s after a
+  message's sent second the feed listed it as "Not yet in effect" (Horse Gulch: sent 5:45:12 PM MDT). A replay now
+  lists a local message from the minute after it was sent (`localFeedMs(sent_ms)`, its `FeedItem.seekMs`; these rows
+  are not seekable, so only the split uses it), exactly when the panels' minute reaches it; until then it sits with
+  the later updates as "Sent after this time". `FeedItem.sentAfterRef` keeps that chip where the feed lists
+  everything (a live fire seen at a past time). The rest of the feed keeps the exact time. "sent N min after this
+  time" counts from both times cut to the minute as they are shown ("sent 2:45 PM" at 2:20 PM: 25 min, before a
+  rounded 26) and says "sent less than a minute after this time" in the same minute (`afterSpan(sentMs, refMs)`).
+  Tested at 5:45:12 and 5:45:30 PM MDT (later, "Sent after this time", badge 2) and 5:46 PM (listed, in effect).
 
 ### 14.8 Evacuations and cameras (`us-official`, both ends)
 
@@ -2769,8 +2835,9 @@ From `us-web.md` (M2, cut line b/c, review round 1).
 #### 14.12 as built
 
 From `us-pipeline.md` and `us-catalog.md` (FIRMS, UTM, fixture-east, live loop).
-- 14.12.1 FIRMS: `load_live_us`, `load_year_us` as specified; `load_live_ca` / `load_year_ca` are deprecated wrappers
-  used only by tests (removed in part 2 or later; `firms.py` is validation's file while it runs). The KD-tree was not
+- 14.12.1 FIRMS: `load_live_us`, `load_year_us` as specified; the deprecated `load_live_ca` / `load_year_ca` were
+  removed in integration part 2 (their tests moved to the national loaders), with `catalog.HISTORICAL_YEAR` and
+  `pipeline.spec_incident_id`; `observed.la_time` is now `fire_local_time` (it always took the fire's zone). The KD-tree was not
   done: the dense matching, first cut to the fires' box, takes about 0.5 s on the national feed.
 - 14.12.2 Weather quota: as specified, plus the decision recorded in item 2 above (hourly re-check of a daily block,
   `weather.recheck_daily_block`, `DAILY_RECHECK_S = 3600`) and two **deviations**: `probe_open_meteo()` returns an extra
@@ -2791,12 +2858,39 @@ From `us-pipeline.md` and `us-catalog.md` (FIRMS, UTM, fixture-east, live loop).
 - 14.12.8 Perimeters: California records keep brief 2's queries exactly (identical OBJECTID sets for Eaton,
   Palisades, Madre, TCU); WFIGS records match by IRWIN id, else by name in `US-<state>`.
 - 14.12.9 `fixture-east`: `make_fixture.py --only east`, NC, America/New_York, EPSG:32617, record "NIFC WFIGS (IRWIN)".
-- 14.12.10 Interim live fuel moisture outside California: the manifest warning and the forecast note prefix as
-  specified (until validation lands GSI; part 2 folds validation's note).
+- 14.12.10 GSI live fuel moisture outside California (folded from `contract3/validation.md`, integration part 2):
+  - Switch `is_california(summary)` (`state == "CA"`, else a CAL FIRE uid when the state is unset) keeps the month
+    table and drought rule exactly (`_california_moisture`, compared in `tests/test_gsi.py` with a frozen pre-GSI copy
+    on Eaton, Palisades, Madre and `fixture-demo`); everything else uses `gsi_nfdrs2016`.
+  - Method `spread/moisture.py` (`config.GSI_*`, NFDRS4's defaults, nothing fitted): daily GSI = iTmin · iVPD · iDayl;
+    VPD = es(Tmax) · (1 − max(RHmin, 5 %)/100); day length NFDRS4 `CalcDayl` (**deviation**: not the archive host's
+    `daylight_duration`, which is stored for audit only); the mean of the 21 local days before the start's day (all 21
+    required), scaled by `GSI_MAX` 1.0; green-up 0.5: herb 0.30 → 2.50, woody 0.60 → 2.00, linear above it.
+  - Inputs `sources/weather.py` `gsi_inputs`: hourly 2 m temperature and humidity aggregated to the fire's local days
+    (**deviation**: not daily aggregates), ERA5 on the archive host (`models=era5`, historical: start − 28 d through
+    the end of the weather window, **deviation**: not to the start) or the forecast host's `past_days=28` (live, TTL
+    6 h). Stored in the backend-only `sim/lfm_gsi.json`; builds and live forecasts fetch it, hindcasts never do.
+  - `live_moisture_detail(bdir, manifest, start_ms, gw=None, *, fetch=True, fetch_gsi=None)`, `gsi_at(doc, t_ms, *,
+    hold_last=False)` (the behaviour charts hold the latest 21-day value after the series ends; gaps are never bridged).
+  - Never silent: no series or fewer than 21 days → California's values with the note "Live fuel moisture:
+    California's seasonal values (GSI series unavailable); experimental." and the manifest warnings "Weather: GSI live
+    fuel moisture series unavailable: …" and `INTERIM_LFM_WARNING`, whose text the integration changed in part 2 to
+    "Live fuel moisture outside California uses California's seasonal values because the regional (GSI) series is
+    unavailable; experimental." (validation review R2: the GSI method is tested now; the wave-1 text "… until a regional
+    method is tested; experimental." is removed on rebuild, `LEGACY_INTERIM_LFM_WARNINGS`). The behaviour charts'
+    fallback hours: "Fire behaviour charts (<dates>, <n> h): live fuel moisture uses California's seasonal values (GSI
+    series unavailable); experimental." (not added when the bundle already carries the interim warning, either text).
+    `build --require-hrrr` fails instead (`WeatherError`).
+  - Outside California the water-year request is still made best-effort (the fallback and the ablation;
+    **deviation**), herb treated as perennial, no snow-day flag. Ablation switch `config.LFM_FORCE_CALIFORNIA`.
+  - Results: docs/validation.md section 10 (12 fires; California unchanged to |Δ| < 0.001 after GSI).
 - 14.12.11 Smoke builds: Horse Gulch (MT) ready (UTM 12, LF2023, 346 h HRRR, 2,937 FIRMS detections, observed/record
-  acres 1.01, 0 "CAL FIRE"). Black Cove (NC) was left pending by the stop rule (Open-Meteo refusals 02:04-03:59Z) and
-  later built by validation (bundle built 06:29Z, UTM 17, LF2024, America/New_York); its acceptance numbers are
-  checked in part 2 of the integration.
+  acres 1.01, 0 "CAL FIRE"). Black Cove (NC), built by validation, checked in integration part 2: UTM 17 (EPSG:32617),
+  LF2024, America/New_York, 339 h HRRR (`open-meteo:historical-forecast:gfs_hrrr`), 1,308 FIRMS detections (1,290 of
+  this fire), final WFIGS perimeter 3,772 ac vs record 3,502 ac (1.08), 0 "CAL FIRE" in the manifest.
+- 14.12.13 Validation's build-code bug fix (`catalog._estimate`, validation's permission): AOI sizing passes the WFIGS
+  identity to the perimeter query, so fires outside California are sized by their own perimeter (Windy Deuce 36 → 60
+  km); seven bundles rebuilt; regression test `test_firedata_catalog.py::test_estimate_fire_bbox_matches_a_wfigs_fire_by_irwin_id`.
 - 14.12.12 Live loop: national candidates, `AUTO_BUILD_MAX = 4`.
 
 ### 14.13 Sources and credits (exact lines; SPEC §2 rows by `us-catalog`, README by final verification)
@@ -2932,8 +3026,17 @@ them into this section as "14.x as built" sub-headings.
   time from each message's own times (see "14.7 as built", round 4); the query stays hour-quantised (why: same
   sub-heading). No backend change (a docstring in `nws.local_phase`).
 
+**Integration part 2 (2026-10-23; report key `part2_done`).** Every item of part 1's `part2` list, the orchestrator's
+round-4 carry-over and the validation review's web leftovers:
+- 14.2: an outage of the source lists is HTTP 503 "The fire lists could not be reached right now; try again later."
+  (never "a local or synthetic bundle"); same-name WFIGS records are one record (both: "14.2 as built").
+- 14.4: validation's results folded; `AccuracyFire.growth_ratio_median`; the amended wording ("14.4 as built").
+- 14.7: one time for the feed and the panels; "less than a minute" ("14.7 as built").
+- 14.12: deprecated FIRMS loaders and names removed; GSI folded; `INTERIM_LFM_WARNING` text; Black Cove's acceptance
+  numbers ("14.12 as built").
+
 **Folded (integration part 1, 2026-10-23):** `us-catalog.md`, `us-official.md`, `us-pipeline.md` and `us-web.md` are
 summarised in the "14.0 as built" to "14.14 as built" sub-headings above (what differs from the text, the deviations
 and the integration's own changes). The role notes stay in `docs/redesign/contract3/` as the detailed record (file
-lists, measurements, review fixes). `validation.md` (GSI, the regional results, `regional_accuracy.json`) is folded in
-part 2.
+lists, measurements, review fixes). `validation.md` (GSI, the regional results, `regional_accuracy.json`) was folded
+in part 2 ("14.4 as built", "14.12 as built" 14.12.10 and 14.12.13).

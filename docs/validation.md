@@ -1247,7 +1247,7 @@ different grid.
 An independent review of this section found these; each was checked against the code and the stored outputs first.
 - **Fire behaviour charts outside California** (`spread/behavior.py`). The hourly flame-length and spread-potential
   annotation took each local day's GSI, but a live bundle's series ends today while its weather runs to +96 h (and a
-  historical one ends 5 days before now), so from about +48 h it quietly used California's month table (herb and
+  historical one ends 6 days before now, `ERA5_DELAY_DAYS`), so from about +48 h it quietly used California's month table (herb and
   woody 120 % in February in Texas instead of 30 % / 60 %), with no warning. Now days after the series hold its latest
   21-day value, as a forecast holds live fuel moisture over its run (`gsi_at(..., hold_last=True)`); any hour that
   still has no GSI value (no series, or a gap inside it) uses California's values and the manifest says so ("Fire

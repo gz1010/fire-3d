@@ -58,15 +58,32 @@ Ports API 8716, Vite 5186. Scratch: session scratchpad `integration2/`. Only age
 
 ## Done
 - 14:50Z read part 1 report/progress, orchestrator carry-over, validation report and review leftovers.
+- Baseline gates: backend 988 passed; web typecheck 0, lint 55 (scene), 75 files 1173 passed 2 skipped.
+- f29c291 backend: ListsUnavailable -> 503 "The fire lists could not be reached right now; try again later." (gate,
+  build, incident, record, extras); Lucas same-name records -> one record (largest, then newest); deprecated names
+  removed (load_live_ca/load_year_ca, HISTORICAL_YEAR, spec_incident_id; la_time -> fire_local_time); INTERIM_LFM
+  warning text (legacy text removed on rebuild); AccuracyFire.growth_ratio_median + regional file regenerated (15 values
+  added only). Backend 990 passed.
+- 95545c0 web: feed/panel one time (localFeedMs, sentAfterRef, afterSpan minute-cut, "less than a minute"); accuracy
+  wording (outcome words in Public's first view, region named, fires named behind the tap, two decimals, fuel caveat,
+  Command "of 1"/region/ratio by fire/GSI); analysis line without a model run; 503 wording. Web 1183 passed.
+- rasters.test.ts carry-over: already done (three tests present, lines 316/331/350).
 
 ## Next
-- Backend: source-list outage 503 (ListsUnavailable); Lucas same-name merge; remove deprecated names; INTERIM_LFM
-  warning text; optional per-fire growth_ratio_median.
-- Docs: CONTRACT §14.4/§14.12.10 fold of contract3/validation.md; SPEC §8.4 GSI; validation.md 10.11 6 days.
-- Web: feed vs panel time (one time), afterSpan from minute-cut time; accuracy wording (W-M2, W-m1..m8, m5);
-  FireCard analysis line without a model run; rasters.test.ts check.
+- Docs: CONTRACT §14.4/§14.12.10 fold of contract3/validation.md + wording amendment, §14.2 503/same-name, §14.7 feed
+  time; SPEC §8.4 GSI + interim text, build gate 503, AccuracyFire; validation.md 10.11 6 days.
 - Verify end to end (screenshots brief3-final-*), gates, report part2_done.
 
-## Decisions
 
-## Open problems
+## Decisions (part 2)
+- An outage is "cannot tell now": resolve_listed raises ListsUnavailable when no answering list knows the id and a
+  lookup failed; get_summary still answers from a bundle on disk; every API path answers 503 with one sentence.
+- Same-name records: the largest reported size, then the newest, is the fire's record; every record stays listed.
+- Feed vs panels: the replay feed lists a local message from the minute after it was sent (its seekMs), so the feed
+  and the minute-quantised panels agree; the rest of the feed keeps the exact time (seeking to an item keeps it listed).
+- Accuracy: Public's first view adds an outcome sentence in words (direction of the growth error from each fire's own
+  ratio; no number); the score stays one tap away (round 2 decision 7 kept); Public's detail uses two decimals like
+  Command (no 0.05 rounding: the fires' own scores are named next to it).
+
+## Open problems (part 2)
+
