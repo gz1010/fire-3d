@@ -89,10 +89,16 @@ Ports API 8716, Vite 5186. Scratch: session scratchpad `integration2/`. Only age
 - Final gates (before batch D): backend 990 passed; web typecheck 0, lint 55 (scene), 75 files 1,185 passed 2 skipped,
   build OK. API log so far: 793 GET, 0 non-GET. Key scan: 0 (scratch, tracked files, part-2 diffs).
 
+- d8205ee found in the browser: a fire-name search right after load said "No listed fire … matches" before the 2025
+  list arrived (now: the lists are still loading). Batches D/E: phones, Timber (OSCC) cards, Bee Haven, fixture-east,
+  Windy Deuce Analysis drawer (region caveats), Horse Gulch "How was it tested?" open, fire searches; a11y run (reduced
+  motion, 40 Tab stops 0 unnamed, roving list, How was it tested by keyboard, Escape returns focus, 0 non-GET).
+- Final: backend 990 passed; web typecheck 0, lint 55 (scene), 75 files 1,186 passed 2 skipped, build OK; check-time-api
+  0/0; API log 1,020 GET, 0 non-GET, 0 builds; key scan 0; 65 brief3-final screenshots, all viewed; servers stopped.
+- Report: docs/redesign/reports/brief3-integration.json key part2_done (top keys updated for part 2).
+
 ## Next
-- Docs: CONTRACT §14.4/§14.12.10 fold of contract3/validation.md + wording amendment, §14.2 503/same-name, §14.7 feed
-  time; SPEC §8.4 GSI + interim text, build gate 503, AccuracyFire; validation.md 10.11 6 days.
-- Verify end to end (screenshots brief3-final-*), gates, report part2_done.
+- Nothing left for part 2. Final verification: live national loop, one Prepare analysis, README rows (§14.13).
 
 
 ## Decisions (part 2)
@@ -106,4 +112,6 @@ Ports API 8716, Vite 5186. Scratch: session scratchpad `integration2/`. Only age
   Command (no 0.05 rounding: the fires' own scores are named next to it).
 
 ## Open problems (part 2)
+- None blocking. Known issues in the report (NIFC snapshot flip-flop, detached perimeter parts early in some replays,
+  ZIP "near" wording, Forensic shots time out under swiftshader, events.py ms fields not done).
 
