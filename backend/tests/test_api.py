@@ -150,6 +150,11 @@ def _fallback_dir(tmp_data_dir, monkeypatch):
         m["summary"]["year"] = int(real[:4])
         (inc / real).mkdir()
         (inc / real / "manifest.json").write_bytes(orjson.dumps(m))
+    failed = orjson.loads((FIXTURE_ROOT / "fixture-live" / "manifest.json").read_bytes())
+    failed.update(status="error")
+    failed["summary"].update(id="2026-failed-fire-cccccc", year=2026)
+    (inc / "2026-failed-fire-cccccc").mkdir()
+    (inc / "2026-failed-fire-cccccc" / "manifest.json").write_bytes(orjson.dumps(failed))   # a failed build: not listed
     monkeypatch.setattr(catalog, "get_catalog", lambda *a, **k: (_ for _ in ()).throw(ConnectionError("CAL FIRE unreachable")))
     return inc
 

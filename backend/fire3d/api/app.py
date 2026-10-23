@@ -267,14 +267,16 @@ def _list_row(s: dict, m: dict | None = None) -> dict:
 def _bundle_rows(mode: str, min_acres: float | None, year: int | None = None) -> list[dict]:
     """Fallback incident list from bundles on disk (catalog unavailable). ``year`` (historical lists asked for one
     year): the bundles of that year in either mode, since a year list also holds that year's active fires. Only
-    bundles of listed fires (an id of the form ``<year>-<name>-<uid6>``): synthetic and local bundles such as
-    ``fixture-live`` are never listed as an agency's fire (final verification, panel SR-B1)."""
+    bundles of listed fires (an id of the form ``<year>-<name>-<uid6>``) that did not fail: synthetic and local bundles
+    such as ``fixture-live`` are never listed as an agency's fire (final verification, panel SR-B1)."""
     rows = []
     for m in bundle.list_bundles():
         if not isinstance(m.get("summary"), dict):
             continue
         if catalog.parse_incident_id(str(m["summary"].get("id") or "")) is None:
             continue
+        if m.get("status") == "error":
+            continue            # a failed build is not a prepared fire
         if year is None and m.get("mode") != mode:
             continue
         try:

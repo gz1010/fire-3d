@@ -170,7 +170,7 @@ describe('overview list (§14.11)', () => {
     expect(html).toMatch(/fetched 47 min ago/)
     expect(html).not.toMatch(/checked just now/)
     const peek = renderToStaticMarkup(createElement(PeekBar))
-    expect(peek).toMatch(/list copy from 47 min ago \(could not refresh\)/)
+    expect(peek).toMatch(/active fires<\/b> · not refreshed \(47 min ago\)/)
   })
 
   it('metric units: the rows show hectares, as the map labels do (panel SR-m4)', () => {

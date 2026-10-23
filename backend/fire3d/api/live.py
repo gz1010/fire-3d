@@ -266,6 +266,8 @@ def sync_live_summaries(summaries: list[IncidentSummary], lookup: Any = None) ->
         cur = m.get("summary")
         if not iid or not isinstance(cur, dict):
             continue
+        if catalog.parse_incident_id(str(iid)) is None:
+            continue            # a synthetic or local bundle (fixture-live): no agency record to follow
         fresh = by_id.get(iid)
         if fresh is None:
             try:
@@ -487,7 +489,7 @@ async def run_cycle(jobs: JobManager) -> tuple[list[IncidentSummary], Any]:
     try:
         synced = await asyncio.to_thread(sync_live_summaries, summaries)
         if synced:
-            log.info("live refresh: CAL FIRE summary updated for %s", ", ".join(synced))
+            log.info("live refresh: summaries updated from their records (CAL FIRE or NIFC WFIGS) for %s", ", ".join(synced))
     except Exception as e:  # noqa: BLE001 - never stop the cycle for this
         log.warning("live refresh: summary sync failed: %s", config.mask_secrets(e))
     queued = await asyncio.to_thread(schedule_refreshes, jobs, summaries, dets)

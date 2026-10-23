@@ -52,6 +52,16 @@ def test_sync_live_summaries(tmp_data_dir) -> None:
     assert live.sync_live_summaries([], lookup=lambda i: (_ for _ in ()).throw(RuntimeError("down"))) == []
 
 
+def test_sync_never_touches_a_synthetic_bundle(tmp_data_dir) -> None:
+    """Final verification: a synthetic or local live bundle (``fixture-live``) has no agency record to follow, so the
+    sync neither looks it up nor rewrites its manifest (it used to log "CAL FIRE summary updated for fixture-live")."""
+    d = make_bundle(tmp_data_dir / "incidents", iid="fixture-live", mode="live")
+    mtime = os.stat(bundle.manifest_path(d)).st_mtime_ns
+    looked: list[str] = []
+    assert live.sync_live_summaries([], lookup=lambda i: looked.append(i) or _summary(i, acres=1.0)) == []
+    assert looked == [] and os.stat(bundle.manifest_path(d)).st_mtime_ns == mtime
+
+
 def test_summary_changes_copy_the_record_identity_only_when_the_record_changes() -> None:
     """Review R1 (brief 3): numbers, link and issuer always come from one record."""
     fresh = _summary("2026-alpha-fire-aaa111", acres=4000.0)                  # a CAL FIRE row (defaults: uid <- calfire_uid)

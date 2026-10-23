@@ -281,7 +281,8 @@ export function PeekBar() {
   else if (staleMs != null)
     text = (
       <>
-        {count} · list copy from {fmtRelative(staleMs, nowMs)} (could not refresh)
+        {/* short enough for a phone's one line: the qualifier must not be cut off */}
+        {count} · not refreshed ({fmtRelative(staleMs, nowMs)})
       </>
     )
   else
