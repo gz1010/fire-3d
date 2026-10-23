@@ -26,6 +26,8 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
   us-official takes the first free slot; then review+fix per role in finish order, us-pipeline's first.
   Consequence: us-web does not pass tf to us-official's 14.9.6 shims (they do not exist yet); the call sites are
   listed in us-web's notes_for_integrator for the integration to wire.
+- 01:40 UTC: us-catalog finished (73 min; 829 backend, 835 web tests). us-official started in its slot.
+  Review order: us-catalog, then the others as they finish (us-pipeline first among those).
 - Lesson: never SendMessage a workflow agent (it starts a second copy); relay through files or Agent-tool agents.
 
 ## Carry-over items for later stages (integration unless a role owns the file)
