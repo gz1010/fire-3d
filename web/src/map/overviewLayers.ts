@@ -139,7 +139,9 @@ export function overviewLabel(name: string, acres: number | null | undefined, un
   const short = name.replace(/\s+fire$/i, '').trim() || name
   if (typeof acres !== 'number' || !Number.isFinite(acres) || acres <= 0) return short
   const v = units === 'metric' ? acres * HA_PER_ACRE : acres
-  return `${short} · ${Math.round(v).toLocaleString('en-US')} ${units === 'metric' ? 'ha' : 'ac'}`
+  // small fires keep one decimal, as the fire card does ("Hulsey Bench · 0.1 ac", never "0 ac"; integration part 2)
+  const n = v < 0.1 ? 'under 0.1' : v < 10 ? Number(v.toFixed(1)).toLocaleString('en-US') : Math.round(v).toLocaleString('en-US')
+  return `${short} · ${n} ${units === 'metric' ? 'ha' : 'ac'}`
 }
 
 const acresOf = (s: Pick<IncidentSummary, 'acres'>) => (typeof s.acres === 'number' && Number.isFinite(s.acres) && s.acres > 0 ? s.acres : 0)

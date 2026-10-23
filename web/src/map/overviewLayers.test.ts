@@ -97,6 +97,12 @@ describe('overview markers', () => {
     expect(overviewLabel('Unknown Fire', null, 'us')).toBe('Unknown')
     expect(overviewLabel('Fire', 10, 'us')).toBe('Fire · 10 ac')
     expect(overviewLabel('Fd140011', 3, 'us')).toBe('Fd140011 · 3 ac')
+    // small fires: one decimal, never "0 ac" (Hulsey Bench, AZ, 0.1 ac)
+    expect(overviewLabel('Hulsey Bench', 0.1, 'us')).toBe('Hulsey Bench · 0.1 ac')
+    expect(overviewLabel('Pines 1', 6.04, 'us')).toBe('Pines 1 · 6 ac')
+    expect(overviewLabel('Roper', 2.5, 'us')).toBe('Roper · 2.5 ac')
+    expect(overviewLabel('Tiny', 0.01, 'us')).toBe('Tiny · under 0.1 ac')
+    expect(overviewLabel('Tiny', 0.5, 'metric')).toBe('Tiny · 0.2 ha')
   })
 })
 
