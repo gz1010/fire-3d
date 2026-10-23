@@ -68,6 +68,18 @@ Ports API 8716, Vite 5186. Scratch: session scratchpad `integration2/`. Only age
   wording (outcome words in Public's first view, region named, fires named behind the tap, two decimals, fuel caveat,
   Command "of 1"/region/ratio by fire/GSI); analysis line without a model run; 503 wording. Web 1183 passed.
 - rasters.test.ts carry-over: already done (three tests present, lines 316/331/350).
+- 25fb8fa, 24821cb docs: CONTRACT §14 folds validation (14.4 / 14.12.10 / 14.12.13), the part 2 changes (14.2 503 and
+  same-name, 14.4 wording amendment, 14.7 one time), SPEC §8.4 GSI + interim text + 503 gate + AccuracyFire,
+  validation.md 10.11 6 days + interim note.
+- eadee37 optional: a flight requested before the map exists is flown (pendingMapFlyTo, 5 s).
+- bd6e2ce region caveats in the Analysis drawer / Forensic tab (W-M3).
+- dbeaa72 found in the browser: "Checking… (Cal OES)" for a NC fire (no guessed source while pending); long verbatim
+  sender names ("AZApacheCountyEmergencyManagement…") wrap.
+- Servers API 8716 / Vite 5186 up. Screenshot batches: A overview x6 (1,391 markers = 230 active + 1,193 of 2026; 2025
+  856), B fires x19 (12 validation fires + Eaton, Palisades, Madre), C (cards, search, location) running.
+- Wording scan: 58 hits, all negations / safe area / quote(safe=) / comments; 0 FireTrace.
+- check_bundle.py: 0 problems on Horse Gulch, Windy Deuce, Rush, Table Rock, Black Cove, Greer; dNBR vs perimeter
+  quicklooks aligned (Table Rock lake carve-out, Windy Deuce outline).
 
 ## Next
 - Docs: CONTRACT §14.4/§14.12.10 fold of contract3/validation.md + wording amendment, §14.2 503/same-name, §14.7 feed
