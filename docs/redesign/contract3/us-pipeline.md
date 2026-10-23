@@ -15,7 +15,7 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
 | Cut-line (b) weighted Open-Meteo counter, soft cap, hourly live refetch | `brief 3 us-pipeline: M4 cut-line b and d` | done |
 | Cut-line (d) `SkillEntry.growth_sorensen` writer | `brief 3 us-pipeline: M4 cut-line b and d` | done |
 | Cut-line (c) 3rd smoke build | fallback used: recorded LANDFIRE window test | no active Southern/Eastern fire of 1,000 ac or more on 2026-10-23 (0 of 22 non-CA fires >= 1,000 ac); test `test_recorded_black_cove_window_switches_lf2025_to_lf2024` on `tests/data/pipeline_us/landfire_black_cove_*_fbfm40.tif` |
-| M4 smoke builds (§14.12.11) | - | in progress |
+| M4 smoke builds (§14.12.11) | `brief 3 us-pipeline: M4 smoke builds` | Horse Gulch done; Black Cove **pending (quota)**: Open-Meteo historical-forecast daily limit, reset 2026-10-24T00:00Z (22 h away at 02:04Z, so no wait under the stop rule) |
 
 ## §14.12.2 Weather quota (as built, M1)
 
@@ -282,6 +282,39 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
   `growth_sorensen` (= the row's `sorensen_growth`, new growth only). `spread/ensemble.run_forecast` writes it on every
   skill entry (any run with observed data inside the horizon: historical runs and hindcasts); `validate.hindcast_skill`
   returns the same shape. Test: `test_us_pipeline_build.py::test_forecast_skill_carries_growth_sorensen`.
+
+## §14.12.11 Smoke builds (as built, M4)
+
+Each build ran with `fire3d.cli build <id> --require-hrrr` only after `fire3d.cli weather-probe` said `overall ok`.
+
+| Fire | Probe | Result |
+|---|---|---|
+| `2024-horse-gulch-889237` (MT) | 01:21Z ok (first build, 322 s); 02:01:12Z ok (rebuild `--force`, 17 s, weather and rasters cached) | ready; `check_bundle.py`: 0 problems |
+| `2025-black-cove-95c3c8` (NC) | 02:04:08Z: historical-forecast `daily_limit` (HTTP 429 "Daily API request limit exceeded"), forecast unreachable (connect timeout) | **pending (quota)**: not built. Reset 2026-10-24T00:00Z |
+
+Horse Gulch (rebuild, 2026-10-23T02:03Z):
+- grid EPSG:32612 (UTM 12N), AOI 20 km, fire grid 512² at 39.1 m, elevation 1114-2170 m;
+- fuels `LF2023` (started 2024-07-09, federal fiscal year 2024: the pre-fire edition);
+- weather `open-meteo:historical-forecast:gfs_hrrr`, 346 h: HRRR 346 h, GFS fill 0 h, ERA5 0 h;
+- observations: 2,937 FIRMS detections from the keyed area API (VIIRS 942, GOES 1,507, MODIS 127, Landsat 361),
+  20 WFIGS perimeters matched by IRWIN id, observed 15,321 ac vs the record's 15,167 ac (ratio 1.01);
+- `summary.time_zone` America/Denver, `record_source` wfigs, `record_issuer` "USFS via NIFC WFIGS", ignition text
+  "Reported by USFS via NIFC WFIGS Jul 09, 13:32 MDT";
+- `data_sources[0]` "NIFC WFIGS incident record (IRWIN)" (restored by the `SOURCE_PREFIXES` fix), `LANDFIRE LF2023`;
+- "CAL FIRE" in the bundle's JSON files: 0;
+- warnings: 3 WFIGS perimeters dated after growth stopped (final extent only) and the interim live fuel moisture text.
+
+Black Cove checks that need no build (API on 8714): the catalog summary resolves (NC, America/New_York, "DFR via NIFC
+WFIGS", 3,502 ac); `/api/official/local-alerts` at 2025-03-21 18:00Z answers the archive channel with two "Civil
+Emergency Message" evacuation alerts from "North Carolina EOC - SWP" (polygon match, ET, ended); fire weather answers
+`available` with `states_checked` NC and SC; `/api/official/calfire` answers `not_covered`. The LANDFIRE switch at Black
+Cove (LF2025 all NoData there, so LF2024) is proved on recorded windows by
+`test_recorded_black_cove_window_switches_lf2025_to_lf2024`.
+
+To finish Black Cove after the reset: `cd backend && uv run python -m fire3d.cli weather-probe` (overall ok), then
+`uv run python -m fire3d.cli build 2025-black-cove-95c3c8 --require-hrrr` (expect EPSG:32617, LF2024 as the pre-fire
+edition of a fiscal-year-2025 fire, America/New_York, 0 "CAL FIRE"), then `uv run python scripts/check_bundle.py
+2025-black-cove-95c3c8` and the Public screenshot (12-hour EDT on the timeline).
 
 ## For the web (us-official, §14.6 / §14.7 consumers)
 

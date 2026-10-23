@@ -23,6 +23,7 @@ import {
   pixelAt,
   pixelCenter,
   rasterSetKey,
+  RasterSetLoader,
   sampleArrival,
   sampleLayer,
   useRasterSet,
@@ -309,6 +310,87 @@ describe('decoded-layer cache (LRU by URL, 256 MB)', () => {
     expect(cpuRasterCacheStats().bytes).toBeLessThanOrEqual(256 * MiB)
     await loadIncidentRaster(mb, 'huge')
     expect(cpuRasterCacheStats()).toEqual({ entries: 1, bytes: 256 * MiB }) // only the newest is left
+  })
+
+  // brief 3 carry-over (PLAN-3 integration item 4): the three cases the restored module had no test for
+  it('a single layer above the 256 MiB cap stays cached (the newest is never evicted) until another layer lands', async () => {
+    const layers: Record<string, LayerInfo> = {
+      over: info('layers/over.bin', 0, { width: 8192, height: 9216 }), // 288 MiB, above the cap on its own
+      small: info('layers/small.bin', 0, { width: 4096, height: 2048 }), // 32 MiB
+    }
+    const mb = manifest({ layers })
+    answer = (url) => ({ ok: true, status: 200, buf: new ArrayBuffer(url.includes('over') ? 288 * MiB : 32 * MiB) })
+    const a = await loadIncidentRaster(mb, 'over')
+    expect(cpuRasterCacheStats()).toEqual({ entries: 1, bytes: 288 * MiB })
+    expect(await loadIncidentRaster(mb, 'over')).toBe(a) // served from the cache: no second download
+    expect(calls).toHaveLength(1)
+    await loadIncidentRaster(mb, 'small') // now the big one is not the newest: it makes room
+    expect(cpuRasterCacheStats()).toEqual({ entries: 1, bytes: 32 * MiB })
+  })
+
+  it('two layer names sharing one file URL share one download and keep their own names', async () => {
+    const shared = info('layers/shared.bin', 4)
+    const mb = manifest({ layers: { first: shared, second: { ...shared, description: 'same file, other name' } } })
+    expect(incidentRasterUrl(mb, 'first')).toBe(incidentRasterUrl(mb, 'second'))
+    const [x, y] = await Promise.all([loadIncidentRaster(mb, 'first'), loadIncidentRaster(mb, 'second')])
+    expect(calls).toHaveLength(1)
+    expect([x.name, y.name]).toEqual(['first', 'second'])
+    expect(y.data).toBe(x.data) // the same decoded array, counted once
+    expect(cpuRasterCacheStats().entries).toBe(1)
+    expect((await loadIncidentRaster(mb, 'first')).name).toBe('first')
+  })
+})
+
+describe('useRasterSet reload rule (RasterSetLoader, no DOM renderer needed)', () => {
+  const m = manifest()
+  const f = forecast(m)
+  const REQ: RasterRequest = { incident: ['observed_arrival'], forecast: ['arrival_p50'] }
+  const tick = () => new Promise((r) => setTimeout(r, 0))
+
+  it('loads once per key; a new manifest object of the same bundle version does not reload; a new version does', async () => {
+    const got: RasterSet[] = []
+    const loader = new RasterSetLoader((s) => got.push(s))
+    expect(loader.update(m, f, REQ)).toBe(true)
+    expect(loader.update({ ...m } as IncidentManifest, f, { incident: ['observed_arrival'], forecast: ['arrival_p50'] })).toBe(false)
+    await tick()
+    await tick()
+    expect(got).toHaveLength(1)
+    expect(got[0].incident.observed_arrival.status).toBe('ready')
+    const rebuilt = manifest({ built_ms: m.built_ms + 1000 })
+    expect(loader.update(rebuilt, forecast(rebuilt), REQ)).toBe(true) // rebuilt bundle: a new key
+    await tick()
+    await tick()
+    expect(got).toHaveLength(2)
+    expect(got[1].key).toBe(rasterSetKey(rebuilt, forecast(rebuilt), REQ))
+    expect(loader.update(rebuilt, forecast(rebuilt), { incident: ['observed_arrival', 'elevation'], forecast: ['arrival_p50'] })).toBe(true) // new names
+  })
+
+  it("drops a superseded key's late answer and every answer after dispose", async () => {
+    const got: string[] = []
+    let release: (() => void) | null = null
+    const slow: typeof loadRasterSet = (mm, ff, rr) =>
+      new Promise((res) => {
+        const go = () => void loadRasterSet(mm, ff, rr).then(res)
+        if (!release) release = go
+        else go()
+      })
+    const loader = new RasterSetLoader((s) => got.push(s.key), slow)
+    loader.update(m, f, REQ) // held back
+    const other = manifest({ built_ms: m.built_ms + 5 })
+    loader.update(other, forecast(other), REQ) // answers at once
+    await tick()
+    await tick()
+    release!()
+    await tick()
+    await tick()
+    expect(got).toEqual([rasterSetKey(other, forecast(other), REQ)]) // the first key's late answer was dropped
+    loader.dispose()
+    loader.update(m, f, REQ)
+    loader.dispose()
+    await tick()
+    await tick()
+    expect(got).toHaveLength(1)
+    expect(loader.update(m, f, REQ)).toBe(true) // after dispose the same key loads again (StrictMode remount)
   })
 })
 

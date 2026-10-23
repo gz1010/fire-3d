@@ -29,7 +29,7 @@ import {
   type SearchPlan,
   type SearchState,
 } from './search'
-import { cardYield } from './searchUi'
+import { cardYield, controlsShift } from './searchUi'
 import type { GeocodeMatch, GeocodeResponse } from './types'
 
 const inc = (id: string, name: string, over: Partial<IncidentSummary> = {}): IncidentSummary =>
@@ -252,6 +252,15 @@ describe('cardYield: the popover never covers the card', () => {
     expect(cardYield({ top: 110, bottom: 400 }, { top: 300, bottom: 780 }, 480, true)).toEqual({ maxHeight: 372 })
     expect(cardYield({ top: 110, bottom: 200 }, { top: 500, bottom: 780 }, 280, true)).toBeNull()
     expect(cardYield({ top: 110, bottom: 720 }, { top: 300, bottom: 780 }, 480, true)).toEqual({ hidden: true })
+  })
+})
+
+describe('controlsShift: phones keep the search message clear of the map controls (W15)', () => {
+  it('slides the controls below the popover, and back when it closes', () => {
+    // the search box ends at 121 px, the controls row starts at 133 px; a two-line message ends at 200 px
+    expect(controlsShift({ top: 127, bottom: 200 }, 133)).toBe(73)
+    expect(controlsShift({ top: 127, bottom: 126.5 }, 133)).toBe(0)
+    expect(controlsShift(null, 133)).toBe(0)
   })
 })
 

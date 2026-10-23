@@ -196,3 +196,52 @@ As §14.9.4: `clockFor`, `useClock`, `useTimeFormat`, `useTimeFormatFor`, `useZo
   `LocationCard.tsx` show it from `/api/geo/lookup` only (no client boxes). `OverviewCard`: "Nearest fires (official
   records)", the place's county and state, "Fire lists: CAL FIRE and NIFC WFIGS, checked …", the zone line "Times:
   Mountain Time (MDT), local time at this place".
+
+## Cut line (M6): done (a), (c), (d), (e), (f); not done (b)
+
+- (a) Accuracy line in the Analysis drawer and the Forensic Analysis tab: `ui/RegionAccuracy.tsx` (`RegionAccuracy`)
+  shows the Command line, the fuel caveat and "Outside the modeled area is unknown, not low." for the open fire, from
+  `state/accuracy.ts` `useOpenFireAccuracy()` (null while the file loads or with no fire open; a load failure says
+  "The accuracy of the model in this region could not be loaded right now."). Rendered by `ui/shell/AnalysisDrawer.tsx`
+  and `ui/AnalysisTab.tsx`, never inside an official record. Test: `ui/RegionAccuracy.test.ts`.
+- (f) Location card model block (`location/LocationCard.tsx` `ReasonsBlock`): one `.loc-model-accuracy` line under the
+  model sentence (Public: the words; Command: the score line), then the "always" sentence; hidden in the compact phone
+  sheet.
+- (d) `data/rasters.ts`: `RasterSetLoader` (plain class, no new dependency) owns the load of one raster set:
+  `update(key, entries)` reloads when the key changes and drops a stale answer, `dispose()` ends it; `useRasterSet`
+  holds one per component (`useState(() => new RasterSetLoader(setLoaded))`). `rasters.test.ts`: a 288 MiB layer above
+  the 256 MiB cache cap stays cached while it is the only layer; two names sharing one URL keep their own names;
+  reload on key change, stale answers dropped, dispose.
+- (e) `lib/reproject.test.ts` W14: zones 10-19 (central meridian ±3.4°, 24.5/37/49.4° N) round trips and grid alignment
+  (72 grids), zone-line AOIs at 102/108/84° W, Key West, Northwest Angle, West Quoddy, and the `fixture-east` grid
+  (UTM 17N, centre 381789 E / 3905979 N, 12 km).
+- (c) W15 phone fixes (audit G12):
+  - search message under the controls: `location/searchUi.ts` `controlsShift(popover, controlsTop)`; on phones
+    `map/MapControls.tsx` slides the controls below an open search message with a transform (the controls' slot
+    keeps its size, so the safe area and the map framing do not move with the message).
+  - refit with the list sheet open: `map/framing.ts` `MIN_MAP_PX = 160` and `mapCovered(insets, w, h)`; while the chrome
+    leaves less map than that (the phone list sheet), `mapController` keeps the last usable padding and does not
+    follow the safe area, so the camera and the list's "N fires in this view" keep what the user saw; closing the
+    sheet frames again. On phones the frame button ("All states" / "Incident") first closes an open bottom sheet
+    (updates, layers, analysis), so the framed map shows.
+- (b) W11 list windowing above 150 rows: NOT done (integration). The list renders every row of the filter in view
+  (1,393 rows with "Show all" on the 2026 season); keyboard Home/End and `aria-setsize`/`aria-posinset` are not added.
+
+## Late changes (after M5)
+
+- `us-official`'s §14.9.6 shims (commit "brief 3 us-official: M1") now get `tf` at every us-web call site:
+  `buildFeedItems` (`ui/KeyEvents.tsx`, `ui/timeline/CompactTimeline.tsx`, `map/mapController.ts` `mapEvents`, whose
+  event key includes the zone and clock), `zoneDetail` and `cameraViewText` (map hovers, `getTimeFormat()`),
+  `officialBlock` (`location/LocationCard.tsx`, `location/OverviewCard.tsx`) and `officialFireWeatherNote`
+  (`location/LocationCard.tsx`).
+- Overview panel: the official block above the list is capped at 22vh (`.ov-official`; the old 34 % of an indefinite
+  height did not apply and the list could shrink to no rows) and the list keeps at least 132 px. An empty view or empty
+  filter carries the list-absence line itself, so the footer is not rendered under it (the line is said once).
+- Alaska, Hawaii and territories (`location/geoLookup.ts` `nearestFiresMeaningful`, `UNLISTED_HERE_TEXT`): the
+  overview location card replaces "Nearest fires (official records)" rows (the nearest lower-48 fire is more than a
+  thousand miles away and would read as nothing nearby) with "Fire-3d lists fires in the lower 48 states only, so fires
+  here are not listed. Follow local officials." Places outside the US keep the list (a point across a border can be
+  near a listed US fire).
+- Fire card: a member fire outside California shows "Part of the {complex_name}" with the name verbatim
+  (`lib/recordText.ts` `partOfComplex`; "Complex" is added only when the name lacks it).
+- Search: a ZIP match is titled "ZIP 83702, ID" from the match's own `zip` and `state`.

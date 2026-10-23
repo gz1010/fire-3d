@@ -66,17 +66,20 @@ describe('overview list (§14.11)', () => {
     setLists()
     ssrState(useMapRuntime, { viewBox: [-75, 40, -70, 44] }) // nothing listed there
     const html = renderToStaticMarkup(createElement(OverviewList, { onPick: () => undefined }))
-    const body = html.slice(html.indexOf('ov-body'), html.indexOf('<footer'))
+    const body = html.slice(html.indexOf('ov-body'))
     expect(has(body, EMPTY_VIEW)).toBe(true)
     expect(has(body, LIST_ABSENCE)).toBe(true)
     expect(body).not.toMatch(/no fires/i)
+    // said once: the footer does not repeat the line under the empty view
+    expect(html.split(esc(LIST_ABSENCE)).length - 1).toBe(1)
+    expect(html).not.toContain('<footer')
   })
 
   it('an empty filter says who lists nothing, with the line', () => {
     setLists([], [])
     ssrState(useWorkspace, { overviewFilter: 'active' })
     const html = renderToStaticMarkup(createElement(OverviewList, { onPick: () => undefined }))
-    const body = html.slice(html.indexOf('ov-body'), html.indexOf('<footer'))
+    const body = html.slice(html.indexOf('ov-body'))
     expect(has(body, 'CAL FIRE and NIFC list no active fires right now.')).toBe(true)
     expect(has(body, LIST_ABSENCE)).toBe(true)
   })

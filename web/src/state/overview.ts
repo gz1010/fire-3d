@@ -172,6 +172,32 @@ export function inViewLabel(inView: number, total: number): { inView: string; al
   return { inView: `${inView.toLocaleString('en-US')} fire${inView === 1 ? '' : 's'} in this view`, all: `Show all ${total.toLocaleString('en-US')}` }
 }
 
+/** W11: above this many rows the overview list renders only the rows near the visible part of its scroller. */
+export const LIST_WINDOW_MIN = 150
+/** Rows rendered above and below the visible ones (keyboard steps and fast scrolls stay smooth). */
+export const LIST_OVERSCAN = 10
+
+/** The rows [start, end) a windowed list renders: the rows between `scrollTop` and `scrollTop + viewH` (px, in the
+ *  list's own coordinates) plus the overscan. Lists of LIST_WINDOW_MIN rows or fewer render every row. */
+export function listWindow(n: number, scrollTop: number, viewH: number, rowH: number, overscan = LIST_OVERSCAN): { start: number; end: number } {
+  if (n <= LIST_WINDOW_MIN) return { start: 0, end: n }
+  const h = Math.max(1, rowH)
+  const y = Math.max(0, scrollTop)
+  const start = Math.max(0, Math.min(n, Math.floor(y / h) - overscan))
+  const end = Math.max(start, Math.min(n, Math.ceil((y + Math.max(0, viewH)) / h) + overscan))
+  return { start, end }
+}
+
+/** The scroll position (list coordinates) that shows row `i` whole: unchanged when it already shows, else the
+ *  nearest edge (a keyboard step scrolls by one row, Home and End jump). */
+export function scrollToRow(i: number, rowH: number, scrollTop: number, viewH: number): number {
+  const top = i * rowH
+  const bottom = top + rowH
+  if (top < scrollTop) return top
+  if (bottom > scrollTop + viewH) return Math.max(0, bottom - viewH)
+  return scrollTop
+}
+
 /** The §14.14 notices for list sources reported unavailable (deduplicated over the lists shown). */
 export function listSourceNotices(sources: readonly (readonly ListSource[] | null | undefined)[]): string[] {
   const down = new Set<string>()

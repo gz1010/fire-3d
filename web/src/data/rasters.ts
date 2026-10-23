@@ -320,6 +320,37 @@ export async function loadRasterSet(manifest: IncidentManifest | null | undefine
   }
 }
 
+/** The loading rule of useRasterSet, without React (so it is unit-tested in node): one load per key (bundle version,
+ *  usable run, requested names); an answer for a key that is no longer the latest is dropped. */
+export class RasterSetLoader {
+  private key: string | null = null
+  private seq = 0
+  private readonly onSet: (set: RasterSet) => void
+  private readonly load: typeof loadRasterSet
+  constructor(onSet: (set: RasterSet) => void, load: typeof loadRasterSet = loadRasterSet) {
+    this.onSet = onSet
+    this.load = load
+  }
+
+  /** The inputs (maybe) changed: start a load when their key differs from the last one. Returns whether it did. */
+  update(manifest: IncidentManifest | null | undefined, forecast: ForecastManifest | null | undefined, req: RasterRequest): boolean {
+    const key = rasterSetKey(manifest, forecast, req)
+    if (key === this.key) return false
+    this.key = key
+    const seq = ++this.seq
+    void this.load(manifest, forecast, req).then((set) => {
+      if (seq === this.seq) this.onSet(set)
+    })
+    return true
+  }
+
+  /** Unmounted: late answers are dropped and the next update loads again. */
+  dispose(): void {
+    this.seq++
+    this.key = null
+  }
+}
+
 /** Raster set of the store's ready manifest and selected forecast run. Pending ('loading') until loaded; reloads
  *  when the bundle version, the run or the requested names change (pass a stable `req`, e.g. a module constant). */
 export function useRasterSet(req: RasterRequest): RasterSet {
@@ -334,16 +365,12 @@ export function useRasterSet(req: RasterRequest): RasterSet {
     inputs.current = { manifest, forecast, req }
   })
   const [loaded, setLoaded] = useState<RasterSet | null>(null)
+  const [loader] = useState(() => new RasterSetLoader(setLoaded))
   useEffect(() => {
-    let live = true
     const { manifest: m, forecast: f, req: r } = inputs.current
-    void loadRasterSet(m, f, r).then((set) => {
-      if (live) setLoaded(set)
-    })
-    return () => {
-      live = false
-    }
-  }, [key])
+    loader.update(m, f, r)
+  }, [key, loader])
+  useEffect(() => () => loader.dispose(), [loader])
   // before the load answers: the decoded layers already in the cache, else 'loading' slots
   const fallback = useMemo(() => cachedRasterSet(manifest, forecast, req) ?? pendingRasterSet(manifest, forecast, req), [manifest, forecast, req])
   return loaded && loaded.key === key ? loaded : fallback

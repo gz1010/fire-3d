@@ -88,6 +88,16 @@ export function poseMatches(a: CameraPose, b: CameraPose): boolean {
   return Math.hypot(dx, dy) <= 24 && Math.abs(a.zoom - b.zoom) <= 0.15 && db <= 2 && Math.abs(a.pitch - b.pitch) <= 2
 }
 
+/** Below this many px of map between the chrome (a phone's bottom sheet open over most of it), framing stops
+ *  following the safe area (W15). */
+export const MIN_MAP_PX = 160
+
+/** True when the chrome leaves less than `minPx` of map height or width: fitting into that sliver would put the fires
+ *  behind the sheet, so the camera keeps the last usable padding (what the user saw) until the sheet closes. */
+export function mapCovered(insets: { top: number; right: number; bottom: number; left: number }, width: number, height: number, minPx = MIN_MAP_PX): boolean {
+  return height - insets.top - insets.bottom < minPx || width - insets.left - insets.right < minPx
+}
+
 /** Zoom that fits `bounds` into a width x height px viewport with `margin` px on each side (MapLibre's 512 px world);
  *  the fallback when MapLibre's cameraForBounds cannot fit (it returns undefined when padding leaves no room). */
 export function zoomForBounds(bounds: LonLatBox, width: number, height: number, margin = 0, maxZoom = 22): number {

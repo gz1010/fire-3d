@@ -101,9 +101,10 @@ describe('fire card record (§14.5)', () => {
     expect(r.html).toContain('href="https://example.org/2-7"')
   })
 
-  it('a member fire outside California says which complex it is part of', () => {
-    const r = render(wfigsSummaryFixture({ complex_name: 'Bear Creek Complex' }))
-    expect(r.outside).toContain('Part of the Bear Creek Complex')
+  it('a member fire outside California says which complex it is part of (the name verbatim, "Complex" never twice)', () => {
+    expect(render(wfigsSummaryFixture({ complex_name: 'Montana Lightning Complex' })).outside).toContain('Part of the Montana Lightning Complex')
+    expect(render(wfigsSummaryFixture({ complex_name: 'Montana Lightning Complex' })).outside).not.toContain('Complex Complex')
+    expect(render(wfigsSummaryFixture({ complex_name: 'Bear Creek' })).outside).toContain('Part of the Bear Creek Complex')
   })
 })
 

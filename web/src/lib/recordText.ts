@@ -40,3 +40,10 @@ export function complexMembers(fire: Pick<IncidentSummary, 'complex_members' | '
     return { name, url: r && isHttps(r.url) ? r.url : null }
   })
 }
+
+/** "Part of the Montana Lightning Complex" (§14.5): the WFIGS complex name verbatim, "Complex" added only when the name
+ *  does not already say it. */
+export function partOfComplex(name: string): string {
+  const n = name.trim()
+  return /\bcomplex$/i.test(n) ? `Part of the ${n}` : `Part of the ${n} Complex`
+}

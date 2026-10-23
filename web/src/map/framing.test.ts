@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { aoiBounds } from '../lib/fireBounds'
 import { localToLonLat } from '../lib/reproject'
-import { boundsCenter, LOWER48_BOUNDS, Framing, goalFor, latestPerimeter, MAX_REISSUES, poseMatches, zoomForBounds, type CameraPose, type FrameGoal, type GoalInput } from './framing'
+import { boundsCenter, LOWER48_BOUNDS, Framing, goalFor, latestPerimeter, mapCovered, MAX_REISSUES, MIN_MAP_PX, poseMatches, zoomForBounds, type CameraPose, type FrameGoal, type GoalInput } from './framing'
 
 const GRID = { utm_zone: 11, center_e: 401418.0, center_n: 3784849.0, extent_m: 12000, bbox_lonlat: [-118.2, 34.1, -118.07, 34.24] as [number, number, number, number] }
 const [PLON, PLAT] = localToLonLat(500, -300, GRID)
@@ -87,6 +87,18 @@ describe('camera helpers', () => {
     const [lon, lat] = boundsCenter([-120, 30, -110, 40])
     expect(lon).toBe(-115)
     expect(lat).toBeGreaterThan(35) // Mercator centre lies north of the arithmetic mean
+  })
+
+  it('mapCovered: a phone list sheet over most of the map stops the framing from fitting into the sliver (W15)', () => {
+    // 390 x 844 phone: search and controls on top (170 px), the list sheet from y = 215 down (629 px)
+    expect(mapCovered({ top: 170, right: 0, bottom: 629, left: 0 }, 390, 844)).toBe(true)
+    // the sheet closed: the peek bar and coordinates only
+    expect(mapCovered({ top: 170, right: 0, bottom: 90, left: 0 }, 390, 844)).toBe(false)
+    // a location card sheet that leaves 255 px of map still frames above it
+    expect(mapCovered({ top: 170, right: 0, bottom: 419, left: 0 }, 390, 844)).toBe(false)
+    // desktop with the overview panel on the right
+    expect(mapCovered({ top: 60, right: 340, bottom: 190, left: 0 }, 1440, 900)).toBe(false)
+    expect(mapCovered({ top: 0, right: 0, bottom: 0, left: 300 }, 300 + MIN_MAP_PX - 1, 800)).toBe(true)
   })
 
   it('latestPerimeter takes the newest, whatever the order', () => {

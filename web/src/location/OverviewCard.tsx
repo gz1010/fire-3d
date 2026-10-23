@@ -19,7 +19,7 @@ import { useWorkspace, type SelectedLocation } from '../state/workspace'
 import { useNow } from '../ui/hooks'
 import { detailsFor, useAddressDetails } from './addressStore'
 import { CardFrame, CoverageNotice, OfficialSection } from './CardParts'
-import { coverageText, lookupPlace, useGeoLookup } from './geoLookup'
+import { coverageText, lookupPlace, nearestFiresMeaningful, UNLISTED_HERE_TEXT, useGeoLookup } from './geoLookup'
 import { PROTOTYPE_NOTE } from './describe'
 import { incidentPool, overviewNearby, type NearFire } from './incidents'
 import { checkLocation } from './locationCheck'
@@ -83,6 +83,7 @@ export function OverviewCard({ sel, official }: { sel: SelectedLocation; officia
   const lookup = useGeoLookup(sel.lon, sel.lat)
   const geo = lookup.status === 'ok' ? lookup.data : null
   const coverage = coverageText(geo)
+  const listed = nearestFiresMeaningful(geo)
   // times at a point without a fire: local time at this place (the lookup's zone), else the viewer's, labelled
   const placeZone = geo?.supported ? geo.time_zone : null
   const tf = useTimeFormatFor(placeZone)
@@ -90,7 +91,7 @@ export function OverviewCard({ sel, official }: { sel: SelectedLocation; officia
     usePlaceZone.getState().setPlaceZone(placeZone)
     return () => usePlaceZone.getState().setPlaceZone(null)
   }, [placeZone])
-  const block = useMemo(() => officialBlock(official, { nowMs, units, fireName: null, incidentUrl: null }), [official, nowMs, units])
+  const block = useMemo(() => officialBlock(official, { nowMs, units, fireName: null, incidentUrl: null, tf }), [official, nowMs, units, tf])
   const near = useMemo(() => overviewNearby(pool, sel.lat, sel.lon, isActiveFire), [pool, sel.lat, sel.lon])
   // the point's own description (address type, approximate) without any fire data
   const point = useMemo(() => checkLocation({ point: sel, timeMs: nowMs, nowMs, summary: null, manifest: null, perimeters: [], detections: [], weather: null, forecast: null, rasters: makeRastersMissing(), address }).point, [sel, nowMs, address])
@@ -123,7 +124,9 @@ export function OverviewCard({ sel, official }: { sel: SelectedLocation; officia
       )}
       <section className="loc-block loc-nearby" aria-label="Nearest fires">
         <h3 className="loc-block-title">Nearest fires (official records)</h3>
-        {near.fires.length ? (
+        {!listed ? (
+          <p className="loc-muted-line">{UNLISTED_HERE_TEXT}</p>
+        ) : near.fires.length ? (
           <ul className="loc-fire-list">
             {fires.map((f) => (
               <FireRow key={f.summary.id} f={f} units={units} />
@@ -133,10 +136,12 @@ export function OverviewCard({ sel, official }: { sel: SelectedLocation; officia
         ) : (
           <p className="loc-muted-line">No fire list is loaded yet.</p>
         )}
-        <p className="loc-note">
-          Distance from here to where the agency (CAL FIRE in California, NIFC WFIGS elsewhere) reported each fire, not to its edge. Distance alone does not
-          tell you the risk.
-        </p>
+        {listed && (
+          <p className="loc-note">
+            Distance from here to where the agency (CAL FIRE in California, NIFC WFIGS elsewhere) reported each fire, not to its edge. Distance alone does not
+            tell you the risk.
+          </p>
+        )}
       </section>
       <OfficialSection block={block} compact={compact} />
       {compact ? (

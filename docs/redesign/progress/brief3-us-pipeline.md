@@ -33,10 +33,20 @@ endpoint, §14.6, §14.7, §14.9.7, §14.12.2/3/5/6/7/8/10/11). Ports API 8714, 
   nws not_checked 7-day reason, archive pending then available with 2 Polk Co evacuation CEMs; calfire not_covered).
 - Web gates ok (typecheck 0, lint 55 all src/scene, 64 files 835 tests + 2 skipped, build ok).
 
+- 02:01Z probe ok -> Horse Gulch rebuilt --force --require-hrrr (17 s, cached): data_sources[0] "NIFC WFIGS
+  incident record (IRWIN)", check_bundle 0 problems, 0 "CAL FIRE".
+- 02:04Z probe: historical-forecast daily_limit (reset 2026-10-24T00:00Z, 22 h) -> Black Cove **pending (quota)**
+  (stop rule: no wait over 1 h).
+- Screenshots (API 8714 restarted on current code, Vite 5184): horse-gulch-command (MDT, UTM 12N, aligned),
+  horse-gulch-public (12-hour MDT), black-cove-public (unbuilt: official panel, NC/SC "not available in these
+  states"; no timeline until the build). API log: 72 GET, 0 non-GET.
+- Final gates: backend 870 passed; web typecheck 0, lint 55 (all src/scene), build ok; web tests 1028 passed,
+  3 failed in us-official's uncommitted working-tree edits (evacuation.test.ts, model.test.ts; both pass on HEAD).
+- Wording scan: 7 hits, all "not an all-clear" negations or `quote(..., safe=...)`. Key scan: 239 files, 0.
+
 ## Next
-- Probes at 01:28-01:29Z: connect timeouts, a per-minute 429 (archive) and an hourly 429 (historical-forecast, until
-  02:00Z). At ~02:00Z: probe; rebuild Horse Gulch --force --require-hrrr (weather cached); build Black Cove.
-- Then screenshots (API 8714 + Vite 5184 running), report.
+- Done except Black Cove (pending quota). After 2026-10-24T00:00Z: weather-probe, build Black Cove
+  --require-hrrr, check_bundle, Public screenshot with 12-hour EDT (steps in contract3/us-pipeline.md §14.12.11).
 
 ## Decisions
 - probe adds a `detail` key; any request-limit period maps to status `daily_limit`.
@@ -44,4 +54,5 @@ endpoint, §14.6, §14.7, §14.9.7, §14.12.2/3/5/6/7/8/10/11). Ports API 8714, 
 - weather_preflight before clearing the bundle (in-memory block only, no network).
 
 ## Open problems
-- historical-forecast host connect timeout on this IP at 00:36Z (not a 429). Re-probe before smoke builds.
+- Open-Meteo on the shared IP: connect timeouts, a per-minute 429 (archive), an hourly 429 (historical-forecast,
+  01:28Z) and the daily limit (historical-forecast, 02:04Z). Black Cove waits for the daily reset.

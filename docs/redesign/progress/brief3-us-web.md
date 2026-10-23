@@ -15,8 +15,14 @@ Role: us-web (API 8712, Vite 5182). Scratch: /tmp/claude-0/-home-user-fire-3d/46
 
 - M5: national search (usStates, search, SearchBox, geocodeClient, types), W8 geodesy order, coverage (done in M3). Accuracy seed check: exact §14.4 OSCC lines from the real seed (seed rule for "starts during main growth").
 
+- Screenshots: all 18 named in plan3-roles taken and viewed (docs/screenshots/brief3-us-web-*.png).
+
+- M6 cut line: (a) RegionAccuracy in the Analysis drawer and Forensic Analysis tab, (c) W15 phone fixes, (d) rasters carry-over (RasterSetLoader), (e) W14 reprojection zones 10-19 + fixture-east, (f) location card accuracy line. Not done: (b) W11 windowing.
+- Late: tf passed to every us-official shim call site; overview official block cap and single list-absence line; AK/HI nearest-fires line; partOfComplex; ZIP titles.
+- Gates (final): tsc 0; lint 55 (all src/scene); vitest 1,028 passed, 2 skipped, 3 failed (all in us-official's uncommitted files: extras/evacuation.test.ts, official/model.test.ts); build OK; backend 870 passed; check-time-api --role us-web 0/0; 0 non-GET in api.log/api2.log/api3.log; key scan 0.
+
 ## Next
-- Screenshots (CA after-shots, fixture-east x3, overview x3, northwest, firecard non-CA, search atlanta/boise, anchorage phone), wording scan, report. Then cut-line items.
+- Report JSON, then hand back.
 
 ## Decisions
 - fmtAt/fmtDayDate default year 'never' (keeps CA strings).
@@ -25,3 +31,5 @@ Role: us-web (API 8712, Vite 5182). Scratch: /tmp/claude-0/-home-user-fire-3d/46
 - SSR tests: ui/ssr.testutil.ts sets zustand initial state (server snapshot).
 
 ## Open problems
+- us-official's uncommitted official/model.ts (at 02:10 UTC) shows "No evacuation order or warning listed here · Cal OES" for points in Georgia and Alaska (search-atlanta and location-anchorage screenshots); §14.14 wants "Evacuation zones: not available in this state". Their file: listed for the integrator.
+- W11 windowing not done.

@@ -332,3 +332,152 @@ describe('per-pixel inverse mapping', () => {
     expect(Array.from(out)).toEqual([44, 0, 11, 33, 22])
   })
 })
+
+// ------------------------------------------------------------------------------------------------- brief 3 (W14)
+// The lower 48 spans UTM zones 10-19 (audit-3 web 3.8). Zones 10 and 11 are covered by the California cases above;
+// here every zone 12-19 at its central meridian and ±3.4°, at 24.5°, 37° and 49.4° N, the zone-line AOIs (102°, 108°
+// and 84° W, like Madre at 120° W), the extreme points (Key West, Northwest Angle, West Quoddy Head) and the real
+// fixture-east bundle (zone 17). Same checks as above: round trip against lib/geo.ts (< 1 mm), the true AOI
+// quadrilateral, and the per-pixel inverse mapping at interior points, edges and corners.
+const zoneOf = (lon: number) => Math.floor((lon + 180) / 6) + 1
+const centralMeridian = (zone: number) => zone * 6 - 183
+
+function gridAt(lon: number, lat: number, zone = zoneOf(lon), extent = 16000): AoiGrid {
+  const [e, n] = lonLatToUtm(lon, lat, zone)
+  return { utm_zone: zone, center_e: Math.round(e), center_n: Math.round(n), extent_m: extent }
+}
+
+interface ZoneCase {
+  name: string
+  grid: AoiGrid
+  w: number
+  h: number
+}
+
+const ZONE_CASES: ZoneCase[] = []
+for (let zone = 12; zone <= 19; zone++) {
+  const cm = centralMeridian(zone)
+  for (const dLon of [-3.4, 0, 3.4])
+    for (const lat of [24.5, 37, 49.4]) ZONE_CASES.push({ name: `zone ${zone}: ${(cm + dLon).toFixed(1)}°, ${lat}° N`, grid: gridAt(cm + dLon, lat, zone), w: 128, h: 128 })
+}
+const SPECIAL_CASES: ZoneCase[] = [
+  // zone-line AOIs (50 km): the grid takes the zone of the AOI centre, part of it lies in the next zone's band
+  { name: '102° W line (zones 13/14), 50 km', grid: gridAt(-102.01, 36.5, 13, 50000), w: 256, h: 256 },
+  { name: '108° W line (zones 12/13), 50 km', grid: gridAt(-107.99, 37.3, 13, 50000), w: 256, h: 256 },
+  { name: '84° W line (zones 16/17), 50 km', grid: gridAt(-84.01, 34.9, 16, 50000), w: 256, h: 256 },
+  // extreme points of the lower 48
+  { name: 'Key West (zone 17)', grid: gridAt(-81.8, 24.55), w: 128, h: 128 },
+  { name: 'Northwest Angle (zone 15)', grid: gridAt(-95.15, 49.38), w: 128, h: 128 },
+  { name: 'West Quoddy Head (zone 19)', grid: gridAt(-66.95, 44.82), w: 128, h: 128 },
+  // the real synthetic North Carolina bundle (data/incidents/fixture-east/manifest.json, us-catalog M2)
+  { name: 'fixture-east (EPSG:32617)', grid: { utm_zone: 17, center_e: 381789.0, center_n: 3905979.0, extent_m: 12000 }, w: 400, h: 400 },
+]
+
+describe('UTM zones 12-19 (W14): zone rule and the 51 test grids', () => {
+  it('zone = floor((lon + 180) / 6) + 1 across the lower 48', () => {
+    expect([-124.7, -120.01, -119.99, -111, -105, -99, -93, -87, -81, -75, -69, -66.95].map(zoneOf)).toEqual([10, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 19])
+    expect(zoneOf(-81.8)).toBe(17) // Key West
+    expect(zoneOf(-95.15)).toBe(15) // Northwest Angle
+    expect(zoneOf(-66.95)).toBe(19) // West Quoddy Head
+    expect(ZONE_CASES).toHaveLength(72)
+  })
+})
+
+describe('UTM zones 12-19: conversions match lib/geo.ts (round trip < 1 mm)', () => {
+  for (const c of [...ZONE_CASES, ...SPECIAL_CASES]) {
+    it(c.name, () => {
+      const r = rng(c.grid.utm_zone * 7919 + Math.round(c.grid.center_n))
+      const h = c.grid.extent_m / 2
+      for (let k = 0; k < 200; k++) {
+        const x = (r() * 2 - 1) * h * 1.5
+        const z = (r() * 2 - 1) * h * 1.5
+        const a = localToLonLat(x, z, c.grid)
+        const b = geo.localToLonLat(x, z, c.grid)
+        expect(Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1])).toBeLessThan(1e-12)
+        const [x2, z2] = lonLatToLocal(a[0], a[1], c.grid)
+        expect(Math.hypot(x2 - x, z2 - z)).toBeLessThan(1e-3)
+      }
+    })
+  }
+})
+
+describe('UTM zones 12-19: the true AOI quadrilateral', () => {
+  for (const c of [...ZONE_CASES, ...SPECIAL_CASES]) {
+    it(c.name, () => {
+      const h = c.grid.extent_m / 2
+      const [nw, ne, se, sw] = aoiCornersLonLat(c.grid)
+      for (const [p, x, z] of [
+        [nw, -h, -h],
+        [ne, h, -h],
+        [se, h, h],
+        [sw, -h, h],
+      ] as const) {
+        const [px, pz] = geo.lonLatToLocal(p[0], p[1], c.grid)
+        expect(Math.hypot(px - x, pz - z)).toBeLessThan(1e-3)
+      }
+      // north is up and east is right in every zone
+      expect(nw[1]).toBeGreaterThan(sw[1])
+      expect(ne[0]).toBeGreaterThan(nw[0])
+      // away from the central meridian the grid is rotated (convergence); on it the north edge is a parallel
+      const cm = centralMeridian(c.grid.utm_zone)
+      const centre = localToLonLat(0, 0, c.grid)
+      const tilt = Math.abs(nw[1] - ne[1])
+      if (Math.abs(centre[0] - cm) > 1) expect(tilt).toBeGreaterThan(1e-4)
+      else expect(tilt).toBeLessThan(2e-3)
+      expect(insideAoiLonLat(...centre, c.grid)).toBe(true)
+      expect(insideAoiLonLat(...localToLonLat(h + 1, 0, c.grid), c.grid)).toBe(false)
+    })
+  }
+  it('fixture-east: the quadrilateral spans the backend bbox (pyproj)', () => {
+    const c = SPECIAL_CASES[SPECIAL_CASES.length - 1]
+    const ring = aoiRingLonLat(c.grid, 64)
+    const bbox = [-82.36688315814473, 35.23518993064652, -82.2332156408772, 35.34478425509049]
+    expect(Math.abs(Math.min(...ring.map((p) => p[0])) - bbox[0])).toBeLessThan(2e-6)
+    expect(Math.abs(Math.min(...ring.map((p) => p[1])) - bbox[1])).toBeLessThan(2e-6)
+    expect(Math.abs(Math.max(...ring.map((p) => p[0])) - bbox[2])).toBeLessThan(2e-6)
+    expect(Math.abs(Math.max(...ring.map((p) => p[1])) - bbox[3])).toBeLessThan(2e-6)
+  })
+})
+
+describe('UTM zones 12-19: per-pixel inverse mapping at interior points, edges and corners', () => {
+  // the corner latitudes and the special cases (the full 72-grid sweep runs the cheaper checks above)
+  const sample = [...ZONE_CASES.filter((c) => /24\.5|49\.4/.test(c.name) && !/: \d+\.\d°, 37/.test(c.name)).filter((_, i) => i % 3 === 0), ...SPECIAL_CASES]
+  for (const c of sample) {
+    it(`${c.name}: source pixel centres map back to themselves; one pixel beyond each edge is transparent`, () => {
+      const m = overlayMapping(c.grid, c.w, c.h)
+      const rows = [0, 1, Math.floor(c.h / 2), c.h - 2, c.h - 1]
+      const cols = [0, 1, Math.floor(c.w / 2), c.w - 2, c.w - 1]
+      for (const r of rows)
+        for (const col of cols) {
+          const { x, z } = pixelCenter(r, col, c.grid.extent_m, c.w, c.h)
+          const [lon, lat] = geo.localToLonLat(x, z, c.grid)
+          const px = overlayPixelOf(m, lon, lat)
+          expect(px).not.toBeNull()
+          expect(m.index[px!.j * m.width + px!.i]).toBe(r * c.w + col)
+        }
+      const h = c.grid.extent_m / 2
+      const d = c.grid.extent_m / c.w
+      for (const [x, z] of [
+        [0, -h - d],
+        [0, h + d],
+        [-h - d, 0],
+        [h + d, 0],
+        [-h - d, -h - d],
+        [h + d, h + d],
+      ] as const) {
+        const [lon, lat] = geo.localToLonLat(x, z, c.grid)
+        const px = overlayPixelOf(m, lon, lat)
+        if (px) expect(m.index[px.j * m.width + px.i]).toBe(-1)
+      }
+      // sampled output pixels equal the lib/geo.ts + pixelAt reference
+      const dx = (m.maxX - m.minX) / m.width
+      const dy = (m.maxY - m.minY) / m.height
+      for (let j = 0; j < m.height; j += 7)
+        for (let i = (j * 3) % 7; i < m.width; i += 7) {
+          const lon = lonFromMercatorX(m.minX + (i + 0.5) * dx)
+          const lat = latFromMercatorY(m.minY + (j + 0.5) * dy)
+          expect(m.index[j * m.width + i]).toBe(referenceIndex({ name: c.name, grid: c.grid, w: c.w, h: c.h, bbox: [0, 0, 0, 0] }, lon, lat))
+        }
+    })
+  }
+})

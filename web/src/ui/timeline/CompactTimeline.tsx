@@ -54,13 +54,14 @@ export function CompactTimeline() {
     })),
   )
   const command = useWorkspace((s) => s.preset === 'command')
+  const tf = useTimeFormat()
   const wall = useNow(30_000)
   const notes = useIncidentAnnotations(st.incidentId)
   const model = useMemo(
     () => (st.manifest ? buildCompactTimeline(st.manifest, st.forecast, st.manifest.time_range.now_ms, wall, { forecastRunId: st.forecastRunId }) : null),
     [st.manifest, st.forecast, st.forecastRunId, wall],
   )
-  const markers = useMemo(() => (st.manifest ? buildFeedItems({ manifest: st.manifest, events: st.events?.events ?? [], annotations: notes }) : []), [st.manifest, st.events, notes])
+  const markers = useMemo(() => (st.manifest ? buildFeedItems({ manifest: st.manifest, events: st.events?.events ?? [], annotations: notes, tf }) : []), [st.manifest, st.events, notes, tf])
 
   if (!model)
     return (

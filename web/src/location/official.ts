@@ -1,9 +1,11 @@
-// The location card's official block (owner: location; brief 2 C-R7). Pure. It words the I5 answers of
-// useOfficialAtPoint (official-web, web/src/official/hooks.ts) for the card: always at least one evacuation line, in
-// every state (listed / none listed where checked / not checked here / past date / unavailable / loading), on phones,
-// in replay and with the map layer off; an NWS line only while an alert is in effect or upcoming at the point; and
-// "Follow local officials" with the CAL FIRE incident page and Cal OES. Official wording stays verbatim, with its
-// issuer and its own times; Fire-3d's fetch time is only ever called "checked". Nothing here is an all-clear.
+// The location card's official block (owner: us-official in brief 3; brief 2 C-R7). Pure. It words the I5 answers of
+// useOfficialAtPoint (web/src/official/hooks.ts) for the card: always at least one evacuation line, in every state
+// (listed / none listed where checked / not checked here / not available in this state / past date / unavailable /
+// loading), on phones, in replay and with the map layer off; an NWS line only while an alert is in effect or upcoming
+// at the point; and "Follow local officials" with the fire's agency record and the state evacuation source's page.
+// Issuer, aggregator ("Cal OES", "Oregon OEM") and times come from the answer's sources. Official wording stays
+// verbatim, with its issuer and its own times (Oregon's levels are flagged as Fire-3d's wording of OEM's level number,
+// with OEM's definition); Fire-3d's fetch time is only ever called "checked". Nothing here is an all-clear.
 import type { CalFireOfficial, EvacuationOfficial, FireWeatherOfficial, OfficialAlert, OfficialInfo, OfficialZone } from '../official/hooks'
 import { area, distance } from '../lib/plainLanguage'
 import { fmtAt, fmtRelative, type TimeFmt } from '../lib/time'
@@ -59,6 +61,16 @@ export interface OfficialContext {
 }
 
 const CAL_OES_FALLBACK = 'https://gis.data.ca.gov/datasets/CalEMA::california-evacuation-aggregation-layer'
+
+/** Links to the evacuation sources of the answer ("Cal OES", "Oregon OEM"); a brief-2 answer: Cal OES. */
+function evacuationLinks(e: EvacuationOfficial): OfficialLink[] {
+  if (e.state === 'not-available') return []
+  const srcs = (e.sources ?? []).filter((s) => https(s.url))
+  if (srcs.length) return srcs.map((s) => ({ label: s.aggregator, url: s.url as string }))
+  // a brief-2 answer (no sources[]): its data page is Cal OES's
+  const url = https(e.sourceUrl)
+  return url ? [{ label: url === CAL_OES_FALLBACK ? 'Cal OES' : 'Evacuation zones source', url }] : []
+}
 const at = (ms: number, tf: TimeFmt) => fmtAt(ms, tf, { zone: true })
 const https = (u: string | null | undefined) => (u && /^https:\/\//i.test(u) ? u : null)
 
@@ -73,18 +85,22 @@ export function withoutFollow(s: string | null | undefined): string | null {
 }
 
 function zoneLine(z: OfficialZone, c: OfficialContext & { tf: TimeFmt }): OfficialLine {
-  const when = z.updatedMs != null ? `updated ${at(z.updatedMs, c.tf)}` : z.listedMs != null ? `issuer time not given; listed by Cal OES ${at(z.listedMs, c.tf)}` : 'issuer time not given'
+  const agg = z.aggregator ?? 'Cal OES'
+  const listed = z.listedPhrase ?? `listed by ${agg}`
+  const when = z.updatedMs != null ? `updated ${at(z.updatedMs, c.tf)}` : z.listedMs != null ? `issuer time not given; ${listed} ${at(z.listedMs, c.tf)}` : 'issuer time not given'
   const far =
     z.outsideAnalysisArea && c.fireName
-      ? `${z.distanceKm != null ? `${distance(z.distanceKm * 1000, c.units).text} from ${c.fireName}; ` : ''}Cal OES does not say which fire this is for`
+      ? `${z.distanceKm != null ? `${distance(z.distanceKm * 1000, c.units).text} from ${c.fireName}; ` : ''}${agg} does not say which fire this is for`
       : null
-  // phones keep the issuer, the source's own time and, for a zone away from the fire, that Cal OES does not name the fire
-  const whenShort = z.updatedMs != null ? `updated ${at(z.updatedMs, c.tf)}` : z.listedMs != null ? `listed by Cal OES ${at(z.listedMs, c.tf)}` : null
+  // Oregon: "Level 3" is Fire-3d's wording of OEM's level number; OEM's definition is the line's text
+  const level = z.verbatim === false ? `${agg} level; definition by ${agg}` : null
+  // phones keep the issuer, the source's own time and, for a zone away from the fire, that the source does not name the fire
+  const whenShort = z.updatedMs != null ? `updated ${at(z.updatedMs, c.tf)}` : z.listedMs != null ? `${listed} ${at(z.listedMs, c.tf)}` : null
   return {
     key: `zone-${z.id}`,
     text: z.status,
-    sub: [z.issuer, when, far].filter(Boolean).join(' · '),
-    subCompact: [z.issuer, whenShort, far].filter(Boolean).join(' · ') || null,
+    sub: [z.issuer, level, when, far, z.hazardNote, z.incidentNote].filter(Boolean).join(' · '),
+    subCompact: [z.issuer, level, whenShort, far].filter(Boolean).join(' · ') || null,
     official: true,
     tone: z.group === 'order' ? 'order' : z.group === 'warning' ? 'warning' : 'other',
     url: null,
@@ -96,16 +112,19 @@ function evacuationLines(e: EvacuationOfficial, c: OfficialContext & { tf: TimeF
   switch (e.state) {
     case 'listed':
       return e.zones.slice(0, c.maxZones ?? 2).map((z) => zoneLine(z, c))
-    case 'none-listed':
+    case 'none-listed': {
+      // CONTRACT §14.8.5: "No evacuation order or warning listed here · {Oregon OEM}, checked {time} · not an all-clear"
+      const who = e.checkedBy ?? 'Cal OES'
       return [
-        { key: 'evac-none', text: 'No evacuation order or warning listed here', sub: `Cal OES${checked ? `, ${checked}` : ''} · not an all-clear`, subCompact: 'Cal OES · not an all-clear', official: true, tone: 'quiet', url: null },
+        { key: 'evac-none', text: 'No evacuation order or warning listed here', sub: `${who}${checked ? `, ${checked}` : ''} · not an all-clear`, subCompact: `${who} · not an all-clear`, official: true, tone: 'quiet', url: null },
       ]
+    }
     case 'not-checked':
       return [
         {
           key: 'evac-unchecked',
           text: 'Evacuation zones: not checked here',
-          sub: withoutFollow(e.reason)?.replace(/^Not checked here:\s*/i, '') ?? 'Fire-3d reads Cal OES zones only near the open fire and the selected point.',
+          sub: withoutFollow(e.reason)?.replace(/^Not checked here:\s*/i, '') ?? 'Fire-3d reads official evacuation zones only near the open fire and the selected point.',
           subCompact: null,
           official: false,
           tone: 'unknown',
@@ -113,11 +132,12 @@ function evacuationLines(e: EvacuationOfficial, c: OfficialContext & { tf: TimeF
         },
       ]
     case 'not-available':
-      // CONTRACT §14.14 short form; the reason names the state ("Not available in this state (Nevada)")
+      // CONTRACT §14.14 short form; the reason names the state ("Not available in this state (Nevada)"); outside the
+      // lower 48 the backend's coverage sentence
       return [
         {
           key: 'evac-not-available',
-          text: 'Evacuation zones: not available in this state',
+          text: e.notAvailableIn && e.notAvailableIn.length === 0 && e.reason && !/state/i.test(e.reason) ? 'Evacuation zones: not available here' : 'Evacuation zones: not available in this state',
           sub: withoutFollow(e.reason) ?? null,
           subCompact: null,
           official: false,
@@ -168,7 +188,8 @@ export function officialBlock(info: OfficialInfo, ctx: OfficialContext): Officia
   const links: OfficialLink[] = []
   const cf = calfireUrl(info.calfire, c.incidentUrl)
   if (cf) links.push({ label: 'CAL FIRE', url: cf })
-  links.push({ label: 'Cal OES', url: https(info.evacuation.sourceUrl) ?? CAL_OES_FALLBACK })
+  // the state evacuation source(s) checked here; none for a state without a feed (never a Cal OES link outside California)
+  for (const s of evacuationLinks(info.evacuation)) if (!links.some((x) => x.url === s.url)) links.push(s)
   for (const l of info.evacuation.links ?? []) if (https(l.url) && !links.some((x) => x.url === l.url)) links.push({ label: l.label, url: l.url })
   const shown = info.evacuation.state === 'listed' ? Math.min(info.evacuation.zones.length, c.maxZones ?? 2) : 0
   return {

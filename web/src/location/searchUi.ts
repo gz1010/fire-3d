@@ -44,3 +44,12 @@ export function cardYield(
   if (naturalPx <= room) return null
   return room < minPx ? { hidden: true } : { maxHeight: room }
 }
+
+/** Phones: how far (px) the map controls slide down so the search message or result list above them stays readable
+ *  (W15, audit G12a; 0 when nothing overlaps). `controlsTop` is the controls' own top in viewport px, before the
+ *  shift. The controls slide with a transform, so the safe area and the map framing do not change with it. */
+export function controlsShift(popover: PopoverBox | null, controlsTop: number, gapPx = 6): number {
+  if (!popover) return 0
+  const overlap = popover.bottom + gapPx - controlsTop
+  return overlap > 0 ? Math.ceil(overlap) : 0
+}

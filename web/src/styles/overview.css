@@ -298,9 +298,13 @@
 .ov-panel {
   min-height: 0;
 }
-/* California's official block (NWS fire weather alerts) above the list: it scrolls when tall, the list keeps the room */
+/* the official block (NWS fire weather alerts) above the list: it scrolls when tall, the list keeps the room (a
+   percentage of the panel's indefinite height did not apply, so the list could shrink to nothing: brief 3) */
 .ov-official {
   max-height: 34%;
+  max-height: 22vh;
+  flex: 0 1 auto;
+  min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
   border-bottom: 1px solid var(--m-border);
@@ -337,7 +341,8 @@
 }
 .ov-body {
   flex: 1 1 auto;
-  min-height: 0;
+  /* at least about three rows, even beside a long official block */
+  min-height: 132px;
   overflow: auto;
   overscroll-behavior: contain;
 }

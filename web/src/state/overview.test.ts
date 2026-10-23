@@ -221,3 +221,31 @@ describe('picker rows and search (W5)', () => {
     expect(pickerMatches(row('y', { name: 'Big Dry', source_name: 'BIG DRY', state: 'MT' }), 'montana')).toBe(true)
   })
 })
+
+describe('list windowing (W11)', () => {
+  it('lists of 150 rows or fewer render every row', async () => {
+    const { listWindow, LIST_WINDOW_MIN } = await import('./overview')
+    expect(LIST_WINDOW_MIN).toBe(150)
+    expect(listWindow(150, 2000, 600, 50)).toEqual({ start: 0, end: 150 })
+    expect(listWindow(0, 0, 600, 50)).toEqual({ start: 0, end: 0 })
+  })
+  it('1,334 rows: the visible rows and the overscan only; the ends clamp', async () => {
+    const { listWindow, LIST_OVERSCAN } = await import('./overview')
+    // top of the list: rows 0-11 visible in 600 px at 50 px each, plus 10
+    expect(listWindow(1334, 0, 600, 50)).toEqual({ start: 0, end: 12 + LIST_OVERSCAN })
+    // scrolled to row 500
+    expect(listWindow(1334, 25_000, 600, 50)).toEqual({ start: 490, end: 522 })
+    // the end (End key): never past the last row
+    expect(listWindow(1334, 1334 * 50 - 600, 600, 50)).toEqual({ start: 1312, end: 1334 })
+    // a zero row height never divides by zero
+    expect(listWindow(1334, 100, 600, 0).end).toBeLessThanOrEqual(1334)
+  })
+  it('scrollToRow: a step scrolls by the overflow; a visible row keeps the position', async () => {
+    const { scrollToRow } = await import('./overview')
+    expect(scrollToRow(5, 50, 0, 600)).toBe(0)
+    expect(scrollToRow(12, 50, 0, 600)).toBe(50)
+    expect(scrollToRow(3, 50, 400, 600)).toBe(150)
+    expect(scrollToRow(1333, 50, 0, 600)).toBe(1334 * 50 - 600)
+    expect(scrollToRow(0, 50, 9000, 600)).toBe(0)
+  })
+})

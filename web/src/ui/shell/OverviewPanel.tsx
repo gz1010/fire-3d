@@ -23,11 +23,14 @@ import {
   isActiveFire,
   LIST_ABSENCE,
   LIST_ABSENCE_SHORT,
+  LIST_WINDOW_MIN,
   listSourceNotices,
+  listWindow,
   newestRecordMs,
   OVERVIEW_FILTERS,
   overviewCounts,
   overviewFires,
+  scrollToRow,
   type OverviewFilter,
 } from '../../state/overview'
 import { useStore, type CatalogList } from '../../state/store'
@@ -63,13 +66,14 @@ function useInView(rows: IncidentSummary[]) {
   return { shown: showAll || !viewBox ? rows : inView, inViewCount: inView.length, hasView: viewBox != null, showAll }
 }
 
-function FireRow({ fire, index, cursor, current, onPick }: { fire: IncidentSummary; index: number; cursor: boolean; current: boolean; onPick: (f: IncidentSummary) => void }) {
+function FireRow({ fire, index, size, cursor, current, onPick }: { fire: IncidentSummary; index: number; size: number; cursor: boolean; current: boolean; onPick: (f: IncidentSummary) => void }) {
   const status = fireStatus(fire)
   const ready = analysisState(fire) === 'ready'
   const where = fireWhere(fire)
   const contained = fire.percent_contained != null && status.key === 'active' ? `${fmtNumber(fire.percent_contained)}% contained` : null
   return (
-    <li>
+    // the row's place in the whole list: a windowed list renders only some rows (W11)
+    <li aria-setsize={size} aria-posinset={index + 1}>
       <button
         type="button"
         className={`ov-row${current ? ' is-current' : ''}`}
@@ -92,32 +96,123 @@ function FireRow({ fire, index, cursor, current, onPick }: { fire: IncidentSumma
   )
 }
 
+/** The list's own top padding (styles/overview.css .ov-list). */
+const LIST_PAD_PX = 4
+/** Row height before the first measure (one name line and one detail line). */
+const ROW_GUESS_PX = 50
+
+interface ListView {
+  /** Scroll position inside the list (px from its first row). */
+  scrollTop: number
+  /** Visible height of the scroller. */
+  viewH: number
+  rowH: number
+}
+
+/** The fire rows. Above LIST_WINDOW_MIN rows only the rows near the visible part of the scroller (.ov-body) are
+ *  rendered, with the rest kept as padding, so 1,300 national rows stay fast (W11). Arrow keys, Home and End move a
+ *  roving focus over the whole list, scrolling an unrendered row in first; every row carries its place in the whole
+ *  list (aria-posinset / aria-setsize). */
 function FireList({ rows, onPick }: { rows: IncidentSummary[]; onPick: (f: IncidentSummary) => void }) {
   const cardId = useWorkspace((s) => s.fireCardId)
   const [cursor, setCursor] = useState(0)
+  const [view, setView] = useState<ListView>({ scrollTop: 0, viewH: 640, rowH: ROW_GUESS_PX })
   const ref = useRef<HTMLUListElement | null>(null)
-  const c = Math.min(cursor, Math.max(0, rows.length - 1))
+  /** A row to focus once it is rendered (a keyboard jump to a row outside the window). */
+  const focusRow = useRef<number | null>(null)
+  const n = rows.length
+  const windowed = n > LIST_WINDOW_MIN
+  const c = Math.min(cursor, Math.max(0, n - 1))
+  const { start, end } = listWindow(n, view.scrollTop, view.viewH, view.rowH)
+
+  // windowed: follow the scroller's position and size, and the rendered row height
+  useEffect(() => {
+    const ul = ref.current
+    const box = ul?.parentElement
+    if (!ul || !box || !windowed) return
+    const measure = () => {
+      const listTop = ul.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop + LIST_PAD_PX
+      const li = ul.querySelector<HTMLElement>(':scope > li')
+      const h = li ? li.getBoundingClientRect().height : 0
+      const next = { scrollTop: Math.max(0, box.scrollTop - listTop), viewH: box.clientHeight, rowH: h > 0 ? h : ROW_GUESS_PX }
+      // focus on a row that leaves the window moves to the list itself (the arrow keys still work from there)
+      const active = document.activeElement as HTMLElement | null
+      const i = active && ul.contains(active) ? Number(active.dataset.row) : NaN
+      if (Number.isInteger(i)) {
+        const w = listWindow(ul.childElementCount ? Number(ul.dataset.size) : 0, next.scrollTop, next.viewH, next.rowH)
+        if (i < w.start || i >= w.end) ul.focus({ preventScroll: true })
+      }
+      setView((v) => (Math.abs(v.scrollTop - next.scrollTop) < 0.5 && v.viewH === next.viewH && Math.abs(v.rowH - next.rowH) < 0.5 ? v : next))
+    }
+    const ro = new ResizeObserver(measure)
+    ro.observe(box)
+    ro.observe(ul)
+    box.addEventListener('scroll', measure, { passive: true })
+    return () => {
+      ro.disconnect()
+      box.removeEventListener('scroll', measure)
+    }
+  }, [windowed])
+
+  // a row asked for by the keyboard is focused as soon as it is rendered
+  useLayoutEffect(() => {
+    const i = focusRow.current
+    if (i == null) return
+    const el = ref.current?.querySelector<HTMLElement>(`[data-row="${i}"]`)
+    if (el) {
+      focusRow.current = null
+      el.focus()
+    }
+  })
+
   const move = (i: number) => {
-    const next = Math.max(0, Math.min(rows.length - 1, i))
+    const next = Math.max(0, Math.min(n - 1, i))
     setCursor(next)
-    ref.current?.querySelector<HTMLElement>(`[data-row="${next}"]`)?.focus()
+    const el = ref.current?.querySelector<HTMLElement>(`[data-row="${next}"]`)
+    const box = ref.current?.parentElement
+    if (windowed && box) {
+      // scroll the row into view first (a rendered row near the edge, or one outside the window)
+      const top = scrollToRow(next, view.rowH, view.scrollTop, view.viewH)
+      if (top !== view.scrollTop) {
+        box.scrollTop += top - view.scrollTop
+        setView((v) => ({ ...v, scrollTop: top }))
+      }
+      if (!el) {
+        focusRow.current = next
+        return
+      }
+    }
+    el?.focus()
   }
   const onKey = (e: KeyboardEvent<HTMLUListElement>) => {
     if (e.key === 'ArrowDown') move(c + 1)
     else if (e.key === 'ArrowUp') move(c - 1)
     else if (e.key === 'Home') move(0)
-    else if (e.key === 'End') move(rows.length - 1)
+    else if (e.key === 'End') move(n - 1)
     else return
     e.preventDefault()
   }
+  const shown = windowed ? rows.slice(start, end) : rows
+  const pad = windowed ? { paddingTop: LIST_PAD_PX + start * view.rowH, paddingBottom: LIST_PAD_PX + (n - end) * view.rowH } : undefined
   return (
-    <ul className="ov-list" ref={ref} aria-label="Fires" onKeyDown={onKey} onFocus={(e) => {
-      const i = Number((e.target as HTMLElement).dataset.row)
-      if (Number.isInteger(i) && i !== c) setCursor(i)
-    }}>
-      {rows.map((f, i) => (
-        <FireRow key={f.id} fire={f} index={i} cursor={i === c} current={f.id === cardId} onPick={onPick} />
-      ))}
+    <ul
+      className={`ov-list${windowed ? ' is-windowed' : ''}`}
+      ref={ref}
+      aria-label="Fires"
+      data-size={n}
+      // windowed: the list itself holds focus when the focused row scrolls out of the window
+      tabIndex={windowed ? -1 : undefined}
+      style={pad}
+      onKeyDown={onKey}
+      onFocus={(e) => {
+        const i = Number((e.target as HTMLElement).dataset.row)
+        if (Number.isInteger(i) && i !== c) setCursor(i)
+      }}
+    >
+      {shown.map((f, k) => {
+        const i = windowed ? start + k : k
+        return <FireRow key={f.id} fire={f} index={i} size={n} cursor={i === c} current={f.id === cardId} onPick={onPick} />
+      })}
     </ul>
   )
 }
@@ -225,6 +320,8 @@ export function OverviewList({ onPick }: { onPick: (f: IncidentSummary) => void 
   }, [filter, catalog.updatedMs.historical, catalog.listLoading.historical, catalog.listErrors.historical])
   const { live, season, historical } = catalog
   const counts = useMemo(() => overviewCounts({ live, season, historical }), [live, season, historical])
+  // an empty view or filter carries the list-absence line itself: the footer would repeat it right below
+  const emptyShown = shown.length === 0 && (rows.length > 0 || (!loading && !error))
   return (
     <>
       <div className="ov-filters">
@@ -283,9 +380,11 @@ export function OverviewList({ onPick }: { onPick: (f: IncidentSummary) => void 
           </div>
         )}
       </div>
-      <footer className="ov-foot">
-        <p className="ov-absence">{LIST_ABSENCE}</p>
-      </footer>
+      {!emptyShown && (
+        <footer className="ov-foot">
+          <p className="ov-absence">{LIST_ABSENCE}</p>
+        </footer>
+      )}
     </>
   )
 }

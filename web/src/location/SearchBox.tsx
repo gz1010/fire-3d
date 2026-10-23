@@ -476,7 +476,7 @@ function Results({ lists, response, others, units, near, currentId, onAddress, o
                 <button type="button" className="loc-result" onClick={() => onArea(m)}>
                   {m.kind === 'zip' ? <Hash size={14} aria-hidden="true" className="loc-result-icon" /> : <Building2 size={14} aria-hidden="true" className="loc-result-icon" />}
                   <span className="loc-result-text">
-                    <span className="loc-result-title">{m.kind === 'zip' ? `ZIP ${m.zip ?? m.name}${m.state ? `, ${m.state}` : ''}` : placeName(m)}</span>
+                    <span className="loc-result-title">{m.kind === 'zip' ? (m.zip ? `ZIP ${m.zip}${m.state ? `, ${m.state}` : ''}` : (m.name ?? m.matched_address)) : placeName(m)}</span>
                     <span className="loc-result-sub">{areaSub(m)}</span>
                   </span>
                 </button>

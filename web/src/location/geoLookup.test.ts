@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { GeoLookup } from '../api/types'
-import { coverageText, isSupportedCoverage, lookupPlace, NOT_SUPPORTED_TEXT, OUTSIDE_US_TEXT } from './geoLookup'
+import { coverageText, isSupportedCoverage, lookupPlace, nearestFiresMeaningful, NOT_SUPPORTED_TEXT, OUTSIDE_US_TEXT, UNLISTED_HERE_TEXT } from './geoLookup'
 
 const g = (over: Partial<GeoLookup>): GeoLookup => ({
   lon: -116.2,
@@ -30,6 +30,18 @@ describe('coverage at a point comes from /api/geo/lookup only (W9, §14.14)', ()
     expect(OUTSIDE_US_TEXT).toBe('Outside the United States: Fire-3d has no data here.')
     // the server's own note wins when it has one
     expect(coverageText(g({ ...off, coverage: 'alaska', note: 'Fire-3d does not support Alaska, Hawaii or US territories yet.' }))).toBe(NOT_SUPPORTED_TEXT)
+  })
+  it('Alaska, Hawaii, territories: no "nearest fires" list from the lower 48 (it would read as nothing nearby)', () => {
+    const off = { supported: false, state: null, state_name: null, county: null, time_zone: null, time_zone_name: null }
+    expect(nearestFiresMeaningful(g({}))).toBe(true)
+    expect(nearestFiresMeaningful(null)).toBe(true)
+    expect(nearestFiresMeaningful(g({ ...off, coverage: 'alaska' }))).toBe(false)
+    expect(nearestFiresMeaningful(g({ ...off, coverage: 'hawaii' }))).toBe(false)
+    expect(nearestFiresMeaningful(g({ ...off, coverage: 'territory' }))).toBe(false)
+    // just across a border, a listed US fire can be near
+    expect(nearestFiresMeaningful(g({ ...off, coverage: 'outside_us' }))).toBe(true)
+    expect(UNLISTED_HERE_TEXT).toMatch(/not listed\. Follow local officials\.$/)
+    expect(UNLISTED_HERE_TEXT).not.toMatch(/\bsafe\b|low risk|no fires/i)
   })
   it('the place line', () => {
     expect(lookupPlace(g({}))).toBe('Ada County, ID')

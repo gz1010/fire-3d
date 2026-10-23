@@ -28,7 +28,7 @@ export function KeyEvents() {
   const ready = manifest != null
   const notes = useIncidentAnnotations(incidentId)
   const items = useMemo(() => mergeEvents(events?.events, notes), [events, notes])
-  const feed = useMemo(() => new Map(buildFeedItems({ manifest, events: events?.events ?? [], annotations: notes }).map((f) => [f.id, f])), [manifest, events, notes])
+  const feed = useMemo(() => new Map(buildFeedItems({ manifest, events: events?.events ?? [], annotations: notes, tf }).map((f) => [f.id, f])), [manifest, events, notes, tf])
   const times = useMemo(() => items.map((i) => i.t), [items])
   const current = useStore((s) => lastIndexAtOrBefore(times, s.timeMs))
   const listRef = useRef<HTMLDivElement | null>(null)

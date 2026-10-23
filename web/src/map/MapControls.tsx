@@ -5,9 +5,11 @@
 // buttons (keyboard and screen-reader accessible); camera moves go through the controller (useMapRuntime.actions), so
 // the opening camera knows about them, and honour prefers-reduced-motion.
 import { ChevronsDown, ChevronsUp, Crosshair, Map as MapIcon, Minus, Plus, RotateCcw, RotateCw, X } from 'lucide-react'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { controlsShift, useSearchUi } from '../location/searchUi'
+import { useNarrow } from '../location/useNarrow'
 import { useStore } from '../state/store'
-import { useWorkspace, type Basemap, type Perspective } from '../state/workspace'
+import { useWorkspace, type Basemap, type PanelKey, type Perspective } from '../state/workspace'
 import { Segmented, SelectMenu } from '../ui/controls'
 import { useMapRuntime } from './mapStore'
 import { aerialPhotoLine, BASEMAP_DESCRIPTION, BASEMAP_LABEL, BASEMAP_SHORT } from './providers'
@@ -87,7 +89,28 @@ function OrbitGroup({ pitch }: { pitch: number }) {
   )
 }
 
+/** Phones: the bottom sheets (fire list, layers, analysis) cover most of the map. A frame press closes the open one
+ *  first, so the framed map shows instead of fitting behind or above the sheet (W15, audit G12b). */
+const SHEETS: PanelKey[] = ['updates', 'layers', 'analysis']
+
+/** Phones: slide the controls below an open search message (searchUi.ts controlsShift). A transform, not a margin:
+ *  the controls' slot keeps its size, so the safe area and the framing do not move with the message. */
+function useYieldToSearch(narrow: boolean) {
+  const ref = useRef<HTMLDivElement | null>(null)
+  const pop = useSearchUi((s) => s.popover)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const top = el.parentElement?.getBoundingClientRect().top ?? el.getBoundingClientRect().top
+    const dy = narrow ? controlsShift(pop, top) : 0
+    el.style.transform = dy > 0 ? `translateY(${dy}px)` : ''
+  }, [narrow, pop])
+  return ref
+}
+
 export function MapControls() {
+  const narrow = useNarrow()
+  const ctlRef = useYieldToSearch(narrow)
   const perspective = useWorkspace((s) => s.perspective)
   const setPerspective = useWorkspace((s) => s.setPerspective)
   const basemap = useWorkspace((s) => s.basemap)
@@ -107,7 +130,7 @@ export function MapControls() {
   const frameLabel = !hasIncident ? 'Show all of the lower 48 states' : nextArea ? 'Show the whole modeled area' : 'Frame the fire'
   const frameTip = !hasIncident ? 'Show all of the lower 48 states (Alaska and Hawaii are not supported yet)' : nextArea ? 'Show the whole modeled area (press again for the fire)' : 'Frame the fire (press again for the whole modeled area)'
   return (
-    <div className="mw-ctl fxm-ctl" role="toolbar" aria-label="Map controls">
+    <div className="mw-ctl fxm-ctl" role="toolbar" aria-label="Map controls" ref={ctlRef}>
       <div className="fxm-ctl-row">
         <Segmented value={perspective} options={PERSPECTIVES} onChange={setPerspective} ariaLabel="Perspective" size="sm" />
         <SelectMenu
@@ -158,7 +181,15 @@ export function MapControls() {
           aria-label={frameLabel}
           data-tip={frameTip}
           disabled={!actions}
-          onClick={() => (!hasIncident ? actions?.frameOverview() : nextArea ? actions?.frameArea() : actions?.frameFire())}
+          onClick={() => {
+            if (narrow) {
+              const ws = useWorkspace.getState()
+              for (const k of SHEETS) if (ws.panels[k]) ws.setPanel(k, false)
+            }
+            if (!hasIncident) actions?.frameOverview()
+            else if (nextArea) actions?.frameArea()
+            else actions?.frameFire()
+          }}
         >
           {hasIncident ? <Crosshair size={14} aria-hidden="true" /> : <MapIcon size={14} aria-hidden="true" />}
           <span>{hasIncident ? 'Incident' : 'All states'}</span>

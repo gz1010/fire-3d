@@ -14,7 +14,7 @@ import { recordBlocks, recordIssuerLabel } from '../../api/records'
 import type { IncidentSummary } from '../../api/types'
 import { fmtAcres, fmtNumber } from '../../lib/format'
 import { accuracyLabel, type AccuracyLabel } from '../../lib/plainLanguage'
-import { agencyIdLine, complexMembers, isHttps as https, recordBlockText } from '../../lib/recordText'
+import { agencyIdLine, complexMembers, isHttps as https, partOfComplex, recordBlockText } from '../../lib/recordText'
 import { fmtAt, fmtDayDate, fmtRelative, type TimeFmt } from '../../lib/time'
 import { findRegion, useAccuracyRegions } from '../../state/accuracy'
 import { analysisState, findFire, fireStatus, fireWhere, isActiveFire, type AnalysisState } from '../../state/overview'
@@ -266,7 +266,7 @@ export function FireCard() {
             {where && <span className="fc-where">{where}</span>}
             <span className="fc-started">Started {fmtDayDate(fire.started_ms, tf.tz, { year: 'always' })}</span>
           </p>
-          {fire.complex_name && <p className="fc-complex">Part of the {fire.complex_name.replace(/\s+complex$/i, '')} Complex</p>}
+          {fire.complex_name && <p className="fc-complex">{partOfComplex(fire.complex_name)}</p>}
         </div>
         <button type="button" className="mw-icon-btn" aria-label="Close the fire card" data-tip="Close (Esc)" onClick={close}>
           <X size={15} />

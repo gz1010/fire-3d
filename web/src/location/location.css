@@ -992,3 +992,11 @@
   line-height: 1.4;
   color: var(--m-text);
 }
+
+/* brief 3 (§14.4): the model's accuracy in the fire's region, under the model sentence */
+.loc-model-accuracy {
+  margin: 4px 0 0;
+  font-size: var(--m-fs-sm);
+  line-height: 1.4;
+  color: var(--m-text-2);
+}

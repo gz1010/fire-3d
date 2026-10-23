@@ -56,7 +56,7 @@ import type { FeedItem } from '../ui/feed/types'
 import { BUILDINGS_3D_LAYER, HILLSHADE_SOURCE, IMAGERY_SOURCE, loadBasemap, TERRAIN_SOURCE, VECTOR_SOURCE, type DerivedStyle } from './basemapStyle'
 import { maskGeometry } from './contours'
 import { allFocusCandidates, CENTRAL_FRACTION, chipTargets, FocusHold, focusUnlessHeld, FOCUS_DEBOUNCE_MS, FOCUS_OUT_ZOOM, type FocusCurrent, type FocusView } from './focus'
-import { boundsCenter, Framing, goalFor, latestPerimeter, LOWER48_BOUNDS, LOWER48_START, zoomForBounds, type CameraPose, type FrameGoal } from './framing'
+import { boundsCenter, Framing, goalFor, latestPerimeter, LOWER48_BOUNDS, LOWER48_START, mapCovered, zoomForBounds, type CameraPose, type FrameGoal } from './framing'
 import { drapedLayers, HATCH_IMAGE, hatchImage, LAYER_GROUPS, LYR, SRC, topLayers, type MapTheme } from './layers'
 import { fmtLatLon, SelectionPin } from './markers'
 import { EMPTY_OVERLAYS, motionMs, patchOverlays, setProvider, useMapRuntime, type MapActions } from './mapStore'
@@ -208,6 +208,8 @@ export class MapController {
   /** An explicit camera move in progress (restarted when the safe area changes mid-flight). */
   private activeFly: { req: Omit<MapFlyTo, 'nonce'>; animate: boolean } | null = null
   private pendingPadding = false
+  /** The last padding that left a usable map (see padding()). */
+  private lastPadding: SafeInsets | null = null
   private hoverRaf = 0
   private lastHover: { x: number; y: number } | null = null
   /** Optional sources (imagery, evacuation zones, cameras): mounted after map-core's own style handling. */
@@ -676,12 +678,23 @@ export class MapController {
   private padding(): SafeInsets {
     const i = useWorkspace.getState().safeInsets
     const c = this.map.getContainer()
+    // a phone's bottom sheet over most of the map (the fire list): keep the last usable padding, so a fit does not
+    // squeeze the fires into the sliver above the sheet or behind it, and "in this view" keeps what the user saw (W15)
+    if (this.lastPadding && this.mapCoveredNow()) return this.lastPadding
     // never let the chrome padding swallow the whole map (narrow screens)
     const maxH = Math.max(0, c.clientWidth - 120)
     const maxV = Math.max(0, c.clientHeight - 120)
     const h = i.left + i.right > maxH ? maxH / Math.max(1, i.left + i.right) : 1
     const v = i.top + i.bottom > maxV ? maxV / Math.max(1, i.top + i.bottom) : 1
-    return { top: i.top * v, bottom: i.bottom * v, left: i.left * h, right: i.right * h }
+    const p = { top: i.top * v, bottom: i.bottom * v, left: i.left * h, right: i.right * h }
+    this.lastPadding = p
+    return p
+  }
+
+  /** The chrome leaves too little map to frame into (framing.ts mapCovered). */
+  private mapCoveredNow(): boolean {
+    const c = this.map.getContainer()
+    return mapCovered(useWorkspace.getState().safeInsets, c.clientWidth, c.clientHeight)
   }
 
   private pose(): CameraPose {
@@ -838,6 +851,8 @@ export class MapController {
   /** Keep the map padding equal to the safe area. The opening fit in flight restarts toward the same goal with the new
    *  padding, as does an explicit flight; during a user gesture the change waits for the gesture to end. */
   private applySafeInsets(animate: boolean): void {
+    // a sheet over most of the map: nothing to follow; closing it brings a usable safe area back (W15)
+    if (this.lastPadding && this.mapCoveredNow()) return
     const padding = this.padding()
     const g = this.framing.goal
     if (this.framing.phase === 'flying' && g) {
@@ -1433,7 +1448,7 @@ export class MapController {
       const cam = useExtrasRuntime.getState().cams.data?.cameras.features.find((c) => c.properties.id === p.id)
       line(String(p.name ?? 'Public camera'), 'fxm-tip-title')
       line(p.kind === 'traffic' ? 'Traffic camera (Caltrans)' : 'Wildfire camera (ALERTCalifornia | UC San Diego)')
-      if (cam) line(cameraViewText(cam))
+      if (cam) line(cameraViewText(cam, getTimeFormat()))
       if (p.out === true || p.out === 'true') line('Out of service (Caltrans)')
       line('Click to open it; an image loads only when you ask', 'fxm-tip-hint')
       return el
@@ -1441,7 +1456,7 @@ export class MapController {
     if (EXTRAS_HOVER_LAYERS.zones.includes(f.layer.id)) {
       const zone = useExtrasRuntime.getState().evac.data?.zones.features.find((z) => z.id === p.id)
       if (!zone) return null
-      const d = zoneDetail(zone, Date.now())
+      const d = zoneDetail(zone, Date.now(), getTimeFormat())
       line(d.status, 'fxm-tip-title')
       line(d.title)
       line(`${d.jurisdiction} · ${d.updatedText}`)
@@ -1783,9 +1798,9 @@ export class MapController {
       patchOverlays({ nearby: fc.features.length })
     }
     // events (events.json + the user's notes with a location)
-    const evs = this.mapEvents(m)
+    const evs = this.mapEvents(m, tf)
     const shownEv = layers.events ? evs.filter((e) => e.tMs <= t) : []
-    const evKey = `${m?.id}|${evs.length}|${shownEv.length}|${s.selectedEventId ?? ''}|${layers.events}`
+    const evKey = `${m?.id}|${evs.length}|${shownEv.length}|${s.selectedEventId ?? ''}|${layers.events}|${tf.tz}|${tf.clock}`
     if (evKey !== this.keys.ev) {
       this.keys.ev = evKey
       this.setData(SRC.events, layers.events ? eventFeatures(evs, t, s.selectedEventId) : EMPTY)
@@ -1793,14 +1808,14 @@ export class MapController {
     }
   }
 
-  private mapEvents(m: IncidentManifest | null): MapEvent[] {
+  private mapEvents(m: IncidentManifest | null, tf: TimeFmt): MapEvent[] {
     const s = useStore.getState()
     if (!m) {
       this.feed.clear()
       return []
     }
     const annotations = useAnnotations.getState().byIncident[m.id] ?? useAnnotations.getState().ensure(m.id)
-    const items = buildFeedItems({ manifest: m, events: s.events?.events ?? [], annotations })
+    const items = buildFeedItems({ manifest: m, events: s.events?.events ?? [], annotations, tf })
     this.feed.clear()
     const out: MapEvent[] = []
     for (const it of items) {

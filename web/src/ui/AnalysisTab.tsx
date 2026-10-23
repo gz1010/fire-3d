@@ -14,6 +14,7 @@ import { EmptyNote, ProgressBar, Section, Segmented, Spinner } from './controls'
 import { useNow } from './hooks'
 import { ENSEMBLE_LABEL, ENSEMBLE_SHORT } from './options'
 import { toast } from './toast'
+import { RegionAccuracy } from './RegionAccuracy'
 
 const HORIZONS = [24, 48, 72]
 
@@ -36,6 +37,7 @@ export function AnalysisTab() {
       <RunList manifest={manifest} />
       {forecast && <RunSummary manifest={manifest} forecast={forecast} />}
       {forecast?.skill && forecast.skill.length > 0 && <SkillTable forecast={forecast} />}
+      <RegionAccuracy />
       <Disclaimer />
     </div>
   )

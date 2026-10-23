@@ -9,6 +9,18 @@ import type { Coverage, GeoLookup } from '../api/types'
 export const NOT_SUPPORTED_TEXT = 'Fire-3d does not support Alaska, Hawaii or US territories yet.'
 export const OUTSIDE_US_TEXT = 'Outside the United States: Fire-3d has no data here.'
 
+/** Alaska, Hawaii and territories: the fire lists cover the lower 48 only, so the "nearest fire" would be one more than
+ *  a thousand miles away while fires here go unlisted. The card says so instead of listing them. */
+export const UNLISTED_HERE_TEXT = 'Fire-3d lists fires in the lower 48 states only, so fires here are not listed. Follow local officials.'
+
+/** False where the nearest listed fires say nothing about the place (Alaska, Hawaii, territories). Places outside the
+ *  US keep the list: a point just across a border can be near a listed US fire, and its coverage sentence already says
+ *  Fire-3d has no data there. */
+export function nearestFiresMeaningful(g: Pick<GeoLookup, 'coverage' | 'supported'> | null | undefined): boolean {
+  if (!g || g.supported) return true
+  return g.coverage === 'lower48' || g.coverage === 'outside_us'
+}
+
 /** The §14.14 sentence for a point Fire-3d does not cover (null inside the lower 48). The backend's `note` wins when
  *  it says something; otherwise the fixed wording by coverage. */
 export function coverageText(g: Pick<GeoLookup, 'coverage' | 'supported' | 'note'> | null | undefined): string | null {

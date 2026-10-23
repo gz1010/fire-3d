@@ -11,6 +11,7 @@
 // details.
 import type { DetectionsFile, ForecastManifest, IncidentManifest, IncidentSummary, PerimetersFile, WeatherFile } from '../../api/types'
 import { fmtAcres, satelliteName } from '../../lib/format'
+import { evacuationWho, type EvacuationOfficial } from '../../official/model'
 import { fmtAt, fmtDate, fmtDateTimeTz, fmtDateTimeYearTz, fmtRelative, laParts, type TimeFmt } from '../../lib/time'
 import { STALE_AFTER_MS } from '../timeline/model'
 
@@ -37,7 +38,7 @@ export interface StatusRow {
 /** The official sources for the current fire, as official-web's useOfficialNow() gives them (I5; structural, so the
  *  rows build without the hook). Missing = not loaded. */
 export interface OfficialStatusInput {
-  evacuation?: { state: string; checkedMs?: number | null; sourceUpdatedMs?: number | null; zones?: readonly unknown[] } | null
+  evacuation?: (Pick<EvacuationOfficial, 'state'> & Partial<Pick<EvacuationOfficial, 'checkedMs' | 'sourceUpdatedMs' | 'reason' | 'sources' | 'checkedBy'>> & { zones?: readonly unknown[] }) | null
   fireWeather?: { state: string; checkedMs?: number | null; alerts?: readonly { archived?: boolean }[] } | null
   calfire?: { state: string; updatedMs?: number | null; acres?: number | null; percentContained?: number | null; isActive?: boolean | null } | null
 }
@@ -142,29 +143,52 @@ export function officialRows(inp: Pick<DataStatusInput, 'summary' | 'official'>,
 
   const ev = o?.evacuation
   if (ev) {
-    const updated = ev.sourceUpdatedMs ?? null
+    const who = evacuationWho(ev)
+    const answered = (ev.sources ?? []).filter((s) => s.answered)
+    const updated = answered.length > 1 ? null : (ev.sourceUpdatedMs ?? null)
     const n = ev.zones?.length ?? 0
     const detail =
       ev.state === 'listed'
-        ? `${plural(n, 'zone', 'zones')} listed near this fire (local officials via Cal OES)`
+        ? `${plural(n, 'zone', 'zones')} listed near this fire (local officials via ${who ?? 'the state source'})`
         : ev.state === 'none-listed'
           ? 'No orders or warnings listed near this fire. That is not an all-clear.'
           : ev.state === 'past-date'
             ? 'Official status is shown only for the current time'
-            : ev.state === 'unavailable'
-              ? 'Cal OES did not answer; follow local officials'
-              : ev.state === 'loading'
-                ? 'Checking…'
-                : 'Not checked for this place'
+            : ev.state === 'not-available'
+              ? `${ev.reason ?? 'Not available in this state'}; follow local officials`
+              : ev.state === 'unavailable'
+                ? `${who ?? 'The evacuation source'} did not answer; follow local officials`
+                : ev.state === 'loading'
+                  ? 'Checking…'
+                  : 'Not checked for this place'
+    // several sources (a border fire): each with its own time, never one time for both
+    const value =
+      answered.length > 1
+        ? answered.map((s) => `${s.aggregator} ${s.updatedMs != null ? fmtStatusTime(s.updatedMs, nowMs) : 'no time'}`).join('; ')
+        : updated != null
+          ? `${who ?? 'Source'} ${fmtStatusTime(updated, nowMs)}`
+          : ev.state === 'loading'
+            ? 'Checking'
+            : ev.state === 'not-available'
+              ? 'Not available in this state'
+              : 'No issuer time'
+    const tips: Record<string, string> = {
+      caloes_evacuations: 'Cal OES rebuilds its statewide evacuation layer every 5 minutes; the time is its last change.',
+      or_oem_evacuations: 'Oregon OEM recalculates its statewide evacuation layer every 15 minutes; the time is its last change, not an order time.',
+    }
+    const srcTips = (ev.sources ?? []).map((s) => tips[s.id]).filter(Boolean)
     out.push({
       key: 'evacuation',
       label: 'Evacuation zones',
-      value: updated != null ? `Cal OES ${fmtStatusTime(updated, nowMs)}` : ev.state === 'loading' ? 'Checking' : 'No issuer time',
+      value,
       tMs: updated,
       detail,
       age: ago(ev.checkedMs),
       stale: false,
-      tip: 'Cal OES rebuilds its statewide evacuation layer every 5 minutes; the time is its last change. Fire-3d checks every 2 minutes while live.',
+      tip:
+        ev.state === 'not-available'
+          ? 'Fire-3d found no free, official, public, machine-readable state evacuation feed for this state (checked Oct 22, 2026). Follow local officials.'
+          : `${srcTips.length ? srcTips.join(' ') : tips.caloes_evacuations} Fire-3d checks every 2 minutes while live.`,
     })
   }
 
