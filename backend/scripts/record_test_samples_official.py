@@ -16,7 +16,14 @@ temporary folder (never ``data/``; ``--cache-dir`` keeps it between runs instead
   for LOX FW.W #1, FW.A #1, FW.W #2 and FW.A #2 of 2025 (4), and ``geojson/vtec_event.py`` for FW.W #1 (1).
 * Element 84 Earth Search STAC: the Sentinel-2 L2A item S2A_11SLT_20250102_0_L2A (1).
 
-Brief 3 (``--only national``, 3 requests; ``--only existing`` re-records only the files above):
+Brief 3 (``--only national``, 3 requests; ``--only perimeters``, about 15 requests; ``--only existing`` re-records
+only the files above):
+
+* NIFC WFIGS perimeters (``--only perimeters``): the attribute queries and geometries that today's
+  ``perimeters.fetch_perimeters`` makes for four California fires (Eaton, Palisades, Madre 2025 and the TCU September
+  Lightning Complex 2025, CAL FIRE's own names, points, starts, acres and containment), saved per fire as
+  ``tests/data/pipeline_us/perimeters_<fire>.json`` with the OBJECTID set the code selects from them, so
+  ``tests/test_us_pipeline_perimeters.py`` can prove the California path unchanged after the brief-3 IRWIN path.
 
 * api.weather.gov: the national ``/alerts/active`` answer for the 48 states + DC with the fire weather and local
   officials' events, exactly as ``nws.national_url()`` asks (1), and the Los Angeles County Civil Emergency Message
@@ -338,12 +345,107 @@ def check_national(national: dict, nwem: dict, fema: dict) -> None:
     need(all(r.get("sender") in (None, REDACTED_SENDER) for r in fema["IpawsArchivedAlerts"]), "OpenFEMA senders redacted")
 
 
+# ------------------------------------------------------------------------------------------------------------------
+# Brief 3: WFIGS perimeter answers of four California fires (the before/after regression of CONTRACT 14.12.8)
+# ------------------------------------------------------------------------------------------------------------------
+PIPELINE_US_DIR = BACKEND / "tests" / "data" / "pipeline_us"
+PERIM_FIRES = {"eaton": "Eaton Fire", "palisades": "Palisades Fire", "madre": "Madre Fire",
+               "tcu": "TCU September Lightning Complex"}
+PERIM_GEOM_TOL_DEG = 0.0008                     # about 80 m (only distance and size checks read the shapes)
+PERIM_DECIMALS = 4
+PERIM_FINE = (0.0002, 5)                        # for the few small polygons the coarse step would empty
+
+
+def perimeter_shape(geom: dict) -> dict:
+    try:
+        return simplify_geometry(geom, PERIM_GEOM_TOL_DEG, PERIM_DECIMALS)
+    except SystemExit:
+        return simplify_geometry(geom, *PERIM_FINE)
+
+
+def attrs_key(url: str, where: str, extra: dict | None) -> str:
+    return f"{url}|{where}|{json.dumps(extra or {}, sort_keys=True)}"
+
+
+def build_perimeters() -> dict[str, dict]:
+    from fire3d.build.observed import PERIM_HORIZON_MS
+    from fire3d.sources import calfire, perimeters
+
+    recs = {r.get("name"): r for r in calfire.list_year(2025)}
+    real_q, real_g = perimeters.query_attributes, perimeters.fetch_geometries
+    out: dict[str, dict] = {}
+    for key, name in PERIM_FIRES.items():
+        r = recs.get(name)
+        need(r is not None, f"CAL FIRE 2025 lists {name}")
+        args = {"name": name, "lat": r["lat"], "lon": r["lon"], "start_ms": int(r["started_ms"]),
+                "end_ms": int(r["started_ms"]) + PERIM_HORIZON_MS, "acres": r.get("acres"),
+                "contained_ms": r.get("extinguished_ms")}
+        attrs: dict[str, list] = {}
+        geoms: dict[str, dict] = {}
+
+        def q(url, where, ttl_s, extra=None, _a=attrs):
+            time.sleep(PAUSE_S)
+            res = real_q(url, where, ttl_s, extra)
+            _a[attrs_key(url, where, extra)] = res
+            return res
+
+        def g(url, ids, ttl_s, _g=geoms):
+            time.sleep(PAUSE_S)
+            res = real_g(url, ids, ttl_s)
+            for oid, geom in res.items():
+                _g[f"{url}|{oid}"] = perimeter_shape(mapping(geom))
+            return res
+
+        perimeters.query_attributes, perimeters.fetch_geometries = q, g
+        try:
+            live = perimeters.fetch_perimeters(args["name"], args["lat"], args["lon"], args["start_ms"], args["end_ms"],
+                                               acres=args["acres"], contained_ms=args["contained_ms"])
+        finally:
+            perimeters.query_attributes, perimeters.fetch_geometries = real_q, real_g
+        print(f"  {name}: {len(live)} perimeters from {sum(len(v) for v in attrs.values())} records")
+        out[key] = {"args": args, "attrs": attrs, "geoms": geoms,
+                    "recorded_object_ids": sorted(p["object_id"] for p in live if p.get("object_id") is not None)}
+        out[key]["expected_object_ids"] = replay_perimeters(out[key])
+    return out
+
+
+def replay_perimeters(doc: dict) -> list[int]:
+    """The OBJECTIDs today's code selects from a recorded sample (geometries as stored)."""
+    from fire3d.sources import perimeters
+
+    real_q, real_g = perimeters.query_attributes, perimeters.fetch_geometries
+
+    def q(url, where, ttl_s, extra=None):
+        k = attrs_key(url, where, extra)
+        if k not in doc["attrs"]:
+            raise SystemExit(f"replay: query not recorded: {k[:200]}")
+        return [dict(a) for a in doc["attrs"][k]]
+
+    def g(url, ids, ttl_s):
+        return {int(i): shape(doc["geoms"][f"{url}|{i}"]) for i in ids if f"{url}|{i}" in doc["geoms"]}
+
+    perimeters.query_attributes, perimeters.fetch_geometries = q, g
+    try:
+        a = doc["args"]
+        res = perimeters.fetch_perimeters(a["name"], a["lat"], a["lon"], a["start_ms"], a["end_ms"], acres=a["acres"],
+                                          contained_ms=a["contained_ms"])
+    finally:
+        perimeters.query_attributes, perimeters.fetch_geometries = real_q, real_g
+    return sorted(p["object_id"] for p in res if p.get("object_id") is not None)
+
+
+def check_perimeters(docs: dict[str, dict]) -> None:
+    for key, d in docs.items():
+        need(len(d["expected_object_ids"]) > 0, f"{key}: some perimeters selected")
+        need(d["expected_object_ids"] == d["recorded_object_ids"], f"{key}: replay equals the live answer")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--dry-run", action="store_true", help="fetch, trim and check; write nothing")
     ap.add_argument("--cache-dir", type=Path, help="keep the HTTP cache here between runs (never under data/)")
-    ap.add_argument("--only", choices=("all", "existing", "national"), default="all",
-                    help="record everything, only the brief-2 samples, or only the brief-3 national samples")
+    ap.add_argument("--only", choices=("all", "existing", "national", "perimeters"), default="all",
+                    help="record everything, only the brief-2 samples, or only the brief-3 national or perimeter samples")
     args = ap.parse_args()
     if args.cache_dir:
         cache = args.cache_dir.resolve()
@@ -375,6 +477,11 @@ def main() -> int:
             OFFICIAL_DIR / "nws_nwem_cem_la.json": dump(nwem),
             OFFICIAL_DIR / "openfema_window_frw.json": dump(fema),
         })
+    if args.only in ("all", "perimeters"):
+        docs = build_perimeters()
+        check_perimeters(docs)
+        files.update({PIPELINE_US_DIR / f"perimeters_{k}.json": json.dumps(d, separators=(",", ":"), sort_keys=True) + "\n"
+                      for k, d in docs.items()})
     key = config.FIRMS_MAP_KEY
     if key and any(key in body for body in files.values()):
         raise SystemExit("the FIRMS key reached a sample: nothing written")

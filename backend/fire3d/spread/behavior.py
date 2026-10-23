@@ -14,14 +14,13 @@ from __future__ import annotations
 
 import logging
 import math
-from datetime import datetime
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import numpy as np
 
 from .. import bundle as fbundle
 from .. import config
+from ..timeutil import local_month, zone_of
 from . import engine, moisture
 
 log = logging.getLogger(__name__)
@@ -29,7 +28,6 @@ log = logging.getLogger(__name__)
 ZONE_RADIUS_M = 2000.0           # dominant-fuel search radius around the front
 RECENT_PIXELS = 50               # pixels used for the front location when nothing burned in the last hour
 M_PER_FT = 0.3048
-LA_TZ = ZoneInfo("America/Los_Angeles")
 
 
 def _clip(v: float, lo: float, hi: float) -> float:
@@ -217,6 +215,7 @@ def annotate_weather_with_behavior(bundle_dir: Path) -> None:
     else:
         fm1, fm10, fm100 = (np.asarray(f) / 100.0 for f in fms)
     man = fbundle.load_manifest(bdir) or {}
+    tz = zone_of(man)                 # the live fuel moisture month follows the fire's own zone (CONTRACT 14.9.7)
     observed = None
     if "observed_arrival" in (man.get("layers") or {}):
         try:
@@ -243,7 +242,7 @@ def annotate_weather_with_behavior(bundle_dir: Path) -> None:
         z = zones[key]
         if z is None:
             continue
-        month = datetime.fromtimestamp(int(t[k]) / 1000.0, LA_TZ).month
+        month = local_month(int(t[k]), tz)
         herb, woody = moisture.live_fuel_moisture(month, precip_wy)
         b = surface_behavior(z["fuel_code"], fm1[k], fm10[k], fm100[k], herb, woody, float(wind[k]) * 3.6, z["slope"],
                              canopy_cover=z["canopy_cover"], canopy_height_m=z["canopy_height"])

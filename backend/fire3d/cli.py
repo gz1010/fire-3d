@@ -102,6 +102,17 @@ def resolve_incident(ref: str) -> str:
         except Exception as e:
             print(f"warning: {mode} catalog unavailable: {config.mask_secrets(e)}", file=sys.stderr)
     found = match_incidents(ref, summaries)
+    if not found:                     # the national lists default to this year: look back two years by name too
+        from .catalog import default_year
+
+        for year in (default_year() - 1, default_year() - 2):
+            try:
+                found = match_incidents(ref, get_catalog("historical", min_acres=0, year=year))
+            except Exception as e:
+                print(f"warning: {year} catalog unavailable: {config.mask_secrets(e)}", file=sys.stderr)
+                continue
+            if found:
+                break
     if not found:
         raise SystemExit(f"no incident matches {ref!r}")
     if len(found) > 1:
@@ -147,14 +158,18 @@ def weather_hours(bundle_dir: Any) -> dict | None:
 
 
 def _cmd_build(args: argparse.Namespace) -> int:
-    from .build.pipeline import build_incident
+    from .build.pipeline import BuildRefused, build_incident
 
     incident_id = resolve_incident(args.incident)
     flags = " (force)" if args.force else ""
     flags += " (require HRRR)" if args.require_hrrr else ""
     print(f"building {incident_id}{flags} into {config.INCIDENTS_DIR / incident_id}", flush=True)
     t0 = time.monotonic()
-    m = build_incident(incident_id, progress=_progress_printer(), force=args.force, require_hrrr=args.require_hrrr)
+    try:
+        m = build_incident(incident_id, progress=_progress_printer(), force=args.force, require_hrrr=args.require_hrrr)
+    except BuildRefused as e:          # the build gate (CONTRACT 14.2): the API answers the same text with e.status
+        print(f"refused (HTTP {e.status} in the API): {config.mask_secrets(e)}", file=sys.stderr)
+        return 1
     print(f"built {m.id}: status={m.status} in {time.monotonic() - t0:.0f} s")
     wh = weather_hours(config.INCIDENTS_DIR / incident_id)
     if wh:

@@ -11,7 +11,7 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
 | M1 weather quota (§14.12.2) | `brief 3 us-pipeline: M1 weather quota` | done |
 | M3 NWS and local alerts (§14.6, §14.7) | `brief 3 us-pipeline: M3 national NWS and local alerts` | done |
 | Cut-line (a) OpenFEMA prefetch | `brief 3 us-pipeline: M3 OpenFEMA archive channel` | done (done early, while waiting for `us-catalog` M3) |
-| M2 build anywhere (§14.2 gate, §14.12.3/5/6/8/10, §14.9.7) | - | waiting for `brief 3 us-catalog: M3` |
+| M2 build anywhere (§14.2 gate, §14.12.3/5/6/8/10, §14.9.7) | `brief 3 us-pipeline: M2 build anywhere` | done |
 | M4 smoke builds (§14.12.11) | - | after M2 |
 
 ## §14.12.2 Weather quota (as built, M1)
@@ -172,6 +172,94 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
 - Tests: `backend/tests/test_local_alerts_nws.py` (16), `backend/tests/test_openfema_parse.py` (8); updated
   `test_official_nws.py` (the national URL).
 
+## §14.2 Build gate (as built, M2)
+
+- `pipeline.is_catalog_incident(incident_id, summary)` (signature unchanged): `summary.id == incident_id`, and
+  `catalog.resolve_listed(incident_id)` answers a summary with this same id (a CAL FIRE or NIFC WFIGS list; never a
+  manifest alone) whose state `catalog.is_supported` accepts. A lookup failure means "not buildable now" (logged).
+- `pipeline.BuildRefused(LookupError)` with `.status`; `gate_refusal(id, summary)` gives the same texts as
+  `api/app.py`: 404 "unknown incident '<id>'"; 422 "Fire-3d does not support Alaska, Hawaii or US territories yet."
+  (`pipeline.UNSUPPORTED_TEXT`); 409 "'<id>' is a local or synthetic bundle; it cannot be rebuilt."; 409 "'<alias>' is
+  listed as '<id>'."; 409 "'<id>' cannot be built in this version yet.". No "CAL FIRE catalog" wording remains.
+  `build_incident` raises it before taking the bundle lock; `short_error` prints it without the class name.
+- `landfire_gate(summary, force)`: a historical fire before Oct 2023 (federal FY2023 or earlier) → `BuildRefused`
+  422 "LANDFIRE has no pre-fire fuels edition here for a fire that began in federal fiscal year <FY> (before October
+  2023); rebuild with force to use LF2023, which may already show the fire's own burn scar." unless `force`; with
+  `force` the build uses LF2023 and adds a "LANDFIRE:" warning.
+- CLI `build`: ids or names (a name not in this year's lists is also looked up in the two previous years' lists);
+  a refusal prints "refused (HTTP <status> in the API): <text>" on stderr and exits 1.
+- `refresh_live` without `detections` loads `firms.load_live_us(days=2)` (the national feed; `pipeline.py` only).
+- `spec_incident_id` is kept, marked deprecated (nothing in the gate uses it).
+- Test support: `tests/test_pipeline_support.py` `FakeBuild` also fakes `catalog.resolve_listed` (`bundle_only` ids
+  and ids not of the catalog's form answer None), so `test_api.py` needs no change for the new gate.
+
+## §14.9.7 Backend fire-local time (as built, M2)
+
+- `timeutil`: `zone(tz)` (ZoneInfo; UTC for None / unknown, never Pacific), `local_dt`, `fmt_local(ms, tz, *,
+  year=False)` → "Jan 07, 18:18 MST" / "Jan 07, 2025, 18:18 MST", `fmt_local_short(ms, tz)` → "Oct 17 14:24 PDT"
+  (satellite passes), `local_month(ms, tz)`, `zone_of(summary_or_manifest)` (`time_zone`, else
+  `regions.time_zone_at(lon, lat)`, else the state's main zone, else "UTC").
+- `BuildContext.time_zone` = `summary.time_zone` (pipeline build and refresh). `observed.py` labels (ignition detail,
+  GOES / polar start reasons), `live_observation.py` (notes, veto, `describe_start(doc, start_ms, tz)`),
+  `overpass.Pass.describe(tz)` / `overpass.pass_time(ms, tz)` (`la_time` kept as a deprecated alias),
+  `ensemble.py` (start note; moisture month), `behavior.py` (moisture month) and `weather_bundle.py` (moisture month)
+  use the fire's zone. No `ZoneInfo("America/Los_Angeles")` remains in `build/`, `spread/` or `sources/overpass.py`.
+  California bundles get America/Los_Angeles from their location, so their strings are unchanged.
+
+## §14.12.3 LANDFIRE (as built, M2)
+
+- `landfire.EDITIONS = ("LF2023", "LF2024", "LF2025")` (LF2023 is on the same lfps.usgs.gov service; its 7 CONUS
+  layers were listed on 2026-10-23). `federal_fy(ms)` (UTC), `prefire_edition(started_ms)`, `edition_for(mode,
+  started_ms=None)` (live LF2025; historical LF{FY − 1}, at least LF2023; without a start, brief 2's LF2024),
+  `has_prefire_edition`, `older_edition`, `nodata_land_fraction`, `switch_warning`, `NODATA_SWITCH_FRAC = 0.02`,
+  `NOT_RELEASED_LF2025 = "LANDFIRE 2025 is not released here yet; LANDFIRE 2024 used"`, `OUTSIDE_COVERAGE =
+  "outside fuel data coverage: not modeled (unknown, not low)"`.
+- `aoi.fetch_fuels`: a failed edition falls back to the next **older** edition only (LF2025 → LF2024 → LF2023;
+  never forward); the vegetation layers are refetched for the edition used.
+- `aoi.land_masks(fire, elev)`: `land` = cell centres inside the lower-48 + DC state polygons (`regions.in_lower48`,
+  every 4th cell, upsampled) with fire-grid elevation above 0.5 m (3DEP answers ~0 m over the sea, which the
+  polygons partly include); `abroad` = ground above 0.5 m outside them. `aoi.choose_fuels` switches the whole
+  bundle to the next older edition while more than 2 % of the land cells have no fuel code, with the warning
+  "LANDFIRE: LANDFIRE 2025 is not released here yet; LANDFIRE 2024 used" (other editions: "LANDFIRE: LANDFIRE <E>
+  has no fuel data for <p>% of the land here; LANDFIRE <older> used").
+- Cells outside the US without fuel data keep fuel 99 and are counted: "LANDFIRE: <n> fire-grid cells (<p>) outside
+  the United States are outside fuel data coverage: not modeled (unknown, not low)". Stats gain
+  `nodata_land_frac` and `outside_coverage_cells`.
+- Measured on the local California bundles: Palisades has 8.7 % NoData cells (the sea), 0.22 % inside the state
+  polygon and 0 % on land above 0.5 m, so a live Palisades-like coast stays on LF2025; Eaton has none.
+
+## §14.12.5 / §14.12.6 Issuer text and data source names (as built, M2)
+
+- `types.record_issuer_of(summary)` (model or dict): `record_issuer`, else "NIFC WFIGS (IRWIN)" for a WFIGS record,
+  else "CAL FIRE" (the 14.1 validator's reading of old manifests).
+- Bundle text from it: "Reported by {issuer} {fmt_local}", "{issuer} start", "{issuer} incident point", "{issuer}
+  point is N km from the earliest detections…", "{issuer} (100% contained)", "… ac reported by {issuer}", the event
+  source "{issuer}[ + FIRMS GOES]", the live veto "{issuer} reported N ac at …" and the forecast note "{issuer}
+  reports N% containment". California strings are unchanged.
+- The fire's own record source: CAL FIRE rows keep brief 2's "CAL FIRE incidents"; WFIGS rows "NIFC WFIGS incident
+  record (IRWIN)" with the IRWIN id and issuer in `detail` (`pipeline.incident_record_source`). Perimeters keep
+  "NIFC WFIGS fire perimeters"; LANDFIRE keeps "LANDFIRE <edition>".
+
+## §14.12.8 Perimeters (as built, M2)
+
+- `perimeters.fetch_perimeters(..., record_source="calfire", state=None, irwin_id=None)`: California records
+  (default) take brief 2's path exactly (`state` / `irwin_id` ignored; same queries, proven by replaying recorded
+  Eaton, Palisades, Madre and TCU answers: identical OBJECTID sets and identical query keys). WFIGS records: by IRWIN
+  id (`irwin_where`: `UPPER(attr_IrwinID) IN ('{ID}', 'ID') OR UPPER(poly_IRWINID) IN (...)`; the identity filter then
+  skips the name and state tests), else by name in `US-<state>`; no CAL FIRE hint; the distance and size checks stay.
+  A WFIGS record without IRWIN id and state is not matched (warning). `observed.perimeter_identity(summary)` passes
+  the WFIGS identity. Helpers `norm_irwin`, `irwin_where`, `wfigs_state`; `build_where(..., state=)`.
+
+## §14.12.10 Interim live fuel moisture (as built, M2)
+
+- `weather_bundle.is_california(summary)`; outside California `build_weather` adds the unprefixed manifest warning
+  "Live fuel moisture outside California uses California's seasonal values until a regional method is tested;
+  experimental." (`INTERIM_LFM_WARNING`, replaced on every rebuild) and `live_moisture_for` starts its note with
+  "Live fuel moisture: California's seasonal values (regional method not tested yet); experimental."
+  (`INTERIM_LFM_NOTE`), which every forecast appends to its warnings. California notes are unchanged.
+- Tests: `tests/test_us_pipeline_build.py` (24), `tests/test_us_pipeline_perimeters.py` (8); recorded data in
+  `tests/data/pipeline_us/` (PROVENANCE.md).
+
 ## Files
 
 `backend/fire3d/http.py`, `backend/fire3d/sources/weather.py`, `backend/fire3d/build/weather_bundle.py`,
@@ -179,7 +267,11 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
 `backend/fire3d/sources/nws.py`, `backend/fire3d/sources/openfema.py` (new), `backend/fire3d/api/official.py`,
 `backend/scripts/record_test_samples_official.py`, `backend/tests/data/official/*` (3 new samples + PROVENANCE),
 `backend/tests/test_us_pipeline_quota.py`, `backend/tests/test_local_alerts_nws.py`, `backend/tests/test_openfema_parse.py`,
-`backend/tests/test_official_nws.py`.
+`backend/tests/test_official_nws.py`, `backend/fire3d/build/aoi.py`, `backend/fire3d/build/observed.py`,
+`backend/fire3d/build/live_observation.py`, `backend/fire3d/sources/landfire.py`, `backend/fire3d/sources/perimeters.py`,
+`backend/fire3d/sources/overpass.py`, `backend/fire3d/spread/ensemble.py`, `backend/fire3d/spread/behavior.py`,
+`backend/fire3d/timeutil.py`, `backend/tests/test_us_pipeline_build.py`, `backend/tests/test_us_pipeline_perimeters.py`,
+`backend/tests/data/pipeline_us/*`, `backend/tests/test_pipeline_support.py`, `backend/tests/test_official_calfire.py`.
 
 ## Deviations
 

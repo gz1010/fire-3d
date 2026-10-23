@@ -31,7 +31,11 @@ LF_SERVICES = "https://lfps.usgs.gov/arcgis/rest/services"
 # Codes are stable across editions; LANDFIRE publishes no LF2024 CSV at the matching path (404), so LF2025's
 # table serves both editions (unknown codes simply fall back to the FBFM40 tree rule).
 EVT_CSV_URL = "https://landfire.gov/sites/default/files/CSV/LF2025/LF2025_EVT.csv"
-EDITIONS = ("LF2024", "LF2025")
+EDITIONS = ("LF2023", "LF2024", "LF2025")          # oldest first; LF2023 is on the same service (checked 2026-10-23)
+LIVE_EDITION = "LF2025"
+NODATA_SWITCH_FRAC = 0.02          # more NoData land cells than this in an edition -> the next older edition
+NOT_RELEASED_LF2025 = "LANDFIRE 2025 is not released here yet; LANDFIRE 2024 used"
+OUTSIDE_COVERAGE = "outside fuel data coverage: not modeled (unknown, not low)"
 CORE_LAYERS = ("FBFM40", "CC", "CH", "CBH", "CBD")
 VEG_LAYERS = ("EVT", "EVC")
 NODATA = -9999
@@ -52,9 +56,67 @@ FBFM40_CODES = frozenset(
 NONBURNABLE_FILL = 99
 
 
-def edition_for(mode: str) -> str:
-    """LANDFIRE edition per SPEC 8.2: LF2024 (pre-2025-fire fuels) for historical, LF2025 for live."""
-    return "LF2025" if mode == "live" else "LF2024"
+def federal_fy(ms: int) -> int:
+    """US federal fiscal year of a UTC instant (FY2025 = Oct 1 2024 .. Sep 30 2025)."""
+    d = datetime.fromtimestamp(int(ms) / 1000.0, tz=timezone.utc)
+    return d.year + 1 if d.month >= 10 else d.year
+
+
+def prefire_edition(started_ms: int) -> str:
+    """The edition that shows the fuels before a fire (CONTRACT 14.12.3): LF{FY of ignition − 1} (FY2024 -> LF2023,
+    FY2025 -> LF2024, FY2026 -> LF2025); later fires get the newest edition here, never a newer one than exists."""
+    want = federal_fy(started_ms) - 1
+    newest = int(EDITIONS[-1][2:])
+    return f"LF{min(want, newest)}"
+
+
+def has_prefire_edition(started_ms: int) -> bool:
+    """False for a fire before Oct 2023 (its pre-fire edition is older than LF2023, the oldest one here)."""
+    return int(prefire_edition(started_ms)[2:]) >= int(EDITIONS[0][2:])
+
+
+def too_old_text(started_ms: int) -> str:
+    return (f"LANDFIRE has no pre-fire fuels edition here for a fire that began in federal fiscal year "
+            f"{federal_fy(started_ms)} (before October 2023); rebuild with force to use {EDITIONS[0]}, which may "
+            "already show the fire's own burn scar.")
+
+
+def edition_for(mode: str, started_ms: int | None = None) -> str:
+    """LANDFIRE edition (CONTRACT 14.12.3): live LF2025; historical LF{federal FY of ignition − 1}, at least LF2023
+    (a fire before Oct 2023 is refused by the build gate unless forced). Without ``started_ms`` (old callers):
+    LF2024 for historical, as in brief 2."""
+    if mode == "live":
+        return LIVE_EDITION
+    if started_ms is None:
+        return "LF2024"
+    ed = prefire_edition(int(started_ms))
+    return ed if ed in EDITIONS else EDITIONS[0]
+
+
+def older_edition(edition: str) -> str | None:
+    """The next older edition here (never a newer one: no forward fallback for a historical fire)."""
+    try:
+        i = EDITIONS.index(edition)
+    except ValueError:
+        return None
+    return EDITIONS[i - 1] if i > 0 else None
+
+
+def nodata_land_fraction(fbfm40_raw: "np.ndarray", land: "np.ndarray") -> float:
+    """Share of the land cells (``land`` True: inside the state polygons with valid ground elevation) where the raw
+    FBFM40 has no fuel code (NoData). 0 without land cells."""
+    f = np.asarray(fbfm40_raw)
+    lm = np.asarray(land, dtype=bool)
+    if f.shape != lm.shape or not lm.any():
+        return 0.0
+    return float((~np.isin(f[lm], list(FBFM40_CODES))).mean())
+
+
+def switch_warning(edition: str, older: str, frac: float) -> str:
+    """The warning for an edition switched for NoData land cells."""
+    if edition == "LF2025" and older == "LF2024":
+        return NOT_RELEASED_LF2025
+    return (f"LANDFIRE {edition[2:]} has no fuel data for {frac:.0%} of the land here; LANDFIRE {older[2:]} used")
 
 
 def seasonal_fbfm40(ms: int | None) -> str | None:
@@ -121,7 +183,7 @@ def fetch_landfire_info(
 
 
 def fetch_landfire(grid: Grid, edition: str, layers: tuple[str, ...] = ("FBFM40", "CC", "CH", "CBH", "CBD", "EVT")) -> dict[str, np.ndarray]:
-    """LANDFIRE ``layers`` of ``edition`` ("LF2024" | "LF2025") on ``grid`` (nearest neighbour), raw int16
+    """LANDFIRE ``layers`` of ``edition`` ("LF2023" | "LF2024" | "LF2025") on ``grid`` (nearest neighbour), raw int16
     arrays keyed by layer name (CH/CBH are m x 10, CBD kg/m³ x 100, CC percent)."""
     return fetch_landfire_info(grid, edition, tuple(layers))[0]
 

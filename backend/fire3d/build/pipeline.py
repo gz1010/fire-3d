@@ -70,32 +70,78 @@ REFRESH_FAILED_PREFIX = "Live refresh failed"
 WEATHER_NOT_REFRESHED_PREFIX = "Weather not refreshed: "
 
 
+UNSUPPORTED_TEXT = "Fire-3d does not support Alaska, Hawaii or US territories yet."     # CONTRACT 14.14
+
+
+class BuildRefused(LookupError):
+    """The build gate refused an id (CONTRACT 14.2): ``status`` is the HTTP answer the API gives for it (404 unknown,
+    409 a local or synthetic bundle or an alias, 422 Alaska / Hawaii / territories or a pre-LF2023 fire)."""
+
+    def __init__(self, status: int, message: str):
+        super().__init__(message)
+        self.status = status
+
+
 def spec_incident_id(summary: IncidentSummary) -> str:
-    """SPEC 4.4 id of a summary: ``f"{year}-{slug(name)}-{calfire_uid[:6].lower()}"``."""
+    """Deprecated (brief 3): the CAL FIRE form of a SPEC 4.4 id, ``f"{year}-{slug(name)}-{calfire_uid[:6].lower()}"``.
+    The build gate now asks the source lists (:func:`is_catalog_incident`)."""
     slug = re.sub(r"[^a-z0-9]+", "-", str(summary.name or "").strip().lower()).strip("-") or "incident"
     return f"{int(summary.year)}-{slug}-{str(summary.calfire_uid).strip().lower()[:6]}"
 
 
-def is_catalog_incident(incident_id: str, summary: IncidentSummary | dict | None) -> bool:
-    """True when ``summary`` describes a real CAL FIRE incident with this id (its SPEC 4.4 id matches).
+def _listed(incident_id: str) -> IncidentSummary | None:
+    """``catalog.resolve_listed`` (a CAL FIRE or NIFC WFIGS list knows the id; never a manifest); None on failure."""
+    from .. import catalog
 
-    ``catalog.get_summary`` also answers from bundle manifests on disk (e.g. ``fixture-demo``); such bundles are
-    served read-only and must never be (re)built or refreshed from their own manifest.
+    try:
+        s = catalog.resolve_listed(incident_id)
+    except Exception as e:  # noqa: BLE001 - an unreachable list: not buildable now, never a 500
+        log.warning("build gate: resolve_listed(%s) failed: %s", incident_id, config.mask_secrets(e))
+        return None
+    if isinstance(s, dict):
+        s = IncidentSummary.model_validate(s)
+    return s
+
+
+def is_catalog_incident(incident_id: str, summary: IncidentSummary | dict | None) -> bool:
+    """True when ``incident_id`` may be built: ``summary`` is this id's, a source list knows it
+    (``catalog.resolve_listed``: CAL FIRE or NIFC WFIGS, never a bundle manifest alone) under this same id, and its
+    state is in the lower 48 + DC (``catalog.is_supported``). CONTRACT 14.2.
+
+    ``catalog.get_summary`` also answers from bundle manifests on disk (``fixture-demo``, ``fixture-east``); such
+    bundles are served read-only and are never (re)built or refreshed from their own manifest.
     """
+    from .. import catalog
+
     if summary is None:
         return False
-    if isinstance(summary, dict):
-        try:
-            summary = IncidentSummary.model_validate(summary)
-        except ValueError:
-            return False
-    return summary.id == incident_id and spec_incident_id(summary) == incident_id
+    sid = summary.get("id") if isinstance(summary, dict) else getattr(summary, "id", None)
+    if sid != incident_id:
+        return False
+    listed = _listed(incident_id)
+    return listed is not None and listed.id == incident_id and catalog.is_supported(listed)
+
+
+def gate_refusal(incident_id: str, summary: IncidentSummary | dict | None) -> BuildRefused:
+    """The error for an id :func:`is_catalog_incident` refuses (same texts as ``api/app.py``, CONTRACT 14.2)."""
+    from .. import regions
+
+    if summary is None:
+        return BuildRefused(404, f"unknown incident {incident_id!r}")
+    listed = _listed(incident_id)
+    if listed is not None and not regions.is_supported_state(listed.state):
+        return BuildRefused(422, UNSUPPORTED_TEXT)
+    if listed is None:
+        return BuildRefused(409, f"'{incident_id}' is a local or synthetic bundle; it cannot be rebuilt.")
+    if listed.id != incident_id:
+        return BuildRefused(409, f"'{incident_id}' is listed as '{listed.id}'.")
+    return BuildRefused(409, f"'{incident_id}' cannot be built in this version yet.")
 
 
 def short_error(exc: BaseException) -> str:
     """One-line, secret-masked description of an exception (for job errors and manifest warnings)."""
     msg = " ".join(str(exc).split()) or type(exc).__name__
-    text = msg if isinstance(exc, (LookupError, BundleBusy, WeatherQuotaExceeded)) else f"{type(exc).__name__}: {msg}"
+    text = msg if isinstance(exc, (LookupError, BundleBusy, WeatherQuotaExceeded, BuildRefused)) else f"{type(exc).__name__}: {msg}"
     text = config.mask_secrets(text)
     return text if len(text) <= ERROR_MAX_CHARS else text[: ERROR_MAX_CHARS - 1] + "…"
 
@@ -466,10 +512,9 @@ def build_incident(incident_id: str, progress: ProgressFn | None = None, force: 
     summary = catalog.get_summary(incident_id)
     if isinstance(summary, dict):
         summary = IncidentSummary.model_validate(summary)
-    if summary is None:
-        raise LookupError(f"unknown incident {incident_id!r}: not in the CAL FIRE catalog")
-    if not is_catalog_incident(incident_id, summary):
-        raise LookupError(f"incident {incident_id!r} is not a CAL FIRE catalog incident (bundle-only), so it cannot be (re)built")
+    if summary is None or not is_catalog_incident(incident_id, summary):
+        raise gate_refusal(incident_id, summary)
+    landfire_gate(summary, force)
     with ExitStack() as stack:
         try:
             stack.enter_context(bundle_lock(bdir, timeout=0))
@@ -490,6 +535,34 @@ def _read_manifest(bdir: Path) -> dict | None:
     except (OSError, ValueError):
         return None
     return m if isinstance(m, dict) else None
+
+
+def _default_edition(mode: str, summary: IncidentSummary) -> str:
+    from ..sources import landfire
+
+    return landfire.edition_for(mode, int(summary.started_ms))
+
+
+def landfire_gate(summary: IncidentSummary, force: bool) -> None:
+    """A historical fire that began before Oct 2023 (federal FY2023 or earlier) has no pre-fire LANDFIRE edition here
+    (LF2023 is the oldest): refused unless ``force`` (CONTRACT 14.12.3); with ``force`` it is built on LF2023 with a
+    warning."""
+    from ..sources import landfire
+
+    if summary.mode == "historical" and not landfire.has_prefire_edition(int(summary.started_ms)) and not force:
+        raise BuildRefused(422, landfire.too_old_text(int(summary.started_ms)))
+
+
+def incident_record_source(summary: IncidentSummary, fetched_ms: int) -> dict:
+    """The manifest's data source for the fire's own record (CONTRACT 14.12.6, read by the web's dataCredits): CAL
+    FIRE rows keep brief 2's "CAL FIRE incidents"; NIFC WFIGS rows "NIFC WFIGS incident record (IRWIN)"."""
+    if getattr(summary, "record_source", None) == "wfigs":
+        issuer = getattr(summary, "record_issuer", None) or "NIFC WFIGS (IRWIN)"
+        return {"name": "NIFC WFIGS incident record (IRWIN)",
+                "detail": f"WFIGS Incident Locations, IRWIN {getattr(summary, 'irwin_id', None) or 'id unknown'} "
+                          f"({issuer}; incident point, acres, dates)", "fetched_ms": int(fetched_ms)}
+    return {"name": "CAL FIRE incidents", "detail": "incidents.fire.ca.gov IncidentApi/List (incident point, acres, dates)",
+            "fetched_ms": int(fetched_ms)}
 
 
 def weather_preflight(summary: IncidentSummary, now: int | None = None) -> None:
@@ -532,9 +605,7 @@ def _build_locked(bdir: Path, summary: IncidentSummary, prog: BuildProgress, *, 
         "schema_version": 1, "id": summary.id, "name": summary.name, "mode": mode, "status": "building",
         "summary": dump(building_summary), "time_origin_ms": time_origin,
         "grid": manifest_grid(render, fire, 0.0, 0.0),
-        "layers": {}, "data_sources": [
-            {"name": "CAL FIRE incidents", "detail": "incidents.fire.ca.gov IncidentApi/List (incident point, acres, dates)", "fetched_ms": t_start},
-        ],
+        "layers": {}, "data_sources": [incident_record_source(summary, t_start)],
         "forecasts": [], "warnings": warnings,
     }
     bundle.update_manifest(bdir, lambda m: initial)
@@ -587,7 +658,7 @@ def _build_locked(bdir: Path, summary: IncidentSummary, prog: BuildProgress, *, 
             m.setdefault("data_sources", [])
             m.setdefault("forecasts", [])
             m.setdefault("warnings", [])
-            m.setdefault("fuels_edition", "LF2025" if mode == "live" else "LF2024")
+            m.setdefault("fuels_edition", _default_edition(mode, summary))
             if not isinstance(m.get("stats"), dict):
                 m["stats"] = _stats_from_files(bdir, m)
 
@@ -689,7 +760,7 @@ def refresh_live(incident_id: str, progress: ProgressFn | None = None, *, detect
             try:
                 from ..sources import firms
 
-                detections = firms.load_live_ca(days=2)
+                detections = firms.load_live_us(days=2)        # the national feed (CONTRACT 14.12.1)
             except Exception as e:
                 log.warning("refresh_live(%s): FIRMS live feeds unavailable: %s", incident_id, config.mask_secrets(e))
                 return False
@@ -724,7 +795,7 @@ def _refresh_locked(incident_id: str, bdir: Path, progress: ProgressFn | None) -
         return False
     summary = summary or IncidentSummary.model_validate(m["summary"])
     if not is_catalog_incident(incident_id, summary):
-        log.info("refresh_live(%s): not a CAL FIRE catalog incident (bundle-only); not refreshed", incident_id)
+        log.info("refresh_live(%s): not a listed incident (bundle-only, or a list is unreachable); not refreshed", incident_id)
         return False
     prog = BuildProgress(progress, REFRESH_STAGES)
     render, fire = grids_from_manifest(m)

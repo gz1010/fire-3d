@@ -23,7 +23,6 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass, replace
-from datetime import timedelta
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
@@ -36,7 +35,7 @@ from ..grid import grids_from_manifest, weather_axes, weather_points
 from ..sources.weather import (BLEND_H, OpenMeteoSource, WeatherError, WeatherSource, blend_offsets, ceil_hour_ms, hourly_axis,
                                uv_to_wind, water_year_precip, water_year_start_ms, wind_to_uv)
 from ..spread.moisture import dead_fuel_moisture, ffwi, greenup_fraction, live_fuel_moisture
-from ..timeutil import DAY_MS, HOUR_MS, floor_hour_ms, ms_to_dt, ms_to_iso, now_ms
+from ..timeutil import DAY_MS, HOUR_MS, floor_hour_ms, local_month, ms_to_iso, now_ms, zone_of
 from ..types import BuildContext, MemberWeather
 
 log = logging.getLogger(__name__)
@@ -63,6 +62,11 @@ RH_MIN, RH_MAX = 1.0, 100.0
 MS_TO_KMH = 3.6
 DATA_SOURCE_NAME = "Weather"
 WARN_PREFIX = "Weather: "                 # manifest warnings written here (replaced on every rebuild)
+# CONTRACT 14.12.10: until a regional live fuel moisture method is tested, fires outside California use California's
+# seasonal values, and say so (an unprefixed manifest warning, replaced on every rebuild like the others).
+INTERIM_LFM_WARNING = ("Live fuel moisture outside California uses California's seasonal values until a regional "
+                       "method is tested; experimental.")
+INTERIM_LFM_NOTE = "Live fuel moisture: California's seasonal values (regional method not tested yet); experimental."
 
 _FIELDS = ("temp_c", "rh_pct", "dewpoint_c", "wind_speed_ms", "wind_dir_deg", "wind_gust_ms", "precip_mm")
 
@@ -355,15 +359,16 @@ def precip_to(bdir: Path, manifest: dict, t_ms: int, gw: GridWeather | None = No
 def live_moisture_for(bdir: Path, manifest: dict, start_ms: int, gw: GridWeather | None = None, *, fetch: bool = True) -> tuple[float, float, str]:
     """``(herb, woody, note)``: the month's live fuel moisture with the drought adjustment for a forecast or hour
     starting at ``start_ms`` (plain month table when the water-year precipitation is unknown)."""
-    month = _local_month(int(start_ms))
+    month = _local_month(int(start_ms), zone_of(manifest))
     p, why = precip_to(bdir, manifest, int(start_ms), gw, fetch=fetch)
     herb, woody = live_fuel_moisture(month, p)
     base = live_fuel_moisture(month)
+    lead = "" if is_california(manifest.get("summary") or {}) else INTERIM_LFM_NOTE + " "
     if p is None:
-        return herb, woody, f"live fuel moisture: month table (herb {base[0]:.0%}, woody {base[1]:.0%}); {why}"
+        return herb, woody, f"{lead}live fuel moisture: month table (herb {base[0]:.0%}, woody {base[1]:.0%}); {why}"
     g = greenup_fraction(p)
     adj = "" if (herb, woody) == base else f" (month table {base[0]:.0%}/{base[1]:.0%}; green-up {g:.0%})"
-    return herb, woody, (f"live fuel moisture herb {herb:.0%}, woody {woody:.0%}{adj}: water-year precipitation "
+    return herb, woody, (f"{lead}live fuel moisture herb {herb:.0%}, woody {woody:.0%}{adj}: water-year precipitation "
                          f"{p:.0f} mm by {ms_to_iso(int(start_ms))[:10]} ({why})")
 
 
@@ -425,12 +430,14 @@ def build_weather(ctx: BuildContext, source: WeatherSource | None = None) -> Non
               f"at_fire = {where}; {moist_note}")
     fetched = int(gw.fetched_ms or now)
 
+    interim = [] if is_california(ctx.summary) else [INTERIM_LFM_WARNING]
+
     def record(m: dict) -> None:
         ds = [d for d in m.get("data_sources", []) if not (isinstance(d, dict) and d.get("name") == DATA_SOURCE_NAME)]
         ds.append({"name": DATA_SOURCE_NAME, "detail": detail, "fetched_ms": fetched})
         m["data_sources"] = ds
-        ws = [w for w in m.get("warnings", []) if not str(w).startswith(WARN_PREFIX)]
-        m["warnings"] = ws + [WARN_PREFIX + w for w in warnings]
+        ws = [w for w in m.get("warnings", []) if not str(w).startswith(WARN_PREFIX) and w != INTERIM_LFM_WARNING]
+        m["warnings"] = ws + [WARN_PREFIX + w for w in warnings] + interim
 
     bundle.update_manifest(bdir, record)
     af = data["at_fire"]
@@ -542,13 +549,9 @@ def deterministic_grid(bdir: Path, manifest: dict, a_ms: int, b_ms: int, source:
         return gw
 
 
-def _local_month(ms: int) -> int:
-    try:
-        from zoneinfo import ZoneInfo
-
-        return ms_to_dt(ms).astimezone(ZoneInfo("America/Los_Angeles")).month
-    except Exception:   # no tz database: PST is close enough for a monthly table
-        return (ms_to_dt(ms) - timedelta(hours=8)).month
+def _local_month(ms: int, tz: str | None) -> int:
+    """The month of ``ms`` in the fire's own zone (CONTRACT 14.9.7; UTC when unknown)."""
+    return local_month(ms, tz)
 
 
 def resolve_ensemble(ensemble: str, mode: str) -> str:

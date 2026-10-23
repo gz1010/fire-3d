@@ -23,7 +23,7 @@ from fire3d import catalog, config
 from fire3d.api import official
 from fire3d.contracts import CalFireOfficialResponse, contract_problems
 from fire3d.sources import calfire, calfire_history as hist
-from fire3d.timeutil import DAY_MS, iso_to_ms
+from fire3d.timeutil import DAY_MS, iso_to_ms, ms_to_dt, now_ms
 
 DATA = Path(__file__).parent / "data" / "firedata"
 LIVE = json.loads((DATA / "calfire_live.json").read_text())
@@ -221,7 +221,8 @@ def test_current_year_list_follows_the_live_list(cal: CalFire) -> None:
     assert "Garden Grove HAZMAT" not in rows
     assert all(s.mode == "historical" and s.year == 2026 and s.detections_24h is None for s in rows.values())
     assert [s.name for s in catalog.get_catalog("historical", year=2026)] == ["Timber Fire", "Henderson Fire"]  # >= 300 ac
-    assert [s.id for s in catalog.get_catalog("historical")][:1] == ["2025-gifford-fire-fb7c1c"]          # default 2025
+    assert [s.id for s in catalog.get_catalog("historical", year=2025)][:1] == ["2025-gifford-fire-fb7c1c"]
+    assert catalog.default_year() == ms_to_dt(now_ms()).year                 # brief 3: the current UTC year
     assert calfire.year_ttl_s(2026) == calfire.CURRENT_YEAR_TTL_S and calfire.year_ttl_s(2025) == calfire.YEAR_TTL_S
 
 

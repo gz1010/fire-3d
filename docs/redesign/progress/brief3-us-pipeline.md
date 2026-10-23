@@ -19,8 +19,13 @@ endpoint, §14.6, §14.7, §14.9.7, §14.12.2/3/5/6/7/8/10/11). Ports API 8714, 
 - Cut-line (a) done early: OpenFEMA incident windows, disk cache, background fetch, pending within 4 s, post-build
   prefetch. Full suite 743 passed.
 
+- M2 build anywhere (us-catalog M3 landed 0acc032): build gate (resolve_listed + is_supported, BuildRefused
+  404/409/422 texts), LANDFIRE editions + NoData switch + outside-coverage label, perimeters by IRWIN (CA regression
+  on recorded Eaton/Palisades/Madre/TCU), fire-local time (timeutil.fmt_local/local_month/zone_of; no LA zone left),
+  issuer text, record data source name, interim LFM warning, refresh_live on load_live_us. Full suite 809 passed.
+
 ## Next
-- M2 build anywhere once `brief 3 us-catalog: M3` is in git log; then M4 smoke builds.
+- M4 smoke builds: weather-probe, then 2024-horse-gulch-889237 and 2025-black-cove-95c3c8 (one at a time).
 
 ## Decisions
 - probe adds a `detail` key; any request-limit period maps to status `daily_limit`.

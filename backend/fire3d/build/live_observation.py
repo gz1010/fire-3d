@@ -71,8 +71,9 @@ class LiveObservation:
                 "passes": self.passes, "markers": list(markers)}
 
 
-def _la(ms: int) -> str:
-    return overpass.la_time(int(ms))
+def _la(ms: int, tz: str | None = None) -> str:
+    """``"Oct 17 14:24 PDT"`` in the fire's zone ``tz`` (UTC when None)."""
+    return overpass.pass_time(int(ms), tz)
 
 
 def _hours(ms: float) -> str:
@@ -92,6 +93,8 @@ def latest_observation(
     official_updated_ms: int | None = None,
     mapped_acres: float | None = None,
     fetch: Callable[..., overpass.PassList] | None = None,
+    tz: str | None = None,
+    issuer: str = "CAL FIRE",
 ) -> LiveObservation:
     """Decide ``now_ms`` of a live bundle (module doc). ``det_*``: this fire's polar detections (for the per-pass
     counts); ``data_times``: :func:`fire3d.sources.firms.data_times_by_satellite` of the FIRMS data used.
@@ -128,16 +131,16 @@ def latest_observation(
     if latest is None or latest.t_ms <= last:
         obs.note = "no confirmed satellite pass over the fire since the last detection or mapped perimeter"
         if latest is not None:
-            obs.note += f" (newest confirmed pass: {latest.describe()})"
+            obs.note += f" (newest confirmed pass: {latest.describe(tz)})"
         obs.source = {"name": SOURCE_NAME, "detail": f"{obs.note}; {detail_tail}", "fetched_ms": int(fetched_ms or wall_ms)}
         return obs
     # a later confirmed pass exists: the fire was looked at and no new fire was seen
     if (official_acres is not None and mapped_acres is not None and official_updated_ms is not None
             and official_updated_ms > last + HOUR_MS
             and official_acres > VETO_RATIO * mapped_acres + VETO_MIN_AC):
-        obs.vetoed = (f"CAL FIRE reported {official_acres:,.0f} ac at {_la(official_updated_ms)}, more than the "
+        obs.vetoed = (f"{issuer} reported {official_acres:,.0f} ac at {_la(official_updated_ms, tz)}, more than the "
                       f"{mapped_acres:,.0f} ac mapped from satellite data: the fire grew without being detected")
-        obs.note = (f"{len(after)} satellite pass(es) since the last detection saw no new fire (latest {latest.describe()}), "
+        obs.note = (f"{len(after)} satellite pass(es) since the last detection saw no new fire (latest {latest.describe(tz)}), "
                     f"but {obs.vetoed}, so the latest observation stays at the last detection")
         obs.warnings.append(obs.note)
         obs.source = {"name": SOURCE_NAME, "detail": f"{obs.note}; {detail_tail}", "fetched_ms": int(fetched_ms or wall_ms)}
@@ -145,8 +148,8 @@ def latest_observation(
     obs.now_ms = int(min(latest.t_ms, wall_ms))
     obs.rule = "latest_pass"
     n_v = sum(1 for p in after if p.instrument == "VIIRS")
-    obs.note = (f"latest observation: {latest.describe()}, {_hours(obs.now_ms - last)} after the last detection "
-                f"({_la(last)}); {len(after)} confirmed pass(es) since then ({n_v} VIIRS) saw no new fire, so the "
+    obs.note = (f"latest observation: {latest.describe(tz)}, {_hours(obs.now_ms - last)} after the last detection "
+                f"({_la(last, tz)}); {len(after)} confirmed pass(es) since then ({n_v} VIIRS) saw no new fire, so the "
                 "burned area is held at the last mapped extent")
     obs.source = {"name": SOURCE_NAME, "detail": f"{obs.note}; {detail_tail}", "fetched_ms": int(fetched_ms or wall_ms)}
     return obs
@@ -229,7 +232,7 @@ def last_activity_ms(doc: dict | None) -> int | None:
     return max(t)
 
 
-def describe_start(doc: dict | None, start_ms: int) -> str | None:
+def describe_start(doc: dict | None, start_ms: int, tz: str | None = None) -> str | None:
     """Forecast warning explaining a live start later than the last detection (None otherwise)."""
     if not doc or doc.get("last_detection_ms") is None:
         return None
@@ -237,10 +240,10 @@ def describe_start(doc: dict | None, start_ms: int) -> str | None:
     if start_ms <= last + 60_000:
         return None
     if doc.get("rule") == "latest_pass" and abs(int(doc.get("now_ms") or 0) - start_ms) <= 60_000:
-        return (f"forecast starts at the latest satellite pass over the fire ({_la(start_ms)}), {_hours(start_ms - last)} "
+        return (f"forecast starts at the latest satellite pass over the fire ({_la(start_ms, tz)}), {_hours(start_ms - last)} "
                 f"after the last detection; {int(doc.get('quiet_passes') or 0)} confirmed pass(es) in between saw no new fire, "
                 "so the start keeps the last mapped burned area (see docs/validation.md)")
-    return (f"forecast starts {_hours(start_ms - last)} after the last detection ({_la(last)}); the burned area is the "
+    return (f"forecast starts {_hours(start_ms - last)} after the last detection ({_la(last, tz)}); the burned area is the "
             "last mapped extent")
 
 
