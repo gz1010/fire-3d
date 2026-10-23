@@ -270,15 +270,17 @@ export function newestRecordText(newestMs: number, nowMs: number): string {
   return `newest record ${r.endsWith(' ago') ? `${r.slice(0, -4)} old` : 'under a minute old'}`
 }
 
-/** When Fire-3d fetched the list(s) shown (final fixes R7): "list checked 30 min ago"; several lists fetched at
- *  different times "lists checked in the last 30 min" (the oldest fetch bounds them all); a copy that could not be
- *  refreshed "copy fetched 47 min ago" (panel F2). */
+/** When Fire-3d fetched the list(s) shown (final fixes R7): "list checked 30 min ago"; sources fetched at different
+ *  times "lists checked in the last 30 min", or "sources checked in the last 8 min" for one list built from two
+ *  sources (the Active list: CAL FIRE and NIFC WFIGS are kept for different times), since the oldest fetch bounds them
+ *  all and a single "checked" time would read as older than the newest record; a copy that could not be refreshed
+ *  "copy fetched 47 min ago" (panel F2). */
 export function listCheckedText(oldestMs: number, newestMs: number | null, nowMs: number, opts: { lists: number; stale: boolean }): string {
   const r = fmtRelative(oldestMs, nowMs)
   if (opts.stale) return `copy fetched ${r}`
-  if (opts.lists <= 1) return `list checked ${r}`
-  if (newestMs == null || newestMs - oldestMs < 60_000 || !r.endsWith(' ago')) return `lists checked ${r}`
-  return `lists checked in the last ${r.slice(0, -4)}`
+  const spread = newestMs != null && newestMs - oldestMs >= 60_000 && r.endsWith(' ago')
+  if (!spread) return `${opts.lists <= 1 ? 'list' : 'lists'} checked ${r}`
+  return `${opts.lists <= 1 ? 'sources' : 'lists'} checked in the last ${r.slice(0, -4)}`
 }
 
 /** The notices for the lists shown: both sources down (one notice, ALL_LISTS_DOWN); else the §14.14 notice per source

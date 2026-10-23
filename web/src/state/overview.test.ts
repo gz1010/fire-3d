@@ -328,6 +328,9 @@ describe('freshness wording (final fixes R7)', () => {
     expect(listCheckedText(NOW - 30 * 60_000, NOW - 2 * 60_000, NOW, { lists: 2, stale: false })).toBe('lists checked in the last 30 min')
     expect(listCheckedText(NOW - 30 * 60_000, NOW - 30 * 60_000 + 5_000, NOW, { lists: 2, stale: false })).toBe('lists checked 30 min ago')
     expect(listCheckedText(NOW - 20_000, NOW, NOW, { lists: 2, stale: false })).toBe('lists checked just now')
+    // one list built from two sources fetched at different times (Active: CAL FIRE kept 10 min, WFIGS 5 min)
+    expect(listCheckedText(NOW - 8 * 60_000, NOW, NOW, { lists: 1, stale: false })).toBe('sources checked in the last 8 min')
+    expect(listCheckedText(NOW - 8 * 60_000, NOW - 8 * 60_000 + 30_000, NOW, { lists: 1, stale: false })).toBe('list checked 8 min ago')
     expect(listCheckedText(NOW - 47 * 60_000, NOW, NOW, { lists: 2, stale: true })).toBe('copy fetched 47 min ago')
   })
   it('listHealth keeps the newest fetch time beside the oldest', () => {

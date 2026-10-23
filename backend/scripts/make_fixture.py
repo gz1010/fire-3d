@@ -284,6 +284,7 @@ def east_scenario() -> Scenario:
             "time_zone": "America/New_York", "agency": None, "agency_code": None, "irwin_id": None,
             "unique_fire_id": None, "source_name": "Fixture East (synthetic)", "gacc": None, "accuracy_region": None,
             "active_sources": [], "other_records": [], "complex_name": None, "complex_members": [], "aliases": [],
+            "contained_kind": "contained",   # its contained_ms is a synthetic WFIGS ContainmentDateTime (final fixes)
         },
     )
 

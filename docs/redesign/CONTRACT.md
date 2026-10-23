@@ -3137,8 +3137,10 @@ The clean re-check after 14.16 found nine minor problems (R1-R9, report `docs/re
   twice stay verbatim (`meta.not_named`: ARNG, DEC, DFFM, INTER, SHP, SP, TRIBE, USMC).
 - **Freshness wording** (R7). The overview's source line and the phone peek say the newest record's age, never
   "updated" beside an older check: "newest record 10 min old" (`overview.newestRecordText`), then when Fire-3d
-  fetched the lists: "list checked 2 min ago"; several lists fetched at different times "lists checked in the last 30
-  min"; a copy that could not be refreshed "copy fetched 47 min ago" (`overview.listCheckedText`;
+  fetched the lists: "list checked 2 min ago"; sources fetched at different times (1 min or more apart, whatever
+  the list count) "lists checked in the last 30 min", or "sources checked in the last 8 min" for the Active list built
+  from CAL FIRE and NIFC WFIGS copies kept for different times (orchestrator follow-up after the final re-check); a
+  copy that could not be refreshed "copy fetched 47 min ago" (`overview.listCheckedText`;
   `ListHealth.fetchedNewestMs` added beside `fetchedMs`). The peek: "<N> active fires · newest record 5 min old".
 - **Chips of nearby fires** (R8). The "Spread not prepared yet" chip layers are split in two: `OVR.pinnedChip` /
   `activeChip` / `otherChip` hold the first `chipTargets` fire (nearest the view centre; always drawn, allow-overlap
