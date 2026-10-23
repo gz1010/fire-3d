@@ -647,7 +647,7 @@ def load_live_us(days: float = 7, *, refresh: bool = False) -> pd.DataFrame:
     return _load_live(days, L48_FIRMS_BOX, refresh)
 
 
-LIVE_FEED_TIMEOUT_S = 30.0     # read timeout; the live list's request path must stay under the web's 30 s
+LIVE_FEED_TIMEOUT_S = 12.0     # read timeout (seconds without data); fetched beside the lists, under the web's 30 s
 LIVE_FEED_CONNECT_S = 5.0
 LIVE_FEED_RETRIES = 1
 FEEDS_KEY = "firms-feeds"

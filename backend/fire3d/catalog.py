@@ -704,18 +704,18 @@ def _source(sid: str, ok: bool, retrieved_ms: int | None, reason: str | None, st
             "reason": (stale_reason if stale else None) if ok else reason}
 
 
-def _side_by_side(f_cal, f_wf) -> tuple[tuple[Any, BaseException | None], tuple[Any, BaseException | None]]:
-    """Run the CAL FIRE and the NIFC WFIGS fetches at the same time, so an outage of one never adds its wait to the
-    other's: ``((cal_value, cal_error), (wf_value, wf_error))``."""
+def _side_by_side(*fns) -> list[tuple[Any, BaseException | None]]:
+    """Run the source fetches (CAL FIRE, NIFC WFIGS, the FIRMS feeds) at the same time, so an outage of one never adds
+    its wait to the others': ``[(value, error), ...]`` in the order given (CONTRACT 14.16)."""
     def outcome(fut):
         try:
             return fut.result(), None
         except Exception as e:  # noqa: BLE001 - the caller decides what each failure means
             return None, e
 
-    with ThreadPoolExecutor(max_workers=2, thread_name_prefix="fire-lists") as ex:
-        a, b = ex.submit(f_cal), ex.submit(f_wf)
-        return outcome(a), outcome(b)
+    with ThreadPoolExecutor(max_workers=len(fns), thread_name_prefix="fire-lists") as ex:
+        futs = [ex.submit(f) for f in fns]
+        return [outcome(f) for f in futs]
 
 
 def _wfigs_rows(rows: list[dict]) -> list[tuple[dict, str]]:
@@ -735,7 +735,9 @@ def _live_base(refresh: bool) -> tuple[list[IncidentSummary], list[dict]]:
     from .sources import calfire, firms, wfigs
 
     cal_live: list[dict] = []
-    (raw, cal_err), (current, wf_err) = _side_by_side(lambda: calfire.list_live(refresh=refresh), lambda: wfigs.list_current(refresh=refresh))
+    (raw, cal_err), (current, wf_err), (det_live, det_err) = _side_by_side(
+        lambda: calfire.list_live(refresh=refresh), lambda: wfigs.list_current(refresh=refresh),
+        lambda: firms.load_live_us(1, refresh=refresh))
     if cal_err is not None and not isinstance(cal_err, calfire.CalFireError):
         raise cal_err
     if cal_err is None:
@@ -782,7 +784,9 @@ def _live_base(refresh: bool) -> tuple[list[IncidentSummary], list[dict]]:
         summaries.append(summary_from_wfigs(r, "live", active, st))
     counts: list[int | None] = [None] * len(summaries)
     try:
-        det = firms.load_live_us(1, refresh=refresh)
+        if det_err is not None:
+            raise det_err
+        det = det_live
         t0 = time.monotonic()
         lat, lon = det["lat"].to_numpy(), det["lon"].to_numpy()
         w, s_, e, n = config.CA_BBOX

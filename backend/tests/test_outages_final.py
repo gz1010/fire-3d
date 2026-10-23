@@ -55,6 +55,8 @@ def wf(monkeypatch: pytest.MonkeyPatch, tmp_data_dir: Path):
         state["calls"] += 1
         if state["mode"] == "connect":
             raise httpx.ConnectError("simulated outage", request=request)
+        if state["mode"] == "timeout":
+            raise httpx.ReadTimeout("simulated hang", request=request)
         if state["mode"] == "html":
             return httpx.Response(200, text="<html>maintenance</html>", headers={"content-type": "text/html"})
         return srv.handle(request)
@@ -78,6 +80,19 @@ def test_wfigs_old_copy_is_marked_stale_and_a_dead_host_is_not_asked_again(wf) -
     fhttp.reset_down_memos()
     wfigs.list_current(refresh=True)
     assert not wfigs.is_stale(WF_KEY) and wf["calls"] == 3
+
+
+def test_a_hung_host_is_remembered_for_the_whole_source(wf) -> None:
+    """A read timeout (a host that accepts but never answers) marks all of WFIGS down, so the other WFIGS lists do not
+    wait on it again; with nothing cached the list fails after one retry."""
+    wf["mode"] = "timeout"
+    with pytest.raises(wfigs.WfigsError):
+        wfigs.list_current()
+    assert wf["calls"] == 2                                           # one retry: no copy was cached
+    with pytest.raises(wfigs.WfigsError):
+        wfigs.list_year(2025)
+    assert wf["calls"] == 2 and wfigs.down_memo.down(wfigs.SOURCE_KEY)
+    assert wfigs.TIMEOUT_S * 2 + wfigs.CONNECT_TIMEOUT_S < 30          # the web gives up after 30 s
 
 
 def test_wfigs_html_page_never_replaces_the_good_copy(wf) -> None:
