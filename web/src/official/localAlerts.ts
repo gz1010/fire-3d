@@ -100,6 +100,9 @@ export interface LocalAlertsOfficial {
    *  messages of that box that do not reach the point, by why (a county match for a neighbouring county; an area that
    *  does not reach it). Never the fire's messages, and not listed in Updates. */
   nearby?: { county: number; area: number }
+  /** Which answer `localAlertsAtPoint` filtered: the open fire's own answer (its other messages are in Updates) or the
+   *  live `?bbox=` answer for the point's box (its messages are not in Updates, so the card lists them all). */
+  pointSource?: 'fire' | 'box'
 }
 
 const PHASE: Record<LocalAlert['phase'], FeedItemStatus> = { upcoming: 'upcoming', in_effect: 'active', ended: 'expired' }
@@ -220,8 +223,10 @@ export function localAlertsAtPoint(l: LocalAlertsOfficial, lon: number, lat: num
     byCounty(a) ? fips == null || a.sameCodes.some((c) => c.slice(-5) === fips) : a.where.covers === true || (a.where.km != null && a.where.km <= POINT_NEAR_KM)
   const alerts = measured.filter(near).sort(localAlertOrder)
   const left = measured.filter((a) => !near(a))
-  const counts: Pick<LocalAlertsOfficial, 'elsewhere' | 'nearby'> =
-    opts.source === 'box' ? { nearby: { county: left.filter(byCounty).length, area: left.filter((a) => !byCounty(a)).length } } : { elsewhere: left.length }
+  const counts: Pick<LocalAlertsOfficial, 'elsewhere' | 'nearby' | 'pointSource'> =
+    opts.source === 'box'
+      ? { nearby: { county: left.filter(byCounty).length, area: left.filter((a) => !byCounty(a)).length }, pointSource: 'box' }
+      : { elsewhere: left.length, pointSource: 'fire' }
   if (alerts.length) return { ...l, alerts, ...counts }
   // the area was checked, and no message's area reaches this point: "none here", never an all-clear
   return { ...l, alerts: [], state: 'none', reason: null, ...counts }
@@ -299,6 +304,8 @@ export function localAlertsState(q: Pick<QueryState<LocalAlertsResponse>, 'data'
     credits: archive ? [LIVE_CREDIT, ARCHIVE_CREDIT] : [LIVE_CREDIT],
   }
   if (d.status === 'not_available_for_past_dates') return { ...base, alerts: [], state: 'not-checked', reason: d.reason }
+  // outside the lower 48 nothing is checked (the backend answers state_not_available): "not checked", not an outage
+  if (d.status === 'unavailable' && d.reason_code === 'state_not_available') return { ...base, alerts: [], state: 'not-checked', reason: d.reason }
   if (d.status === 'unavailable') return { ...base, alerts: [], state: 'unavailable', reason: d.reason }
   const alerts = d.alerts
     .map(toLocalAlertItem)

@@ -408,6 +408,25 @@ def test_local_alerts_bbox_form_and_bad_requests(upstream: Upstream, client: Tes
     assert client.get("/api/official/local-alerts", params={"incident": "bad id"}).status_code == 400
 
 
+@pytest.mark.parametrize("bbox,outside", [
+    ("-110.955,29.065,-110.945,29.075", "Outside the United States: Fire-3d has no data here."),          # Hermosillo, MX
+    ("-149.905,61.195,-149.895,61.205", "Fire-3d does not support Alaska, Hawaii or US territories yet."),  # Anchorage
+])
+def test_local_alerts_outside_the_lower_48_are_not_checked(upstream: Upstream, client: TestClient, monkeypatch,
+                                                           bbox: str, outside: str) -> None:
+    """A point outside the lower 48 is never answered "available" with an empty list (that reads as "none here"):
+    both channels are not_checked, with no NWS request (integration, after review round 2 N2)."""
+    monkeypatch.setattr(official, "now_ms", lambda: CEM_NOW)
+    r = client.get("/api/official/local-alerts", params={"bbox": bbox})
+    assert r.status_code == 200 and contract_problems(LocalAlertsResponse, r.content) == []
+    d = r.json()
+    assert d["status"] == "unavailable" and d["reason_code"] == "state_not_available" and d["alerts"] == []
+    assert d["reason"] == f"Fire-3d checks local officials' alerts in the lower 48 states only. {outside}"
+    assert [c["status"] for c in d["channels"]] == ["not_checked", "not_checked"]
+    assert all(c["reason"] == "Fire-3d checks local officials' alerts in the lower 48 states only." for c in d["channels"])
+    assert "not an all-clear" in d["caveats"][0] and upstream.count("api.weather.gov") == 0
+
+
 def test_local_alerts_upstream_down_is_never_none(upstream: Upstream, client: TestClient, monkeypatch) -> None:
     monkeypatch.setattr(official, "now_ms", lambda: CEM_NOW)
     upstream.fail = {"active"}

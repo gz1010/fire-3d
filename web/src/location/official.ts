@@ -249,7 +249,11 @@ export function localAlertLines(l: LocalAlertsOfficial | undefined, tf: TimeFmt,
         ...(l.archivePending ? [status('local-pending', "FEMA's archive of local alerts: still being checked", 'Ask again in a minute.', 'loading')] : []),
       ]
     case 'listed': {
-      const out = l.alerts.slice(0, max).map((a): OfficialLine => {
+      // the live answer for the point's own box is not in Updates (it lists the open fire's messages), so every message
+      // that reaches the point is shown here (the integration, after review round 2's N3); the fire's own answer keeps
+      // `max` lines and points to Updates for the rest
+      const shown = l.pointSource === 'box' ? l.alerts.length : max
+      const out = l.alerts.slice(0, shown).map((a): OfficialLine => {
         const when = sentText(a, tf)
         const place = localAlertPlace(a, { metric, fireOpen: opts.fireOpen })
         const sub = [a.event, when, a.archived ? 'FEMA archive' : 'relayed by the National Weather Service', place, a.archived ? `${ARCHIVE_CREDIT}: ${OPENFEMA_NOTICE}` : null].filter(Boolean).join(' · ')
@@ -265,7 +269,7 @@ export function localAlertLines(l: LocalAlertsOfficial | undefined, tf: TimeFmt,
           urlLabel: a.link.label,
         }
       })
-      if (l.alerts.length > max) out.push(status('local-more', `+${l.alerts.length - max} more local alerts (see Updates)`, null, 'other'))
+      if (l.alerts.length > shown) out.push(status('local-more', `+${l.alerts.length - shown} more local alerts (see Updates)`, null, 'other'))
       if (elsewhere) out.push(status('local-elsewhere', elsewhere, null, 'other'))
       if (l.archivePending) out.push(status('local-pending', "FEMA's archive of local alerts: still being checked", 'Ask again in a minute.', 'loading'))
       return out

@@ -266,6 +266,42 @@ describe('review round 2', () => {
     expect(far.nearby).toEqual({ county: 0, area: 1 })
     expect(localAlertLines(far, LA12)[0].sub).toMatch(/^1 nearby local alert is for an area that does not reach this point\./)
   })
+
+  it('a backend answer outside the lower 48 (state_not_available) is "not checked", never "none" or an outage', () => {
+    const outside = {
+      ...LOCAL_LIVE_LA_CEM,
+      status: 'unavailable' as const,
+      reason_code: 'state_not_available',
+      reason: "Fire-3d checks local officials' alerts in the lower 48 states only. Outside the United States: Fire-3d has no data here.",
+      alerts: [],
+      counties: [],
+      channels: LOCAL_LIVE_LA_CEM.channels.map((c) => ({ ...c, status: 'not_checked' as const, retrieved_ms: null, reason: "Fire-3d checks local officials' alerts in the lower 48 states only." })),
+    }
+    const s = localAlertsState(ok(outside))
+    expect(s.state).toBe('not-checked')
+    const at = localAlertsAtSelectedPoint({ lon: -117.02, lat: 32.51, live: s, fire: null, pointState: null })
+    const line = localAlertLines(at, LA12)[0]
+    expect(line.text).toBe("Local officials' alerts: not checked")
+    expect(line.sub).toMatch(/lower 48 states only\. Outside the United States/)
+    expect(`${line.text} ${line.sub}`).not.toMatch(/none here|does not mean there were none/)
+  })
+
+  it("N3 (integration): every message of the live box answer that reaches the point is listed, never '+N more (see Updates)'", () => {
+    // Updates lists the open fire's messages, not the point's box answer, so the card must not send people there
+    const la = LOCAL_LIVE_LA_CEM.alerts[0]
+    const five = [0, 1, 2, 3, 4].map((i) => ({ ...la, id: `la-${i}`, headline: `Alert ${i}`, wea_text: null, sent_ms: (la.sent_ms ?? 0) + i * 60_000 }))
+    const at = localAlertsAtSelectedPoint({ lon: -118.6335, lat: 34.1715, live: localAlertsState(ok({ ...LOCAL_LIVE_LA_CEM, alerts: five })), fire: null, countyFips: '06037', pointState: 'CA' })
+    expect(at).toMatchObject({ state: 'listed', pointSource: 'box' })
+    const lines = localAlertLines(at, LA12, 3, { units: 'us', fireOpen: false })
+    expect(lines.filter((x) => x.key.startsWith('local-la-'))).toHaveLength(5)
+    expect(lines.map((x) => `${x.text} ${x.sub ?? ''}`).join(' ')).not.toMatch(/see Updates/)
+    // the fire's own answer keeps three lines and points to Updates for the rest (they are listed there)
+    const fire = localAlertsAtSelectedPoint({ lon: -118.6335, lat: 34.1715, live: null, fire: localAlertsState(ok({ ...LOCAL_LIVE_LA_CEM, alerts: five })), countyFips: '06037', pointState: 'CA' })
+    expect(fire.pointSource).toBe('fire')
+    const fireLines = localAlertLines(fire, LA12, 3, { units: 'us', fireOpen: true })
+    expect(fireLines.filter((x) => x.key.startsWith('local-la-'))).toHaveLength(3)
+    expect(fireLines.find((x) => x.key === 'local-more')?.text).toBe('+2 more local alerts (see Updates)')
+  })
 })
 
 describe('review R4: map credits for local officials\' alerts', () => {

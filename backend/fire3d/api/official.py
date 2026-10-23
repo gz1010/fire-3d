@@ -77,6 +77,7 @@ ARCHIVE_RECENT_REASON = ("FEMA publishes its archive about a day later; messages
                          "National Weather Service.")
 ARCHIVE_POINT_REASON = "The FEMA archive is checked for a chosen fire only."
 NWS_PAST_POINT_REASON = "Past local alerts are checked for a chosen fire only."
+LOWER48_ONLY_REASON = "Fire-3d checks local officials' alerts in the lower 48 states only."
 ARCHIVE_ENABLED = True                 # the background OpenFEMA prefetch (us-pipeline cut-line item a)
 ARCHIVE_PENDING_REASON = "FEMA's archive is being fetched; ask again in a minute."
 
@@ -571,6 +572,18 @@ def local_alerts_payload(incident: str | None, bbox: str | None, at_ms: int | No
     out["area_bbox"] = list(area)
     at = int(at_ms) if at_ms is not None else now
     states = nws.states_in_area(area)
+    if not states:
+        # outside the lower 48 (Alaska, Hawaii, territories, Mexico, Canada, the sea): nothing is checked, so never
+        # "available" with an empty list (that would read as "none here"; integration, after review round 2 N2)
+        from ..sources import evacuations as evac
+
+        cx, cy = point or ((area[0] + area[2]) / 2, (area[1] + area[3]) / 2)
+        out.update(status="unavailable", reason_code="state_not_available",
+                   reason=f"{LOWER48_ONLY_REASON} {evac.outside_reason(cx, cy)}",
+                   channels=[_channel("nws_api", "not_checked", LOWER48_ONLY_REASON),
+                             _channel("openfema_archive", "not_checked", LOWER48_ONLY_REASON)])
+        out["caveats"] = [LOCAL_CAVEAT]
+        return out
     counties, point_county = _counties(area, point)
     out["counties"] = counties
     fips = [c["fips"] for c in counties]
