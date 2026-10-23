@@ -35,8 +35,9 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
     `block_host(label, period)` until the next 00:00 UTC (daily), next whole hour (hourly) or next minute;
     `host_block`, `blocked_hosts`, `clear_host_blocks`, `raise_if_blocked(labels)`, `deterministic_hosts(start,
     end)`. `om_request(url, params, ttl_s)` is the only way the module calls Open-Meteo: a blocked host answers from
-    the disk cache or raises `WeatherQuotaExceeded` with **no network call**; a limit answer blocks the host and
-    raises.
+    the disk cache or raises `WeatherQuotaExceeded` with **no network call**; a daily or hourly limit answer blocks
+    the host and raises. A **per-minute** limit answer is waited out once (until the next minute + 1 s, at most
+    65 s) and asked again; a second refusal raises (deviation, below).
   - `OpenMeteoSource.deterministic`: a refused historical-forecast / forecast request **raises**
     `WeatherQuotaExceeded` (no ERA5 fill). `OpenMeteoSource(allow_era5=False)` (used for `require_hrrr`) never asks
     the archive and raises `WeatherError` "HRRR and GFS are missing for N past hour(s); ERA5 filling is not allowed
@@ -291,7 +292,13 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
 
 ## Deviations
 
-- `probe_open_meteo()` returns an extra `detail` key (the contract's three keys are unchanged).
+- `probe_open_meteo()` returns an extra `detail` key (the contract's three keys are unchanged). Any request-limit
+  period (daily, hourly, per-minute) is reported as status `daily_limit`; `detail` names the period.
+- A per-minute Open-Meteo refusal is waited out once inside `om_request` (the contract says "no retries"): on
+  2026-10-23 other tenants of the shared IP pushed the archive host over its 600-a-minute limit, and a whole build
+  failing on a one-minute limit would waste every other request it made. Daily and hourly refusals are never retried.
+- `observed.SOURCE_PREFIXES` is now `("NASA FIRMS", "NIFC WFIGS fire perimeters", "NASA CMR")` so the observed step no
+  longer removes the pipeline's "NIFC WFIGS incident record (IRWIN)" entry (found in the first Horse Gulch build).
 - OpenFEMA: server-side filter by date window and status only (see §14.7 above).
 - Local alerts matched by county: `covers_reported_location` and `nearest_km` are null (not computed from the
   county), so a county-wide message is never presented as covering the fire's point.
