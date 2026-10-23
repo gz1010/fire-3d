@@ -83,6 +83,22 @@ describe('bundleCredits', () => {
     expect(bundleCredits([{ name: 'CAL FIRE incidents', detail: '' }])[0]).toMatchObject({ id: 'calfire', text: 'CAL FIRE' })
   })
 
+  it("credits TIGERweb and NTAD for an open fire, and NWCG when a plain agency name is shown (integration, §14.13)", () => {
+    const wfigs = [
+      { name: 'NIFC WFIGS incident record (IRWIN)', detail: 'IrwinID {889237AB-...}' },
+      { name: 'LANDFIRE LF2023', detail: 'FBFM40' },
+    ]
+    const c = bundleCredits(wfigs, { place: { agencyNames: true } })
+    expect(c.map((x) => x.id)).toEqual(['wfigs-record', 'landfire', 'tigerweb', 'ntad', 'nwcg'])
+    expect(c.slice(2).map((x) => x.text)).toEqual(['Boundaries: U.S. Census Bureau TIGERweb', 'Time zones: USDOT BTS NTAD', 'Agency names: NWCG unit identifiers'])
+    expect(c.every((x) => safeHref(x.href) === x.href)).toBe(true)
+    // CAL FIRE's record shows no NWCG name; no place given (an older caller): neither credit
+    expect(bundleCredits([{ name: 'CAL FIRE incidents', detail: '' }], { place: { agencyNames: false } }).map((x) => x.id)).toEqual(['calfire', 'tigerweb', 'ntad'])
+    expect(bundleCredits(wfigs).map((x) => x.id)).toEqual(['wfigs-record', 'landfire'])
+    // a synthetic fixture: no outside credits at all
+    expect(bundleCredits(FIXTURE, { place: { agencyNames: true } })).toEqual([])
+  })
+
   it('keeps NASA FIRMS acknowledgement text verbatim', () => {
     expect(FIRMS_ACKNOWLEDGEMENT).toMatch(/^We acknowledge the use of data and\/or imagery from NASA's Fire Information for Resource Management System \(FIRMS\)/)
     expect(FIRMS_ACKNOWLEDGEMENT).toMatch(/\(LANCE\) and NASA's Earth Science Data and Information System \(ESDIS\)\.$/)
