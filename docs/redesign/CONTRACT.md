@@ -1992,8 +1992,9 @@ From `us-catalog.md` (M4), `us-web.md` (M4, cut line a/f) and `validation.md` (f
   `growth_ratio_median` (added in part 2; the file was regenerated from validation's `fires_review_fixes.json` with
   only these 15 values added). `fuel_groups_tested`: the fires' fuel words (grass / shrub / timber whose LANDFIRE FBFM40
   family shares reach 25 % of the fire's burnable burned area). `caveats`: "Two fires only: a rough value (the two
-  fires scored A and B)." per region, plus named problems (Windy Deuce's timing, Rush, Lower Sugarloaf); they are served
-  but not shown in the app.
+  fires scored A and B)." per region, plus named problems (Windy Deuce's timing, Rush, Lower Sugarloaf); the Analysis
+  drawer and the Forensic Analysis tab list them verbatim under the Command line (Public: behind "How was it
+  tested?"; never on the fire card; `AccuracyLabel.notes`, review W-M3).
 - **Wording, amended by the integration (part 2; validation review W-M2, W-m1..m4, W-m7, m5).** Round 2 decision 7
   is kept: Public shows words with the score one tap away; Command shows the score. Templates (`accuracyLabel`):
   - Public line (tested): "Tested on {2} past fires in the {Northwest} region ({2025})." then one outcome sentence in

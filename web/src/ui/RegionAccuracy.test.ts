@@ -25,6 +25,19 @@ describe('RegionAccuracy (§14.4)', () => {
     expect(t).toContain('Hindcast growth score 0.43 of 1 in the Southern California region (fires 0.40-0.47; 3 fires, 32 leads, +12-72 h;')
     expect(t).toContain('Outside the modeled area is unknown, not low.')
   })
+  it('Command shows the region\'s caveats from the file verbatim (validation review W-M3); Public keeps them behind the tap', () => {
+    const s = summaryFixture({ id: 'f' })
+    const f = JSON.parse(fixtureText) as AccuracyRegionsResponse
+    const oscc = f.regions.find((r) => r.id === 'OSCC')!
+    oscc.caveats = ['Two fires only: a rough value (the two fires scored 0.19 and 0.49).', 'Windy Deuce: timing uncertain by up to a day.']
+    ssrState(useStore, { incidentId: 'f', summary: s })
+    ssrState(useAccuracyStore, { status: 'ok', data: f, error: null })
+    const cmd = text(renderToStaticMarkup(createElement(RegionAccuracy)))
+    expect(cmd).toContain('Two fires only: a rough value (the two fires scored 0.19 and 0.49).')
+    expect(cmd).toContain('Windy Deuce: timing uncertain by up to a day.')
+    const pub = text(renderToStaticMarkup(createElement(RegionAccuracy, { words: true })))
+    expect(pub).not.toContain('Windy Deuce')
+  })
   it('Public (the Analysis drawer): the words, with the score one tap away (decision 7; review UX-m7)', () => {
     const s = summaryFixture({ id: 'f' })
     ssrState(useStore, { incidentId: 'f', summary: s })

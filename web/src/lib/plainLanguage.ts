@@ -442,6 +442,7 @@ export interface AccuracyRegionInput {
   lfm_method?: string
   fuels_editions?: string[]
   fuel_groups_tested?: string[]
+  caveats?: string[]
   fires?: AccuracyFireInput[]
 }
 export interface AccuracyMethodInput {
@@ -463,6 +464,9 @@ export interface AccuracyLabel {
   fuelCaveat: string | null
   /** ACCURACY_ALWAYS. */
   always: string
+  /** The region's caveats from the file, verbatim (the two fires' scores, timing problems of a fire): shown in the
+   *  Analysis drawer and the Forensic Analysis tab (validation review W-M3), not on the fire card. */
+  notes: string[]
 }
 
 /** The live fuel moisture method in words. */
@@ -610,6 +614,7 @@ export function accuracyLabel(region: AccuracyRegionInput | null | undefined, me
       commandLine: region?.name ? `${ACCURACY_UNTESTED} No past fires in the ${region.name} region have been re-run.` : ACCURACY_UNTESTED,
       fuelCaveat: null,
       always: ACCURACY_ALWAYS,
+      notes: [],
     }
   }
   if (region.status === 'limited') {
@@ -622,6 +627,7 @@ export function accuracyLabel(region: AccuracyRegionInput | null | undefined, me
       commandLine: bits.length ? `${ACCURACY_LIMITED} [${bits.join(', ')}; not a regional score]` : ACCURACY_LIMITED,
       fuelCaveat,
       always: ACCURACY_ALWAYS,
+      notes: regionNotes(region),
     }
   }
   // tested
@@ -685,5 +691,10 @@ export function accuracyLabel(region: AccuracyRegionInput | null | undefined, me
   ].filter((x): x is string => !!x)
   const scoreText = score != null ? `Hindcast growth score ${d2(score)} of 1` : 'Hindcast growth score not given'
   const commandLine = `${scoreText} in ${where} (${parts.join('; ')}).`
-  return { status: 'tested', publicLine, publicDetail: detailParts.join(' '), commandLine, fuelCaveat, always: ACCURACY_ALWAYS }
+  return { status: 'tested', publicLine, publicDetail: detailParts.join(' '), commandLine, fuelCaveat, always: ACCURACY_ALWAYS, notes: regionNotes(region) }
+}
+
+/** The region's caveats, verbatim and non-empty (each says what it is about). */
+function regionNotes(region: AccuracyRegionInput): string[] {
+  return (region.caveats ?? []).map((c) => c.trim()).filter(Boolean)
 }

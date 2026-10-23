@@ -22,6 +22,7 @@ export function RegionAccuracy({ className, words = false }: { className?: strin
         <span className="region-accuracy-tag">Model accuracy here</span> {line}
       </p>
       {label?.fuelCaveat && <p className="region-accuracy-sub">{label.fuelCaveat}</p>}
+      {!words && label && <Notes notes={label.notes} />}
       {words && label && label.publicLine !== label.commandLine && (
         <>
           <button type="button" className="mw-link-btn region-accuracy-more" aria-expanded={open} aria-controls={id} onClick={() => setOpen((v) => !v)}>
@@ -31,11 +32,26 @@ export function RegionAccuracy({ className, words = false }: { className?: strin
             <div id={id}>
               {label.publicDetail && <p className="region-accuracy-sub">{label.publicDetail}</p>}
               <p className="region-accuracy-sub">{label.commandLine}</p>
+              <Notes notes={label.notes} />
             </div>
           )}
         </>
       )}
       <p className="region-accuracy-sub">{label?.always ?? 'Outside the modeled area is unknown, not low.'}</p>
     </div>
+  )
+}
+
+/** The region's caveats from the regional file, verbatim (validation review W-M3). */
+function Notes({ notes }: { notes: string[] }) {
+  if (!notes.length) return null
+  return (
+    <ul className="region-accuracy-notes">
+      {notes.map((n) => (
+        <li key={n} className="region-accuracy-sub">
+          {n}
+        </li>
+      ))}
+    </ul>
   )
 }
