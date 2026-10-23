@@ -37,7 +37,11 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
     `host_block`, `blocked_hosts`, `clear_host_blocks`, `raise_if_blocked(labels)`, `deterministic_hosts(start,
     end)`. `om_request(url, params, ttl_s)` is the only way the module calls Open-Meteo: a blocked host answers from
     the disk cache or raises `WeatherQuotaExceeded` with **no network call**; a daily or hourly limit answer blocks
-    the host and raises. A **per-minute** limit answer is waited out once (until the next minute + 1 s, at most
+    the host and raises. Exception (review round 1, R3; deviation below): a **daily** block is re-checked by
+    `recheck_daily_block(label)` with one tiny uncached probe request (the probe's own parameters, no retries) at
+    most once an hour (`DAILY_RECHECK_S = 3600`, counted from the block or the last re-check); an answer lifts the
+    block and the request goes ahead, a limit answer renews it, anything else keeps it. `om_request` and
+    `raise_if_blocked` (the build preflight) both use it; hourly and per-minute blocks are never re-checked. A **per-minute** limit answer is waited out once (until the next minute + 1 s, at most
     65 s) and asked again; a second refusal raises (deviation, below).
   - `OpenMeteoSource.deterministic`: a refused historical-forecast / forecast request **raises**
     `WeatherQuotaExceeded` (no ERA5 fill). `OpenMeteoSource(allow_era5=False)` (used for `require_hrrr`) never asks
@@ -74,7 +78,7 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
   it for California's drought adjustment"; otherwise it is the bundle warning "water-year precipitation unavailable:
   live fuel moisture uses the month table (<reason>)".
 - `fire3d.types.BuildContext` gains `time_zone: str | None = None` and `require_hrrr: bool = False`.
-- Tests: `backend/tests/test_us_pipeline_quota.py` (34 tests).
+- Tests: `backend/tests/test_us_pipeline_quota.py` (40 tests; 2 added in review round 1 for the re-check).
 - Cut-line (b), built: `weather.request_cost(params)` = locations × max(1, series / 10) × max(1, days / 14) (series =
   variables × models; days from start/end dates, else forecast + past days); every real Open-Meteo request
   (`om_request`, also refused ones, never cache hits; each probe request counts 1) adds its cost to
@@ -146,8 +150,15 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
   Stored parsed (no `_geom`, no `sender`) in `DATA_DIR/official/openfema/window_<lo>_<hi>.json`; fresh for 1 h when
   the window ends within 3 days of now, else 30 days. The answer lists the stored messages sent in
   `[at − 24 h, at + 1 h]` (`openfema.answer`), matched like the NWS ones (`place_local`).
-- After a successful build `pipeline.archive_prefetch(summary, manifest)` fetches the incident's window
-  synchronously (best effort, logged; never fails the build; skipped when the fire began less than 24 h ago).
+- After a successful build `pipeline.archive_prefetch(summary, manifest)` warms the incident's window (best effort,
+  logged; never fails the build; skipped when the fire began less than 24 h ago; review round 1, R2):
+  - in an API job (`api.jobs` runs every job inside `pipeline.background_followups()`), it only **starts** the one
+    deduplicated background fetch (`openfema.start`), so "Prepare analysis" ends when the bundle is ready;
+    `JobManager.drain` also waits for these threads;
+  - in a CLI build (the process ends with the build, so a background thread would be killed) it fetches at once,
+    each request capped at `openfema.PREFETCH_TIMEOUT_S` = 15 s with no retry (deviation, below).
+  - `openfema.prefetch(started, end, *, background=False, threads=None)` returns "stored", "started", "skipped" or
+    "failed" (a window that failed less than 10 min ago is not started again).
 - Scope (`nws.local_in_scope`): FRW, EVI, SPW, CDW always; CEM and LAE only when the event, headline, description,
   instruction or WEA text matches `fire(s) | wildfire(s) | brush fire | grass fire | smoke | evacuat*`, after removing
   names that are not about a fire ("Fire Station", "Fire Department", "fire hydrant", "fireworks", "smoke
@@ -180,9 +191,12 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
   counties are matched in `parse_record` / `place_local`. OpenFEMA's nested `any()` filters on `info` fail or are
   slow (syntax errors in the test, and the audit's 503 after 60 s), while a day of national messages is 40-200 rows.
 - Samples: `backend/tests/data/official/nws_alerts_national.json`, `nws_nwem_cem_la.json`, `openfema_window_frw.json`
-  (provenance in `PROVENANCE.md`; operator addresses redacted). Recorder: `scripts/record_test_samples_official.py
+  (provenance in `PROVENANCE.md`; operator addresses redacted; the one out-of-scope LEW record keeps only its event
+  code, its WEA texts replaced by a neutral placeholder because the original named a private person, review round
+  1, R4; the recorder does the same, `TEXT_REMOVED_CODES`). Recorder: `scripts/record_test_samples_official.py
   --only national`.
-- Tests: `backend/tests/test_local_alerts_nws.py` (16), `backend/tests/test_openfema_parse.py` (8); updated
+- Tests: `backend/tests/test_local_alerts_nws.py` (18), `backend/tests/test_openfema_parse.py` (15; 3 added in
+  review round 1 for R2 and R4); `backend/tests/test_api_jobs.py` gains the build-job follow-up test (R2); updated
   `test_official_nws.py` (the national URL).
 
 ## §14.2 Build gate (as built, M2)
@@ -273,7 +287,7 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
   experimental." (`INTERIM_LFM_WARNING`, replaced on every rebuild) and `live_moisture_for` starts its note with
   "Live fuel moisture: California's seasonal values (regional method not tested yet); experimental."
   (`INTERIM_LFM_NOTE`), which every forecast appends to its warnings. California notes are unchanged.
-- Tests: `tests/test_us_pipeline_build.py` (24), `tests/test_us_pipeline_perimeters.py` (8); recorded data in
+- Tests: `tests/test_us_pipeline_build.py` (26), `tests/test_us_pipeline_perimeters.py` (8); recorded data in
   `tests/data/pipeline_us/` (PROVENANCE.md).
 
 ## §14.12.7 Skill (as built, cut-line item d)
@@ -366,5 +380,14 @@ edition of a fiscal-year-2025 fire, America/New_York, 0 "CAL FIRE"), then `uv ru
 - `observed.SOURCE_PREFIXES` is now `("NASA FIRMS", "NIFC WFIGS fire perimeters", "NASA CMR")` so the observed step no
   longer removes the pipeline's "NIFC WFIGS incident record (IRWIN)" entry (found in the first Horse Gulch build).
 - OpenFEMA: server-side filter by date window and status only (see §14.7 above).
+- §14.12.2 "no network call to a blocked host until the reset" (review round 1, R3; a contract decision for the
+  integration): a **daily** block is re-checked with one tiny probe request at most once an hour and lifted when the
+  host answers. On the shared cloud IP the daily-limit answer was transient (2026-10-23: historical-forecast refused
+  02:04Z, answered 02:13Z, all four hosts ok 02:31Z; archive refused again 02:47Z and 02:57Z), and a long-running API
+  would otherwise refuse every build and live refresh on that host for up to 24 h after one such answer (only a
+  restart cleared it). Cost: at most 24 tiny requests a day per blocked host.
+- §14.7 "a successful build also starts it" (review round 1, R2): API build jobs only start the background fetch;
+  a **CLI** build fetches synchronously (its process would kill a background thread), capped at 15 s per request
+  with no retry (a window of one page each for the messages and the updates' references: about 30 s at worst).
 - Local alerts matched by county: `covers_reported_location` and `nearest_km` are null (not computed from the
   county), so a county-wide message is never presented as covering the fire's point.
