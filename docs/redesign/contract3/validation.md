@@ -8,11 +8,15 @@ fires, the regional accuracy file and docs/validation.md section 10. This note i
 
 | Milestone | Commit | State |
 |---|---|---|
-| M1 pre-registration (docs/validation.md 10.1, `scripts/validate_us_fires.py` FIRES) | `brief 3 validation: M1 pre-registration` (29f0e2d) | done, before any score outside California |
-| M2 GSI + regional tooling + absolute starts | `brief 3 validation: M2 GSI live fuel moisture ...` | done |
-| M3 builds and bundle checks | | in progress (weather quota) |
-| M4 California baseline (pre-GSI worktree) and post-GSI re-run | | in progress |
-| M5 hindcasts, `regional_accuracy.json`, docs/validation.md 10.2+ | | pending |
+| M1 pre-registration (docs/validation.md 10.1, `scripts/validate_us_fires.py` FIRES) | 29f0e2d | done, before any score outside California |
+| M2 GSI + regional tooling + absolute starts | 3283526, 988f29e, 7166a7f | done |
+| M3 California baseline (Madre rebuilt; pre-GSI worktree = section 5.1; post-GSI = pre-GSI exactly) | e408707 | done |
+| Bug fix: AOI sizing outside California (`catalog._estimate`) | b501d96 | done, 7 fires rebuilt |
+| M4 builds, checks, hindcasts, `regional_accuracy.json`, docs/validation.md 10.3-10.11 | 807d309 | done: 12 fires, six regions `tested`, no replacement |
+
+**Results** (31-member p50 growth Sørensen, mean of fire means): NWCC 0.255, NRCC 0.341, GBCC 0.247, SWCC 0.351,
+SACC-SP 0.394, SACC-SE 0.193, OSCC 0.433 (in-sample); RMCC, EACC, ONCC untested. `/api/accuracy-regions` on 8716
+(`FIRE3D_LIVE=0`) serves the file (200, `Cache-Control: no-cache`, 10 regions).
 
 ## §14.12.10 GSI (as built)
 

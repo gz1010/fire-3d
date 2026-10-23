@@ -10,7 +10,9 @@ Role `validation` (wave 2). Ports: API 8716, no Vite. Scratch: session scratchpa
   orchestrator in 3283b7d at the usage limit). test_us_pipeline_quota water-year test adapted to GSI.
 - California (herb, woody, note) identical before/after GSI on Eaton, Palisades, fixture-demo (Madre pending build).
 
-## Next
+## Status 13:5x Z: all work done (M4 807d309). Remaining: report JSON (docs/redesign/reports/brief3-validation.json).
+
+## Next (historical)
 1. Commit GSI + aggregation (M2) after tests for the aggregation.
 2. Builds via scratchpad queue.py (q2 started 06:28Z): 12 fires + Madre + Horse Gulch (--force, only on overall ok).
 3. Madre baseline + California re-run (step 1 = with GSI code in place; California path is bit-identical, proven
