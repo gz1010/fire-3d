@@ -1261,6 +1261,11 @@ An independent review of this section found these; each was checked against the 
   timing problem; the Northern Rockies' growth ratio is null with a caveat naming each fire's (section 10.5).
 - Section 10.4: the two Appalachian growth ratios were listed in the wrong order (Black Cove 0.46, Table Rock 0.22).
 
+- **Warning text** (brief 3 integration, part 2; review R2): with GSI tested, the never-silent manifest warning of
+  10.1 now reads "Live fuel moisture outside California uses California's seasonal values because the regional (GSI)
+  series is unavailable; experimental." (10.1 keeps the pre-registered wording; bundles carrying the old text drop it
+  on rebuild). No score depends on it: every scored bundle has its GSI series.
+
 ### 10.12 Reproduce (outside California)
 
 ```bash
