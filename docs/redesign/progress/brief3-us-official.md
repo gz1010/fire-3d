@@ -29,9 +29,12 @@ Started 2026-10-23 ~01:45 UTC (late start; us-catalog finished, us-web past M5, 
 - M5 committed f6ddb54. Container restarted ~02:50 UTC (servers gone). M6: time migration done, checker 0/0,
   zone lines; gates tc 0, lint 55, 67 files / 1078, build OK.
 
+- M6 committed 77291ab. Screenshots taken and viewed (dev preset, overview, Reno, Brookings phone, fixture-east,
+  cameras non-CA, Eaton Command, Horse Gulch Command/Public); 0 non-GET (239 GET). Cut line (a) W12 and (b) W13 done.
+  Final gates: tc 0, lint 55 (scene), 67 files / 1079, build OK, pytest 878, check-time-api 0/0.
+
 ## Next
-- Screenshots (overview, Reno, Brookings, fixture-east Command, cameras non-CA, Eaton Command, Horse Gulch), backend
-  pytest, wording scan, key scan, report. Kill servers on 8713/5183.
+- Write the report (docs/redesign/reports/brief3-us-official.json), commit, kill servers, hand back.
 
 ## Decisions
 - State check before the past-date check (a Nevada replay says not available, not 'past dates').

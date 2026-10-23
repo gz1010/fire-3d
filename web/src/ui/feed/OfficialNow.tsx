@@ -230,7 +230,9 @@ function RecordRow({ c, nowMs, wallMs, live }: { c: CalFireOfficial; nowMs: numb
   const tf = useTimeFormat()
   // labelled from the record's issuer (CONTRACT §14.5): "CAL FIRE", "USFS (USDA Forest Service) via NIFC WFIGS"
   const issuer = c.issuer ?? 'CAL FIRE'
-  const label = issuer
+  // a long issuer ("USFS (USDA Forest Service) via NIFC WFIGS") is named in full in the row's text; the header keeps
+  // the publisher's short name so the link stays visible
+  const label = issuer.length > 18 ? (c.linkLabel ?? issuer) : issuer
   const source = 'incident record'
   const icon = <ShieldAlert size={13} />
   const mode = useStore((s) => (s.manifest?.status === 'ready' ? s.manifest.mode : (s.summary?.mode ?? s.mode)))
@@ -275,7 +277,7 @@ function RecordRow({ c, nowMs, wallMs, live }: { c: CalFireOfficial; nowMs: numb
       </>
     ) : undefined
   return (
-    <Row icon={icon} label={label} source={source} tone="info" aside={<SourceLink href={c.url}>{cf ? 'Incident page' : 'NIFC WFIGS record'}</SourceLink>} more={extra}>
+    <Row icon={icon} label={label} source={source} tone="info" aside={<SourceLink href={c.url}>{cf ? 'Incident page' : 'Record'}</SourceLink>} more={extra}>
       <p className="on-line">
         <strong className="on-official">
           {join([
@@ -339,7 +341,7 @@ function FireWeatherRow({ f, nowMs, wallMs, metric, statewide = false }: { f: Fi
     return (
       <Row icon={icon} label={label} source={source} tone="muted">
         <p className="on-line">
-          <strong>{f.state === 'past-date' ? 'Not available for this time.' : 'Unavailable right now.'}</strong> {f.reason ?? ''} That does not mean there were no alerts.
+          <strong>{f.state === 'past-date' ? 'Not available for this time.' : f.reasonCode === 'demo' || f.reasonCode === 'not_checked' ? 'Not checked.' : 'Unavailable right now.'}</strong> {reasonSentence(f.reason)}That does not mean there were no alerts.
         </p>
       </Row>
     )

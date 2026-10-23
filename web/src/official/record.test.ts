@@ -89,7 +89,8 @@ describe('the record of a NIFC WFIGS fire (Horse Gulch, MT)', () => {
     expect(feed[0].notes?.[0]).toBe('USFS (USDA Forest Service) via NIFC WFIGS last updated this record Aug 2, 09:30 MDT.')
     const rows = buildDataStatus({ summary: s, manifest: null, perimeters: null, detections: null, forecast: null, weather: null, official: { calfire: st } }, NOW)
     const rec = rows.find((r) => r.key === 'record')!
-    expect(rec.label).toBe('USFS (USDA Forest Service) via NIFC WFIGS record')
+    expect(rec.label).toBe('Agency record')
+    expect(rec.detail).toBe('Last edit of USFS (USDA Forest Service) via NIFC WFIGS’s record · 9,450 ac · 100% contained')
     const line = summaryRecordLine(st, NOW)
     expect(line.label).toBe('USFS (USDA Forest Service) via NIFC WFIGS')
     expect(JSON.stringify([st, feed, rec, line])).not.toMatch(/CAL FIRE/)

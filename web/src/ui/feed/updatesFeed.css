@@ -812,3 +812,8 @@
   line-height: 1.35;
   color: var(--m-text-2);
 }
+
+/* data status zone line ("Times: Mountain Time (MDT), the fire's local time"; CONTRACT §14.9.1) */
+.mw-status-zone {
+  padding: 0 14px 10px;
+}

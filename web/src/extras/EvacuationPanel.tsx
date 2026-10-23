@@ -60,7 +60,7 @@ export function EvacuationPanel({ state, onShowZone, selectedZoneId }: Evacuatio
             </p>
           ))
         ) : (
-          <p className="xs-meta">{freshnessText(data, now, `${answeredNames(data) ?? 'Cal OES'} data last changed`, tf)}</p>
+          <p className="xs-meta">{freshnessText(data, now, `${answeredNames(data) ?? 'Source'} data last changed`, tf)}</p>
         )
       ) : (
         <ExtrasNotice line={line} onRetry={state.error ? state.refresh : undefined} />

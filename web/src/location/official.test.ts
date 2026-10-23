@@ -86,7 +86,7 @@ describe('officialBlock: the evacuation line is always present and honest', () =
     expect(b.evacuation).toEqual([expect.objectContaining({ text: 'No evacuation order or warning listed here', official: true, tone: 'quiet' })])
     expect(b.evacuation[0].sub).toBe('Cal OES, checked 2 min ago · not an all-clear')
     // on phones too
-    expect(b.evacuation[0].subCompact).toBe('Cal OES · not an all-clear')
+    expect(b.evacuation[0].subCompact).toBe('Cal OES, checked 2 min ago · not an all-clear')
   })
   it('not checked, past date, unavailable and loading are said as such', () => {
     const nc = officialBlock(info({ state: 'not-checked', checkedMs: null, reason: 'Not checked here: Fire-3d reads Cal OES zones only near the selected fire and the selected point.' }), CTX)
@@ -125,7 +125,7 @@ describe('NWS fire weather in the card', () => {
     expect(b.fireWeather[0].sub).toBe('NWS San Diego CA · a weather warning, not an evacuation order')
     // the sender and the caveat stay on a phone's short card too (as does "not an all-clear" on the evacuation line)
     expect(b.fireWeather[0].subCompact).toBe('NWS San Diego CA · a weather warning, not an evacuation order')
-    expect(b.evacuation[0].subCompact).toBe('Cal OES · not an all-clear')
+    expect(b.evacuation[0].subCompact).toBe('Cal OES, checked 2 min ago · not an all-clear')
     const longSender = officialBlock(info({}, { state: 'active', alerts: [alert({ senderName: 'National Weather Service Los Angeles/Oxnard CA' })] }), CTX)
     expect(longSender.fireWeather[0].sub).toMatch(/^NWS Los Angeles\/Oxnard CA · /)
     const arch = officialBlock(info({}, { state: 'active', archived: true, alerts: [alert({ archived: true, phase: 'upcoming', timeText: 'from Jan 7, 04:00 PST' })] }), CTX)
@@ -158,7 +158,7 @@ describe('evacuation lines outside California (brief 3)', () => {
   const oem = { id: 'or_oem_evacuations', aggregator: 'Oregon OEM', credit: 'Oregon Department of Emergency Management', url: 'https://www.arcgis.com/home/item.html?id=dd2bee51e3004dc4b1004df34fbd9e29', homeState: 'OR', answered: true, checkedMs: NOW - 120_000, updatedMs: NOW - 3_600_000, reason: null }
   it('Oregon, none listed: "No evacuation order or warning listed here · Oregon OEM, checked … · not an all-clear", with the OEM link and no Cal OES', () => {
     const b = officialBlock({ ...info({ checkedBy: 'Oregon OEM', sources: [oem], sourceUrl: oem.url }), calfire: { state: 'unavailable' } }, { ...CTX, incidentUrl: null })
-    expect(b.evacuation[0]).toMatchObject({ text: 'No evacuation order or warning listed here', sub: 'Oregon OEM, checked 2 min ago · not an all-clear', subCompact: 'Oregon OEM · not an all-clear', official: true })
+    expect(b.evacuation[0]).toMatchObject({ text: 'No evacuation order or warning listed here', sub: 'Oregon OEM, checked 2 min ago · not an all-clear', subCompact: 'Oregon OEM, checked 2 min ago · not an all-clear', official: true })
     expect(b.links).toEqual([{ label: 'Oregon OEM', url: oem.url }])
     expect(JSON.stringify(b)).not.toMatch(/Cal OES/)
   })

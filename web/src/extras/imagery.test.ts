@@ -14,6 +14,8 @@ import {
   pickDefaultImagery,
   productsByFamily,
   resolutionText,
+  withGroupHeadings,
+  platformText,
 } from './imagery'
 import type { ImageryProduct, ImageryResponse } from './types'
 import { setCaliforniaCommandClock } from './__fixtures__/clock.testutil'
@@ -178,5 +180,15 @@ describe('legend, credits and feed', () => {
     // with the fire start known, scenes from before the fire are context, not updates
     expect(imageryFeedItems(IMAGERY_SAMPLE, range, COOLEY_START)).toEqual([])
     expect(imageryFeedItems(IMAGERY_SAMPLE, range, Date.UTC(2026, 9, 9)).map((i) => i.title)).toEqual(['Satellite image acquired: Sentinel-2C (10 m)'])
+  })
+})
+
+describe('imagery labels from each product\'s platform (brief 3, W13)', () => {
+  it('a GOES product is named by its own platform, never a fixed GOES-West', () => {
+    const goes = IMAGERY_SAMPLE.products.find((p) => p.family === 'goes')!
+    const east = { ...goes, id: 'goes-east-x', platform: 'GOES-East' }
+    const rows = withGroupHeadings([east], east.acquired_ms + 3_600_000, null, true)
+    expect(rows[0].heading).toBe('GOES-East: every 10 min, 1-2 km pixels')
+    expect(platformText(east)).toBe('GOES-East')
   })
 })

@@ -218,3 +218,42 @@ fetching, envelope).
 - Tests that check the brief-2 California strings through the defaults set a California place in Command once
   (`extras/__fixtures__/clock.testutil.ts`, `setCaliforniaCommandClock()`); new tests check Montana (MST/MDT,
   12-hour Public) in the data status, Denver and New York in `fmtStatusTimeAt`, Denver 12-hour in the card.
+
+## Cut line items and final fixes
+
+- (a) W12 cameras panel wording: **done** (backend sentence of §14.8.6; `envelopeStatusLine` titles a
+  `state_not_available` answer "Public cameras: not available in this state" with the backend's sentence; screenshot
+  `docs/screenshots/brief3-us-official-cameras-nonca-desktop.png`).
+- (b) W13 imagery labels: **done** (the GOES group heading comes from each product's `platform`; `FAMILY_LABEL.goes`
+  "GOES, every 10 min (1-2 km)"). GOES-East imagery itself stays deferred (B-R15).
+- After the screenshots: a "none listed" evacuation line keeps its check time on phones too ("Oregon OEM, checked 1
+  min ago · not an all-clear"); demo/not-checked NWS rows say "Not checked." (not "Unavailable right now."); a long
+  record issuer keeps the Official now header and the data-status label short ("NIFC WFIGS" / "Agency record") and
+  names the issuer in full in the row text.
+
+## Deviations from §14 (also in the report)
+
+1. `sources[]` entries of `/api/extras/evacuations` carry one more additive field, `aggregator` ("Cal OES" / "Oregon
+   OEM"), so the web never derives the short name from `publisher`.
+2. `EvacAdapter` has three derived properties (`upstream_name`, `layer_what`, `none_caveat`), no extra fields.
+3. Several states without a feed: "Official evacuation zones are not available in these states (Nevada, Utah)."
+   (§14.14 has only the singular sentence.)
+4. The state check comes before the past-date check: a past time in a state without a feed answers
+   `state_not_available` (California past answers are unchanged).
+5. `OfficialLine.urlLabel` (optional) names each local-alert link; us-web's `OfficialSection` still renders "Read it"
+   (integration: show `urlLabel` when present).
+6. `OfficialInfo.calfire` holds the source-neutral `RecordStatus` (field name kept for us-web's call sites); the
+   location card's record link label comes from `linkLabel`.
+7. Quoted local-alert text prefers the WEA text, then the headline, then the description (us-pipeline's note said
+   headline first), and is cut at 220 characters with "…" (the full texts are behind "More").
+
+## Files (us-official, brief 3)
+
+Backend: `fire3d/sources/evacuations.py` (new), `fire3d/api/extras.py`, `scripts/record_test_samples_evacuations.py`
+(new), `tests/test_evacuations_sources.py` (new), `tests/data/evacuations/**` (new). Web: `official/{model,hooks,
+client,runtime,types,calfire,fireWeather,mapLayer}.ts`, `official/{record,localAlerts}.ts` (new) and their tests,
+`official/__fixtures__/{localAlerts,national}.ts` (new), `extras/{evacuation,format,credits,cameras,imagery,types,
+hooks,runtime}.ts`, `extras/{EvacuationPanel,CameraPanel,ImageryPanel}.tsx`, `extras/__fixtures__/{samplesUs,
+clock.testutil}.ts` (new), `extras/dev/{presets.ts,main.tsx,DevApp.tsx,dev.css,UsOfficialPreset.tsx,usOfficialSeed.ts}`,
+`ui/feed/{OfficialNow.tsx,UpdatesFeed.tsx,feedModel.ts,feedMeta.ts,types.ts,updatesFeed.css}`,
+`ui/shell/{officialSummary.ts,dataStatus.ts,UpdatesPanel.tsx,LayersPanel.tsx}`, `location/official.ts` and tests.

@@ -123,7 +123,8 @@ function evacuationLines(e: EvacuationOfficial, c: OfficialContext & { tf: TimeF
       // CONTRACT §14.8.5: "No evacuation order or warning listed here · {Oregon OEM}, checked {time} · not an all-clear"
       const who = e.checkedBy ?? 'Cal OES'
       return [
-        { key: 'evac-none', text: 'No evacuation order or warning listed here', sub: `${who}${checked ? `, ${checked}` : ''} · not an all-clear`, subCompact: `${who} · not an all-clear`, official: true, tone: 'quiet', url: null },
+        // phones keep the check time too: "none" means something only with who checked and when
+        { key: 'evac-none', text: 'No evacuation order or warning listed here', sub: `${who}${checked ? `, ${checked}` : ''} · not an all-clear`, subCompact: `${who}${checked ? `, ${checked}` : ''} · not an all-clear`, official: true, tone: 'quiet', url: null },
       ]
     }
     case 'not-checked':

@@ -42,7 +42,7 @@ export interface OfficialStatusInput {
   evacuation?: (Pick<EvacuationOfficial, 'state'> & Partial<Pick<EvacuationOfficial, 'checkedMs' | 'sourceUpdatedMs' | 'reason' | 'sources' | 'checkedBy'>> & { zones?: readonly unknown[] }) | null
   fireWeather?: { state: string; checkedMs?: number | null; alerts?: readonly { archived?: boolean }[] } | null
   /** The fire's agency record (CAL FIRE's or NIFC WFIGS's; `issuer` / `source` from official/record.ts). */
-  calfire?: { state: string; updatedMs?: number | null; acres?: number | null; percentContained?: number | null; isActive?: boolean | null; issuer?: string; source?: 'calfire' | 'wfigs' | null; synthetic?: boolean } | null
+  calfire?: { state: string; updatedMs?: number | null; acres?: number | null; percentContained?: number | null; isActive?: boolean | null; issuer?: string; linkLabel?: string; source?: 'calfire' | 'wfigs' | null; synthetic?: boolean } | null
 }
 
 export interface DataStatusInput {
@@ -233,13 +233,15 @@ export function officialRows(inp: Pick<DataStatusInput, 'summary' | 'official'>,
     // labelled from the record's issuer (CONTRACT §14.5): never "CAL FIRE" for a NIFC WFIGS record
     const wfigs = cf?.source === 'wfigs'
     const issuer = cf?.issuer ?? 'CAL FIRE'
+    // a long issuer keeps the row label short ("Agency record"); the detail names the issuer in full
+    const short = issuer.length > 18 ? 'Agency' : issuer
     out.push({
       key: 'record',
-      label: `${issuer} record`,
+      label: `${short} record`,
       // a past fire's record is often edited long after the fire: always show the year and say what the time is
       value: live ? at(recordMs) : fmtAt(recordMs, tf, { year: 'always', zone: true }),
       tMs: recordMs,
-      detail: live ? facts || `${issuer}’s latest update of the incident` : `Last edit of ${issuer}’s record${facts ? ` · ${facts}` : ''}`,
+      detail: live ? `${short !== issuer ? `${issuer} · ` : ''}${facts || `${issuer}’s latest update of the incident`}` : `Last edit of ${issuer}’s record${facts ? ` · ${facts}` : ''}`,
       age: live ? fmtRelative(recordMs, nowMs) : null,
       stale: false,
       tip: wfigs
