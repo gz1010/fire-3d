@@ -62,6 +62,14 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
 - ~07:25 UTC: integration part 1 done (6072b83..4bdaceb; backend 956, web 1,116; deprecated exports removed, (R)
   fields required, CONTRACT §14 as-built folded, 2 browser bugs fixed). Part-2 list is in its report's part2 key.
   An adversarial review of part 1 (code + user-facing lenses) runs while validation continues (7 of 12 built).
+- ~09:20 UTC: review of integration part 1: 15 issues (UX: local officials' messages missing from Public's short
+  Official now; fire search without state; 24-hour times in Public; picking an unprepared fire opened a nearby
+  prepared one), 14 fixed (038816d, 812131b, 282443a, db57d12). Re-check left R1 (map-marker path) + 3 minors: a
+  second fix round runs now.
+- Validation: all 12 test fires + Madre built by ~09:20; it found and fixed an AOI bug outside California (b501d96:
+  AOI sizing used a California-only perimeter query) and rebuilt 7 fires; scoring in progress. Its log says Horse
+  Gulch was rebuilt at 08:01 by "another session" (no role may build except validation: check in final
+  verification) and that one `pkill -f multiprocessing.spawn` (~08:04) may have hit other agents' workers.
 - Lesson: never SendMessage a workflow agent (it starts a second copy); relay through files or Agent-tool agents.
 
 ## Carry-over items for later stages (integration unless a role owns the file)
