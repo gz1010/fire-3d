@@ -1,127 +1,524 @@
 {
- "schema_version": 1,
- "generated_ms": 1792713600000,
- "model": {
-  "engine": "pyretechnics 2026.8.10",
-  "settings": "operational setting of docs/validation.md section 5.2 (hold + decay, multiplier 0.5)"
- },
- "method": {
-  "metric": "growth_sorensen",
-  "forecast": "p50 of 31 perturbed members",
-  "leads_h": [
-   12,
-   24,
-   48,
-   72
-  ],
-  "aggregate": "mean_of_fire_means",
-  "min_fires": 2,
-  "min_leads": 16,
-  "weather": "archived HRRR (hindcast), no ERA5 fill",
-  "starts": "during main growth (Eaton and Palisades: ignition + 6, 12, 24 h; Madre: ignition + 24, 48 h)",
-  "secondary": "ignition + 6/12/24 h"
- },
- "assignment": {
-  "by": "WFIGS GACC of the fire's record (CAL FIRE fires: the matched WFIGS record)",
-  "split": {
-   "SACC-SP": [
-    "TX",
-    "OK"
-   ],
-   "SACC-SE": [
-    "the rest of SACC"
-   ]
+  "schema_version": 1,
+  "generated_ms": 1792762376963,
+  "model": {
+    "engine": "pyretechnics 2026.8.10",
+    "settings": "config.FORECAST_* (multiplier 0.5 with the 12 h decay, held inactive perimeter, growth-coincident activity) @ 9cf2936"
   },
-  "fallback": "California county table (ca_county_gacc.json) when present, else none: accuracy not yet tested here"
- },
- "regions": [
-  {
-   "id": "NWCC",
-   "name": "Northwest",
-   "status": "untested",
-   "n_fires": 0
+  "method": {
+    "metric": "growth_sorensen",
+    "forecast": "p50 of 31 perturbed members",
+    "leads_h": [
+      12,
+      24,
+      48,
+      72
+    ],
+    "aggregate": "mean_of_fire_means",
+    "min_fires": 2,
+    "min_leads": 16,
+    "weather": "archived HRRR (hindcast), no ERA5 fill",
+    "starts": "pre-registered (docs/validation.md section 10.1), during main growth; California: ignition + 6/12/24 h (Madre + 24/48 h)",
+    "secondary": "WFIGS discovery + 6/12/24 h (California: bundle ignition + 6/12/24 h)"
   },
-  {
-   "id": "NRCC",
-   "name": "Northern Rockies",
-   "status": "untested",
-   "n_fires": 0
+  "assignment": {
+    "by": "WFIGS GACC of the fire's record (CAL FIRE fires: the matched WFIGS record)",
+    "split": {
+      "SACC-SP": [
+        "TX",
+        "OK"
+      ],
+      "SACC-SE": [
+        "the rest of SACC"
+      ]
+    },
+    "fallback": "California county table (ca_county_gacc.json) when present, else none: accuracy not yet tested here"
   },
-  {
-   "id": "GBCC",
-   "name": "Great Basin",
-   "status": "untested",
-   "n_fires": 0
-  },
-  {
-   "id": "SWCC",
-   "name": "Southwest",
-   "status": "untested",
-   "n_fires": 0
-  },
-  {
-   "id": "SACC-SP",
-   "name": "Southern Plains",
-   "status": "untested",
-   "n_fires": 0
-  },
-  {
-   "id": "SACC-SE",
-   "name": "Southeast",
-   "status": "untested",
-   "n_fires": 0
-  },
-  {
-   "id": "RMCC",
-   "name": "Rocky Mountain",
-   "status": "untested",
-   "n_fires": 0
-  },
-  {
-   "id": "EACC",
-   "name": "Eastern",
-   "status": "untested",
-   "n_fires": 0
-  },
-  {
-   "id": "ONCC",
-   "name": "Northern California",
-   "status": "untested",
-   "n_fires": 0
-  },
-  {
-   "id": "OSCC",
-   "name": "Southern California",
-   "status": "tested",
-   "in_sample": true,
-   "seed": true,
-   "n_fires": 3,
-   "n_leads": 32,
-   "growth_sorensen": 0.433,
-   "range": [
-    0.395,
-    0.467
-   ],
-   "pooled_leads": 0.438,
-   "by_lead": {
-    "12": 0.349,
-    "24": 0.432,
-    "48": 0.481,
-    "72": 0.49
-   },
-   "growth_ratio_median": 1.85,
-   "years": [
-    2025
-   ],
-   "lfm_method": "ca_month_table_drought",
-   "fuel_groups_tested": [
-    "chaparral",
-    "grass"
-   ],
-   "caveats": [
-    "Seed from docs/validation.md section 5.2 (operational setting, 2026-10-18): Eaton 0.438, Madre 0.395, Palisades 0.467; the model's settings were tuned on these three fires (in-sample).",
-    "Replaced by the validation tooling in brief 3 wave 2 (Madre rebuilt as the California baseline)."
-   ]
-  }
- ]
+  "regions": [
+    {
+      "id": "NWCC",
+      "name": "Northwest",
+      "status": "tested",
+      "in_sample": false,
+      "n_fires": 2,
+      "n_leads": 24,
+      "growth_sorensen": 0.255,
+      "range": [
+        0.231,
+        0.279
+      ],
+      "pooled_leads": 0.255,
+      "ignition_relative": 0.167,
+      "by_lead": {
+        "12": 0.214,
+        "24": 0.277,
+        "48": 0.279,
+        "72": 0.251
+      },
+      "growth_ratio_median": 0.26,
+      "years": [
+        2025
+      ],
+      "lfm_method": "gsi_nfdrs2016",
+      "fuels_editions": [
+        "LF2024"
+      ],
+      "fuel_groups_tested": [
+        "timber"
+      ],
+      "caveats": [
+        "Two fires: a rough value (about ±0.05).",
+        "Lower Sugarloaf's run has no perimeter between Sep 17 and Sep 21: its truth is timed by VIIRS only."
+      ],
+      "fires": [
+        {
+          "id": "2025-emigrant-241e2b",
+          "name": "Emigrant",
+          "state": "OR",
+          "n_leads": 12,
+          "growth_sorensen": 0.279,
+          "fuels_edition": "LF2024",
+          "lfm_method": "gsi_nfdrs2016",
+          "era5_hours": 0.0,
+          "gfs_fill_hours": 0,
+          "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
+          "replaced": null
+        },
+        {
+          "id": "2025-lower-sugarloaf-569fb7",
+          "name": "Lower Sugarloaf",
+          "state": "WA",
+          "n_leads": 12,
+          "growth_sorensen": 0.231,
+          "fuels_edition": "LF2024",
+          "lfm_method": "gsi_nfdrs2016",
+          "era5_hours": 0.0,
+          "gfs_fill_hours": 0,
+          "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
+          "replaced": null
+        }
+      ]
+    },
+    {
+      "id": "NRCC",
+      "name": "Northern Rockies",
+      "status": "tested",
+      "in_sample": false,
+      "n_fires": 2,
+      "n_leads": 24,
+      "growth_sorensen": 0.341,
+      "range": [
+        0.189,
+        0.492
+      ],
+      "pooled_leads": 0.341,
+      "ignition_relative": 0.313,
+      "by_lead": {
+        "12": 0.258,
+        "24": 0.341,
+        "48": 0.38,
+        "72": 0.384
+      },
+      "growth_ratio_median": 0.73,
+      "years": [
+        2024,
+        2025
+      ],
+      "lfm_method": "gsi_nfdrs2016",
+      "fuels_editions": [
+        "LF2023",
+        "LF2024"
+      ],
+      "fuel_groups_tested": [
+        "grass",
+        "shrub",
+        "timber"
+      ],
+      "caveats": [
+        "Two fires: a rough value (about ±0.05)."
+      ],
+      "fires": [
+        {
+          "id": "2025-island-creek-ff270c",
+          "name": "Island Creek",
+          "state": "ID",
+          "n_leads": 12,
+          "growth_sorensen": 0.189,
+          "fuels_edition": "LF2024",
+          "lfm_method": "gsi_nfdrs2016",
+          "era5_hours": 0.0,
+          "gfs_fill_hours": 0,
+          "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
+          "replaced": null
+        },
+        {
+          "id": "2024-horse-gulch-889237",
+          "name": "Horse Gulch",
+          "state": "MT",
+          "n_leads": 12,
+          "growth_sorensen": 0.492,
+          "fuels_edition": "LF2023",
+          "lfm_method": "gsi_nfdrs2016",
+          "era5_hours": 0.0,
+          "gfs_fill_hours": 0,
+          "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
+          "replaced": null
+        }
+      ]
+    },
+    {
+      "id": "GBCC",
+      "name": "Great Basin",
+      "status": "tested",
+      "in_sample": false,
+      "n_fires": 2,
+      "n_leads": 28,
+      "growth_sorensen": 0.247,
+      "range": [
+        0.218,
+        0.275
+      ],
+      "pooled_leads": 0.251,
+      "ignition_relative": 0.213,
+      "by_lead": {
+        "12": 0.202,
+        "24": 0.247,
+        "48": 0.268,
+        "72": 0.286
+      },
+      "growth_ratio_median": 0.83,
+      "years": [
+        2025
+      ],
+      "lfm_method": "gsi_nfdrs2016",
+      "fuels_editions": [
+        "LF2024"
+      ],
+      "fuel_groups_tested": [
+        "grass",
+        "shrub",
+        "timber"
+      ],
+      "caveats": [
+        "Two fires: a rough value (about ±0.05)."
+      ],
+      "fires": [
+        {
+          "id": "2025-france-canyon-7d16d1",
+          "name": "France Canyon",
+          "state": "UT",
+          "n_leads": 12,
+          "growth_sorensen": 0.218,
+          "fuels_edition": "LF2024",
+          "lfm_method": "gsi_nfdrs2016",
+          "era5_hours": 0.0,
+          "gfs_fill_hours": 0,
+          "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
+          "replaced": null
+        },
+        {
+          "id": "2025-cottonwood-peak-a3ba9f",
+          "name": "Cottonwood Peak",
+          "state": "NV",
+          "n_leads": 16,
+          "growth_sorensen": 0.275,
+          "fuels_edition": "LF2024",
+          "lfm_method": "gsi_nfdrs2016",
+          "era5_hours": 0.0,
+          "gfs_fill_hours": 0,
+          "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
+          "replaced": null
+        }
+      ]
+    },
+    {
+      "id": "SWCC",
+      "name": "Southwest",
+      "status": "tested",
+      "in_sample": false,
+      "n_fires": 2,
+      "n_leads": 32,
+      "growth_sorensen": 0.351,
+      "range": [
+        0.348,
+        0.355
+      ],
+      "pooled_leads": 0.351,
+      "ignition_relative": 0.304,
+      "by_lead": {
+        "12": 0.313,
+        "24": 0.345,
+        "48": 0.365,
+        "72": 0.382
+      },
+      "growth_ratio_median": 1.84,
+      "years": [
+        2025
+      ],
+      "lfm_method": "gsi_nfdrs2016",
+      "fuels_editions": [
+        "LF2024"
+      ],
+      "fuel_groups_tested": [
+        "grass",
+        "shrub",
+        "timber"
+      ],
+      "caveats": [
+        "Two fires: a rough value (about ±0.05)."
+      ],
+      "fires": [
+        {
+          "id": "2025-trout-4fd248",
+          "name": "Trout",
+          "state": "NM",
+          "n_leads": 16,
+          "growth_sorensen": 0.355,
+          "fuels_edition": "LF2024",
+          "lfm_method": "gsi_nfdrs2016",
+          "era5_hours": 0.0,
+          "gfs_fill_hours": 0,
+          "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
+          "replaced": null
+        },
+        {
+          "id": "2025-greer-a746c6",
+          "name": "Greer",
+          "state": "AZ",
+          "n_leads": 16,
+          "growth_sorensen": 0.348,
+          "fuels_edition": "LF2024",
+          "lfm_method": "gsi_nfdrs2016",
+          "era5_hours": 0.0,
+          "gfs_fill_hours": 0,
+          "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
+          "replaced": null
+        }
+      ]
+    },
+    {
+      "id": "SACC-SP",
+      "name": "Southern Plains",
+      "status": "tested",
+      "in_sample": false,
+      "n_fires": 2,
+      "n_leads": 24,
+      "growth_sorensen": 0.394,
+      "range": [
+        0.299,
+        0.49
+      ],
+      "pooled_leads": 0.394,
+      "ignition_relative": 0.397,
+      "by_lead": {
+        "12": 0.344,
+        "24": 0.39,
+        "48": 0.423,
+        "72": 0.419
+      },
+      "growth_ratio_median": 0.69,
+      "years": [
+        2024
+      ],
+      "lfm_method": "gsi_nfdrs2016",
+      "fuels_editions": [
+        "LF2023",
+        "LF2024"
+      ],
+      "fuel_groups_tested": [
+        "grass"
+      ],
+      "caveats": [
+        "Two fires: a rough value (about ±0.05).",
+        "Windy Deuce scores only the second day (65 % of its final area burned by the first perimeter).",
+        "Rush's first perimeter already held 46 % of the final area; its first leads are timed by VIIRS."
+      ],
+      "fires": [
+        {
+          "id": "2024-windy-deuce-b972cf",
+          "name": "Windy Deuce",
+          "state": "TX",
+          "n_leads": 12,
+          "growth_sorensen": 0.299,
+          "fuels_edition": "LF2023",
+          "lfm_method": "gsi_nfdrs2016",
+          "era5_hours": 0.0,
+          "gfs_fill_hours": 0,
+          "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
+          "replaced": null
+        },
+        {
+          "id": "2024-rush-641e3e",
+          "name": "Rush",
+          "state": "OK",
+          "n_leads": 12,
+          "growth_sorensen": 0.49,
+          "fuels_edition": "LF2024",
+          "lfm_method": "gsi_nfdrs2016",
+          "era5_hours": 0.0,
+          "gfs_fill_hours": 0,
+          "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
+          "replaced": null
+        }
+      ]
+    },
+    {
+      "id": "SACC-SE",
+      "name": "Southeast",
+      "status": "tested",
+      "in_sample": false,
+      "n_fires": 2,
+      "n_leads": 24,
+      "growth_sorensen": 0.193,
+      "range": [
+        0.174,
+        0.212
+      ],
+      "pooled_leads": 0.193,
+      "ignition_relative": 0.14,
+      "by_lead": {
+        "12": 0.184,
+        "24": 0.198,
+        "48": 0.187,
+        "72": 0.203
+      },
+      "growth_ratio_median": 0.35,
+      "years": [
+        2025
+      ],
+      "lfm_method": "gsi_nfdrs2016",
+      "fuels_editions": [
+        "LF2024"
+      ],
+      "fuel_groups_tested": [
+        "timber"
+      ],
+      "caveats": [
+        "Two fires: a rough value (about ±0.05)."
+      ],
+      "fires": [
+        {
+          "id": "2025-table-rock-20616f",
+          "name": "Table Rock",
+          "state": "SC",
+          "n_leads": 12,
+          "growth_sorensen": 0.212,
+          "fuels_edition": "LF2024",
+          "lfm_method": "gsi_nfdrs2016",
+          "era5_hours": 0.0,
+          "gfs_fill_hours": 0,
+          "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
+          "replaced": null
+        },
+        {
+          "id": "2025-black-cove-95c3c8",
+          "name": "Black Cove",
+          "state": "NC",
+          "n_leads": 12,
+          "growth_sorensen": 0.174,
+          "fuels_edition": "LF2024",
+          "lfm_method": "gsi_nfdrs2016",
+          "era5_hours": 0.0,
+          "gfs_fill_hours": 0,
+          "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
+          "replaced": null
+        }
+      ]
+    },
+    {
+      "id": "RMCC",
+      "name": "Rocky Mountain",
+      "status": "untested",
+      "n_fires": 0
+    },
+    {
+      "id": "EACC",
+      "name": "Eastern",
+      "status": "untested",
+      "n_fires": 0
+    },
+    {
+      "id": "ONCC",
+      "name": "Northern California",
+      "status": "untested",
+      "n_fires": 0
+    },
+    {
+      "id": "OSCC",
+      "name": "Southern California",
+      "status": "tested",
+      "in_sample": true,
+      "n_fires": 3,
+      "n_leads": 32,
+      "growth_sorensen": 0.433,
+      "range": [
+        0.395,
+        0.467
+      ],
+      "pooled_leads": 0.438,
+      "ignition_relative": 0.403,
+      "by_lead": {
+        "12": 0.349,
+        "24": 0.432,
+        "48": 0.481,
+        "72": 0.49
+      },
+      "growth_ratio_median": 1.85,
+      "years": [
+        2025
+      ],
+      "lfm_method": "ca_month_table_drought",
+      "fuels_editions": [
+        "LF2024"
+      ],
+      "fuel_groups_tested": [
+        "grass",
+        "shrub"
+      ],
+      "caveats": [
+        "The model's settings (multiplier 0.5, 12 h decay, held perimeter) were fitted on these three fires: in-sample, a best case."
+      ],
+      "fires": [
+        {
+          "id": "2025-eaton-fire-dbfa57",
+          "name": "Eaton Fire",
+          "state": "CA",
+          "n_leads": 12,
+          "growth_sorensen": 0.438,
+          "fuels_edition": "LF2024",
+          "lfm_method": "ca_month_table_drought",
+          "era5_hours": 0.0,
+          "gfs_fill_hours": 0,
+          "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
+          "replaced": null
+        },
+        {
+          "id": "2025-madre-fire-01e7e8",
+          "name": "Madre Fire",
+          "state": "CA",
+          "n_leads": 8,
+          "growth_sorensen": 0.395,
+          "fuels_edition": "LF2024",
+          "lfm_method": "ca_month_table_drought",
+          "era5_hours": 0.0,
+          "gfs_fill_hours": 0,
+          "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
+          "replaced": null
+        },
+        {
+          "id": "2025-palisades-fire-abfed7",
+          "name": "Palisades Fire",
+          "state": "CA",
+          "n_leads": 12,
+          "growth_sorensen": 0.467,
+          "fuels_edition": "LF2024",
+          "lfm_method": "ca_month_table_drought",
+          "era5_hours": 0.0,
+          "gfs_fill_hours": 0,
+          "weather_source": "open-meteo:historical-forecast:gfs_hrrr",
+          "replaced": null
+        }
+      ]
+    }
+  ]
 }

@@ -131,11 +131,14 @@ def test_accuracy_regions_seed(client) -> None:
     d = r.json()
     assert [x["id"] for x in d["regions"]] == list(records.REGION_NAMES) and len(d["regions"]) == 10
     oscc = d["regions"][-1]
-    assert oscc["id"] == "OSCC" and oscc["status"] == "tested" and oscc["in_sample"] is True and oscc["seed"] is True
+    # The us-catalog seed was replaced by the validation tooling (brief 3 wave 2; CONTRACT 14.4): OSCC re-measured
+    # after the GSI code with the same values, no `seed` key, every status by the 14.4 rule.
+    assert oscc["id"] == "OSCC" and oscc["status"] == "tested" and oscc["in_sample"] is True and "seed" not in oscc
     assert oscc["n_fires"] == 3 and oscc["n_leads"] == 32 and oscc["range"] == [0.395, 0.467]
     assert round(oscc["growth_sorensen"], 2) == 0.43 and oscc["pooled_leads"] == 0.438 and oscc["growth_ratio_median"] == 1.85
-    assert oscc["lfm_method"] == "ca_month_table_drought" and "fuels_editions" not in oscc
-    assert all(x["status"] == "untested" and x["n_fires"] == 0 for x in d["regions"][:-1])
+    assert oscc["lfm_method"] == "ca_month_table_drought"
+    assert all(x["status"] == records.region_status(x) for x in d["regions"])
+    assert {x["id"] for x in d["regions"] if x["status"] == "untested"} >= {"RMCC", "EACC", "ONCC"}
     assert d["served_ms"] > 0 and d["schema_version"] == 1
 
 
