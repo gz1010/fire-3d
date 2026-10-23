@@ -51,6 +51,12 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
 - ~04:35 UTC: us-web review pass after fixes (94c978f; R1 blocker: CAL FIRE's own status on the card when agencies
   disagree). For the integration: N1 credit NWCG names and NTAD zones also when a fire is open; N2 stale statements in
   us-web's report/progress (us-official's pieces have landed).
+- ~05:00 UTC: the user's session usage limit stopped validation and the us-official re-check (round 2 fixes
+  14f126d were committed). Before it, validation committed its pre-registration (29f0e2d) and built Black Cove (NC)
+  and Emigrant (MT).
+- 06:25 UTC (wake-up): validation resumed; us-official review resumed for its last re-check; integration part 1
+  started early (orchestrator decision: everything except validation's files, API 8715 / Vite 5185), part 2 after
+  validation does the end-to-end checks on the validation fires.
 - Lesson: never SendMessage a workflow agent (it starts a second copy); relay through files or Agent-tool agents.
 
 ## Carry-over items for later stages (integration unless a role owns the file)
