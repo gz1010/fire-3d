@@ -165,6 +165,60 @@
    "item": "Optional: apply a pending map flight requested just before the map controller exists (see known_issues), and a Public compact-summary line for local officials' alerts.",
    "where": "web/src/map/mapController.ts:286; web/src/ui/shell/officialSummary.ts",
    "why": "minor, below this part's bar."
+  },
+  {
+   "item": "Optional (UX-M3 cleaner form): build/events.py could emit the instants it writes into the ignition text ('Reported by … Mar 19, 15:00 EDT', the first GOES and VIIRS detections) as ms fields, so the web formats them without parsing; the web parser (feedModel.localizeDetailTimes) handles today's text and stays as the fallback for existing bundles.",
+   "where": "backend/fire3d/build/events.py (ignition detail), web/src/ui/feed/feedModel.ts eventCopy 'ignition'",
+   "why": "build/** is validation's while it runs."
   }
- ]
+ ],
+ "part1_review_fixes": {
+  "role": "integration fixer (part 1 follow-up), 2026-10-23 about 07:45-09:00 UTC; API 8713, Vite 5183 (both stopped)",
+  "commits": [
+   "038816d (R2)",
+   "812131b (R1, R3, UX-M2, UX-m8 part)",
+   "282443a (UX-M1, UX-M3, R4, UX-m1..m7, UX-m8 message)",
+   "this report commit"
+  ],
+  "issues": {
+   "R1": "fixed. Verified first (SearchBox.tsx, OverviewCard.tsx and mapController.openFireFromOverview flew without source 'fire-card'). New web/src/state/fireCard.ts showFireCard(id, row?) is the one path for the overview list row, the header picker (fireActions re-exports it), a map marker or label (openFireFromOverview), the search box's fire result (SearchBox keeps closing its popover and afterPick) and the location card's nearest-fire rows. Browser check (1440x900, swiftshader, check_paths.mjs): search 'Little Giant' + Enter, a real click on the Little Giant marker, and the list row each keep fireCardId '2026-little-giant-091081', incidentId null, flight source 'fire-card' at 3, 6 and 10 s (r1-search.png, r1-marker.png, r1-list.png). Tests: state/fireCard.test.ts (marker id, search row not in the lists, prepared fire, Forensic, and a source check that the three paths call showFireCard). CONTRACT 14.11 as built lists every path.",
+   "R2": "fixed. Reproduced with TestClient (3 failures on the old script). serve_fixture.py: rows carry bbox_lonlat (manifest.grid.bbox_lonlat when valid), the list carries sources (calfire and wfigs 'unavailable', reason 'Fixture server: only the fire bundles on disk are listed (the CAL FIRE and NIFC lists are not fetched).'), year and state filters like the API, LiveStatus.detections_24h = the live bundles' sum. Test: backend/tests/test_serve_fixture.py (lists, year, live status; validates against the contract models).",
+   "R3": "fixed. When the map is shown and the picked fire has no ready analysis, showFireCard closes another open fire first (closeIncident, before the flight because the map releases the focus hold when the open fire changes), then flies with source 'fire-card'. Deviation from the suggestion 'without an extra history entry': closing pushes an overview entry, because history.back() is asynchronous and would close the fire after the flight (dropping the hold); Back returns to the fire that was open (checked: Horse Gulch reopens with incidentSource 'history'). Browser check: Horse Gulch open (Command) + the picker's path for Little Giant: incidentId null, card Little Giant at 3/6/10 s, header 'United States · all fires' (r3-picker.png). Tests: fireCard.test.ts (another fire open closes; a prepared fire leaves it to the zoom; the same fire stays; Forensic keeps it).",
+   "R4": "fixed. CONTRACT §14.1 block shows the (R) fields required and sources/detections_24h required, the validator as built (mode='after'); §13 NOT_FIRE_SPECIFIC and the feed topic 'calfire' are marked as removed by the integration; useOfficialBadge and zoneLine signatures updated; 14.15 lists the part 1 review fixes. vite.config.ts builds extras-dev.html too (the build gate passes).",
+   "UX-M1": "fixed. officialSummary.ts localAlertsLine: Public's compact Official now gains a 'Local officials' alerts' line (after Evacuations, separate from it) while a message is in effect or was sent within the replay's next hour: lead, verbatim quoted text, own sent time in its area's zone, FEMA archive / relayed by NWS, '+N more in Details', the link. officialBadge(evac, fw, local) counts in-effect or upcoming local messages; level 'order' for a verbatim Evacuation Immediate / Shelter In Place Warning, else the new 'local' (sr text \"local officials' alert\"), ranked order > warning > local > fire-weather. Browser: Horse Gulch Jul 10, 2024 6:00 PM MDT Public desktop shows 'Local officials' alerts Archived alert from MTHelenaPoliceDepartment: \"Urgent! Evacuation for Horse Gulch Fire: …\" · sent Jul 10, 2024 5:45 PM MDT · FEMA archive · +2 more in Details · source record (FEMA archive)' (hg-public-desktop.png); phone badge '3', level order (hg-public-phone.png); Eaton and Black Cove show theirs. Tests: officialSummary.test.ts (Horse Gulch fixture LOCAL_ARCHIVE_HORSE_GULCH from the endpoint), badge counts.",
+   "UX-M2": "fixed. search.ts fireResultFacts uses the overview's fireWhere: 'Lincoln Co., NE · 2026 · 129,253 acres · 100% contained' (browser: the six Cottonwood results read NE, UT, OR, MT, NV, NM). Test: search.test.ts (two Lincoln County fires in NE and NV, a Louisiana parish, no county).",
+   "UX-M3": "fixed (web side). feedModel.ts localizeDetailTimes rewrites each 'Mon DD, HH:MM ZZZ' token of the fire-start text (the only event type that carries such tokens in the 15 bundles) to fmtAt in the panel's clock and the fire's zone, reading the abbreviation's own offset and the year nearest the event; unknown abbreviations (the fixtures' 'PT') stay. Browser: Black Cove Public feed 'Reported by DFR via NIFC WFIGS Mar 19, 3:00 PM EDT …'. Tests: feedModel.test.ts (12 h, 24 h, a PDT token in a Mountain fire, the ignition row). The cleaner backend option is in part2.",
+   "UX-m1": "fixed. lib/time.ts recordYearMode: record update and containment times carry their year when any differs from the fire's year, the replay's or today's (FireCard OfficialRecord, OfficialNow RecordRow). Browser: Emigrant Command 'Updated by … Sep 6, 2026 14:18 PDT · contained Dec 16, 2025 14:30 PST'. Tests: time.test.ts, FireCard.test.ts (Dragon Bravo 2025 edited May 14, 2026).",
+   "UX-m2": "fixed. localAlerts.ts localPhaseText: a message sent after the reference time reads 'sent 33 min after this time' (onset later: 'not yet in effect'), in OfficialNow (refMs = the replay minute), the Public summary line, the location card (OfficialContext.refMs = the replay minute) and the feed chip (feedStatusLabel: 'Sent after this time'); the link now follows ' · '. Browser: Black Cove Mar 22 7:22 PM EDT. Tests: localAlerts.test.ts, feedModel.test.ts, officialSummary.test.ts.",
+   "UX-m3": "fixed. answeredChannelsText names the channels that answered: the location card 'Local officials' alerts (FEMA archive): none here · not an all-clear' when only the archive was read (browser: Emigrant Command), OfficialNow's none line and row source likewise; '1 of the fire's local alerts is …'. Tests: localAlerts.test.ts (the Eaton expectation changed accordingly).",
+   "UX-m4": "fixed. zoneLine(tf, ms, whose, alsoMs?) names the replay time's abbreviation first and today's when it differs; UpdatesPanel ZoneNote and OfficialNow pass the replay minute. Browser: Eaton Command 'Times: Pacific Time (PST/PDT), the fire's local time'. Tests: time.test.ts.",
+   "UX-m5": "fixed. official/model.ts statewideCountText: 'N alerts upcoming in M states' / 'in effect or upcoming'. Browser: the overview read '4 alerts upcoming in 4 states; the 3 most recent:'. Test: model.test.ts.",
+   "UX-m6": "fixed. The compact Evacuations line uses notAvailableReason ('Not available in this state (Montana).', 'Not available in these states (North Carolina, South Carolina).'); the location card's past-date line reads 'Evacuation zones: not available for past dates', the panel's wording. Tests: officialSummary.test.ts, official.test.ts.",
+   "UX-m7": "fixed (decided now rather than in part 2, as decision 7 is explicit). RegionAccuracy words: the Public Analysis drawer shows the Public words with 'How was it tested?' revealing the detail and the score line; Command and the Forensic Analysis tab keep the score. Browser: Eaton Public drawer. Test: RegionAccuracy.test.ts.",
+   "UX-m8": "partly fixed, rest accepted and documented. The no-match message covers fires ('No listed fire, US city, town, county or ZIP code matches …', keeping the geocoder's hint). Including ready bundles of other years in the search would need a new list of bundles on disk (API and catalog state); not cheap, so documented in CONTRACT 14.15 (Horse Gulch, 2024, opens by its link). Test: search.test.ts."
+  },
+  "gates": {
+   "backend": "cd backend && uv run pytest -q: 974 passed, 0 failed (84 s, about 08:55 UTC; baseline at the integration report 956; +3 test_serve_fixture.py, the rest validation's own additions since).",
+   "web": "npm run typecheck: exit 0; npm run lint: exit 0, 55 warnings, 0 outside src/scene; npm test: 74 files, 1140 passed, 2 skipped (was 73 files, 1116); npm run build: OK (now with extras-dev).",
+   "time_checker": "node web/scripts/check-time-api.mjs web/src: 301 files, 0 deprecated uses, 0 America/Los_Angeles literals.",
+   "non_get_requests": "0 non-GET requests in the uvicorn access log of API 8713 (281 GET). No build, no 'Prepare analysis'.",
+   "secrets": "count-only scan of git diff 057c887..HEAD and the scratch folder for FIRMS_MAP_KEY: 0 and 0.",
+   "validation_files": "none touched; no gate failure attributable to validation's uncommitted work during this run."
+  },
+  "screenshots": [
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-review/fixer/r1-search.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-review/fixer/r1-marker.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-review/fixer/r1-list.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-review/fixer/r3-picker.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-review/fixer/hg-public-desktop.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-review/fixer/hg-public-phone.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-review/fixer/bc-command.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-review/fixer/bc-public-details.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-review/fixer/eaton-public-analysis.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-review/fixer/emigrant-command.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-review/fixer/emigrant-location.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-review/fixer/search-cottonwood.png"
+  ],
+  "screenshot_note": "swiftshader at 1440x900 (phone 390x844 @2x); Forensic was not opened; frame rates are not meaningful here."
+ }
 }
