@@ -160,7 +160,9 @@ export function describeError(e: unknown): string {
     } catch {
       detail = e.body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160)
     }
-    const what = e.status === 404 ? 'Not found' : e.status >= 500 ? 'Server error' : `Request failed`
+    // 503: a source Fire-3d needs cannot be reached right now (e.g. "The fire lists could not be reached right now; try
+    // again later."), not a fault of the server
+    const what = e.status === 404 ? 'Not found' : e.status === 503 ? 'Unavailable right now' : e.status >= 500 ? 'Server error' : `Request failed`
     return `${what}${detail ? `: ${detail}` : ''} (HTTP ${e.status})`
   }
   if (e instanceof DOMException && (e.name === 'TimeoutError' || e.name === 'AbortError')) return 'The request timed out'

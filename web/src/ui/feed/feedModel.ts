@@ -612,8 +612,8 @@ export interface FeedView {
 /** The status chip of a row: "Expired", "Cancelled", "Upcoming". A local officials' message is never "Upcoming" (a
  *  "leave now" order is not a scheduled one): one sent after the replay time says "Sent after this time", one whose
  *  onset is later "Not yet in effect" (integration review UX-m2). */
-export function feedStatusLabel(item: Pick<FeedItem, 'status' | 'topic'>, later: boolean): string | undefined {
-  if (item.status === 'upcoming' && item.topic === 'local-alert') return later ? 'Sent after this time' : 'Not yet in effect'
+export function feedStatusLabel(item: Pick<FeedItem, 'status' | 'topic' | 'sentAfterRef'>, later: boolean): string | undefined {
+  if (item.status === 'upcoming' && item.topic === 'local-alert') return later || item.sentAfterRef ? 'Sent after this time' : 'Not yet in effect'
   return item.status ? FEED_STATUS_LABEL[item.status] : undefined
 }
 const FEED_STATUS_LABEL: Partial<Record<NonNullable<FeedItem['status']>, string>> = { expired: 'Expired', cancelled: 'Cancelled', upcoming: 'Upcoming' }

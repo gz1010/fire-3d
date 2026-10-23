@@ -18,7 +18,7 @@ import { accuracyLabel, type AccuracyLabel } from '../../lib/plainLanguage'
 import { agencyIdLine, agencyNameShown, complexMembers, isHttps as https, partOfComplex, recordBlockText, recordStatus } from '../../lib/recordText'
 import { fmtAt, fmtDayDate, fmtRelative, localYear, recordYearMode, type TimeFmt } from '../../lib/time'
 import { findRegion, useAccuracyRegions } from '../../state/accuracy'
-import { analysisState, findFire, fireWhere, isActiveFire, type AnalysisState } from '../../state/overview'
+import { analysisReadyText, analysisState, findFire, fireWhere, isActiveFire, type AnalysisState } from '../../state/overview'
 import { useStore } from '../../state/store'
 import { useTimeFormatFor } from '../../state/timeZone'
 import { useWorkspace } from '../../state/workspace'
@@ -29,23 +29,25 @@ import { useDrawerFocus } from './hooks'
 
 const mapCanvas = () => document.querySelector<HTMLElement>('.mw-map canvas')
 
-/** The analysis state of the card's fire: the open fire's live manifest and job win over the list's chip. */
-function useAnalysis(fire: IncidentSummary | null): { state: AnalysisState; progress: number | null } {
+/** The analysis state of the card's fire: the open fire's live manifest and job win over the list's chip. `modelRuns`:
+ *  the open fire's experimental model runs (null when the card's fire is not the open one with a ready bundle). */
+function useAnalysis(fire: IncidentSummary | null): { state: AnalysisState; progress: number | null; modelRuns: number | null } {
   const cur = useStore(
     useShallow((s) => ({
       id: s.incidentId,
       manifest: s.manifest?.status ?? null,
+      modelRuns: s.manifest?.status === 'ready' && s.manifest.id === s.incidentId ? (s.manifest.forecasts?.length ?? 0) : null,
       jobRunning: s.job != null && s.job.kind === 'build' && (s.job.status === 'queued' || s.job.status === 'running'),
       jobFailed: s.job != null && s.job.kind === 'build' && s.job.status === 'error',
       progress: s.job?.kind === 'build' ? s.job.progress : null,
     })),
   )
-  if (!fire) return { state: 'none', progress: null }
-  if (cur.id !== fire.id) return { state: analysisState(fire), progress: null }
-  if (cur.manifest === 'ready') return { state: 'ready', progress: null }
-  if (cur.jobRunning || cur.manifest === 'building' || fire.bundle_status === 'building') return { state: 'building', progress: cur.progress }
-  if (cur.jobFailed || cur.manifest === 'error' || fire.bundle_status === 'error') return { state: 'error', progress: null }
-  return { state: analysisState(fire) === 'ready' ? 'ready' : 'none', progress: null }
+  if (!fire) return { state: 'none', progress: null, modelRuns: null }
+  if (cur.id !== fire.id) return { state: analysisState(fire), progress: null, modelRuns: null }
+  if (cur.manifest === 'ready') return { state: 'ready', progress: null, modelRuns: cur.modelRuns }
+  if (cur.jobRunning || cur.manifest === 'building' || fire.bundle_status === 'building') return { state: 'building', progress: cur.progress, modelRuns: null }
+  if (cur.jobFailed || cur.manifest === 'error' || fire.bundle_status === 'error') return { state: 'error', progress: null, modelRuns: null }
+  return { state: analysisState(fire) === 'ready' ? 'ready' : 'none', progress: null, modelRuns: null }
 }
 
 function modeChip(f: IncidentSummary): { label: string; cls: string } {
@@ -203,11 +205,11 @@ function useAccuracyLabel(fire: IncidentSummary | null): { label: AccuracyLabel 
   return { label: accuracyLabel(findRegion(data, fire.accuracy_region ?? null), data.method), failed: false }
 }
 
-function AnalysisLine({ state, progress }: { state: AnalysisState; progress: number | null }) {
+function AnalysisLine({ state, progress, modelRuns }: { state: AnalysisState; progress: number | null; modelRuns: number | null }) {
   if (state === 'ready')
     return (
       <p className="fc-analysis is-ready">
-        <i className="fc-dot" aria-hidden="true" /> Analysis ready: spread reconstruction and the experimental model
+        <i className="fc-dot" aria-hidden="true" /> {analysisReadyText(modelRuns)}
       </p>
     )
   if (state === 'building')
@@ -229,7 +231,7 @@ export function FireCard() {
   const fire = useStore((s) => findFire(id, s.summary, s.catalog))
   const catalogLoading = useStore((s) => s.catalog.loading)
   const currentId = useStore((s) => s.incidentId)
-  const { state, progress } = useAnalysis(fire)
+  const { state, progress, modelRuns } = useAnalysis(fire)
   const command = useWorkspace((s) => s.preset === 'command')
   const accuracy = useAccuracyLabel(fire)
   const nowMs = useNow(30_000)
@@ -280,7 +282,7 @@ export function FireCard() {
         </button>
       </header>
       <OfficialRecord fire={fire} nowMs={nowMs} tf={tf} />
-      <AnalysisLine state={state} progress={progress} />
+      <AnalysisLine state={state} progress={progress} modelRuns={modelRuns} />
       <div className="fc-actions">
         {!isCurrent && ready && (
           <button type="button" className="mw-btn is-primary fc-main" onClick={() => void openFire(fire.id)}>

@@ -59,7 +59,8 @@ export interface FeedItem {
   eventId: string | null
 
   // ---- additions (timeline-feed)
-  /** Timeline target when it differs from tMs (a live forecast is listed when issued but starts earlier). */
+  /** Timeline target when it differs from tMs (a live forecast is listed when issued but starts earlier); also the time
+   *  a replay lists it from (a local officials' message: the minute after it was sent, `localFeedMs`). */
   seekMs?: number
   /** The producer's own wording (scientific units) for details and Forensic. */
   original?: { title: string; detail: string | null; source: string } | null
@@ -101,6 +102,9 @@ export interface FeedItem {
   place?: string | null
   /** No issuer or source time exists: the time column says so (tMs only orders the list). */
   timeNotGiven?: boolean
+  /** A local officials' message sent after the time the panels are for (their phase was decided at it): "Sent after
+   *  this time", also where the feed lists everything (a live fire seen at a past time). */
+  sentAfterRef?: boolean
   /** A day's satellite passes grouped into one row: the passes it holds (each selectable in the details). */
   children?: FeedItem[]
 }

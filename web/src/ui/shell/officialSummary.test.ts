@@ -3,7 +3,8 @@ import type { CalFireOfficial, EvacuationOfficial, FireWeatherOfficial, Official
 import { calfireLine, evacuationLine, fireWeatherLine, localAlertsLine, officialSummary } from './officialSummary'
 import { setCaliforniaCommandClock } from '../../extras/__fixtures__/clock.testutil'
 import { LOCAL_ARCHIVE_HORSE_GULCH } from '../../official/__fixtures__/localAlerts'
-import { localAlertPlace, localAlertsState, localPhaseText } from '../../official/localAlerts'
+import { localAlertFeedItems, localAlertPlace, localAlertsState, localPhaseText } from '../../official/localAlerts'
+import { feedCompareMs, feedStatusLabel, feedView, isLaterItem } from '../feed/feedModel'
 import { officialBadge } from '../../official/model'
 import type { LocalAlert } from '../../official/types'
 import { localAlertLines } from '../../location/official'
@@ -244,8 +245,9 @@ describe('Horse Gulch local messages at the panel’s own time, from an hour-qua
     // 2:20 PM, the same hour's answer: not sent yet (and before its effective time): said so, never counted
     const early = 1720642800000
     const e = atPanel(early)
-    expect(localPhaseText(e.alerts[0], e.refMs)).toBe('sent 26 min after this time')
-    expect(localAlertsLine(e, MDT12, early)!.text).toContain('· sent 26 min after this time ·')
+    // "sent 2:45 PM" (2:45:30 cut to the minute, as shown) at 2:20 PM: 25 min, never a rounded 26 (integration part 2)
+    expect(localPhaseText(e.alerts[0], e.refMs)).toBe('sent 25 min after this time')
+    expect(localAlertsLine(e, MDT12, early)!.text).toContain('· sent Jul 10, 2024 2:45 PM MDT · FEMA archive · sent 25 min after this time ·')
     expect(officialBadge(notAvailable, none, e, early)).toEqual({ count: 0, level: null })
   })
 
@@ -266,6 +268,40 @@ describe('Horse Gulch local messages at the panel’s own time, from an hour-qua
     expect(l.alerts.every((a) => a.phase === 'active')).toBe(true)
     expect(localAlertsLine(l, MDT12, t)!.text).toBe(EVAC_545)
     expect(officialBadge(notAvailable, none, l, t)).toEqual({ count: 3, level: 'order' })
+  })
+
+  it('5:45:12 and 5:45:30 PM MDT (the sent second and later in its minute): the feed and the panels use one time (integration part 2)', () => {
+    const sent = 1720655112000 // 5:45:12 PM MDT
+    const tf = timeFmt('America/Denver', '12h')
+    for (const timeMs of [sent, sent + 18_000]) {
+      // the panels' time is the replay minute (useOfficialPanelTime / the official context's refMs): 5:45:00 PM
+      const panel = Math.floor(timeMs / 60_000) * 60_000
+      const l = atPanel(panel)
+      const evac = l.alerts.find((a) => a.sentMs === sent)!
+      expect(evac.phase).toBe('upcoming')
+      expect(localPhaseText(evac, l.refMs)).toBe('sent less than a minute after this time')
+      expect(officialBadge(notAvailable, none, l, panel)).toEqual({ count: 2, level: 'order' })
+      // the feed splits at the exact timeline time: the message joins it at 5:46:00, so it sits with the later updates,
+      // labelled "Sent after this time", never listed as "Not yet in effect"
+      const items = localAlertFeedItems(l, { manifest: null, tf })
+      const row = items.find((i) => i.issuedMs === sent)!
+      expect(feedCompareMs(row)).toBe(1720655160000)
+      const chrono = items.slice().sort((x, y) => feedCompareMs(x) - feedCompareMs(y))
+      const view = feedView(chrono, timeMs, false, false)
+      expect(view.listed.map((i) => i.id)).not.toContain(row.id)
+      expect(view.later.map((i) => i.id)).toContain(row.id)
+      expect(feedStatusLabel(row, isLaterItem(row, timeMs, false))).toBe('Sent after this time')
+      // a live fire's feed lists everything (nothing is "later"): the label still follows the panels' time
+      expect(feedStatusLabel(row, false)).toBe('Sent after this time')
+    }
+    // 5:46:00 PM: listed and in effect (effective 5:00 PM), no status label, at the same minute in every panel
+    const t = 1720655160000
+    const l = atPanel(t)
+    const row = localAlertFeedItems(l, { manifest: null, tf: MDT12 }).find((i) => i.issuedMs === sent)!
+    expect(row.status).toBe('active')
+    expect(feedView([row], t, false, false).listed).toEqual([row])
+    expect(feedStatusLabel(row, isLaterItem(row, t, false))).toBeUndefined()
+    expect(localAlertsLine(l, MDT12, t)!.text).toBe(EVAC_545)
   })
 
   it('expiry: the 5:45 PM evacuation ends at its own expiry (7:45:12 PM MDT), at the panel’s minute', () => {

@@ -12,6 +12,7 @@ import { EMPTY_CATALOG } from '../../state/catalog'
 import { useStore } from '../../state/store'
 import { useWorkspace } from '../../state/workspace'
 import { restoreSsrState, ssrState } from '../ssr.testutil'
+import { analysisReadyText } from '../../state/overview'
 import { FireCard } from './FireCard'
 
 const regions = JSON.parse(fixtureText) as AccuracyRegionsResponse
@@ -170,11 +171,13 @@ describe('fire card accuracy label (§14.4)', () => {
 
   it('Public: the words and "How was it tested?"; Command: the score line', () => {
     const pub = render(summaryFixture({ year: 2026 }))
-    expect(pub.outside).toContain("Tested on 3 past fires in this region (2025; chaparral and grass fires). The model's settings were tuned on these same fires, so this is a best case.")
+    expect(pub.outside).toContain(
+      "Tested on 3 past fires in the Southern California region (2025). In those tests the forecast showed more new spread than really happened. The model's settings were tuned on these same fires, so this is a best case.",
+    )
     expect(pub.outside).toContain('How was it tested?')
     expect(pub.outside).not.toContain('Hindcast growth score')
     const cmd = render(summaryFixture({ year: 2026 }), 'command')
-    expect(cmd.outside).toContain('Hindcast growth score 0.43 (fires 0.40-0.47; 3 fires, 32 leads, +12-72 h;')
+    expect(cmd.outside).toContain('Hindcast growth score 0.43 of 1 in the Southern California region (fires 0.40-0.47; 3 fires, 32 leads, +12-72 h;')
     expect(cmd.outside).not.toContain('How was it tested?')
   })
 
@@ -184,3 +187,18 @@ describe('fire card accuracy label (§14.4)', () => {
     expect(render(wfigsSummaryFixture({ accuracy_region: 'NRCC' }), 'command').outside).toContain('No past fires in the Northern Rockies region have been re-run.')
   })
 })
+
+describe('fire card analysis line (validation review W-m8)', () => {
+  it('names the experimental model only when the open bundle holds a model run', () => {
+    expect(analysisReadyText(2)).toBe('Analysis ready: spread reconstruction and the experimental model')
+    expect(analysisReadyText(0)).toBe('Analysis ready: spread reconstruction (no model run yet)')
+    expect(analysisReadyText(null)).toBe('Analysis ready: spread reconstruction')
+  })
+
+  it('a prepared fire that is not open: no claim about a model run', () => {
+    const r = render(summaryFixture({ year: 2026, bundle_status: 'ready', bundle_built_ms: 1_700_000_000_000 }))
+    expect(r.outside).toContain('Analysis ready: spread reconstruction')
+    expect(r.outside).not.toContain('experimental model')
+  })
+})
+

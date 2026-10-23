@@ -393,12 +393,24 @@ export function sentText(a: Pick<LocalAlertItem, 'sentMs' | 'timeZone'>, tf: Tim
   return a.sentMs != null ? `sent ${fmtAt(a.sentMs, alertTimeFormat(a, tf), { zone: true, year: 'auto' })}` : null
 }
 
-/** How long after the reference time a message was sent: "32 min", "1 h 5 min". */
-function afterSpan(ms: number): string {
-  const min = Math.max(1, Math.round(ms / 60_000))
+const MINUTE_MS = 60_000
+const minuteCut = (ms: number) => Math.floor(ms / MINUTE_MS) * MINUTE_MS
+
+/** How long after the reference time a message was sent, from both times cut to the minute as they are shown ("sent
+ *  2:45 PM" at 2:20 PM: "25 min"; integration part 2): "less than a minute" in the same minute, "32 min", "1 h 5 min". */
+export function afterSpan(sentMs: number, refMs: number): string {
+  const min = Math.round((minuteCut(sentMs) - minuteCut(refMs)) / MINUTE_MS)
+  if (min < 1) return 'less than a minute'
   if (min < 60) return `${min} min`
   const h = Math.floor(min / 60)
   return min % 60 ? `${h} h ${min % 60} min` : `${h} h`
+}
+
+/** When a local message joins a replay's feed: the start of the minute after it was sent, so it is listed exactly when
+ *  the panels' time (the replay minute, `useOfficialPanelTime`) reaches it, never "not yet in effect" for the seconds
+ *  in between (integration part 2: one time for the feed and the panels). */
+export function localFeedMs(sentMs: number): number {
+  return Math.ceil(sentMs / MINUTE_MS) * MINUTE_MS
 }
 
 /**
@@ -410,7 +422,7 @@ function afterSpan(ms: number): string {
  * already-effective message never reads "not yet in effect".
  */
 export function localPhaseText(a: Pick<LocalAlertItem, 'phase' | 'sentMs'>, refMs?: number | null): string | null {
-  if (sentAfter(a, refMs)) return `sent ${afterSpan(a.sentMs! - refMs!)} after this time`
+  if (sentAfter(a, refMs)) return `sent ${afterSpan(a.sentMs!, refMs!)} after this time`
   if (a.phase === 'expired' || a.phase === 'cancelled') return 'ended'
   if (a.phase !== 'upcoming') return null
   return 'not yet in effect'
@@ -468,6 +480,9 @@ export function localAlertFeedItems(l: LocalAlertsOfficial | null, ctx: LocalFee
       topic: 'local-alert' as const,
       kind: 'official' as const,
       tMs: a.sentMs ?? 0,
+      // listed from the minute after it was sent: the panels decide its phase at the replay minute (one time for both)
+      ...(a.sentMs != null ? { seekMs: localFeedMs(a.sentMs) } : {}),
+      sentAfterRef: sentAfter(a, l.refMs),
       title: `${a.lead}: "${a.text}"`,
       place: localAlertPlace(a, { metric: ctx.metric ?? false }),
       detail: [a.event, sentText(a, ctx.tf), channelText(a)].filter(Boolean).join(' · '),

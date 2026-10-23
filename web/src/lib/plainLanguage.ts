@@ -394,7 +394,9 @@ export function sourceName(raw: string | null | undefined): string {
 // The per-region accuracy label of the experimental model (brief 3 decision 3; round 2 item 7: words in Public with the
 // score one tap away, the score in Command). Every number comes from the regional file (GET /api/accuracy-regions);
 // none is written into a template, OSCC included. A clause whose value the file lacks is left out, never guessed.
-// Never "accurate", "reliable", "safe" or "low risk".
+// Never "accurate", "reliable", "safe" or "low risk". Integration part 2 (validation review W-M2, W-m1..m8): Public's
+// first view also says, in words and without a number, how the forecast did in those tests (more or less new spread
+// than really happened); the region and its test fires are named; the score stays behind "How was it tested?".
 
 /** Always shown under the label. */
 export const ACCURACY_ALWAYS = 'Outside the modeled area is unknown, not low.'
@@ -402,6 +404,25 @@ export const ACCURACY_UNTESTED = 'Accuracy not yet tested here.'
 export const ACCURACY_LIMITED = 'Tested on only 1 past fire in this region: too few for a score.'
 export const ACCURACY_IN_SAMPLE_PUBLIC = "The model's settings were tuned on these same fires, so this is a best case."
 export const ACCURACY_IN_SAMPLE_COMMAND = 'in-sample: settings fitted on these fires'
+/** Public's "How was it tested?": why live forecasts usually do worse than these re-runs (review W-m7). */
+export const ACCURACY_WEATHER_PUBLIC = 'used the weather that really happened; live forecasts must use predicted weather and usually do worse.'
+/** The fuels caveat when the tested fires already span grass, shrub and timber (review W-m1: "other fuels" would be
+ *  empty there; what stays untested is most combinations of fuel and weather). */
+export const ACCURACY_FEW_FIRES = (n: number) =>
+  `Only ${n} fire${n === 1 ? ' was' : 's were'} tested here: most fuel and weather conditions in this region are untested.`
+
+/** The growth ratio thresholds of validation's `growth_direction` (|ratio − 1| < 0.05 is "about as much"). */
+const RATIO_OVER = 1.05
+const RATIO_UNDER = 0.95
+
+/** One test fire as the label reads it (AccuracyFire). */
+export interface AccuracyFireInput {
+  name?: string
+  state?: string
+  growth_sorensen: number
+  n_leads: number
+  growth_ratio_median?: number | null
+}
 
 /** The parts of the regional file the label reads (AccuracyRegion and the file's method). */
 export interface AccuracyRegionInput {
@@ -421,7 +442,7 @@ export interface AccuracyRegionInput {
   lfm_method?: string
   fuels_editions?: string[]
   fuel_groups_tested?: string[]
-  fires?: { growth_sorensen: number; n_leads: number }[]
+  fires?: AccuracyFireInput[]
 }
 export interface AccuracyMethodInput {
   leads_h?: number[]
@@ -430,13 +451,15 @@ export interface AccuracyMethodInput {
 
 export interface AccuracyLabel {
   status: 'tested' | 'limited' | 'untested'
-  /** Public's line ("Tested on 2 past fires in this region (2024-2025; grass fires)."). */
+  /** Public's line: "Tested on 2 past fires in the Northwest region (2025). In those tests the forecast showed much less
+   *  new spread than really happened." (no score: round 2 decision 7). */
   publicLine: string
-  /** Public's "How was it tested?" text (tested regions only). */
+  /** Public's "How was it tested?" text (tested regions only): the score, the test fires, the growth, the weather. */
   publicDetail: string | null
-  /** Command's line (the score with its counts, or the limited / untested words). */
+  /** Command's line (the score of 1 with its counts, or the limited / untested words). */
   commandLine: string
-  /** "Tested on timber fires only; other fuels here are untested." whenever the file lists the fuels tested. */
+  /** "Tested on timber fires only; other fuels here are untested.", or ACCURACY_FEW_FIRES when the fires span every
+   *  fuel group; null when the file lists none. */
   fuelCaveat: string | null
   /** ACCURACY_ALWAYS. */
   always: string
@@ -445,7 +468,7 @@ export interface AccuracyLabel {
 /** The live fuel moisture method in words. */
 export function lfmMethodWords(m: string | null | undefined): string | null {
   if (!m) return null
-  if (m === 'gsi_nfdrs2016') return 'GSI'
+  if (m === 'gsi_nfdrs2016') return 'GSI (NFDRS growing-season index)'
   if (m === 'ca_month_table_drought') return 'California seasonal values, drought-adjusted'
   if (m === 'ca_month_table') return 'California seasonal values'
   return m
@@ -483,18 +506,102 @@ function leadSpan(r: AccuracyRegionInput, method: AccuracyMethodInput | null | u
   return lo === hi ? `+${lo} h` : `+${lo}-${hi} h`
 }
 
-/** "about 2.1× too much growth" / "about 60% of the real growth" (Public, one decimal). */
-function growthWords(ratio: number): string {
-  if (ratio >= 1.05) return `It usually predicted about ${d1(ratio)}× too much growth.`
-  if (ratio > 0.95) return 'It usually predicted about as much growth as really happened.'
+type Direction = 'over' | 'under' | 'about'
+const direction = (r: number): Direction => (r >= RATIO_OVER ? 'over' : r <= RATIO_UNDER ? 'under' : 'about')
+
+/** "about 1.9 times as much growth as really happened" / "about 26% of the real growth" / "about half …". */
+function growthPhrase(ratio: number): string {
+  const d = direction(ratio)
+  if (d === 'over') return `about ${d1(ratio)} times as much growth as really happened`
+  if (d === 'about') return 'about as much growth as really happened'
   const pct = Math.round(ratio * 100)
-  return `It usually predicted about ${pct >= 45 && pct <= 55 ? 'half' : `${pct}%`} of the real growth.`
+  return `about ${pct >= 45 && pct <= 55 ? 'half' : `${pct}%`} of the real growth`
+}
+
+/** One fire's ratio, short: "about 1.8 times", "about 63%", "about right" (`full`: "… the real growth"). */
+function fireRatioShort(ratio: number, full = false): string {
+  const d = direction(ratio)
+  const tail = full ? ' the real growth' : ''
+  if (d === 'over') return `about ${d1(ratio)} times${tail}`
+  if (d === 'about') return 'about right'
+  return `about ${Math.round(ratio * 100)}%${full ? ' of the real growth' : ''}`
+}
+
+/** "Emigrant, OR" (the fire's name and state as the file gives them). */
+const fireName = (f: AccuracyFireInput) => [f.name?.trim(), f.state?.trim()].filter(Boolean).join(', ')
+
+/** The region's growth outcome from each fire's own ratio (else the region's): which way the forecasts erred. */
+interface GrowthOutcome {
+  /** Every fire (or the region, without per-fire values) erred one way, or none was off ('about'). */
+  kind: Direction | 'split'
+  /** Fires by direction (per-fire values only). */
+  over: AccuracyFireInput[]
+  under: AccuracyFireInput[]
+  about: AccuracyFireInput[]
+}
+
+function growthOutcome(region: AccuracyRegionInput): GrowthOutcome | null {
+  const fires = (region.fires ?? []).filter((f) => num(f.growth_ratio_median))
+  const ratio = num(region.growth_ratio_median) ? region.growth_ratio_median : null
+  const by = (d: Direction) => fires.filter((f) => direction(f.growth_ratio_median!) === d)
+  const over = by('over')
+  const under = by('under')
+  const about = by('about')
+  if (fires.length && fires.length === (region.fires ?? []).length) {
+    if (over.length && under.length) return { kind: 'split', over, under, about }
+    // no fire erred the other way: the region's ratio says which way (Great Basin ×0.83: one fire about right)
+    const kind: Direction = ratio != null ? direction(ratio) : over.length ? 'over' : under.length ? 'under' : 'about'
+    return { kind, over, under, about }
+  }
+  return ratio != null ? { kind: direction(ratio), over: [], under: [], about: [] } : null
+}
+
+/** Public's first-view words of how the forecast did (no number; review W-M2): "In those tests the forecast showed
+ *  much less new spread than really happened." / "… too much new spread on one fire and too little on the other." */
+function outcomeWords(region: AccuracyRegionInput, o: GrowthOutcome | null): string | null {
+  if (!o) return null
+  const ratio = num(region.growth_ratio_median) ? region.growth_ratio_median : null
+  const lead = 'In those tests the forecast showed'
+  if (o.kind === 'split') {
+    const n = (region.fires ?? []).length
+    const k = o.over.length
+    const j = o.under.length
+    if (n === 2 && k === 1 && j === 1) return `${lead} too much new spread on one fire and too little on the other.`
+    const tail = j === 1 && k + j === n ? 'the other' : `${j} of them`
+    return `${lead} too much new spread on ${k} of the ${n} fires and too little on ${tail}.`
+  }
+  if (o.kind === 'about') return `${lead} about as much new spread as really happened.`
+  if (o.kind === 'over') return `${lead} ${ratio != null && ratio >= 2 ? 'much ' : ''}more new spread than really happened.`
+  return `${lead} ${ratio != null && ratio <= 0.5 ? 'much ' : ''}less new spread than really happened.`
+}
+
+/** Public's growth sentence behind "How was it tested?", with each fire's own ratio when the file gives it. */
+function growthDetail(region: AccuracyRegionInput, o: GrowthOutcome | null): string | null {
+  if (!o) return null
+  const ratio = num(region.growth_ratio_median) ? region.growth_ratio_median : null
+  const perFire = (fs: AccuracyFireInput[]) => fs.map((f) => `${f.name ?? 'a fire'} (${fireRatioShort(f.growth_ratio_median!, true)})`)
+  if (o.kind === 'split') {
+    const parts = [`too much growth on ${listWords(perFire(o.over))}`, `too little on ${listWords(perFire(o.under))}`]
+    if (o.about.length) parts.push(`about the right amount on ${listWords(perFire(o.about))}`)
+    const body = parts.length === 2 && ratio == null ? parts.join(' and ') : parts.join('; ')
+    // a region ratio kept by the majority (Southern California ×1.85): say it, and that not every fire went that way
+    return ratio != null ? `Overall it predicted ${growthPhrase(ratio)}, but not on every fire: ${body}.` : `It predicted ${body}.`
+  }
+  if (ratio == null) return null
+  const fires = [...o.over, ...o.under, ...o.about]
+  const each = fires.length ? ` (${fires.map((f) => `${f.name ?? 'a fire'}: ${fireRatioShort(f.growth_ratio_median!)}`).join('; ')})` : ''
+  // "usually" only when no fire was about right (every fire erred the same way)
+  return `${o.about.length ? 'Overall it' : 'It usually'} predicted ${growthPhrase(ratio)}${each}.`
 }
 
 /** The accuracy label of a fire's region (CONTRACT §14.4). `region` null: an unassigned or untested region. */
 export function accuracyLabel(region: AccuracyRegionInput | null | undefined, method?: AccuracyMethodInput | null): AccuracyLabel {
   const fuels = region?.fuel_groups_tested?.filter((f) => f.trim()) ?? []
-  const fuelCaveat = region && region.status !== 'untested' && fuels.length ? `Tested on ${listWords(fuels)} fires only; other fuels here are untested.` : null
+  // every fuel group of the vocabulary tested (grass, shrub and timber): "other fuels" would be empty (review W-m1)
+  const allFuels = ['grass', 'shrub', 'timber'].every((g) => fuels.includes(g))
+  const n = region?.n_fires ?? 0
+  const fuelCaveat =
+    region && region.status !== 'untested' && fuels.length ? (allFuels ? ACCURACY_FEW_FIRES(n) : `Tested on ${listWords(fuels)} fires only; other fuels here are untested.`) : null
   if (!region || region.status === 'untested' || !(region.n_fires > 0)) {
     return {
       status: 'untested',
@@ -518,38 +625,65 @@ export function accuracyLabel(region: AccuracyRegionInput | null | undefined, me
     }
   }
   // tested
-  const n = region.n_fires
   const fires = `${n} past fire${n === 1 ? '' : 's'}`
-  const clauses = [yearsWords(region.years), fuels.length ? `${listWords(fuels)} fires` : null].filter((x): x is string => x != null)
+  const where = region.name?.trim() ? `the ${region.name.trim()} region` : 'this region'
+  // the fuels are named once: in the caveat when it names them, else (every fuel group) in this line (review W-m1)
+  const clauses = [yearsWords(region.years), fuels.length && allFuels ? `${listWords(fuels)} fires` : null].filter((x): x is string => x != null)
   const inSample = region.in_sample === true
-  const publicLine = `Tested on ${fires} in this region${clauses.length ? ` (${clauses.join('; ')})` : ''}.${inSample ? ` ${ACCURACY_IN_SAMPLE_PUBLIC}` : ''}`
+  const outcome = growthOutcome(region)
+  const firstView = [`Tested on ${fires} in ${where}${clauses.length ? ` (${clauses.join('; ')})` : ''}.`, outcomeWords(region, outcome), inSample ? ACCURACY_IN_SAMPLE_PUBLIC : null]
+  const publicLine = firstView.filter((x): x is string => !!x).join(' ')
   const score = num(region.growth_sorensen) ? region.growth_sorensen : null
   const range = region.range && num(region.range[0]) && num(region.range[1]) ? region.range : null
   const ratio = num(region.growth_ratio_median) ? region.growth_ratio_median : null
+  const testFires = (region.fires ?? []).filter((f) => num(f.growth_sorensen) && (f.name ?? '').trim())
   // "starts during main growth" only when the file's method says so, and not for the California seed (§14.4's exact seed
   // lines carry no such clause: its starts were set before the regional protocol)
   const mainGrowth = /main growth/i.test(method?.starts ?? '') && region.seed !== true
   const detailParts: string[] = []
-  if (score != null)
+  if (score != null) {
+    // two decimals, as in Command (review W-m2: one decimal made "0.2-0.2" and a range that did not exist); the fires'
+    // own scores, named (W-m4); without them the range, "both fires …" when its ends meet
+    let spread = ''
+    if (!testFires.length && range) {
+      const [lo, hi] = [d2(range[0]), d2(range[1])]
+      spread = lo === hi ? `; ${n === 2 ? 'both fires' : 'every fire'} ${lo}` : `; the fires ranged ${lo}-${hi}`
+    }
     detailParts.push(
-      `When re-run on these fires, the predicted new spread matched the real new spread with a score of about ${d1(score)} out of 1 (1 = perfect, 0 = none${range ? `; the fires ranged ${d1(range[0])}-${d1(range[1])}` : ''}).`,
+      `When re-run on these fires, the predicted new spread matched the real new spread with a score of about ${d2(score)} out of 1 (1 = perfect, 0 = none${spread}).`,
     )
-  if (ratio != null) detailParts.push(growthWords(ratio))
-  detailParts.push(`These re-runs ${mainGrowth ? "started during the fires' main growth and " : ''}used archived weather, so live forecasts usually do worse.`)
+    if (testFires.length) {
+      const named = testFires.map((f) => `${fireName(f)} ${d2(f.growth_sorensen)}`)
+      detailParts.push(`The test fires scored ${listWords(named)}.`)
+    }
+  }
+  const growth = growthDetail(region, outcome)
+  if (growth) detailParts.push(growth)
+  detailParts.push(`These re-runs ${mainGrowth ? "started during the fires' main growth and " : ''}${ACCURACY_WEATHER_PUBLIC}`)
   detailParts.push('Experimental: follow local officials.')
   const lead = leadSpan(region, method)
   const lfm = lfmMethodWords(region.lfm_method)
   const editions = region.fuels_editions?.filter((e) => e.trim()) ?? []
   const counts = [`${n} fire${n === 1 ? '' : 's'}`, num(region.n_leads) ? `${region.n_leads} leads` : null, lead].filter(Boolean).join(', ')
+  // each fire's own ratio, when the region gives none (its fires erred both ways) or not every fire went its way
+  const fireRatios = (region.fires ?? []).map((f) => f.growth_ratio_median).filter(num)
+  const byFire = fireRatios.length > 1 ? `×${ratio2(Math.min(...fireRatios))}-${ratio2(Math.max(...fireRatios))} by fire` : null
+  const growthClause =
+    ratio != null
+      ? `forecast/real growth ×${ratio2(ratio)}${outcome?.kind === 'split' && byFire ? ` (${byFire})` : ''}`
+      : byFire
+        ? `forecast/real growth ${byFire}`
+        : null
   const parts = [
-    range ? `fires ${d2(range[0])}-${d2(range[1])}` : null,
+    range ? (d2(range[0]) === d2(range[1]) ? `${n === 2 ? 'both fires' : 'every fire'} ${d2(range[0])}` : `fires ${d2(range[0])}-${d2(range[1])}`) : null,
     counts,
-    ratio != null ? `growth ×${ratio2(ratio)}` : null,
+    growthClause,
     mainGrowth ? 'starts during main growth' : null,
     lfm ? `live fuel moisture ${lfm}` : null,
     editions.length ? `fuels ${editions.join(', ')}` : null,
     inSample ? ACCURACY_IN_SAMPLE_COMMAND : null,
   ].filter((x): x is string => !!x)
-  const commandLine = `${score != null ? `Hindcast growth score ${d2(score)}` : 'Hindcast growth score not given'} (${parts.join('; ')}).`
+  const scoreText = score != null ? `Hindcast growth score ${d2(score)} of 1` : 'Hindcast growth score not given'
+  const commandLine = `${scoreText} in ${where} (${parts.join('; ')}).`
   return { status: 'tested', publicLine, publicDetail: detailParts.join(' '), commandLine, fuelCaveat, always: ACCURACY_ALWAYS }
 }

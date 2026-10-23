@@ -110,6 +110,14 @@ export function analysisState(s: Pick<IncidentSummary, 'bundle_status'>): Analys
   return s.bundle_status === 'ready' || s.bundle_status === 'building' || s.bundle_status === 'error' ? s.bundle_status : 'none'
 }
 
+/** The fire card's "Analysis ready: …" (validation review W-m8): the experimental model is named only when the open
+ *  bundle holds a model run (`modelRuns` > 0); a bundle without one (the test fires, Eaton) says so; a fire that is not
+ *  open (`modelRuns` null) names only what every prepared bundle holds. */
+export function analysisReadyText(modelRuns: number | null): string {
+  if (modelRuns == null) return 'Analysis ready: spread reconstruction'
+  return modelRuns > 0 ? 'Analysis ready: spread reconstruction and the experimental model' : 'Analysis ready: spread reconstruction (no model run yet)'
+}
+
 const M_PER_DEG_LAT = 111_320
 const ACRE_M2 = 4046.8564224
 /** Smallest half-width of a fire's fly-to box (m). */

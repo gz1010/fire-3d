@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { geoLookupQuery, getAccuracyRegions, getGeoLookup, incidentListQuery } from './client'
+import { ApiError, describeError, geoLookupQuery, getAccuracyRegions, getGeoLookup, incidentListQuery } from './client'
 
 describe('incident list query (brief 2, I2)', () => {
   it('sends the year explicitly for historical lists only', () => {
@@ -49,5 +49,16 @@ describe('brief 3 fetchers (CONTRACT 14.3, 14.4)', () => {
     const r = await getAccuracyRegions()
     expect(calls).toEqual(['/api/accuracy-regions'])
     expect(r.schema_version).toBe(1)
+  })
+})
+
+describe('describeError (integration part 2)', () => {
+  it('a 503 says the source is unavailable right now, with the server’s own sentence', () => {
+    const body = JSON.stringify({ detail: 'The fire lists could not be reached right now; try again later.' })
+    expect(describeError(new ApiError(503, '/api/incidents/x/build', body))).toBe(
+      'Unavailable right now: The fire lists could not be reached right now; try again later. (HTTP 503)',
+    )
+    expect(describeError(new ApiError(500, '/x', ''))).toBe('Server error (HTTP 500)')
+    expect(describeError(new ApiError(404, '/x', JSON.stringify({ detail: "unknown incident 'x'" })))).toBe("Not found: unknown incident 'x' (HTTP 404)")
   })
 })
