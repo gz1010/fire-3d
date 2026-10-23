@@ -111,11 +111,12 @@ def test_incident_lists(client, fake):
 
 
 def test_incident_list_year_and_bbox(client, fake):
-    """BRIEF-2 O-R8: ``year=`` reaches other CAL FIRE years (default 2025); rows carry the ready bundle's area."""
+    """BRIEF-2 O-R8: ``year=`` reaches other years (brief 3: default the current UTC year); rows carry the ready
+    bundle's area."""
     pipeline.build_incident(HIST)
     pipeline.build_incident(LIVE)
     body = client.get("/api/incidents", params={"mode": "historical"}).json()
-    assert body["year"] == 2025 and [s["id"] for s in body["incidents"]] == [HIST]
+    assert body["year"] == catalog.default_year() and [s["id"] for s in body["incidents"]] == [HIST]
     m = bundle.load_manifest(bundle.bundle_dir(HIST))
     assert body["incidents"][0]["bbox_lonlat"] == list(m["grid"]["bbox_lonlat"])
     r = client.get("/api/incidents", params={"mode": "historical", "year": 2026, "min_acres": 0})

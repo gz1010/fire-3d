@@ -2,8 +2,10 @@
 
 ``live_refresh_loop`` (an asyncio task started by the API when FIRE3D_LIVE=1) runs one cycle every 15 min:
 
-1. refresh the CAL FIRE live list (``catalog.get_catalog("live", refresh=True)``) and the FIRMS 7-day feeds;
-2. copy CAL FIRE's current acres, containment, update time and status into every ready live bundle's manifest
+1. refresh the national live list (``catalog.get_catalog("live", refresh=True)``: every active wildfire of the lower
+   48, CAL FIRE the record in California, NIFC WFIGS elsewhere; brief 3) and the national FIRMS 7-day feeds
+   (``firms.load_live_us(days=7)``);
+2. copy each record's current acres, containment, update time and status into every ready live bundle's manifest
    summary (:func:`sync_live_summaries`: local writes only, no extra request for listed incidents);
 3. for every ready live bundle of a still-active incident with detections newer than its ``now_ms`` (or a bundle
    older than :data:`STALE_REFRESH_H`), queue a ``refresh`` job: ``pipeline.refresh_live`` re-runs
@@ -12,8 +14,8 @@
    :func:`prune_live_forecasts` keeps the newest :data:`KEEP_LIVE_FORECASTS` runs (disk stays bounded).
 
 On the first successful cycle (and while FIRE3D_AUTO_BUILD_LIVE=1) up to 4 live incidents with >= 100 acres and
-detections in the last 48 h are built, one after another. All heavy work runs in jobs or worker threads; the loop
-itself only schedules.
+detections in the last 48 h are built, one after another, chosen from the whole lower-48 live list (BRIEF-3 round 2
+item 4). All heavy work runs in jobs or worker threads; the loop itself only schedules.
 """
 
 from __future__ import annotations
@@ -47,9 +49,11 @@ FORECAST_AREA_CHANGE = 0.02
 STALE_REFRESH_H = 3.0
 COUNTS_TTL_S = 10 * 60.0
 COUNTS_WAIT_S = 2.0
-# CAL FIRE fields copied into live bundle summaries each cycle (identity, mode and bundle fields stay)
+# Record fields copied into live bundle summaries each cycle (identity, mode and bundle fields stay); brief 3 adds
+# the other agencies' records and the active sources (a California fire's records can disagree, round 3 item 2)
 SUMMARY_SYNC_FIELDS = ("acres", "percent_contained", "updated_ms", "contained_ms", "is_active", "county", "location",
-                       "admin_unit", "url", "lat", "lon", "detections_24h")
+                       "admin_unit", "url", "lat", "lon", "detections_24h", "active_sources", "other_records",
+                       "complex_members", "irwin_id", "gacc", "accuracy_region")
 KEEP_LIVE_FORECASTS = 4            # newest ready runs kept per live bundle by the live loop ...
 PRUNE_MIN_AGE_H = 6.0              # ... and every run issued in the last 6 h
 PRUNE_GRACE_S = 3600.0             # unlisted run directories are deleted only after this (open views keep working)
@@ -64,6 +68,7 @@ class LiveState:
     next_refresh_ms: int | None = None
     active_incidents: int | None = None
     detections_24h_ca: int | None = None
+    detections_24h: int | None = None           # brief 3: lower 48 (FIRMS feed rows of the last 24 h in the states)
     counts_ms: int | None = None
     last_error: str | None = None
     auto_build_done: bool = False
@@ -85,6 +90,7 @@ def live_status() -> LiveStatus:
         active_incidents=int(st.active_incidents or 0),
         detections_24h_ca=st.detections_24h_ca,
         auto_build=bool(st.running and config.AUTO_BUILD_LIVE),
+        detections_24h=st.detections_24h,
     )
 
 
@@ -105,7 +111,7 @@ def _refresh_counts_in_background(wait_s: float = COUNTS_WAIT_S) -> None:
 
 
 def _refresh_counts() -> None:
-    """active_incidents + detections_24h_ca from the (cached) catalog and FIRMS feeds."""
+    """active_incidents + detections_24h + detections_24h_ca from the (cached) catalog and FIRMS feeds."""
     from .. import catalog
 
     try:
@@ -118,6 +124,12 @@ def _refresh_counts() -> None:
             STATE.detections_24h_ca = n
     except Exception as e:
         log.info("live counts: FIRMS feeds unavailable: %s", config.mask_secrets(e))
+    try:
+        n = detections_24h_us()
+        if n is not None:
+            STATE.detections_24h = n
+    except Exception as e:
+        log.info("live counts: national FIRMS feeds unavailable: %s", config.mask_secrets(e))
     STATE.counts_ms = now_ms()
 
 
@@ -132,26 +144,64 @@ def detections_24h_ca(dets_7d: Any = None) -> int | None:
         if n is not None:
             return int(n)
     if dets_7d is not None:
-        return _count_24h(dets_7d)
+        return _count_24h(dets_7d, california=True)
     from ..sources import firms
 
-    return _count_24h(firms.load_live_ca(days=1))
+    return _count_24h(firms.load_live_us(days=1), california=True)
 
 
-def _count_24h(dets: Any) -> int | None:
+def detections_24h_us(dets_7d: Any = None) -> int | None:
+    """Lower-48 detections of the keyless 24 h FIRMS feeds (``LiveStatus.detections_24h``): rows of
+    ``load_live_us(days=1)`` inside the lower-48 state polygons; the catalog's total (the same feed) when available,
+    else counted from ``dets_7d`` (the cycle's 7-day feed, last 24 h) or a fresh ``load_live_us(days=1)``."""
+    from .. import catalog
+
+    total = getattr(catalog, "live_detections_24h_us_total", None)
+    if callable(total):
+        try:
+            n = total()
+        except Exception as e:  # noqa: BLE001 - fall back to counting the feed
+            log.info("live counts: catalog total unavailable: %s", config.mask_secrets(e))
+            n = None
+        if n is not None:
+            return int(n)
+    if dets_7d is not None:
+        return _count_24h(dets_7d, lower48=True)
+    from ..sources import firms
+
+    return _count_24h(firms.load_live_us(days=1), lower48=True)
+
+
+def _count_24h(dets: Any, *, california: bool = False, lower48: bool = False) -> int | None:
+    """Rows of the last 24 h, inside California (``catalog.CA_OUTLINE``, the SPEC's CA box first) or inside the
+    lower-48 state polygons when asked."""
     if dets is None:
         return None
     try:
-        return int((np.asarray(dets["t_ms"], dtype=np.int64) >= now_ms() - 24 * HOUR_MS).sum())
+        recent = np.asarray(dets["t_ms"], dtype=np.int64) >= now_ms() - 24 * HOUR_MS
+        if not (california or lower48):
+            return int(recent.sum())
+        lat = np.asarray(dets["lat"], dtype=np.float64)[recent]
+        lon = np.asarray(dets["lon"], dtype=np.float64)[recent]
     except (KeyError, TypeError, ValueError):
         return None
+    if lower48:
+        from .. import regions
+
+        return int(regions.in_lower48(lon, lat).sum())
+    from .. import catalog
+
+    w, s, e, n = config.CA_BBOX
+    box = (lon >= w) & (lon <= e) & (lat >= s) & (lat <= n)
+    return int(catalog.in_california(lat[box], lon[box]).sum())
 
 
 # ----------------------------------------------------------------------------------------------------------------
 # One cycle
 # ----------------------------------------------------------------------------------------------------------------
 def fetch_cycle_data() -> tuple[list[IncidentSummary], Any]:
-    """Fresh CAL FIRE live list + FIRMS 7-day CA detections (None if the feeds fail)."""
+    """Fresh national live list + the national FIRMS 7-day detections (``load_live_us(days=7)``; None if the feeds
+    fail)."""
     from .. import catalog
 
     rows = [IncidentSummary.model_validate(s) if isinstance(s, dict) else s for s in catalog.get_catalog("live", refresh=True)]
@@ -160,7 +210,7 @@ def fetch_cycle_data() -> tuple[list[IncidentSummary], Any]:
     try:
         from ..sources import firms
 
-        dets = firms.load_live_ca(days=7)
+        dets = firms.load_live_us(days=7)
     except Exception as e:
         log.warning("live refresh: FIRMS feeds unavailable: %s", config.mask_secrets(e))
     return summaries, dets
@@ -172,16 +222,16 @@ def _live_bundles() -> list[dict]:
 
 def summary_changes(current: dict, fresh: IncidentSummary | dict) -> dict:
     """The :data:`SUMMARY_SYNC_FIELDS` whose CAL FIRE value differs from the bundle summary's."""
-    f = fresh.model_dump() if isinstance(fresh, IncidentSummary) else dict(fresh)
+    f = fresh.model_dump(mode="json") if isinstance(fresh, IncidentSummary) else dict(fresh)
     return {k: f.get(k) for k in SUMMARY_SYNC_FIELDS if k in f and f.get(k) != current.get(k)}
 
 
 def sync_live_summaries(summaries: list[IncidentSummary], lookup: Any = None) -> list[str]:
-    """Make every ready live bundle's ``manifest.summary`` follow CAL FIRE (issue: acres / containment used to
-    refresh only with new detections). Listed incidents use this cycle's list; an incident that left the live list
-    is looked up once through ``catalog.get_summary`` (CAL FIRE's year list, cached 24 h), so a fire CAL FIRE no
-    longer lists as active stops reading as active. Atomic manifest updates, no rebuild, ``built_ms`` unchanged
-    (bundle files did not change). Returns the ids that changed."""
+    """Make every ready live bundle's ``manifest.summary`` follow its records (CAL FIRE or NIFC WFIGS; issue: acres /
+    containment used to refresh only with new detections). Listed incidents use this cycle's list; an incident that
+    left the live list is looked up once through ``catalog.get_summary`` (its year list, cached), so a fire no record
+    lists as active stops reading as active. Atomic manifest updates, no rebuild, ``built_ms`` unchanged (bundle files
+    did not change). Returns the ids that changed."""
     from .. import catalog
 
     lookup = lookup or catalog.get_summary
@@ -402,6 +452,13 @@ async def run_cycle(jobs: JobManager) -> tuple[list[IncidentSummary], Any]:
         log.info("live refresh: 24 h detection count unavailable: %s", config.mask_secrets(e))
     if n24 is not None:
         STATE.detections_24h_ca = n24
+    try:
+        n24_us = await asyncio.to_thread(detections_24h_us, dets)
+    except Exception as e:
+        n24_us = None
+        log.info("live refresh: national 24 h detection count unavailable: %s", config.mask_secrets(e))
+    if n24_us is not None:
+        STATE.detections_24h = n24_us
     STATE.counts_ms = now_ms()
     try:
         synced = await asyncio.to_thread(sync_live_summaries, summaries)

@@ -102,6 +102,82 @@ milestone commit; other roles read it instead of guessing. Kept current at every
 - `check_bundle.py fixture-east` reports one problem, "forecast fx-001: arrival before the start", which
   `fixture-demo` and `fixture-live` already report on the same synthetic forecast (pre-existing, not brief 3).
 
+## M3: national list, merge, FIRMS feed, live loop (commit `brief 3 us-catalog: M3 ...`)
+
+### `backend/fire3d/sources/wfigs.py`
+- `list_current(refresh=False)` (Current layer, 5 min), `list_year(year, min_acres=300, refresh=False)` (YearToDate for
+  the current UTC year, 30 min; all-years layer for past years, 24 h), `find_irwin_prefix(prefix)` (all-years, 24 h).
+  Server-side `IncidentTypeCategory='WF'` (+ `UniqueFireIdentifier LIKE '<year>-%' AND IncidentSize>=<min>` for year
+  lists), explicit `OUT_FIELDS`, `outSR=4326`, pages of 2,000, through `fire3d.http`, stale-if-error, `WfigsError`.
+- Rows are cleaned dicts (`normalize`): `irwin_id` (upper, no braces), `unique_fire_id`, `year` (UFI year),
+  `source_name`, `type`, `acres`, `percent_contained`, `started_ms`, `contained_ms`, `controlled_ms`, `out_ms`,
+  `updated_ms`, `ics209_report_ms`, `poo_state` (USPS), `county`, `agency_code`, `protecting_unit`, `gacc`,
+  `is_cpx_child`, `cpx_name`, `lat`, `lon`, `url` (= `record_url(irwin)`, the all-years `f=html` page).
+  Helpers: `clean_irwin`, `record_url`, `ufi_year`, `fetched_ms(key)`, `list_key(url, where)`, `DATASET_URL`.
+
+### `backend/fire3d/catalog.py` (what other roles call)
+- Switches: `CA_ACTIVE_RULE = "either"`, `CA_COMPLEX_ROWS = "calfire"`.
+- `default_year()` (current UTC year; `HISTORICAL_YEAR` is kept as a deprecated import-time alias).
+- `get_catalog(mode, min_acres=None, refresh=False, year=None, state=None)` (signature extended with an optional
+  `state`), `list_incidents(...) -> (rows, sources)`, `cached_sources(mode, year=None, min_acres=None)`.
+- **`resolve_listed(incident_id) -> IncidentSummary | None`**: live list, the id's year list, CAL FIRE's year list (any
+  size), then one cached `IrwinID LIKE '{ABCDEF%'` query; year and slug checked; never a manifest. A California WFIGS
+  record folded into a CAL FIRE fire is not resolvable under its WFIGS id. **Alaska, Hawaii and territory ids
+  resolve** (with their own `state` and zone, e.g. America/Anchorage) although they are never listed, so the build
+  gate can answer 422; `is_supported(summary)` is False for them.
+- `get_summary(id)` = `resolve_listed` else `manifest_summary(id)`; `is_bundle_only(id)`; `find_by_irwin(irwin_id)`
+  (a listed row carrying that IRWIN id as its own or a matched record, else the record's own summary);
+  `is_supported(summary)`; `record_issuer(summary)`; `issuer_for(code)`; `active_sources(summary)`;
+  `accuracy_region_for(gacc, state)` (SACC split TX/OK -> SACC-SP, else SACC-SE; unknown codes -> None);
+  `summary_from_wfigs(rec, mode, current_irwins, state)`; `merge_california(wf_rows, cal_pool)`;
+  `display_name` (ALL CAPS -> title case word by word); `name_tokens`; `norm_name`;
+  `live_detections_24h_us_total()` (new) next to `live_detections_24h_total()` (California, kept).
+- Merge as §14.2, measured live on 2026-10-23 01:00 UTC: live 235 rows in 23 states (CAL FIRE rows 6: Timber
+  (active by NIFC only), Rocky, Lost (NIFC only), Norte, Cooley, Soda; 62 WFIGS-only California rows); 2026 list 1,192
+  rows; 2025 list 856 rows, California = 78 CAL FIRE + 2 WFIGS (Big Cliff, Alpaugh); TCU September Lightning Complex
+  one row with 5 members (the duplicate "2-2" record dropped first), Orleans Complex (Butler), Swift Complex (PEAK).
+- Rules decided here: name tokens drop "fire", "the", "incident", "wildfire"; duplicates need both sizes reported and
+  over 1 ac (two different 0.1 ac "SMOKE CHECK" fires are never merged); duplicates are removed **before** the
+  California merge; WFIGS year lists are never fetched below 100 ac (`WFIGS_YEAR_FLOOR_ACRES`; `min_acres=0` lists
+  CAL FIRE of every size plus WFIGS >= 100 ac); `complex_name` is the complex's display name (title-cased when ALL
+  CAPS) and usually already ends in "Complex" ("Montana Lightning Complex"): the card should not add "Complex" again.
+- `agency` stays null on WFIGS rows (the NWCG code file is below the cut line); `record_issuer` shows the code verbatim.
+
+### `api/app.py`
+- `GET /api/incidents`: `state=` (two letters; 422 otherwise), `year` default `catalog.default_year()`, `sources[]`
+  always present (from `catalog.cached_sources`; `[]` only with a test's fake catalog), gzip in the handler when
+  accepted and the body is >= 1 KB (`Vary: Accept-Encoding`).
+- Build gate texts: 422 "Fire-3d does not support Alaska, Hawaii or US territories yet." (a listed id whose state is
+  not in the lower 48); 409 "'{id}' is a local or synthetic bundle; it cannot be rebuilt." (no list knows the id);
+  409 "'{alias}' is listed as '{id}'." (an alias); 409 "'{id}' cannot be built in this version yet." (listed but
+  `pipeline.is_catalog_incident` still refuses it: every WFIGS id until us-pipeline's build-anywhere lands).
+
+### FIRMS (`sources/firms.py`, §14.12.1)
+- `L48_FIRMS_BOX = (-125.4, 23.9, -66.4, 49.9)`; `load_live_us(days=7, refresh=False)`; `load_year_us(year,
+  bbox=None)` (national CSVs cut to the box, sorted by lon, `firms_us_{year}.parquet` with 50,000-row groups, read
+  with pyarrow `filters=`); `load_live_ca` / `load_year_ca` are deprecated wrappers (CA box cut of the national
+  loaders; `load_year_ca` reads `firms_us_{year}.parquet`, no `firms_ca_*` file is written any more).
+- Callers switched: `firms._keyless` (yearly `load_year_us(year, bbox)`, live `load_live_us(7)`), `catalog._live_base`
+  (`load_live_us(1)`), `catalog._bbox_detections` (`load_live_us(7)`), `api/live.py` (`fetch_cycle_data`:
+  `load_live_us(days=7)`; counts: `load_live_us(days=1)`).
+- `assign_detections`: dense matching kept (cut-line item (c) not done); a 300-fire x 20,000-detection national case
+  runs well under 2 s (test `test_assign_detections_national_timing`).
+
+### `api/live.py` (§14.12.12)
+- Candidates from the national live list; `AUTO_BUILD_MAX = 4`, 100 ac and 48 h unchanged.
+- `LiveStatus.detections_24h` (state polygons, `regions.in_lower48`) next to `detections_24h_ca`;
+  `detections_24h_us(dets_7d=None)` new.
+- `SUMMARY_SYNC_FIELDS` also copies `active_sources`, `other_records`, `complex_members`, `irwin_id`, `gacc`,
+  `accuracy_region` into ready live bundles' summaries.
+
+### Changes other roles need
+- `backend/tests/test_official_calfire.py:224` (us-pipeline) asserts the old default year: `catalog.get_catalog
+  ("historical")` now lists the current UTC year (§14.1). Replace that line with
+  `assert [s.id for s in catalog.get_catalog("historical", year=2025)][:1] == ["2025-gifford-fire-fb7c1c"]`.
+- `pipeline.is_catalog_incident` (us-pipeline) can now be `summary is not None and summary.id == incident_id and
+  catalog.resolve_listed(incident_id) is not None` (§14.2) plus `catalog.is_supported`; `refresh_live`
+  (`pipeline.py:677`) should call `firms.load_live_us(days=2)`.
+
 ## Deviations
 - `coverage_at` uses a **1 km** tolerance around the state polygons, not 5 km: the TIGERweb state polygons already
   include near-shore water, and 5 km would put central Tijuana (2.0 km south of the border; §14.3 requires

@@ -91,12 +91,12 @@ def test_incident_ids() -> None:
 # Catalogs
 # ------------------------------------------------------------------------------------------------------------------
 def test_historical_catalog(services) -> None:
-    rows = catalog.get_catalog("historical")
+    rows = catalog.get_catalog("historical", year=2025)     # brief 3: the default year is the current UTC year
     assert [s.id for s in rows] == ["2025-gifford-fire-fb7c1c", "2025-palisades-fire-abfed7", "2025-eaton-fire-dbfa57"]
     assert all(s.mode == "historical" and s.detections_24h is None and s.bundle_status == "none" for s in rows)
     assert rows[0].name == "Gifford Fire" and rows[0].contained_ms == iso_to_ms("2025-10-14T15:00:00Z")
-    assert [s.name for s in catalog.get_catalog("historical", min_acres=100)][3:] == ["Catlett Fire", "Rosa Fire"]
-    everything = catalog.get_catalog("historical", min_acres=0)
+    assert [s.name for s in catalog.get_catalog("historical", min_acres=100, year=2025)][3:] == ["Catlett Fire", "Rosa Fire"]
+    everything = catalog.get_catalog("historical", min_acres=0, year=2025)
     assert len(everything) == 7 and "Eaton Flood" not in {s.name for s in everything}       # not a fire type
     assert "Scout Fire" in {s.name for s in everything}                                     # Type "Fire" counts
     assert all(not contract_problems(IncidentSummary, s) for s in everything)
@@ -132,7 +132,7 @@ def test_bundle_status_from_manifest(services, tmp_data_dir: Path) -> None:
     b = tmp_data_dir / "incidents" / "2025-gifford-fire-fb7c1c"
     b.mkdir(parents=True)
     (b / "manifest.json").write_text(json.dumps({"status": "building", "built_ms": 99}))
-    rows = {s.id: s for s in catalog.get_catalog("historical")}
+    rows = {s.id: s for s in catalog.get_catalog("historical", year=2025)}
     assert (rows["2025-eaton-fire-dbfa57"].bundle_status, rows["2025-eaton-fire-dbfa57"].bundle_built_ms) == ("ready", 1234567)
     assert (rows["2025-gifford-fire-fb7c1c"].bundle_status, rows["2025-gifford-fire-fb7c1c"].bundle_built_ms) == ("building", None)
     assert rows["2025-palisades-fire-abfed7"].bundle_status == "none"
@@ -249,7 +249,7 @@ def test_estimate_fire_bbox_live_uses_feeds(monkeypatch: pytest.MonkeyPatch) -> 
     now = now_ms()
     s = _summary(mode="live", is_active=True, started_ms=now - 3 * DAY_MS, contained_ms=None)
     monkeypatch.setattr(perimeters, "fetch_perimeters", lambda *a, **k: perimeters.PerimeterList([]))
-    monkeypatch.setattr(firms, "load_live_ca", lambda days=7, **k: _dets([(34.20, -118.07, now - DAY_MS), (34.20, -118.06, now - DAY_MS + HOUR_MS)]))
+    monkeypatch.setattr(firms, "load_live_us", lambda days=7, **k: _dets([(34.20, -118.07, now - DAY_MS), (34.20, -118.06, now - DAY_MS + HOUR_MS)]))
     monkeypatch.setattr(firms, "detections_for", lambda *a, **k: pytest.fail("live bbox must use the keyless feeds"))
     w, so, e, n = catalog.estimate_fire_bbox(s)
     assert w <= -118.07 and e >= -118.06

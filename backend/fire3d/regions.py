@@ -59,6 +59,9 @@ MAIN_ZONE: dict[str, str] = {
     **{s: "America/Denver" for s in ("CO", "ID", "MT", "NM", "UT", "WY")},
     "AZ": "America/Phoenix",
     **{s: "America/Los_Angeles" for s in ("CA", "NV", "OR", "WA")},
+    # not supported yet; named so a resolved record still carries its own zone (never Pacific by default)
+    "AK": "America/Anchorage", "HI": "Pacific/Honolulu", "PR": "America/Puerto_Rico", "VI": "America/St_Thomas",
+    "GU": "Pacific/Guam", "MP": "Pacific/Saipan", "AS": "Pacific/Pago_Pago",
 }
 ZONE_NAMES: dict[str, str] = {
     "America/Los_Angeles": "Pacific Time", "America/Denver": "Mountain Time", "America/Phoenix": "Mountain Time",
@@ -290,6 +293,21 @@ def lookup(lon: float, lat: float) -> dict[str, Any]:
     tz = time_zone_at(lon, lat) or main_zone(st or "")
     out.update(state=st, state_name=STATE_NAMES.get(st or ""), time_zone=tz, time_zone_name=zone_name(tz),
                county={"fips": c.fips, "name": c.name} if c is not None and c.state == st else None)
+    return out
+
+
+def in_lower48(lon: Any, lat: Any) -> Any:
+    """Vectorized: a boolean numpy array, True for points inside the lower-48 + DC state polygons (no tolerance;
+    the polygons include near-shore water). Used for national detection totals."""
+    import numpy as np
+    import shapely
+
+    lo = np.asarray(lon, dtype=np.float64).ravel()
+    la = np.asarray(lat, dtype=np.float64).ravel()
+    out = np.zeros(lo.shape, dtype=bool)
+    if lo.size:
+        idx = _layer("states").tree.query(shapely.points(lo, la), predicate="intersects")[0]
+        out[np.unique(idx)] = True
     return out
 
 
