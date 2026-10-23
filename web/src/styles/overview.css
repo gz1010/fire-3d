@@ -759,6 +759,15 @@
 .os-src {
   color: var(--m-text-2);
 }
+/* a local officials' message's own link (its issuer's, else the record it was read from) */
+.os-link {
+  color: var(--m-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.os-link:hover {
+  color: var(--m-text);
+}
 .os-row.is-order .os-icon,
 .os-row.is-order .os-text {
   color: #f6a8d3;

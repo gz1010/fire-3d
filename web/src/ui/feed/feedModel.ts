@@ -120,17 +120,45 @@ function growthAt(e: FireEvent, ts: TimeseriesFile | null): { growth: number | n
   return { growth: num(e.detail.match(/\+?([\d,.]+)\s*ac\/h/)?.[1]), ros: num(e.detail.match(/ROS\s*([\d,.]+)\s*ch\/h/)?.[1]) }
 }
 
+/** UTC offsets (hours) of the US zone abbreviations the backend writes into event details. */
+const ABBR_OFFSET_H: Record<string, number> = {
+  UTC: 0, GMT: 0, EST: -5, EDT: -4, CST: -6, CDT: -5, MST: -7, MDT: -6, PST: -8, PDT: -7, AKST: -9, AKDT: -8, HST: -10,
+}
+const MONTH_INDEX: Record<string, number> = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 }
+const DETAIL_TIME = /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{1,2}), (\d{1,2}):(\d{2}) (UTC|GMT|EST|EDT|CST|CDT|MST|MDT|PST|PDT|AKST|AKDT|HST)\b/g
+
+/**
+ * The times the build writes into an event's text ("Reported by DFR via NIFC WFIGS Mar 19, 15:00 EDT", 24-hour and
+ * zero-padded) in the panel's own clock and zone (CONTRACT §14.9.1, round 2 decision 8: Public reads "Mar 19, 3:00 PM
+ * EDT"; integration review UX-M3). The token has no year: the one nearest `nearMs` (the event's time) is used. A
+ * token with an unknown abbreviation stays as written.
+ */
+export function localizeDetailTimes(text: string, tf: TimeFmt, nearMs: number): string {
+  return text.replace(DETAIL_TIME, (tok, mon: string, day: string, hh: string, mm: string, abbr: string) => {
+    const off = ABBR_OFFSET_H[abbr]
+    const base = new Date(Number.isFinite(nearMs) ? nearMs : Date.now()).getUTCFullYear()
+    let best: number | null = null
+    for (const y of [base - 1, base, base + 1]) {
+      const ms = Date.UTC(y, MONTH_INDEX[mon], Number(day), Number(hh), Number(mm)) - off * HOUR
+      if (best == null || Math.abs(ms - nearMs) < Math.abs(best - nearMs)) best = ms
+    }
+    return best == null || !Number.isFinite(best) ? tok : fmtAt(best, tf, { zone: true })
+  })
+}
+
 function eventCopy(e: FireEvent, c: Ctx): Copy {
   const u = c.units
   const estimated = e.confidence !== 'observed'
   switch (e.type) {
-    case 'ignition':
+    case 'ignition': {
+      // the build's own times in the panel's clock and the fire's zone (review UX-M3)
+      const text = localizeDetailTimes(e.detail, c.tf, e.t_ms)
       // Only CAL FIRE's reported start, unchanged and not confirmed by a satellite (backend ignition_time): an agency
       // report, not something Fire-3d inferred. The start area is still Fire-3d's estimate (approximate location).
       if (estimated && /^CAL FIRE\b/.test(e.source) && !/\+|GOES|FIRMS/.test(e.source) && !/Ignition estimated/.test(e.detail))
         return {
           title: 'Fire start reported',
-          detail: `${e.detail} Not confirmed by satellite heat detections.`,
+          detail: `${text} Not confirmed by satellite heat detections.`,
           kind: 'official',
           automated: false,
           approximate: true,
@@ -138,7 +166,7 @@ function eventCopy(e: FireEvent, c: Ctx): Copy {
         }
       return {
         title: estimated ? 'Fire started (estimated time)' : 'Fire started',
-        detail: e.detail
+        detail: text
           .replace(/persistent (GOES[-\w]*) detection/g, 'repeated $1 satellite heat detection')
           .replace(/^Ignition estimated/, 'Start time estimated')
           .replace(/\. Ignition estimated/g, '. Start time estimated'),
@@ -146,6 +174,7 @@ function eventCopy(e: FireEvent, c: Ctx): Copy {
         approximate: true,
         locationLabel: 'Estimated start area, not an exact ignition point',
       }
+    }
     case 'rapid_growth': {
       const { growth, ros } = growthAt(e, c.timeseries)
       const g = growthRate(growth, u)
@@ -578,6 +607,15 @@ export interface FeedView {
 
 /** An item after the timeline time (dimmed, "later"). Live current-status items (not seekable, e.g. today's official
  *  evacuation status) describe the present, not a point on the timeline, so they are never "later" there. */
+/** The status chip of a row: "Expired", "Cancelled", "Upcoming". A local officials' message is never "Upcoming" (a
+ *  "leave now" order is not a scheduled one): one sent after the replay time says "Sent after this time", one whose
+ *  onset is later "Not yet in effect" (integration review UX-m2). */
+export function feedStatusLabel(item: Pick<FeedItem, 'status' | 'topic'>, later: boolean): string | undefined {
+  if (item.status === 'upcoming' && item.topic === 'local-alert') return later ? 'Sent after this time' : 'Not yet in effect'
+  return item.status ? FEED_STATUS_LABEL[item.status] : undefined
+}
+const FEED_STATUS_LABEL: Partial<Record<NonNullable<FeedItem['status']>, string>> = { expired: 'Expired', cancelled: 'Cancelled', upcoming: 'Upcoming' }
+
 export function isLaterItem(item: Pick<FeedItem, 'seekMs' | 'tMs' | 'seekable'>, tMs: number, live: boolean): boolean {
   return feedCompareMs(item) > tMs && (item.seekable || !live)
 }

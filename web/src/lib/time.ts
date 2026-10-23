@@ -112,9 +112,13 @@ export function zoneName(tz: string, ms: number = Date.now()): string {
 }
 
 /** The panel's zone line (§14.9.1): "Times: Mountain Time (MDT), the fire's local time" / "Times: Eastern Time (EDT),
- *  local time at this place" / "Times: your device's time (CDT)". */
-export function zoneLine(tf: TimeFmt, ms: number, whose: 'fire' | 'place' | 'viewer'): string {
-  const abbr = zoneAbbr(ms, tf.tz)
+ *  local time at this place" / "Times: your device's time (CDT)". `ms` is the time the panel is for (a replay's time);
+ *  `alsoMs` another time its rows show (today's checks): when its abbreviation differs, both are named, `ms`'s first
+ *  ("Pacific Time (PST/PDT)"; integration review UX-m4). */
+export function zoneLine(tf: TimeFmt, ms: number, whose: 'fire' | 'place' | 'viewer', alsoMs?: number | null): string {
+  const first = zoneAbbr(ms, tf.tz)
+  const second = alsoMs != null && Number.isFinite(alsoMs) ? zoneAbbr(alsoMs, tf.tz) : first
+  const abbr = second && second !== first ? `${first}/${second}` : first
   if (whose === 'viewer') return `Times: your device's time (${abbr})`
   return `Times: ${zoneName(tf.tz, ms)} (${abbr}), ${whose === 'fire' ? "the fire's local time" : 'local time at this place'}`
 }
@@ -187,6 +191,22 @@ const wallKey = (y: number, mo: number, d: number, h: number, mi: number) => (((
 /** The calendar year of `ms` in `tz` (a fire found at 8 PM EST on Dec 31 belongs to that year, not UTC's next one). */
 export function localYear(ms: number, tz: string): number {
   return wallParts(ms, tz).year
+}
+
+/**
+ * Whether a line of agency record times (an update, a containment date) shows years (integration review UX-m1):
+ * 'always' for all of them when any one's local year differs from any reference year (the fire's year, the replay's,
+ * today's), so "record last edited May 14" (2026) is never read as the 2025 fire's year and "contained Dec 16" never
+ * sits beside "Sep 6, 2026" as that year; 'never' when every time and every reference share one year.
+ */
+export function recordYearMode(times: readonly (number | null | undefined)[], tz: string, refYears: readonly (number | null | undefined)[]): 'always' | 'never' {
+  const refs = refYears.filter((y): y is number => y != null && Number.isFinite(y))
+  for (const t of times) {
+    if (t == null || !Number.isFinite(t)) continue
+    const y = localYear(t, tz)
+    if (refs.some((r) => r !== y)) return 'always'
+  }
+  return 'never'
 }
 
 // ------------------------------------------------------------------------------------------------- ticks

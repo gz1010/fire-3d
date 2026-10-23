@@ -38,6 +38,7 @@ import type { TimeFmt } from '../lib/time'
 import { httpsUrl } from './url'
 import type { CalFireStatus } from './calfire'
 import type { RecordStatus } from './record'
+import type { LocalAlertsOfficial } from './localAlerts'
 import type { FeedItemStatus } from '../ui/feed/types'
 
 export type { CalFireStatus } from './calfire'
@@ -689,29 +690,49 @@ export function fireWeatherAtPointState(i: FireWeatherAtPointInput): FireWeather
   return env ?? notCheckedAt(i.statewide!.data!, i.pointState) ?? alertsHere(i.statewide!.data!, i.lon, i.lat, i.refMs, i.tf)
 }
 
-// ---- badge -----------------------------------------------------------------------------------------------------
-export interface OfficialBadge {
-  /** Active official items: evacuation (status, issuer) groups of orders / shelter / warnings near the fire, plus NWS
-   *  alerts in effect (or upcoming) at the reference time. */
-  count: number
-  /** The most urgent: an order (or shelter in place), a warning, a fire weather alert, or none. */
-  level: 'order' | 'warning' | 'fire-weather' | null
+/** The national summary's count (integration review UX-m5): "4 alerts in effect in 4 states", or "in effect or upcoming"
+ *  when any starts later (an upcoming Red Flag Warning is not in effect yet). */
+export function statewideCountText(alerts: readonly { phase: string }[], stateCount: number, scope: string): string {
+  const phase = alerts.some((a) => a.phase === 'upcoming') ? (alerts.every((a) => a.phase === 'upcoming') ? 'upcoming' : 'in effect or upcoming') : 'in effect'
+  const where = stateCount > 1 ? `${stateCount} states` : scope
+  return `${alerts.length} alerts ${phase} in ${where}; the 3 most recent:`
 }
 
-export function officialBadge(evac: EvacuationOfficial, fw: FireWeatherOfficial): OfficialBadge {
+// ---- badge -----------------------------------------------------------------------------------------------------
+export interface OfficialBadge {
+  /** Active official items: evacuation (status, issuer) groups of orders / shelter / warnings near the fire, NWS
+   *  alerts in effect (or upcoming) at the reference time, and local officials' messages in effect (or upcoming; brief
+   *  3, CONTRACT §14.7: integration review UX-M1). */
+  count: number
+  /** The most urgent: an order (an evacuation order or shelter in place, or a local "Evacuation Immediate" / "Shelter
+   *  In Place Warning"), an evacuation warning, another local officials' message (a "Fire Warning", a civil emergency
+   *  message), a fire weather alert, or none. */
+  level: 'order' | 'warning' | 'local' | 'fire-weather' | null
+}
+
+const BADGE_RANK: Record<NonNullable<OfficialBadge['level']>, number> = { order: 3, warning: 2, local: 1, 'fire-weather': 0 }
+const higher = (a: OfficialBadge['level'], b: NonNullable<OfficialBadge['level']>): NonNullable<OfficialBadge['level']> => (a != null && BADGE_RANK[a] >= BADGE_RANK[b] ? a : b)
+
+/** A local officials' message's badge level from its verbatim event (never from its text: Fire-3d does not read it). */
+export function localBadgeLevel(event: string): 'order' | 'local' {
+  return /^(evacuation immediate|shelter in place warning)$/i.test(event.trim()) ? 'order' : 'local'
+}
+
+export function officialBadge(evac: EvacuationOfficial, fw: FireWeatherOfficial, local?: Pick<LocalAlertsOfficial, 'state' | 'alerts'> | null): OfficialBadge {
   const groups = new Set<string>()
   let level: OfficialBadge['level'] = null
   if (evac.state === 'listed') {
     for (const z of evac.zones) {
       if (z.group === 'other') continue
       groups.add(`${z.status}|${z.issuer}`)
-      if (z.group === 'order') level = 'order'
-      else if (level !== 'order') level = 'warning'
+      level = higher(level, z.group === 'order' ? 'order' : 'warning')
     }
   }
   const alerts = fw.state === 'active' ? fw.alerts.filter((a) => a.phase === 'active' || a.phase === 'upcoming').length : 0
-  if (alerts && !level) level = 'fire-weather'
-  return { count: groups.size + alerts, level }
+  if (alerts) level = higher(level, 'fire-weather')
+  const messages = local?.state === 'listed' ? local.alerts.filter((a) => a.phase === 'active' || a.phase === 'upcoming') : []
+  for (const m of messages) level = higher(level, localBadgeLevel(m.event))
+  return { count: groups.size + alerts + messages.length, level }
 }
 
 // ---- CAL FIRE ---------------------------------------------------------------------------------------------------

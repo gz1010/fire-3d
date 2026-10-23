@@ -15,14 +15,26 @@ import { calfireHistoryNote, changeTitleParts, laggedEditNote } from '../../offi
 import { distanceText } from '../../official/geo'
 import { useOfficialNow, type CalFireOfficial, type EvacuationOfficial, type FireWeatherOfficial } from '../../official/hooks'
 import { forIncident } from '../../official/guard'
-import { evacuationWho, groupZones, officialNowScope } from '../../official/model'
+import { evacuationWho, groupZones, officialNowScope, statewideCountText } from '../../official/model'
 import { partOfComplex, recordBlockText, recordLinkLabel } from '../../official/record'
-import { ARCHIVE_CAVEAT, ARCHIVE_CREDIT, LOCAL_PLACE_NOTE, LOCAL_STANDING_CAVEAT, localAlertPlace, OPENFEMA_NOTICE, OPENFEMA_TERMS_URL, sentText, type LocalAlertsOfficial } from '../../official/localAlerts'
+import {
+  answeredChannelsText,
+  ARCHIVE_CAVEAT,
+  ARCHIVE_CREDIT,
+  LOCAL_PLACE_NOTE,
+  LOCAL_STANDING_CAVEAT,
+  localAlertPlace,
+  localPhaseText,
+  OPENFEMA_NOTICE,
+  OPENFEMA_TERMS_URL,
+  sentText,
+  type LocalAlertsOfficial,
+} from '../../official/localAlerts'
 import { alertTimeFmt } from '../../official/fireWeather'
 import { useOfficialRuntime } from '../../official/runtime'
 import { showOfficialArea } from '../../official/select'
 import { useStore } from '../../state/store'
-import { zoneLine } from '../../lib/time'
+import { fmtAt, localYear, recordYearMode, zoneLine } from '../../lib/time'
 import { useTimeFormat, useZoneSource } from '../../state/timeZone'
 import { useWorkspace } from '../../state/workspace'
 import { useNow } from '../hooks'
@@ -237,6 +249,7 @@ function RecordRow({ c, nowMs, wallMs, live }: { c: CalFireOfficial; nowMs: numb
   const icon = <ShieldAlert size={13} />
   const mode = useStore((s) => (s.manifest?.status === 'ready' ? s.manifest.mode : (s.summary?.mode ?? s.mode)))
   const incidentId = useStore((s) => s.incidentId)
+  const fireYear = useStore((s) => s.summary?.year ?? null)
   const last = useOfficialRuntime((s) => {
     const d = forIncident(s.calfire.data, incidentId)
     const ch = d?.current ? d.changes : null
@@ -265,6 +278,9 @@ function RecordRow({ c, nowMs, wallMs, live }: { c: CalFireOfficial; nowMs: numb
       </Row>
     )
   const cf = c.source !== 'wfigs'
+  // years on the update and containment times when either differs from the fire's year, the replay's or today's, so
+  // "contained Dec 16" never sits beside "Sep 6, 2026" as that year (review UX-m1)
+  const yearMode = recordYearMode([c.updatedMs, live ? null : c.containedMs], tf.tz, [fireYear, localYear(nowMs, tf.tz), localYear(wallMs, tf.tz)])
   const status = c.final ? 'final record' : c.isActive === false ? 'not active' : c.isActive ? 'active' : null
   const note = cf ? calfireHistoryNote(c, mode, tf) : 'NIFC WFIGS publishes the current record only; Fire-3d does not record changes to it yet.'
   const lagged = laggedEditNote(c)
@@ -314,8 +330,8 @@ function RecordRow({ c, nowMs, wallMs, live }: { c: CalFireOfficial; nowMs: numb
       {lagged && <p className="on-meta">{lagged}</p>}
       <p className="on-meta">
         {join([
-          c.updatedMs != null ? `Updated by ${issuer} ${fmtWhen(c.updatedMs, nowMs, tf)}` : `${issuer} gives no update time`,
-          !live && c.containedMs != null ? `contained ${fmtWhen(c.containedMs, nowMs, tf)}` : null,
+          c.updatedMs != null ? `Updated by ${issuer} ${fmtAt(c.updatedMs, tf, { zone: true, year: yearMode })}` : `${issuer} gives no update time`,
+          !live && c.containedMs != null ? `contained ${fmtAt(c.containedMs, tf, { zone: true, year: yearMode })}` : null,
           checked(c.checkedMs, wallMs),
         ])}
       </p>
@@ -388,13 +404,7 @@ function FireWeatherRow({ f, nowMs, wallMs, metric, statewide = false }: { f: Fi
         </>
       }
     >
-      {statewide && inEffect.length > 3 && (
-        <p className="on-meta">
-          {(f.alertStates?.length ?? 0) > 1
-            ? `${inEffect.length} alerts in effect in ${f.alertStates!.length} states; the 3 most recent:`
-            : `${inEffect.length} alerts in effect in ${scope === 'the lower 48 states' ? 'the lower 48 states' : scope}; the 3 most recent:`}
-        </p>
-      )}
+      {statewide && inEffect.length > 3 && <p className="on-meta">{statewideCountText(inEffect, f.alertStates?.length ?? 0, scope)}</p>}
       {(statewide ? inEffect.slice(0, 3) : inEffect).map((a) => {
         const id = `official-now:fw:${a.id}`
         const active = highlightId === id
@@ -426,16 +436,24 @@ function FireWeatherRow({ f, nowMs, wallMs, metric, statewide = false }: { f: Fi
   )
 }
 
+/** "None here" in the words of the channels that answered (a past time older than NWS keeps reads FEMA's archive only). */
+const NONE_HERE: Record<ReturnType<typeof answeredChannelsText>, string> = {
+  'relayed by NWS': 'None relayed by NWS here.',
+  'FEMA archive': "None in FEMA's archive here.",
+  'NWS, FEMA archive': "None relayed by NWS or in FEMA's archive here.",
+}
+
 /** Local officials' messages relayed by NWS, or archived by FEMA for a past time (CONTRACT §14.7): each with its
  *  issuer, own time, verbatim text, link and where its area lies ("area covers the fire's reported location", "area
  *  1.7 mi from the fire's reported location · may be about another fire"; review round 1, R1), the most relevant
  *  first (localAlertOrder); the archive with its notice and credit; pending and not-checked states said as such; the
  *  standing caveat behind "More". */
-export function LocalAlertsRow({ l, wallMs }: { l: LocalAlertsOfficial; wallMs: number }) {
+export function LocalAlertsRow({ l, wallMs, refMs }: { l: LocalAlertsOfficial; wallMs: number; /** The time the panel is for (the replay time, or now). */ refMs?: number }) {
   const tf = useTimeFormat()
   const metric = useWorkspace((s) => s.units === 'metric')
   const label = "Local officials' alerts"
-  const source = l.archive ? 'NWS, FEMA archive' : 'relayed by NWS'
+  // the channels that answered: a past time older than NWS keeps reads FEMA's archive only (review UX-m3)
+  const source = answeredChannelsText(l)
   const icon = <Megaphone size={13} />
   const pending = l.archivePending ? <p className="on-meta">FEMA&apos;s archive is still being checked for this time; ask again in a minute.</p> : null
   const notice = l.archive ? (
@@ -478,7 +496,7 @@ export function LocalAlertsRow({ l, wallMs }: { l: LocalAlertsOfficial; wallMs: 
     return (
       <Row icon={icon} label={label} source={source} tone="quiet" more={standing}>
         <p className="on-line">
-          <strong>None relayed by NWS{l.archive && !l.archivePending ? " or in FEMA's archive" : ''} here.</strong> Not an all-clear: most local alerts are not relayed.
+          <strong>{NONE_HERE[answeredChannelsText(l)]}</strong> Not an all-clear: most local alerts are not relayed.
         </p>
         {pending}
         <p className="on-meta">{checked(l.checkedMs, wallMs)}</p>
@@ -496,7 +514,8 @@ export function LocalAlertsRow({ l, wallMs }: { l: LocalAlertsOfficial; wallMs: 
             {a.lead}: <strong className="on-official">&ldquo;{a.text}&rdquo;</strong>
           </p>
           <p className="on-meta">
-            {join([a.event, sentText(a, tf), a.archived ? 'FEMA archive' : 'relayed by the National Weather Service', a.phase === 'expired' ? 'ended' : a.phase === 'upcoming' ? 'upcoming' : null])}{' '}
+            {join([a.event, sentText(a, tf), a.archived ? 'FEMA archive' : 'relayed by the National Weather Service', localPhaseText(a, refMs)])}
+            {' · '}
             <SourceLink href={a.link.url}>{a.link.label}</SourceLink>
           </p>
           <p className="on-meta">{localAlertPlace(a, { metric })}</p>
@@ -557,9 +576,10 @@ export function OfficialNow() {
         <EvacuationRow e={evacuation} nowMs={nowMs} wallMs={wallMs} metric={metric} />
         <RecordRow c={calfire} nowMs={nowMs} wallMs={wallMs} live={live} />
         <FireWeatherRow f={fireWeather} nowMs={nowMs} wallMs={wallMs} metric={metric} />
-        {local && <LocalAlertsRow l={local} wallMs={wallMs} />}
+        {local && <LocalAlertsRow l={local} wallMs={wallMs} refMs={nowMs} />}
       </ul>
-      <p className="on-meta">{zoneLine(tf, wallMs, whose)}</p>
+      {/* the replay time's abbreviation first, today's too when it differs (integration review UX-m4) */}
+      <p className="on-meta">{zoneLine(tf, nowMs, whose, wallMs)}</p>
       <p className="on-foot">{NOT_AN_ORDER}</p>
     </section>
   )

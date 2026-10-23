@@ -33,6 +33,7 @@ import {
   extendFeedBaseline,
   feedBaseline,
   feedCompareMs,
+  feedStatusLabel,
   feedView,
   filterFeed,
   focusFeedItem,
@@ -288,7 +289,6 @@ interface RowProps {
   onFocusRow: (id: string) => void
 }
 
-const STATUS_LABEL: Partial<Record<NonNullable<FeedItem['status']>, string>> = { expired: 'Expired', cancelled: 'Cancelled', upcoming: 'Upcoming' }
 
 const FeedRow = memo(function FeedRow({ item, selected, later, current, isNew, live, command, nowMs, incidentId, tabbable, onFocusRow }: RowProps) {
   const topic = topicStyle(item.topic)
@@ -307,7 +307,7 @@ const FeedRow = memo(function FeedRow({ item, selected, later, current, isNew, l
   const recent = live && startOfLocalDay(t, tf.tz) === startOfLocalDay(nowMs, tf.tz)
   const line1 = item.timeNotGiven ? 'Time not given' : fmtClock(t, tf, { zone: true })
   const line2 = item.timeNotGiven ? (item.checkedMs != null ? `checked ${agoText(item.checkedMs, nowMs)}` : null) : live ? (recent ? fmtRelative(t, nowMs) : fmtDayDate(t, tf.tz)) : fmtDayDate(t, tf.tz)
-  const status = item.status ? STATUS_LABEL[item.status] : undefined
+  const status = feedStatusLabel(item, later)
   return (
     <li className={cls} data-feed-id={selectionId(item)}>
       <button

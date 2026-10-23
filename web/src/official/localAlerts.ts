@@ -328,6 +328,35 @@ export function sentText(a: Pick<LocalAlertItem, 'sentMs' | 'timeZone'>, tf: Tim
   return a.sentMs != null ? `sent ${fmtAt(a.sentMs, alertTimeFormat(a, tf), { zone: true, year: 'auto' })}` : null
 }
 
+/** How long after the reference time a message was sent: "32 min", "1 h 5 min". */
+function afterSpan(ms: number): string {
+  const min = Math.max(1, Math.round(ms / 60_000))
+  if (min < 60) return `${min} min`
+  const h = Math.floor(min / 60)
+  return min % 60 ? `${h} h ${min % 60} min` : `${h} h`
+}
+
+/**
+ * A message's phase in the words of its line (integration review UX-m2): null while in effect; "ended"; a message sent
+ * after the reference time (a replay's +1 h window, §14.7) "sent 32 min after this time", never "upcoming" (a "leave
+ * now" order is not a scheduled one); another message not yet in effect (its onset later) "not yet in effect".
+ */
+export function localPhaseText(a: Pick<LocalAlertItem, 'phase' | 'sentMs'>, refMs?: number | null): string | null {
+  if (a.phase === 'expired' || a.phase === 'cancelled') return 'ended'
+  if (a.phase !== 'upcoming') return null
+  if (a.sentMs != null && refMs != null && Number.isFinite(refMs) && a.sentMs > refMs) return `sent ${afterSpan(a.sentMs - refMs)} after this time`
+  return 'not yet in effect'
+}
+
+/** Which channels answered, for a line that says none were found (integration review UX-m3): "relayed by NWS" (the
+ *  live channel), "FEMA archive" (a past time older than NWS keeps: only the archive was read), or "NWS, FEMA
+ *  archive". */
+export function answeredChannelsText(l: Pick<LocalAlertsOfficial, 'channels'>): 'relayed by NWS' | 'FEMA archive' | 'NWS, FEMA archive' {
+  const ok = (id: LocalChannelStatus['id']) => l.channels.some((c) => c.id === id && c.status === 'available')
+  if (ok('openfema_archive')) return ok('nws_api') ? 'NWS, FEMA archive' : 'FEMA archive'
+  return 'relayed by NWS'
+}
+
 /** "relayed by the National Weather Service" / "FEMA archive". */
 export function channelText(a: Pick<LocalAlertItem, 'archived'>): string {
   return a.archived ? 'FEMA archive' : 'relayed by the National Weather Service'

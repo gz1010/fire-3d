@@ -57,6 +57,11 @@ describe('fire card record (§14.5)', () => {
     expect(r.official).toContain('Incident ID (CAL FIRE): abc12345-0000-0000-0000-000000000000')
   })
 
+  it("a past year's record edited this year carries its year (the Dragon Bravo Fire, 2025; review UX-m1)", () => {
+    const r = render(wfigsSummaryFixture({ id: '2025-dragon-bravo-x', name: 'Dragon Bravo', year: 2025, state: 'AZ', time_zone: 'America/Phoenix', started_ms: Date.UTC(2025, 6, 4, 18), updated_ms: Date.UTC(2026, 4, 14, 23, 56), is_active: false }))
+    expect(r.official).toContain('record last edited May 14, 2026 4:56 PM MST')
+  })
+
   it('agencies that disagree: each record with its own issuer, status and time (the Timber Fire)', () => {
     const timber = summaryFixture({
       id: '2026-timber-fire-51374d',

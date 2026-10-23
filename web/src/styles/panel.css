@@ -1138,3 +1138,12 @@ button.ac-row:hover {
 .region-accuracy-sub {
   color: var(--text-2, inherit);
 }
+.region-accuracy-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin: 2px 0;
+}
+.region-accuracy-more .is-open {
+  transform: rotate(180deg);
+}

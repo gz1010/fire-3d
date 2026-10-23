@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { CalFireOfficial, EvacuationOfficial, FireWeatherOfficial, OfficialAlert, OfficialZone } from '../../official/model'
-import { calfireLine, evacuationLine, fireWeatherLine, officialSummary } from './officialSummary'
+import { calfireLine, evacuationLine, fireWeatherLine, localAlertsLine, officialSummary } from './officialSummary'
 import { setCaliforniaCommandClock } from '../../extras/__fixtures__/clock.testutil'
+import { LOCAL_ARCHIVE_HORSE_GULCH } from '../../official/__fixtures__/localAlerts'
+import { localAlertsState } from '../../official/localAlerts'
+import { officialBadge } from '../../official/model'
+import { timeFmt } from '../../lib/time'
 
 setCaliforniaCommandClock()
 
@@ -55,9 +59,64 @@ describe('Public official summary lines', () => {
 })
 
 describe('evacuation summary line (brief 3)', () => {
-  it('a state without a feed: "Not available in this state." with no source tag; Oregon names Oregon OEM', () => {
-    expect(evacuationLine({ state: 'not-available', zones: [], checkedMs: null, sourceUpdatedMs: null, sourceUrl: null, caveat: '', sources: [] }, false)).toMatchObject({ text: 'Not available in this state.', source: null })
+  it('a state without a feed: "Not available in this state (Montana)." with no source tag; Oregon names Oregon OEM', () => {
+    const na = { state: 'not-available' as const, zones: [], checkedMs: null, sourceUpdatedMs: null, sourceUrl: null, caveat: '', sources: [] }
+    expect(evacuationLine({ ...na, notAvailableIn: ['Montana'] }, false)).toMatchObject({ text: 'Not available in this state (Montana).', source: null })
+    // an area across two states names both, as the full panel does (review UX-m6: Black Cove, NC and SC)
+    expect(evacuationLine({ ...na, notAvailableIn: ['North Carolina', 'South Carolina'] }, false)).toMatchObject({ text: 'Not available in these states (North Carolina, South Carolina).' })
+    // no state named (outside the lower 48): the backend's own sentence, else "here"
+    expect(evacuationLine(na, false)).toMatchObject({ text: 'Not available here.', source: null })
+    expect(evacuationLine({ ...na, reason: 'Fire-3d covers the lower 48 states only. Follow local officials.' }, false).text).toBe('Fire-3d covers the lower 48 states only.')
     expect(evacuationLine({ state: 'none-listed', zones: [], checkedMs: 1, sourceUpdatedMs: 1, sourceUrl: null, caveat: '', checkedBy: 'Oregon OEM' }, false).source).toBe('Oregon OEM')
     expect(evacuationLine({ state: 'none-listed', zones: [], checkedMs: 1, sourceUpdatedMs: 1, sourceUrl: null, caveat: '' }, false).source).toBe('Cal OES') // brief-2 shape
+  })
+})
+
+// Integration part 1 review UX-M1: local officials' evacuation messages in the two places a non-expert sees first. Horse
+// Gulch (Montana: no state evacuation feed) at Jul 10, 2024 6:00 PM MDT has three in-effect messages from
+// MTHelenaPoliceDepartment in FEMA's archive; before, the Public summary said only "Evacuations: Not available in this
+// state." and the phone badge counted nothing.
+describe("local officials' alerts in the Public summary and the phone badge (Horse Gulch, MT)", () => {
+  const AT = 1720656000000 // Jul 10, 2024 18:00 MDT
+  const MDT12 = timeFmt('America/Denver', '12h')
+  const local = localAlertsState({ data: LOCAL_ARCHIVE_HORSE_GULCH, loading: false, error: null })
+  const notAvailable = evac({ state: 'not-available', notAvailableIn: ['Montana'] })
+
+  it('quotes the newest message verbatim with its issuer, own sent time, the archive and its link, separate from the evacuation line', () => {
+    const l = localAlertsLine(local, MDT12, AT)
+    expect(l).not.toBeNull()
+    expect(l!.label).toBe("Local officials' alerts")
+    expect(l!.text).toBe(
+      'Archived alert from MTHelenaPoliceDepartment: “Urgent! Evacuation for Horse Gulch Fire: Residences between Cave Gulch to Magpie Gulch” · sent Jul 10, 2024 5:45 PM MDT · FEMA archive · +2 more in Details',
+    )
+    expect(l!.tone).toBe('order') // "Evacuation Immediate", the issuer's own event
+    expect(l!.link?.url).toMatch(/^https:\/\/www\.fema\.gov\/api\/open\/v1\/IpawsArchivedAlerts/)
+    const lines = officialSummary({ evacuation: notAvailable, calfire: { state: 'loading' } as CalFireOfficial, fireWeather: fw({ state: 'none' }), local }, AT, false, MDT12, AT)
+    expect(lines.map((x) => x.key)).toEqual(['evacuation', 'local', 'calfire', 'fire-weather'])
+    // the evacuation line keeps its own words; the message is never merged into it
+    expect(lines[0].text).toBe('Not available in this state (Montana).')
+  })
+
+  it('no line when nothing is in effect, not checked or none (the full block says those)', () => {
+    expect(localAlertsLine(localAlertsState(null), MDT12, AT)).toBeNull()
+    const ended = { ...local, alerts: local.alerts.map((a) => ({ ...a, phase: 'expired' as const })) }
+    expect(localAlertsLine(ended, MDT12, AT)).toBeNull()
+    expect(officialSummary({ evacuation: notAvailable, calfire: { state: 'loading' } as CalFireOfficial, fireWeather: fw({ state: 'none' }) }, AT, false).map((x) => x.key)).toEqual(['evacuation', 'calfire', 'fire-weather'])
+  })
+
+  it('a message sent after the replay time says so, never "upcoming" (review UX-m2)', () => {
+    const later = { ...local, alerts: [{ ...local.alerts[0], phase: 'upcoming' as const }] }
+    const l = localAlertsLine(later, MDT12, local.alerts[0].sentMs! - 32 * 60_000)
+    expect(l!.text).toContain('· sent 32 min after this time')
+    expect(l!.text).not.toMatch(/upcoming/i)
+  })
+
+  it('the phone badge counts the in-effect local messages; an Evacuation Immediate is the most urgent level', () => {
+    expect(officialBadge(notAvailable, fw({ state: 'none' }), local)).toEqual({ count: 3, level: 'order' })
+    // a Fire Warning alone: a local officials' alert, more urgent than a fire weather alert
+    const warning = { ...local, alerts: local.alerts.filter((a) => a.event === 'Fire Warning') }
+    expect(officialBadge(notAvailable, fw({ state: 'active', alerts: [alert({})] }), warning)).toEqual({ count: 2, level: 'local' })
+    // before: nothing counted
+    expect(officialBadge(notAvailable, fw({ state: 'none' }))).toEqual({ count: 0, level: null })
   })
 })

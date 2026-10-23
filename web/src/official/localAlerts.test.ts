@@ -2,8 +2,9 @@
 import { describe, expect, it } from 'vitest'
 import { NOT_FOUND_TEXT } from '../extras/format'
 import { timeFmt } from '../lib/time'
-import { LOCAL_ARCHIVE_EATON, LOCAL_ARCHIVE_KERN_FRW, LOCAL_ARCHIVE_PENDING_BLACK_COVE, LOCAL_ARCHIVE_SHERIDAN_WY, LOCAL_LIVE_LA_CEM, LOCAL_LIVE_NONE_RENO } from './__fixtures__/localAlerts'
+import { LOCAL_ARCHIVE_EATON, LOCAL_ARCHIVE_HORSE_GULCH, LOCAL_ARCHIVE_KERN_FRW, LOCAL_ARCHIVE_PENDING_BLACK_COVE, LOCAL_ARCHIVE_SHERIDAN_WY, LOCAL_LIVE_LA_CEM, LOCAL_LIVE_NONE_RENO } from './__fixtures__/localAlerts'
 import {
+  answeredChannelsText,
   LOCAL_LOOKUP_FAILED_REASON,
   LOCAL_LOWER48_REASON,
   LOCAL_PLACE_NOTE,
@@ -16,6 +17,7 @@ import {
   localAlertsForPointState,
   localAlertsState,
   localAlertText,
+  localPhaseText,
   OPENFEMA_NOTICE,
   sentText,
 } from './localAlerts'
@@ -148,7 +150,8 @@ describe('review R1: where each message applies, most relevant first (Eaton, rep
     const none = localAlertsAtPoint(eaton(), -118.069155, 34.203483, { countyFips: '06037' })
     expect(none).toMatchObject({ state: 'none', alerts: [], elsewhere: 8 })
     const noneLine = localAlertLines(none, LA12)[0]
-    expect(noneLine.text).toBe("Local officials' alerts relayed by NWS: none here · not an all-clear")
+    // a replay older than NWS keeps: only FEMA's archive was read, so the line names it, not NWS (review UX-m3)
+    expect(noneLine.text).toBe("Local officials' alerts (FEMA archive): none here · not an all-clear")
     expect(noneLine.sub).toMatch(/^8 of the fire's local alerts are for other places in its area \(see Updates\)\. Fire-3d lists only/)
   })
 
@@ -319,5 +322,46 @@ describe('review R4: map credits for local officials\' alerts', () => {
     expect(localAlertCredits(localAlertsState(ok(LOCAL_ARCHIVE_PENDING_BLACK_COVE)))).toEqual([])
     expect(localAlertCredits(localAlertsState(ok(null, { error: NOT_FOUND_TEXT })))).toEqual([])
     expect(localAlertCredits(null)).toEqual([])
+  })
+})
+
+// Integration part 1 review UX-m2 / UX-m3: a message sent after the replay time is never called "upcoming", and a
+// "none here" line names the channels that actually answered.
+describe('phase words and the channels that answered (integration review)', () => {
+  const hg = localAlertsState({ data: LOCAL_ARCHIVE_HORSE_GULCH, loading: false, error: null })
+  const a = hg.alerts[0]
+  const MDT12 = timeFmt('America/Denver', '12h')
+
+  it('sent after the reference time: "sent 32 min after this time"; onset later: "not yet in effect"; ended: "ended"', () => {
+    const up = { ...a, phase: 'upcoming' as const }
+    expect(localPhaseText(up, a.sentMs! - 32 * 60_000)).toBe('sent 32 min after this time')
+    expect(localPhaseText(up, a.sentMs! - 65 * 60_000)).toBe('sent 1 h 5 min after this time')
+    expect(localPhaseText(up, a.sentMs! + 60_000)).toBe('not yet in effect')
+    expect(localPhaseText(up, null)).toBe('not yet in effect')
+    expect(localPhaseText({ ...a, phase: 'expired' }, null)).toBe('ended')
+    expect(localPhaseText(a, a.sentMs! + 1)).toBeNull()
+  })
+
+  it('the location card and the panel never say "upcoming" for a message sent after this time', () => {
+    const later = { ...hg, alerts: [{ ...a, phase: 'upcoming' as const }] }
+    const [line] = localAlertLines(later, MDT12, 3, { refMs: a.sentMs! - 32 * 60_000 })
+    expect(line.sub).toContain('FEMA archive · sent 32 min after this time')
+    expect(line.subCompact).toContain('sent 32 min after this time')
+    expect(`${line.sub} ${line.subCompact}`).not.toMatch(/upcoming/i)
+  })
+
+  it('"none here" names what answered: NWS, FEMA\'s archive, or both', () => {
+    expect(answeredChannelsText(hg)).toBe('FEMA archive') // NWS keeps about 7 days: not checked for 2024
+    expect(answeredChannelsText(localAlertsState({ data: LOCAL_LIVE_NONE_RENO, loading: false, error: null }))).toBe('relayed by NWS')
+    const both = { channels: [
+      { id: 'nws_api' as const, status: 'available' as const, retrieved_ms: 1, source_updated_ms: null, reason: null },
+      { id: 'openfema_archive' as const, status: 'available' as const, retrieved_ms: 1, source_updated_ms: null, reason: null },
+    ] }
+    expect(answeredChannelsText(both)).toBe('NWS, FEMA archive')
+    const none = { ...hg, state: 'none' as const, alerts: [], elsewhere: 1 }
+    const [line] = localAlertLines(none, MDT12)
+    expect(line.text).toBe("Local officials' alerts (FEMA archive): none here · not an all-clear")
+    // one message elsewhere: "1 of the fire's local alerts is …" (was "1 of the fire's local alert is …")
+    expect(line.sub).toMatch(/^1 of the fire's local alerts is for other places in its area \(see Updates\)\./)
   })
 })

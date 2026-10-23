@@ -1562,3 +1562,261 @@ export const LOCAL_ARCHIVE_EATON: LocalAlertsResponse = {
     "FEMA IPAWS archive via OpenFEMA: This product uses the Federal Emergency Management Agency's OpenFEMA API, but is not endorsed by FEMA."
   ]
 }
+
+// Fire-3d's own answer for the Horse Gulch Fire (Montana, 2024) at Jul 10, 2024 6:00 PM MDT (`at_ms=1720656000000`), from
+// the endpoint on 2026-10-23 (integration part 1 review, UX-M1): NWS keeps about 7 days, so only FEMA's archive answered;
+// three in-effect messages from MTHelenaPoliceDepartment (two "Evacuation Immediate", one "Fire Warning"), the newest
+// covering the fire's reported location. Montana has no state evacuation feed, so these are the only official
+// evacuation messages Fire-3d can show for this fire.
+export const LOCAL_ARCHIVE_HORSE_GULCH: LocalAlertsResponse = {
+  "kind": "local_alerts",
+  "status": "available",
+  "reason_code": null,
+  "reason": null,
+  "source": {
+    "name": "National Weather Service (relayed local officials' messages)",
+    "url": "https://www.weather.gov/dsb/nonweatheralerts",
+    "credit": "National Weather Service (relayed local officials' messages)",
+    "license": "U.S. Government work in the public domain; api.weather.gov data is open data, free to use for any purpose",
+    "terms_url": "https://www.weather.gov/disclaimer"
+  },
+  "retrieved_ms": 1792718813706,
+  "source_updated_ms": null,
+  "requested_at_ms": 1720656000000,
+  "now_ms": 1792744732692,
+  "incident_id": "2024-horse-gulch-889237",
+  "caveats": [
+    "Fire-3d lists only the local alerts the National Weather Service relays; most are not relayed (about 1 in 20 fire and evacuation alerts in 2024-26). No alert here is not an all-clear: follow local officials.",
+    "Archived copy from FEMA (OpenFEMA, published about a day later); FEMA does not validate message content. Replays can list more than was visible live.",
+    "FEMA IPAWS archive via OpenFEMA: This product uses the Federal Emergency Management Agency's OpenFEMA API, but is not endorsed by FEMA."
+  ],
+  "alerts": [
+    {
+      "id": "17206551120001381312434",
+      "channel": "openfema_archive",
+      "archived": true,
+      "event": "Evacuation Immediate",
+      "event_code": "EVI",
+      "message_type": "Alert",
+      "references": [],
+      "sender_name": "MTHelenaPoliceDepartment",
+      "sender_is_platform": false,
+      "sent_ms": 1720655112000,
+      "effective_ms": 1720652400000,
+      "onset_ms": 1720652400000,
+      "expires_ms": 1720662312000,
+      "headline": null,
+      "description": null,
+      "instruction": "Urgent! The Lewis & Clark County Sheriff has issued an evacuation order for the Horse Gulch fire. Residences between Cave Gulch to Magpie Gulch north of Canyon Ferry must evacuate now. Please be aware of changing conditions and emergency vehicles in the area.",
+      "wea_text": "Urgent! Evacuation for Horse Gulch Fire: Residences between Cave Gulch to Magpie Gulch",
+      "wea_long_text": "Urgent! The Lewis & Clark County Sheriff has issued an evacuation order for the Horse Gulch fire. Residences between Cave Gulch to Magpie Gulch north of Canyon Ferry must evacuate now. Please be aware of changing conditions and emergency vehicles in the area.",
+      "web": null,
+      "source_url": "https://www.fema.gov/api/open/v1/IpawsArchivedAlerts?$filter=identifier%20eq%20%2717206551120001381312434%27",
+      "area_desc": "Horse Gulch Fire",
+      "same_codes": [
+        "030049"
+      ],
+      "ugcs": [],
+      "polygon": {
+        "type": "MultiPolygon",
+        "coordinates": [
+          [
+            [
+              [
+                -111.6663,
+                46.6513
+              ],
+              [
+                -111.6741,
+                46.6516
+              ],
+              [
+                -111.6805,
+                46.6481
+              ],
+              [
+                -111.7047,
+                46.6557
+              ],
+              [
+                -111.7076,
+                46.6588
+              ],
+              [
+                -111.7069,
+                46.6911
+              ],
+              [
+                -111.7071,
+                46.6911
+              ],
+              [
+                -111.7071,
+                46.6913
+              ],
+              [
+                -111.6396,
+                46.6925
+              ],
+              [
+                -111.6408,
+                46.6607
+              ],
+              [
+                -111.6415,
+                46.6465
+              ],
+              [
+                -111.6663,
+                46.6513
+              ]
+            ]
+          ],
+          [
+            [
+              [
+                -111.7071,
+                46.6911
+              ],
+              [
+                -111.7076,
+                46.6588
+              ],
+              [
+                -111.721,
+                46.6596
+              ],
+              [
+                -111.7244,
+                46.6908
+              ],
+              [
+                -111.7071,
+                46.6911
+              ]
+            ]
+          ]
+        ]
+      },
+      "match": "polygon",
+      "covers_reported_location": true,
+      "nearest_km": 0.0,
+      "time_zone": "America/Denver",
+      "phase": "in_effect"
+    },
+    {
+      "id": "17206483950001381242600",
+      "channel": "openfema_archive",
+      "archived": true,
+      "event": "Evacuation Immediate",
+      "event_code": "EVI",
+      "message_type": "Alert",
+      "references": [],
+      "sender_name": "MTHelenaPoliceDepartment",
+      "sender_is_platform": false,
+      "sent_ms": 1720648395000,
+      "effective_ms": 1720643280000,
+      "onset_ms": 1720643280000,
+      "expires_ms": 1720677195000,
+      "headline": null,
+      "description": null,
+      "instruction": "Residences on Cave Gulch are to evacuate immediately due to the Horse Gulch fire per order of the Sheriff.",
+      "wea_text": "Urgent. A fire evacuation notice has been issued by the Sheriff for the Cave Gulch area.",
+      "wea_long_text": "Urgent. The Lewis & Clark County Sheriff has issued an evacuation notice for the residences in the Cave Gulch area due to the Horse Gulch fire.",
+      "web": null,
+      "source_url": "https://www.fema.gov/api/open/v1/IpawsArchivedAlerts?$filter=identifier%20eq%20%2717206483950001381242600%27",
+      "area_desc": "Horse Gulch/Cave Gulch",
+      "same_codes": [
+        "030049"
+      ],
+      "ugcs": [],
+      "polygon": null,
+      "match": "county",
+      "covers_reported_location": null,
+      "nearest_km": null,
+      "time_zone": "America/Denver",
+      "phase": "in_effect"
+    },
+    {
+      "id": "17206443300001381292441",
+      "channel": "openfema_archive",
+      "archived": true,
+      "event": "Fire Warning",
+      "event_code": "FRW",
+      "message_type": "Alert",
+      "references": [],
+      "sender_name": "MTHelenaPoliceDepartment",
+      "sender_is_platform": false,
+      "sent_ms": 1720644330000,
+      "effective_ms": 1720643280000,
+      "onset_ms": 1720643280000,
+      "expires_ms": 1720673130000,
+      "headline": null,
+      "description": null,
+      "instruction": null,
+      "wea_text": "Urgent. A fire pre-evacuation notice has been issued by the Sheriff for Horse Gulch area.",
+      "wea_long_text": "Urgent. From the Helena-Lewis & Clark County 911 Center: The Lewis & Clark County Sheriff's Office has issued a pre-evacuation notice for the areas of Horse Gulch and Cave Gulch due to the wildfire. Please be aware of changing conditions and be prepared to evacuate.",
+      "web": null,
+      "source_url": "https://www.fema.gov/api/open/v1/IpawsArchivedAlerts?$filter=identifier%20eq%20%2717206443300001381292441%27",
+      "area_desc": "Horse Gulch/Cave Gulch",
+      "same_codes": [
+        "030049"
+      ],
+      "ugcs": [],
+      "polygon": null,
+      "match": "county",
+      "covers_reported_location": null,
+      "nearest_km": null,
+      "time_zone": "America/Denver",
+      "phase": "in_effect"
+    }
+  ],
+  "channels": [
+    {
+      "id": "nws_api",
+      "status": "not_checked",
+      "retrieved_ms": null,
+      "source_updated_ms": null,
+      "reason": "NWS keeps about 7 days of alerts."
+    },
+    {
+      "id": "openfema_archive",
+      "status": "available",
+      "retrieved_ms": 1792718813706,
+      "source_updated_ms": null,
+      "reason": null
+    }
+  ],
+  "area_bbox": [
+    -111.9973,
+    46.4605,
+    -111.3407,
+    46.9115
+  ],
+  "reported_location": [
+    -111.69614569201491,
+    46.68870665301193
+  ],
+  "counties": [
+    {
+      "fips": "30007",
+      "name": "Broadwater County",
+      "state": "MT"
+    },
+    {
+      "fips": "30043",
+      "name": "Jefferson County",
+      "state": "MT"
+    },
+    {
+      "fips": "30049",
+      "name": "Lewis and Clark County",
+      "state": "MT"
+    },
+    {
+      "fips": "30059",
+      "name": "Meagher County",
+      "state": "MT"
+    }
+  ]
+}

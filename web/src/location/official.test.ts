@@ -91,7 +91,7 @@ describe('officialBlock: the evacuation line is always present and honest', () =
   it('not checked, past date, unavailable and loading are said as such', () => {
     const nc = officialBlock(info({ state: 'not-checked', checkedMs: null, reason: 'Not checked here: Fire-3d reads Cal OES zones only near the selected fire and the selected point.' }), CTX)
     expect(nc.evacuation[0]).toMatchObject({ text: 'Evacuation zones: not checked here', official: false, sub: 'Fire-3d reads Cal OES zones only near the selected fire and the selected point.' })
-    expect(officialBlock(info({ state: 'past-date' }), CTX).evacuation[0]).toMatchObject({ text: 'Evacuation orders: not shown for past dates', official: false, sub: null })
+    expect(officialBlock(info({ state: 'past-date' }), CTX).evacuation[0]).toMatchObject({ text: 'Evacuation zones: not available for past dates', official: false, sub: null })
     expect(officialBlock(info({ state: 'unavailable', reason: 'Cal OES did not answer.' }), CTX).evacuation[0]).toMatchObject({ text: 'Evacuation zones: unavailable right now', sub: 'Cal OES did not answer.' })
     expect(officialBlock(info({ state: 'loading' }), CTX).evacuation[0]).toMatchObject({ text: 'Checking official evacuation zones…', tone: 'loading' })
     expect(officialBlock(info({ state: 'listed', zones: [] }), CTX).evacuation).toHaveLength(1) // never empty

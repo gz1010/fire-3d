@@ -18,6 +18,7 @@ import {
   wallParts,
   wallTimeToMs,
   zoneAbbr,
+  recordYearMode,
   zoneLine,
   zoneName,
   zoneOffsetMinutes,
@@ -156,6 +157,22 @@ describe('six zones (Node ICU, July and January)', () => {
     expect(zoneLine(timeFmt(DENVER, '12h'), jul, 'fire')).toBe("Times: Mountain Time (MDT), the fire's local time")
     expect(zoneLine(timeFmt(NY, '24h'), jan, 'place')).toBe('Times: Eastern Time (EST), local time at this place')
     expect(zoneLine(timeFmt(CHI, '24h'), jul, 'viewer')).toBe("Times: your device's time (CDT)")
+    // a January replay read in October (integration review UX-m4): the replay's abbreviation first, today's too
+    expect(zoneLine(timeFmt(LA, '24h'), jan, 'fire', jul)).toBe("Times: Pacific Time (PST/PDT), the fire's local time")
+    expect(zoneLine(timeFmt(LA, '24h'), jul, 'fire', jul)).toBe("Times: Pacific Time (PDT), the fire's local time")
+    expect(zoneLine(timeFmt(PHX, '24h'), jan, 'fire', jul)).toBe("Times: Mountain Standard Time (MST), the fire's local time")
+  })
+
+  it('record times show years when any differs from the fire year, the replay year or this year (review UX-m1)', () => {
+    const y2025 = Date.UTC(2025, 11, 16, 22, 30)
+    const y2026 = Date.UTC(2026, 8, 6, 21, 18)
+    // Emigrant: updated Sep 6, 2026, contained Dec 16, 2025: both carry their year
+    expect(recordYearMode([y2026, y2025], LA, [2025, 2025, 2026])).toBe('always')
+    // Dragon Bravo (2025): record last edited in 2026
+    expect(recordYearMode([y2026], PHX, [2025, 2026])).toBe('always')
+    // a live fire of this year updated this year: no year
+    expect(recordYearMode([y2026, null], LA, [2026, 2026])).toBe('never')
+    expect(recordYearMode([null, undefined], LA, [2025, 2026])).toBe('never')
   })
 })
 

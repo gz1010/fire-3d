@@ -6,7 +6,7 @@
 // the freshness line and "Official details and all updates", which expands the panel to the full block and the feed.
 // Command and the expanded panel show the full block. Phones: a bottom sheet opened from the header's labelled
 // "Updates" button, always the full block.
-import { ChevronDown, ChevronRight, ChevronUp, Clock, Flag, ListChecks, ShieldAlert, TriangleAlert, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, Clock, Flag, ListChecks, Megaphone, ShieldAlert, TriangleAlert, X } from 'lucide-react'
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useOfficialNow } from '../../official/hooks'
@@ -40,11 +40,23 @@ function useStatusRows() {
   return { manifest: inp.manifest, rows, nowMs, checkedMs: checks.length ? Math.max(...checks) : null, tf }
 }
 
-/** "Times: Mountain Time (MDT), the fire's local time" (CONTRACT §14.9.1): which zone the rows are in. */
+/** The time an open fire's panel is for: now for a live fire, else the replay time (to the minute). */
+function usePanelTime(nowMs: number): number {
+  const replayMinute = useStore((s) => {
+    const live = (s.manifest?.status === 'ready' ? s.manifest.mode : (s.summary?.mode ?? s.mode)) === 'live'
+    return live || s.incidentId == null ? null : Math.floor(s.timeMs / 60_000)
+  })
+  return replayMinute == null ? nowMs : replayMinute * 60_000
+}
+
+/** "Times: Mountain Time (MDT), the fire's local time" (CONTRACT §14.9.1): which zone the rows are in. A replay names
+ *  the abbreviation at the replay time first, and today's too when it differs ("Pacific Time (PST/PDT)": a January
+ *  replay's rows read PST, the checks read today's PDT; integration review UX-m4). */
 function ZoneNote({ nowMs }: { nowMs: number }) {
   const tf = useTimeFormat()
   const whose = useZoneSource()
-  return <p className="mw-set-note mw-status-zone">{zoneLine(tf, nowMs, whose)}</p>
+  const refMs = usePanelTime(nowMs)
+  return <p className="mw-set-note mw-status-zone">{zoneLine(tf, refMs, whose, nowMs)}</p>
 }
 
 function StatusRows({ rows }: { rows: StatusRow[] }) {
@@ -118,6 +130,7 @@ function Freshness({ defaultOpen = false }: { defaultOpen?: boolean }) {
 
 const SUMMARY_ICON: Record<SummaryLine['key'], ReactNode> = {
   evacuation: <TriangleAlert size={14} />,
+  local: <Megaphone size={14} />,
   calfire: <ShieldAlert size={14} />,
   'fire-weather': <Flag size={14} />,
 }
@@ -129,7 +142,8 @@ function OfficialSummary() {
   const metric = useWorkspace((s) => s.units === 'metric')
   const hasIncident = useStore((s) => s.incidentId != null)
   const { manifest, rows, nowMs, checkedMs, tf } = useStatusRows()
-  const lines = useMemo(() => officialSummary(info, nowMs, metric, tf), [info, nowMs, metric, tf])
+  const refMs = usePanelTime(nowMs)
+  const lines = useMemo(() => officialSummary(info, nowMs, metric, tf, refMs), [info, nowMs, metric, tf, refMs])
   if (!hasIncident) return null
   const fresh = manifest ? freshnessLine(rows, manifest.mode === 'live', nowMs, checkedMs, tf) : null
   return (
@@ -143,6 +157,14 @@ function OfficialSummary() {
             <span className="os-text">
               <span className="os-label">{l.label}</span> {l.text}
               {l.source && <span className="os-src"> ({l.source})</span>}
+              {l.link && (
+                <>
+                  {' · '}
+                  <a className="os-link" href={l.link.url} target="_blank" rel="noreferrer noopener">
+                    {l.link.label}
+                  </a>
+                </>
+              )}
             </span>
           </li>
         ))}

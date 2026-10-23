@@ -25,6 +25,17 @@ describe('RegionAccuracy (§14.4)', () => {
     expect(t).toContain('Hindcast growth score 0.43 (fires 0.40-0.47; 3 fires, 32 leads, +12-72 h;')
     expect(t).toContain('Outside the modeled area is unknown, not low.')
   })
+  it('Public (the Analysis drawer): the words, with the score one tap away (decision 7; review UX-m7)', () => {
+    const s = summaryFixture({ id: 'f' })
+    ssrState(useStore, { incidentId: 'f', summary: s })
+    ssrState(useAccuracyStore, { status: 'ok', data: regions, error: null })
+    const t = text(renderToStaticMarkup(createElement(RegionAccuracy, { words: true })))
+    expect(t).toMatch(/Model accuracy here Tested on 3 past fires in this region/)
+    expect(t).toContain('How was it tested?')
+    // the score is behind the disclosure (closed on first render)
+    expect(t).not.toContain('Hindcast growth score')
+    expect(t).toContain('Outside the modeled area is unknown, not low.')
+  })
   it('untested region: the untested words; no fire open: nothing', () => {
     const s = wfigsSummaryFixture({ id: 'g', accuracy_region: 'EACC' })
     ssrState(useStore, { incidentId: 'g', summary: s })

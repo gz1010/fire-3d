@@ -16,7 +16,7 @@ import { NWCG_AGENCY_CREDIT } from '../../lib/dataCredits'
 import { fmtAcres, fmtNumber } from '../../lib/format'
 import { accuracyLabel, type AccuracyLabel } from '../../lib/plainLanguage'
 import { agencyIdLine, agencyNameShown, complexMembers, isHttps as https, partOfComplex, recordBlockText, recordStatus } from '../../lib/recordText'
-import { fmtAt, fmtDayDate, fmtRelative, type TimeFmt } from '../../lib/time'
+import { fmtAt, fmtDayDate, fmtRelative, localYear, recordYearMode, type TimeFmt } from '../../lib/time'
 import { findRegion, useAccuracyRegions } from '../../state/accuracy'
 import { analysisState, findFire, fireWhere, isActiveFire, type AnalysisState } from '../../state/overview'
 import { useStore } from '../../state/store'
@@ -64,6 +64,8 @@ export function OfficialRecord({ fire, nowMs, tf }: { fire: IncidentSummary; now
   const blocks = recordBlocks(fire)
   const disagree = blocks.length > 1
   const updated = fire.updated_ms
+  // years on every record time when any differs from the fire's year or today's (review UX-m1)
+  const yearMode = recordYearMode([updated, fire.contained_ms], tf.tz, [fire.year, localYear(nowMs, tf.tz)])
   const members = complexMembers(fire)
   const idLine = agencyIdLine(fire)
   const wfigs = (fire.record_source ?? 'calfire') === 'wfigs'
@@ -91,11 +93,11 @@ export function OfficialRecord({ fire, nowMs, tf }: { fire: IncidentSummary; now
         {updated != null ? (
           active ? (
             <>
-              Updated by {issuer} <span className="mw-mono">{fmtAt(updated, tf, { zone: true, year: 'auto', refMs: nowMs })}</span> ({fmtRelative(updated, nowMs)})
+              Updated by {issuer} <span className="mw-mono">{fmtAt(updated, tf, { zone: true, year: yearMode })}</span> ({fmtRelative(updated, nowMs)})
             </>
           ) : (
             <>
-              {issuer} record last edited <span className="mw-mono">{fmtAt(updated, tf, { zone: true, year: 'auto', refMs: nowMs })}</span>
+              {issuer} record last edited <span className="mw-mono">{fmtAt(updated, tf, { zone: true, year: yearMode })}</span>
               {fire.contained_ms != null && (
                 <>
                   {' '}

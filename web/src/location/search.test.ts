@@ -369,6 +369,9 @@ describe('national search (brief 3, §14.10, W6)', () => {
     // fire names are searched too (integration review UX-m8): the message says so when nothing matched at all
     expect(none).toEqual({ kind: 'none', message: 'No listed fire, US city, town, county or ZIP code matches “Nowheresville”.' })
     expect(noMatchMessage('x')).toBe('No listed fire, US city, town, county or ZIP code matches “x”.')
+    // the geocoder's own note (places only) keeps its hint and gains the fires
+    const noted = decide(lookupPlan('Horse Gulch'), { ...res([]), note: "No US city, town, county or ZIP code matches 'Horse Gulch'. Landmarks, businesses and street names without a house number are not searched (e.g. 83702)." })
+    expect(noted).toEqual({ kind: 'none', message: "No listed fire, US city, town, county or ZIP code matches 'Horse Gulch'. Landmarks, businesses and street names without a house number are not searched (e.g. 83702)." })
     // fires matched but no place: the place sentence stays, and the fires are listed
     expect(noPlaceMessage('x')).toBe('No US city, town, county or ZIP code matches “x”.')
     expect(OUTSIDE_LOWER48_WARNING).toBe('This point is outside the area Fire-3d covers (the lower 48 states).')

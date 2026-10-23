@@ -241,10 +241,10 @@ export function useOfficialNow(): OfficialInfo {
   return useMemo(() => ({ evacuation, fireWeather, calfire, local }), [evacuation, fireWeather, calfire, local])
 }
 
-/** The phone Updates badge (I5): active official items near the open fire and the most urgent level (none on the
- *  overview: the badge is about the open fire). */
+/** The phone Updates badge (I5): active official items near the open fire (evacuation zones, NWS fire weather alerts
+ *  and local officials' messages) and the most urgent level (none on the overview: the badge is about the open fire). */
 export function useOfficialBadge(): OfficialBadge {
-  const { evacuation, fireWeather } = useOfficialNow()
+  const { evacuation, fireWeather, local } = useOfficialNow()
   const open = useStore((s) => s.incidentId != null)
-  return useMemo(() => (open ? officialBadge(evacuation, fireWeather) : { count: 0, level: null }), [open, evacuation, fireWeather])
+  return useMemo(() => (open ? officialBadge(evacuation, fireWeather, local) : { count: 0, level: null }), [open, evacuation, fireWeather, local])
 }

@@ -162,6 +162,8 @@ export const noPlaceMessage = (q: string) => `No US city, town, county or ZIP co
 /** Nothing matched at all: fire names are searched too (brief-3 integration review UX-m8). Only the listed fires are
  *  searched (active fires, 2026 and 2025, and the open fire); a prepared fire of another year opens by its link. */
 export const noMatchMessage = (q: string) => `No listed fire, US city, town, county or ZIP code matches “${q}”.`
+/** The geocoder's own no-match note (CONTRACT §14.10, places only) said for this search, which also looked at fires. */
+export const withFires = (note: string) => note.replace(/^No US city, town, county or ZIP code matches\b/, 'No listed fire, US city, town, county or ZIP code matches')
 
 // ------------------------------------------------------------------------------------------------- incidents
 /** Whether an incident's analysis can be opened now. Only 'ready' (or a build in progress) opens without asking. */
@@ -252,7 +254,7 @@ export function decide(plan: Extract<SearchPlan, { kind: 'lookup' }>, res: Geoco
   }
   const exact = ms.filter((m) => m.exact)
   if (candidate && !exact.length) return { kind: 'incident', hit: candidate }
-  if (!ms.length && !incidents.length) return { kind: 'none', message: res.note ?? noMatchMessage(plan.query) }
+  if (!ms.length && !incidents.length) return { kind: 'none', message: res.note ? withFires(res.note) : noMatchMessage(plan.query) }
   // one match, or one exact name whose other matches are only partial: go there and keep the rest listed
   const go = ms.length === 1 ? ms[0] : exact.length === 1 ? exact[0] : null
   if (go && (!incidents.length || !candidate)) return { kind: 'area', match: go, others: splitMatches(res, incidents, go) }

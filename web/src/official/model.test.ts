@@ -18,6 +18,7 @@ import {
   needsStatewideFireWeather,
   officialBadge,
   pointQueryBbox,
+  statewideCountText,
   type EvacuationOfficial,
   type FireWeatherOfficial,
 } from './model'
@@ -313,5 +314,16 @@ describe('NWS "checked" follows states_checked only (CONTRACT §14.6)', () => {
       expect(fireWeatherLines(st)[0].text).toBe('Fire weather alerts (NWS): not checked here')
     }
     expect(fireWeatherAtPointState({ ...base, lon: -119.81, lat: 39.53, statewide: ok(national), pointState: 'NV' }).state).toBe('none')
+  })
+})
+
+// Integration part 1 review UX-m5: the national summary never calls upcoming alerts "in effect".
+describe('national fire weather count', () => {
+  it('in effect / upcoming / in effect or upcoming', () => {
+    const up = { phase: 'upcoming' }
+    const on = { phase: 'active' }
+    expect(statewideCountText([up, up, up, up], 4, 'the lower 48 states')).toBe('4 alerts upcoming in 4 states; the 3 most recent:')
+    expect(statewideCountText([on, up, on, on], 4, 'the lower 48 states')).toBe('4 alerts in effect or upcoming in 4 states; the 3 most recent:')
+    expect(statewideCountText([on, on, on, on], 1, 'California')).toBe('4 alerts in effect in California; the 3 most recent:')
   })
 })

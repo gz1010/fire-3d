@@ -59,7 +59,7 @@ export function PanelToggle({
   )
 }
 
-const BADGE_TEXT = { order: 'evacuation order', warning: 'evacuation warning', 'fire-weather': 'fire weather alert' } as const
+const BADGE_TEXT = { order: 'evacuation order', warning: 'evacuation warning', local: "local officials' alert", 'fire-weather': 'fire weather alert' } as const
 
 function DemoBadge() {
   return (
@@ -151,7 +151,8 @@ function HeaderMenu() {
 }
 
 /** Phones: the updates sheet toggle, labelled, with a badge while official orders, warnings or fire weather alerts
- *  are active near the fire (U-R4). The badge counts official items only; no badge is never an all-clear. */
+ *  are active near the fire (U-R4), and local officials' messages (brief 3, §14.7). The badge counts official items
+ *  only; no badge is never an all-clear. */
 function UpdatesToggle() {
   const { count, level } = useOfficialBadge()
   const badge =
