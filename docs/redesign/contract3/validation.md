@@ -65,6 +65,19 @@ fires, the regional accuracy file and docs/validation.md section 10. This note i
 - `backend/scripts/validate_us_fires.py`: `FIRES` (pre-registered), `starts`, `checks` (protocol step 2),
   `hindcast --what main|main_det|ignition|ablation_det`, `collect` (fires.json for `validate regional`).
 
+## Bug fix in the build code (validation's bug-fix permission)
+
+- `backend/fire3d/catalog.py` `_estimate` (AOI sizing, `estimate_fire_bbox`): it called
+  `perimeters.fetch_perimeters` without the WFIGS identity, so for a fire outside California the California-only
+  default query found no perimeter and the AOI was sized from the VIIRS cluster alone. Windy Deuce's AOI came out 36 km
+  and clipped the fire (observed / WFIGS area 0.78, 1,138 burned cells on the AOI edge). Fix: pass `record_source`,
+  `state` and `irwin_id` for WFIGS rows (as `observed.perimeter_identity` does); CAL FIRE rows unchanged. Regression
+  test `tests/test_firedata_catalog.py::test_estimate_fire_bbox_matches_a_wfigs_fire_by_irwin_id`. Effect: Windy
+  Deuce 36 → 60 km (area ratio 1.04, inside the AOI); Emigrant 34 → 37 km; Table Rock 19 → 20 km; centre shifts under
+  270 m for Lower Sugarloaf, Cottonwood Peak, Trout and Greer; Black Cove, Island Creek, France Canyon, Horse Gulch and
+  Rush unchanged. The seven changed bundles were rebuilt and re-scored; before/after values are in docs/validation.md
+  section 10.9.
+
 ## Deviations
 
 - Day length uses NFDRS4's own formula (`CalcDayl`), as the reference code does; Open-Meteo's `daylight_duration` is
@@ -74,6 +87,9 @@ fires, the regional accuracy file and docs/validation.md section 10. This note i
   vapour pressure deficit or dew point").
 - Outside California the water-year request is still made (best effort, never a warning while GSI applies): it serves
   the never-silent fallback (`ca_month_table_drought`) and the validation ablation.
+- Build gate: the queue started a build when historical-forecast or the archive answered the probe (not only on
+  `overall ok`; the forecast host is not used by these historical builds), relying on `--require-hrrr` to fail rather
+  than fill. Every scored bundle has 0 ERA5 and 0 GFS-filled hours and an ERA5 GSI series (docs/validation.md 10.3).
 - The series covers `start − 28 d` through the end of the bundle's weather window (CONTRACT: start − 28 d to start),
   so hindcasts started days after ignition use the 21 days before their own start.
 
@@ -83,5 +99,6 @@ fires, the regional accuracy file and docs/validation.md section 10. This note i
 `backend/fire3d/spread/ensemble.py`, `backend/fire3d/spread/validate.py`, `backend/fire3d/sources/weather.py`,
 `backend/fire3d/build/weather_bundle.py`, `backend/scripts/validate_us_fires.py`, `backend/tests/test_gsi.py`,
 `backend/tests/test_regional_accuracy.py`, `backend/tests/test_spread_validate.py`,
-`backend/tests/test_us_pipeline_quota.py` (one test adapted to GSI), `backend/fire3d/data/regional_accuracy.json`,
+`backend/tests/test_us_pipeline_quota.py` (one test adapted to GSI), `backend/tests/test_regional_accuracy_script.py`,
+`backend/fire3d/catalog.py` and `backend/tests/test_firedata_catalog.py` (bug fix), `backend/fire3d/data/regional_accuracy.json`,
 `docs/validation.md`.

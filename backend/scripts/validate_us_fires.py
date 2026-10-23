@@ -406,7 +406,9 @@ def collect(run_dir: Path, checks: list[dict], california_meta: dict) -> dict:
         meta = california_meta.get(fid) or {}
         if rows is None:
             continue
-        ign = _load_rows(run_dir, fid, "ignition") or []
+        ign = _load_rows(run_dir, fid, "ignition")
+        if ign is None:    # Eaton and Palisades: the label starts are ignition + 6/12/24 h already
+            ign = rows if tuple(dict(CALIFORNIA)[fid]) == (6.0, 12.0, 24.0) else []
         fires.append({"id": fid, "name": meta.get("name") or fid, "state": "CA", "region": "OSCC",
                       "year": int(fid[:4]), "rows": rows, "ignition_rows": ign,
                       "fuels_edition": meta.get("fuels_edition"), "lfm_method": meta.get("lfm_method"),
