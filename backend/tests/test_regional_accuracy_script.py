@@ -81,7 +81,7 @@ def test_few_fires_caveat_is_built_from_the_scores(vf) -> None:
     assert vf.few_fires_caveat([0.355, 0.348]) == "Two fires only: a rough value (both fires scored about 0.35)."
     assert vf.few_fires_caveat([0.4, 0.3, 0.5]) == "Three fires only: a rough value (the three fires scored 0.30, 0.40 and 0.50)."
     assert vf.few_fires_caveat([]) is None
-    rows = lambda s: [{"lead_h": 12.0, "sorensen": 0.8, "sorensen_growth": s, "area_ratio": 1.0}]   # noqa: E731
+    rows = lambda s: [{"lead_h": 12.0, "sorensen": 0.8, "sorensen_growth": s, "area_ratio": 1.0}]
     caveats = vf.region_caveats([{"region": "SACC-SP", "rows": rows(0.299)}, {"region": "SACC-SP", "rows": rows(0.49)},
                                  {"region": "OSCC", "rows": rows(0.4)}])
     assert caveats["SACC-SP"][0] == "Two fires only: a rough value (the two fires scored 0.30 and 0.49)."

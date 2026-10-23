@@ -70,16 +70,17 @@ def test_fires_erring_in_opposite_directions_give_no_region_ratio() -> None:
     ic = _fire("island-creek", "NRCC", [0.2] * 12, ratio=0.63, name="Island Creek")
     r = V.region_accuracy("NRCC", "Northern Rockies", [ic, hg], caveats=["Two fires only"])
     assert r["growth_ratio_median"] is None and r["growth_sorensen"] == pytest.approx(0.35)
-    assert r["caveats"] == ["Two fires only", "The fires erred in opposite directions: too much growth on Horse Gulch "
-                            "(×1.78), too little on Island Creek (×0.63); no single growth ratio is given for this region."]
+    assert r["caveats"] == ["Two fires only", ("The fires erred in opposite directions: too much growth on Horse Gulch "
+                                               "(×1.78), too little on Island Creek (×0.63); no single growth ratio is "
+                                               "given for this region.")]
     # most fires err the pooled way: the ratio stays, the caveat names the exception
     fs = [_fire("e", "OSCC", [0.5] * 12, ratio=1.74, name="Eaton"), _fire("m", "OSCC", [0.5] * 8, ratio=2.2, name="Madre"),
           _fire("p", "OSCC", [0.4] * 12, ratio=0.57, name="Palisades")]
     r = V.region_accuracy("OSCC", "Southern California", fs)
     assert r["growth_ratio_median"] == pytest.approx(1.74)
-    assert r["caveats"] == ["The fires erred in opposite directions: too much growth on Eaton (×1.74) and Madre (×2.2), "
-                            "too little on Palisades (×0.57); the region's growth ratio (×1.74, the median over all "
-                            "leads) follows most of them."]
+    assert r["caveats"] == [("The fires erred in opposite directions: too much growth on Eaton (×1.74) and Madre (×2.2), "
+                             "too little on Palisades (×0.57); the region's growth ratio (×1.74, the median over all "
+                             "leads) follows most of them.")]
     # same direction, or about right: no caveat (Great Basin x1.03 and x0.83)
     r = V.region_accuracy("GBCC", "Great Basin", [_fire("f", "GBCC", [0.2] * 12, ratio=1.03),
                                                   _fire("c", "GBCC", [0.3] * 16, ratio=0.83)])

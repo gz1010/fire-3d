@@ -349,7 +349,7 @@ def test_behaviour_annotation_fallback_is_never_silent(tmp_path) -> None:
     doc["days"] = [d for d in doc["days"] if d["date"] != "2024-02-20"]          # a gap inside the series
     bundle.write_json(bdir / WB.LFM_GSI_JSON, doc)
     f = behavior._live_moisture_by_hour(bdir, man, tz, None)
-    for h in range(0, 30):
+    for h in range(30):
         f(now + h * HOUR_MS)
     assert sum(f.fallback.values()) == 30 and len(f.fallback) == 2              # Feb 27 and Feb 28 (CST)
     msg = behavior._behavior_lfm_warning(f.fallback)

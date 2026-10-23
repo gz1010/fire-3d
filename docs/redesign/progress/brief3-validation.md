@@ -93,3 +93,14 @@ sensitivity (15). Assembly: scratchpad tools/assemble.py (needs doc_10_5/6/7/8 r
 
 ## Open problems
 - none yet
+
+## Review fixes (2026-10-23, ~14:10-14:35Z; fixer)
+- Verified every issue before fixing (reviewer repro rerun, Windy Deuce bundle files read, per-fire growth ratios and
+  the pooled between-fire spread recomputed from the stored rows). All confirmed.
+- M1: behaviour charts hold the latest GSI after the series (gsi_at hold_last) and record any remaining fallback as a
+  manifest warning. m4: member_weathers fetches the GSI series for live bundles only.
+- W-M1 / W-M3 / m1: regional_accuracy.json regenerated from stored rows (no re-run): data-built two-fire caveats,
+  NRCC growth_ratio_median null with a per-fire caveat, Windy Deuce timing caveat. Scores unchanged.
+- Docs 10.4/10.5/10.10/summary, new 10.11 "Review fixes". Web items (per-fire ratio wording, 0.2-0.2 range) and SPEC 8.4
+  handed to the integration (report notes_for_integrator).
+- Backend 988 passed; web 1173 passed (2 skipped).
