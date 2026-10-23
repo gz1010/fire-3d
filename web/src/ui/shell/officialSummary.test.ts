@@ -40,7 +40,8 @@ describe('Public official summary lines', () => {
     const live = calfireLine({ state: 'available', acres: 3160, percentContained: 65, isActive: true, updatedMs: Date.UTC(2026, 9, 18, 15, 1) } as CalFireOfficial, nowMs)
     expect(live.text).toBe('3,160 ac · 65% contained · updated Oct 18, 08:01 PDT')
     const past = calfireLine({ state: 'available', acres: 14021, percentContained: 100, isActive: false, final: true, updatedMs: Date.UTC(2026, 7, 6, 17, 47) } as CalFireOfficial, nowMs)
-    expect(past.text).toBe('14,021 ac · 100% contained · final record · updated Aug 6, 10:47 PDT')
+    // a record that is no longer active keeps its year (a replay of 2025 must not read "Aug 6" as 2025)
+    expect(past.text).toBe('14,021 ac · 100% contained · final record · updated Aug 6, 2026 10:47 PDT')
     expect(calfireLine({ state: 'unavailable' } as CalFireOfficial, nowMs).tone).toBe('muted')
     // no record vs an outage: an unreachable source is never reported as "no record"
     expect(calfireLine({ state: 'unavailable', reason: 'No CAL FIRE record is linked to this fire.' } as CalFireOfficial, nowMs).text).toBe('No record for this fire.')

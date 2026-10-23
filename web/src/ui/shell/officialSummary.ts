@@ -9,7 +9,8 @@ import { fmtWhen } from '../../extras/format'
 import { distanceText } from '../../official/geo'
 import { evacuationWho, groupZones, type CalFireOfficial, type EvacuationOfficial, type FireWeatherOfficial } from '../../official/model'
 import { fmtAcres, fmtNumber } from '../../lib/format'
-import type { TimeFmt } from '../../lib/time'
+import { fmtAt, type TimeFmt } from '../../lib/time'
+import { getTimeFormat } from '../../state/timeZone'
 
 export type SummaryTone = 'order' | 'warning' | 'alert' | 'quiet' | 'muted'
 
@@ -69,7 +70,9 @@ export function calfireLine(c: CalFireOfficial, nowMs: number, tf?: TimeFmt): Su
     c.percentContained != null ? `${fmtNumber(c.percentContained)}% contained` : null,
     c.isActive !== true && c.final ? 'final record' : null,
     c.blocks && c.blocks.length > 1 ? 'the agencies differ on whether it is active' : null,
-    c.updatedMs != null ? `updated ${fmtWhen(c.updatedMs, nowMs, tf)}` : null,
+    // a record that is no longer active is often read in a replay of another year: its update time always carries the
+    // year (as the Command row does), so "updated Apr 9" is never taken for the replay's year (integration)
+    c.updatedMs != null ? `updated ${c.isActive === true ? fmtWhen(c.updatedMs, nowMs, tf) : fmtAt(c.updatedMs, tf ?? getTimeFormat(), { zone: true, year: 'always' })}` : null,
   ].filter(Boolean)
   return { ...base, text: parts.length ? parts.join(' · ') : 'Record without size or containment.', tone: 'quiet' }
 }
