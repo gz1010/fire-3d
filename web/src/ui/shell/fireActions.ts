@@ -2,7 +2,7 @@
 // useStore.selectIncident, so state/history.ts records it as a history entry; a build starts only for "Prepare
 // analysis (1-3 min)", never because a fire was opened.
 import { isHistoryEntry } from '../../state/history'
-import { findFire, fireFlyTo } from '../../state/overview'
+import { analysisState, findFire, fireFlyTo } from '../../state/overview'
 import { getTimeBounds, useStore, type AppState } from '../../state/store'
 import { useWorkspace } from '../../state/workspace'
 import { switchWorkspace } from './handoff'
@@ -84,5 +84,7 @@ export function showFireCard(id: string): void {
   ws.setFireCard(id)
   const fire = findFire(id, st.summary, st.catalog)
   const fly = fire ? fireFlyTo(fire) : null
-  if (fly && ws.workspace === 'map') ws.requestMapFlyTo(fly)
+  // an unprepared fire's card holds the map's zoom focus (map/focus.ts FocusHold): a prepared fire whose area the view
+  // covers must not open instead of the fire the user picked; a prepared fire is opened by the zoom as before
+  if (fly && ws.workspace === 'map') ws.requestMapFlyTo(fire && analysisState(fire) !== 'ready' ? { ...fly, source: 'fire-card' } : fly)
 }

@@ -236,6 +236,16 @@ describe('official areas hold the focus', () => {
     expect(focusUnlessHeld(view(ZONE_CENTER[0], ZONE_CENTER[1], 14.5), fires, null, hold)).toBe(null)
   })
 
+  it("a flight to an unprepared fire's card holds too (integration: Little Giant must not open Lower Sugarloaf)", () => {
+    const hold = new FocusHold()
+    hold.flight('fire-card')
+    expect(hold.active).toBe(true)
+    // on the overview, flying to the card of a fire next to a prepared one keeps the overview (the card stays)
+    expect(focusUnlessHeld(view(ZONE_CENTER[0], ZONE_CENTER[1], 10), fires, null, hold)).toBe(null)
+    hold.release() // the user's next move: the zoom focus applies again
+    expect(focusUnlessHeld(view(ZONE_CENTER[0], ZONE_CENTER[1], 10), fires, null, hold)).toBe(NORTE.id)
+  })
+
   it('the next user move, another flight or a release ends the hold', () => {
     const hold = new FocusHold()
     hold.flight('official')

@@ -52,7 +52,7 @@ export interface GeoView {
 
 /** Who asked for a map flight (brief 2, decision 10): 'official' = showing an official area (an evacuation zone, an NWS
  *  alert's zones); the map's zoom focus skips the move it causes, so showing an area never opens another fire. */
-export type MapFlySource = 'official'
+export type MapFlySource = 'official' | 'fire-card'
 
 /** One-shot request for the map camera (geographic). The map reacts to `nonce` changes only. */
 export interface MapFlyTo {
