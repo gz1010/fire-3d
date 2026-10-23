@@ -59,7 +59,10 @@
   "docs/screenshots/brief3-us-official-cameras-nonca-desktop.png",
   "docs/screenshots/brief3-us-official-eaton-command-desktop.png",
   "docs/screenshots/brief3-us-official-horse-gulch-command-desktop.png",
-  "docs/screenshots/brief3-us-official-horse-gulch-public-desktop.png"
+  "docs/screenshots/brief3-us-official-horse-gulch-public-desktop.png",
+  "docs/screenshots/brief3-us-official-eaton-feed-command-desktop.png",
+  "docs/screenshots/brief3-us-official-eaton-feed-public-desktop.png",
+  "docs/screenshots/brief3-us-official-location-tijuana-desktop.png"
  ],
  "contract_deviations": [
   "§14.8.2: sources[] entries also carry 'aggregator' ('Cal OES' / 'Oregon OEM'), additive, so the web never derives the short name from 'publisher'.",
@@ -130,6 +133,37 @@
    "web/src/ui/shell/dataStatus.ts",
    "docs/redesign/contract3/us-official.md",
    "docs/redesign/progress/brief3-us-official.md"
+  ]
+ },
+ "fixes_round_2": {
+  "review": "round-2 review of us-official (issues N1 major, N2 and N3 minor, all in role; reviewer screenshots in the scratch folder review-us-official/shots2/)",
+  "restart_note": "No partial work of the interrupted earlier fixer was found: git status and git diff were clean in every us-official path and nothing was committed for it after 18808f4 (round 1). The scratch folder review-us-official/ held only the reviewer's files; fix-us-official/ is round 1's. The only stale worktree (review-us-web/wt2) belongs to the us-web review and did not block anything, so it was left alone.",
+  "issues": {
+   "N1": "fixed. Verified: on Eaton at the replay time the Official filter opens on LA City's Sunset Fire warning and the Runyon Canyon messages, and their place phrase sat at the end of `detail`, which the feed clamps to 1 line (Command) or 2 (Public), so a collapsed row never showed it. Now FeedItem has an optional `place` (ui/feed/types.ts) and localAlertFeedItems puts localAlertPlace(...) there; UpdatesFeed renders it as its own line (.uf-place, a pin icon, never clamped) right under the title, and `detail` keeps event, sent time and channel (the phrase is said once). Re-taken at Eaton t=1736394000000, Official filter: Command shows 'area 18 mi from the fire's reported location · may be about another fire' and 'area 16 mi …' on the first two collapsed rows; Public shows the same on the Sunset and Runyon rows. Tests (localAlerts.test.ts): every feed row's `place` equals localAlertPlace of its message (mi and km), `detail` never repeats it, the newest row in feed order is the Sunset Fire warning with 'area 18 mi from the fire's reported location · may be about another fire'.",
+   "N2": "fixed. Verified: at Tijuana and Anchorage the ?bbox= answer is nws_api 'available' with counties [] and 0 alerts, and the card said 'Local officials' alerts relayed by NWS: none here · not an all-clear'. New pure localAlertsForPointState (official/localAlerts.ts), used by useOfficialAtPoint through the new localAlertsAtSelectedPoint: while the point's state is looked up (placeState undefined) a 'listed' or 'none' answer reads 'Checking local officials' alerts…'; where the point has no state (null: outside the lower 48) 'none' becomes 'Local officials' alerts: not checked' with 'Fire-3d checks local officials' alerts in the lower 48 states only.'; when the lookup failed, 'Fire-3d could not tell which state this point is in.'. Messages listed there stay listed (their area reaches the point). The fire's own answer (past time, point in its area) waits for the lookup too. Tests: Tijuana and Anchorage box answers (from the reviewer's recorded answers) -> not checked with the lower-48 reason, loading while undefined, never 'none here'; lookup failed -> its reason; Reno NV -> none here; LA CEM listed stays listed with null state; the fire's Eaton answer -> loading, then listed with elsewhere 6. Screenshot: location card at 32.51,-117.02 (Tijuana) and 61.2,-149.9 (Anchorage): evacuation, NWS and local alerts all 'not …' here; Reno still 'none here · not an all-clear'. The backend side (nws_api 'not_checked' when states_in_area is empty) is us-pipeline's api/official.py and is left to the integration.",
+   "N3": "fixed. Verified: localAlertsAtPoint counted every message it left out of the live ?bbox= answer in `elsewhere`, and localAlertLines then said 'N of the fire's local alerts are for other places in its area (see Updates).', though that answer is the point's box, not the fire's, and Updates does not list it (backend _counties(area) matches every county the ±0.005° box touches). localAlertsAtPoint now takes `source: 'fire' | 'box'` (default 'fire'): the fire's answer still counts `elsewhere`; the box answer counts `nearby` {county, area}, worded '1 nearby local alert is for a neighbouring county, not this point's county.' (or '… for an area that does not reach this point.'), without '(see Updates)'. Tests: a point on the Los Angeles side of the Los Angeles / Ventura line with a Ventura County-wide message in the box answer -> none here with the neighbouring-county sentence, never \"the fire's\" or 'see Updates'; with the LA message too -> the LA line plus the sentence; an area match left out -> the area sentence. No screenshot (needs a live county-wide message next to a county line)."
+  },
+  "gates": {
+   "backend": "cd backend && uv run pytest -q -> 882 passed (68.2 s), main checkout (no backend change in this round)",
+   "web_main_checkout": "typecheck (tsc -b) exit 0; lint exit 0, 55 warnings, 0 outside src/scene; npm test 72 files, 1111 passed, 2 skipped; build exit 0",
+   "check_time_api": "node web/scripts/check-time-api.mjs --role us-official -> 0 deprecated uses, 0 America/Los_Angeles literals",
+   "non_get_requests": "0 in the API run (8713, FIRE3D_LIVE=0): 116 GET",
+   "key_scan": "FIRMS_MAP_KEY count-only scan of the diff and logs: 0",
+   "wording_scan": "added lines: 4 hits, all negations or test text ('never an all-clear', 'none here · not an all-clear', 'Not an all-clear either way')"
+  },
+  "screenshots": [
+   "docs/screenshots/brief3-us-official-eaton-feed-command-desktop.png (Eaton Command at the replay time, Official filter: each collapsed local-alert row shows 'area 18 mi / 16 mi from the fire's reported location · may be about another fire')",
+   "docs/screenshots/brief3-us-official-eaton-feed-public-desktop.png (the same in Public, Details open)",
+   "docs/screenshots/brief3-us-official-location-tijuana-desktop.png (overview, point in Tijuana: 'Local officials' alerts: not checked · Fire-3d checks local officials' alerts in the lower 48 states only.')"
+  ],
+  "files": [
+   "web/src/official/localAlerts.ts (FeedItem.place for local alerts; localAlertsAtPoint source 'fire' | 'box' with `nearby`; localAlertsForPointState; localAlertsAtSelectedPoint; LOCAL_LOWER48_REASON, LOCAL_LOOKUP_FAILED_REASON)",
+   "web/src/official/hooks.ts (useOfficialAtPoint uses localAlertsAtSelectedPoint with the point's state)",
+   "web/src/official/localAlerts.test.ts (round-2 cases)",
+   "web/src/location/official.ts (localAlertLines: `nearby` wording)",
+   "web/src/ui/feed/types.ts (FeedItem.place, optional)",
+   "web/src/ui/feed/UpdatesFeed.tsx, web/src/ui/feed/updatesFeed.css (.uf-place line, never clamped)",
+   "docs/redesign/contract3/us-official.md, docs/redesign/progress/brief3-us-official.md, this report, 3 screenshots"
   ]
  }
 }

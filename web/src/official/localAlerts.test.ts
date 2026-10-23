@@ -4,12 +4,16 @@ import { NOT_FOUND_TEXT } from '../extras/format'
 import { timeFmt } from '../lib/time'
 import { LOCAL_ARCHIVE_EATON, LOCAL_ARCHIVE_KERN_FRW, LOCAL_ARCHIVE_PENDING_BLACK_COVE, LOCAL_ARCHIVE_SHERIDAN_WY, LOCAL_LIVE_LA_CEM, LOCAL_LIVE_NONE_RENO } from './__fixtures__/localAlerts'
 import {
+  LOCAL_LOOKUP_FAILED_REASON,
+  LOCAL_LOWER48_REASON,
   LOCAL_PLACE_NOTE,
   localAlertCredits,
   localAlertFeedItems,
   localAlertLink,
   localAlertPlace,
   localAlertsAtPoint,
+  localAlertsAtSelectedPoint,
+  localAlertsForPointState,
   localAlertsState,
   localAlertText,
   OPENFEMA_NOTICE,
@@ -107,11 +111,11 @@ describe('review R1: where each message applies, most relevant first (Eaton, rep
     expect(localAlertPlace(l.alerts[0], { metric: true })).toBe("area 2.7 km from the fire's reported location · may be about another fire")
     expect(localAlertPlace({ match: 'polygon', where: { from: 'fire', covers: true, km: 0 } }, { metric: false })).toBe("area covers the fire's reported location")
     expect(localAlertPlace({ match: 'county', where: { from: 'fire', covers: null, km: null } }, { metric: false })).toBe('matched by county, not by an exact area · may be about another fire')
-    // the feed: every row's detail carries the phrase, and the note explains it
+    // the feed: every row carries the phrase as its own `place` (shown unclamped; review round 2, N1), and the note
+    // explains it
     const feed = localAlertFeedItems(l, { manifest: null, tf: LA12, metric: false })
     expect(feed).toHaveLength(8)
-    feed.forEach((f, i) => expect(f.detail).toContain(places[i]))
-    expect(feed[0].detail).toBe("Evacuation Immediate · sent Jan 7, 2025 10:26 PM PST · FEMA archive · area 1.7 mi from the fire's reported location · may be about another fire")
+    feed.forEach((f, i) => expect(f.place).toBe(places[i]))
     expect(feed[0].notes).toContain(LOCAL_PLACE_NOTE)
     // the card (fire's list, e.g. the overview card of the open fire): every local-alert line has the phrase, phones too
     const lines = localAlertLines(l, LA12, 3, { units: 'us', fireOpen: true }).filter((x) => x.key.startsWith('local-') && x.url)
@@ -158,6 +162,109 @@ describe('review R1: where each message applies, most relevant first (Eaton, rep
     const a = localAlertsAtPoint(wy, -106.9, 44.8).alerts[0]
     expect(localAlertPlace(a, { metric: false, fireOpen: false })).toBe('matched by county, not by an exact area')
     expect(localAlertPlace(a, { metric: false, fireOpen: true })).toBe('matched by county, not by an exact area · may be about another fire')
+  })
+})
+
+describe('review round 2', () => {
+  const eaton = () => localAlertsState(ok(LOCAL_ARCHIVE_EATON))
+
+  it('N1: a collapsed feed row shows where the area lies: `place` (never clamped), not the end of the clamped detail', () => {
+    const l = eaton()
+    const feed = localAlertFeedItems(l, { manifest: null, tf: LA12, metric: false })
+    // in time order (the feed's order) the newest is LA City's Sunset Fire warning, 18 mi away
+    const newest = [...feed].sort((a, b) => b.tMs - a.tMs)[0]
+    expect(newest.title).toMatch(/^Archived alert from 200277,LA City Public Alerts.*Sunset Fire/)
+    expect(newest.place).toBe("area 18 mi from the fire's reported location · may be about another fire")
+    for (const f of feed) {
+      expect(f.place).toMatch(/^area (covers|[\d.]+ mi from) the fire's reported location|^matched by county/)
+      expect(f.detail).not.toContain('reported location') // said once, in the unclamped line
+    }
+    expect(feed[0].detail).toBe('Evacuation Immediate · sent Jan 7, 2025 10:26 PM PST · FEMA archive')
+    expect(localAlertFeedItems(l, { manifest: null, tf: LA12, metric: true })[0].place).toBe("area 2.7 km from the fire's reported location · may be about another fire")
+  })
+
+  // the live `?bbox=` answers at a point outside the lower 48 (recorded from the endpoint by the round-2 review):
+  // NWS 'available' with no county and no message, because the national request covers the lower 48 only
+  const outside = (bbox: [number, number, number, number]) => ({ ...LOCAL_LIVE_NONE_RENO, area_bbox: bbox, counties: [] })
+  const TIJUANA = outside([-117.025, 32.505, -117.015, 32.515])
+  const ANCHORAGE = outside([-149.905, 61.195, -149.895, 61.205])
+
+  it('N2: outside the lower 48 local alerts are "not checked", never "none here"; loading while the state is looked up', () => {
+    for (const [d, lon, lat] of [
+      [TIJUANA, -117.02, 32.51],
+      [ANCHORAGE, -149.9, 61.2],
+    ] as const) {
+      const live = localAlertsState(ok(d))
+      expect(live.state).toBe('none') // the raw answer reads as a check
+      const out = localAlertsAtSelectedPoint({ lon, lat, live, fire: null, countyFips: null, pointState: null })
+      expect(out).toMatchObject({ state: 'not-checked', reason: LOCAL_LOWER48_REASON, alerts: [] })
+      const lines = localAlertLines(out, LA12)
+      expect(lines).toHaveLength(1)
+      expect(lines[0]).toMatchObject({ text: "Local officials' alerts: not checked", sub: "Fire-3d checks local officials' alerts in the lower 48 states only.", official: false })
+      expect(lines.map((x) => x.text).join(' ')).not.toMatch(/none here/)
+      // the point's state not known yet: checking, never "none" for a moment
+      const wait = localAlertsAtSelectedPoint({ lon, lat, live, fire: null, pointState: undefined })
+      expect(wait.state).toBe('loading')
+      expect(localAlertLines(wait, LA12)[0].text).toBe("Checking local officials' alerts…")
+    }
+    // the lookup failed: not checked, saying why
+    expect(localAlertsAtSelectedPoint({ lon: -117.02, lat: 32.51, live: localAlertsState(ok(TIJUANA)), fire: null, pointState: null, lookupFailed: true })).toMatchObject({
+      state: 'not-checked',
+      reason: LOCAL_LOOKUP_FAILED_REASON,
+    })
+    // in the lower 48 (Reno, NV) "none here" stays, never an all-clear
+    const reno = localAlertsAtSelectedPoint({ lon: -119.81, lat: 39.53, live: localAlertsState(ok(LOCAL_LIVE_NONE_RENO)), fire: null, countyFips: '32031', pointState: 'NV' })
+    expect(reno.state).toBe('none')
+    expect(localAlertLines(reno, LA12)[0].text).toBe("Local officials' alerts relayed by NWS: none here · not an all-clear")
+    // a message listed there stays listed (its area reaches the point), whatever the lookup said
+    const la = localAlertsState(ok(LOCAL_LIVE_LA_CEM))
+    expect(localAlertsForPointState(la, { pointState: null }).state).toBe('listed')
+    // not checked, unavailable and loading answers pass through as they are
+    const failed = localAlertsState(ok(null, { error: 'Could not reach the Fire-3d server.' }))
+    expect(localAlertsForPointState(failed, { pointState: undefined })).toBe(failed)
+  })
+
+  it("N2: the fire's own answer (a past time, the point in its area) waits for the point's state too", () => {
+    const fire = eaton()
+    expect(localAlertsAtSelectedPoint({ lon: -118.0426, lat: 34.1705, live: null, fire, countyFips: null, pointState: undefined }).state).toBe('loading')
+    const p = localAlertsAtSelectedPoint({ lon: -118.0426, lat: 34.1705, live: null, fire, countyFips: '06037', pointState: 'CA' })
+    expect(p).toMatchObject({ state: 'listed', elsewhere: 6 })
+    expect(p.nearby).toBeUndefined()
+    // a past time outside the fire's area: not checked
+    expect(localAlertsAtSelectedPoint({ lon: -100, lat: 40, live: null, fire: null, pointState: 'NE' })).toMatchObject({
+      state: 'not-checked',
+      reason: "Past local alerts are checked for the selected fire's area only.",
+    })
+  })
+
+  it("N3: the live box answer's left-out messages are 'nearby' (a neighbouring county), never the fire's", () => {
+    // a point on the Los Angeles side of the Los Angeles / Ventura county line: the ±0.005° box touches both counties,
+    // so the backend matches a Ventura County-wide message too
+    const la = LOCAL_LIVE_LA_CEM.alerts[0]
+    const ventura = { ...la, id: 'ventura-cem', area_desc: 'Ventura', same_codes: ['006111'], headline: 'Alert from VC Alert' }
+    const box = { ...LOCAL_LIVE_LA_CEM, area_bbox: [-118.6385, 34.1665, -118.6285, 34.1765] as [number, number, number, number], counties: [{ fips: '06037', name: 'Los Angeles County', state: 'CA' }, { fips: '06111', name: 'Ventura County', state: 'CA' }] }
+    const at = (alerts: (typeof la)[]) =>
+      localAlertsAtSelectedPoint({ lon: -118.6335, lat: 34.1715, live: localAlertsState(ok({ ...box, alerts })), fire: null, countyFips: '06037', pointState: 'CA' })
+    const onlyVentura = at([ventura])
+    expect(onlyVentura).toMatchObject({ state: 'none', nearby: { county: 1, area: 0 } })
+    expect(onlyVentura.elsewhere).toBeUndefined()
+    const none = localAlertLines(onlyVentura, LA12)[0]
+    expect(none.text).toBe("Local officials' alerts relayed by NWS: none here · not an all-clear")
+    expect(none.sub).toMatch(/^1 nearby local alert is for a neighbouring county, not this point's county\. Fire-3d lists only/)
+    expect(none.sub).not.toMatch(/fire's local alert|see Updates/)
+    const both = at([la, ventura])
+    expect(both.alerts.map((a) => a.id)).toEqual([la.id])
+    const lines = localAlertLines(both, LA12, 3, { units: 'us', fireOpen: false })
+    expect(lines.map((x) => x.text)).toEqual(['Alert, issuer not named: "Alert from AlertLACounty"', "1 nearby local alert is for a neighbouring county, not this point's county."])
+    // an area match left out of a box answer is said as such
+    const far = localAlertsAtPoint(
+      localAlertsState(ok({ ...box, alerts: [{ ...la, id: 'poly', match: 'polygon', same_codes: [], polygon: { type: 'Polygon', coordinates: [[[-118.7, 34.3], [-118.69, 34.3], [-118.69, 34.31], [-118.7, 34.3]]] } }] })),
+      -118.6335,
+      34.1715,
+      { countyFips: '06037', source: 'box' },
+    )
+    expect(far.nearby).toEqual({ county: 0, area: 1 })
+    expect(localAlertLines(far, LA12)[0].sub).toMatch(/^1 nearby local alert is for an area that does not reach this point\./)
   })
 })
 

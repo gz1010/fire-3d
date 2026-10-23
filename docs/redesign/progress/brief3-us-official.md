@@ -51,3 +51,12 @@ Started 2026-10-23 ~01:45 UTC (late start; us-catalog finished, us-web past M5, 
   (cameras sources [] outside California), R6 fixed (Cal OES "none" names its source in multi-state answers), R7 fixed.
 - Gates: pytest 880; web typecheck 0, lint 55 (scene), 72 files / 1107 tests (clean worktree 67 / 1085), build OK;
   check-time-api 0/0; 0 non-GET; key scan 0. Screenshots viewed; servers stopped.
+
+## Review fixes, round 2 (2026-10-23)
+- Issues N1 (major), N2, N3 (minor), all in role. No partial work of the interrupted earlier fixer was found (clean
+  paths, nothing committed after round 1).
+- N1 fixed (FeedItem.place: the local alert's location phrase on its own unclamped line in the feed), N2 fixed (local
+  alerts at a point wait for the point's state; outside the lower 48 "not checked", never "none"), N3 fixed (the live
+  box answer's left-out messages are "nearby", never "the fire's").
+- Gates: pytest 882; web typecheck 0, lint 55 (scene), 72 files / 1111 tests, build OK; check-time-api 0/0; 0 non-GET
+  (116 GET); key scan 0. Screenshots viewed (Eaton feed Command and Public, Tijuana, Anchorage, Reno); servers stopped.

@@ -215,13 +215,22 @@ export function fireWeatherLines(fw: FireWeatherOfficial): OfficialLine[] {
  * area lies, on phones too ("area covers this point", "area 0.2 mi from this point · may be about another fire";
  * review round 1, R1: useOfficialAtPoint measures from the point and keeps the messages whose area reaches it). None:
  * "Local officials' alerts relayed by NWS: none here · not an all-clear" with the standing caveat (and how many of the
- * fire's messages are for other places); endpoint missing or failed: "Local officials' alerts: not checked", never
- * "none".
+ * fire's messages are for other places, or, for the live box answer, how many nearby ones are for a neighbouring
+ * county: review round 2, N3); endpoint missing or failed, outside the lower 48 or the point's state unknown: "Local
+ * officials' alerts: not checked", never "none" (N2).
  */
 export function localAlertLines(l: LocalAlertsOfficial | undefined, tf: TimeFmt, max = 3, opts: { units?: Units; fireOpen?: boolean } = {}): OfficialLine[] {
   if (!l) return []
   const metric = opts.units === 'metric'
-  const elsewhere = l.elsewhere ? `${l.elsewhere} of the fire's local alert${l.elsewhere === 1 ? ' is' : 's are'} for other places in its area (see Updates).` : null
+  const elsewhere = [
+    // the fire's own answer: its messages for other places in its area are in Updates
+    l.elsewhere ? `${l.elsewhere} of the fire's local alert${l.elsewhere === 1 ? ' is' : 's are'} for other places in its area (see Updates).` : null,
+    // the live answer for the point's small box (review round 2, N3): never called the fire's, and not in Updates
+    l.nearby?.county ? `${l.nearby.county} nearby local alert${l.nearby.county === 1 ? ' is' : 's are'} for a neighbouring county, not this point's county.` : null,
+    l.nearby?.area ? `${l.nearby.area} nearby local alert${l.nearby.area === 1 ? ' is for an area that does' : 's are for areas that do'} not reach this point.` : null,
+  ]
+    .filter(Boolean)
+    .join(' ') || null
   const status = (key: string, text: string, sub: string | null, tone: OfficialTone, official = false): OfficialLine => ({ key, text, sub, subCompact: sub, official, tone, url: null })
   switch (l.state) {
     case 'loading':

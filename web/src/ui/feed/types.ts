@@ -98,6 +98,9 @@ export interface FeedItem {
   archived?: boolean
   /** Short notes for the details, e.g. "Oregon OEM does not say which fire this is for." */
   notes?: string[]
+  /** Where the item's area lies, e.g. "area 18 mi from the fire's reported location · may be about another fire" (brief
+   *  3, local officials' alerts). Shown in full on the collapsed row, never clamped like `detail` (review round 2, N1). */
+  place?: string | null
   /** No issuer or source time exists: the time column says so (tMs only orders the list). */
   timeNotGiven?: boolean
   /** A day's satellite passes grouped into one row: the passes it holds (each selectable in the details). */

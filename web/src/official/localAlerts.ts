@@ -7,8 +7,10 @@
 // all-clear. An older backend without the endpoint (HTTP 404) is "not checked", never "none". Every line says where
 // the message's area lies (review round 1, R1): "area covers the fire's reported location" or "area 1.7 mi from the
 // fire's reported location · may be about another fire" (the location card measures from its point instead), and the
-// messages are listed in effect first, then the area covering the location, then the nearest, then the newest. Pure;
-// tested in localAlerts.test.ts.
+// messages are listed in effect first, then the area covering the location, then the nearest, then the newest. The
+// feed shows that phrase in full on every collapsed row (`FeedItem.place`; review round 2, N1). At the location card's
+// point, "none here" needs the point's state: Fire-3d checks the lower 48 only (N2), and the live box answer's left-out
+// messages are its own, never "the fire's" (N3). Pure; tested in localAlerts.test.ts.
 import type { IncidentManifest } from '../api/types'
 import { NOT_FOUND_TEXT } from '../extras/format'
 import { lonLatToLocal } from '../lib/reproject'
@@ -91,8 +93,13 @@ export interface LocalAlertsOfficial {
   /** "National Weather Service (relayed local officials' messages)" and, with the archive, "FEMA IPAWS archive via
    *  OpenFEMA". */
   credits: string[]
-  /** At a point (`localAlertsAtPoint`): the fire's messages whose area lies elsewhere in its area (not shown there). */
+  /** At a point (`localAlertsAtPoint`) of the fire's own answer: the fire's messages whose area lies elsewhere in its
+   *  area (not shown there; listed in Updates). */
   elsewhere?: number
+  /** At a point (`localAlertsAtPoint`) of the live `?bbox=` answer for the point's small box (review round 2, N3): the
+   *  messages of that box that do not reach the point, by why (a county match for a neighbouring county; an area that
+   *  does not reach it). Never the fire's messages, and not listed in Updates. */
+  nearby?: { county: number; area: number }
 }
 
 const PHASE: Record<LocalAlert['phase'], FeedItemStatus> = { upcoming: 'upcoming', in_effect: 'active', ended: 'expired' }
@@ -183,14 +190,23 @@ export function localAlertPlace(a: Pick<LocalAlertItem, 'match' | 'where'>, opts
 /** Area match radius at a point for the fire's (past) answer: about the live card's `?bbox=` box (±0.005°). */
 export const POINT_NEAR_KM = 1
 
+export interface LocalAtPointOptions {
+  /** 5-digit county FIPS of the point (from /api/geo/lookup); county matches elsewhere are not kept. */
+  countyFips?: string | null
+  /** Which answer is filtered: 'fire' (default) = the open fire's own answer (past time, point inside its area): the
+   *  messages left out are counted in `elsewhere` ("… of the fire's local alerts are for other places in its area");
+   *  'box' = the live `?bbox=` answer for the point's small box: they are counted in `nearby` (review round 2, N3). */
+  source?: 'fire' | 'box'
+}
+
 /**
- * The fire's local alerts as seen from a point of the location card (review round 1, R1): each area measured from
- * the point (covers it / km away), only the messages whose area reaches the point (polygon within POINT_NEAR_KM; a
- * county match in the point's county, or every county match while the county is unknown), most relevant first; the
- * rest are counted in `elsewhere`. The live card's `?bbox=` answer is already limited to the point's box: it is only
- * measured and ordered. Not an all-clear either way.
+ * The local alerts seen from a point of the location card (review round 1, R1): each area measured from the point
+ * (covers it / km away), only the messages whose area reaches the point (polygon within POINT_NEAR_KM; a county match
+ * in the point's county, or every county match while the county is unknown), most relevant first. The rest are counted
+ * in `elsewhere` for the fire's own answer, or in `nearby` for the live `?bbox=` answer, whose box (±0.005°) can touch
+ * a neighbouring county (review round 2, N3). Not an all-clear either way.
  */
-export function localAlertsAtPoint(l: LocalAlertsOfficial, lon: number, lat: number, opts: { countyFips?: string | null } = {}): LocalAlertsOfficial {
+export function localAlertsAtPoint(l: LocalAlertsOfficial, lon: number, lat: number, opts: LocalAtPointOptions = {}): LocalAlertsOfficial {
   if (l.state !== 'listed' || !Number.isFinite(lon) || !Number.isFinite(lat)) return l
   const fips = opts.countyFips && /^\d{5}$/.test(opts.countyFips) ? opts.countyFips : null
   const measured = l.alerts.map((a): LocalAlertItem => {
@@ -199,13 +215,63 @@ export function localAlertsAtPoint(l: LocalAlertsOfficial, lon: number, lat: num
     const d = covers ? 0 : pointPolygonDistanceKm(a.polygon, lon, lat)
     return { ...a, where: { from: 'point', covers, km: Number.isFinite(d) ? Math.round(d * 10) / 10 : null } }
   })
+  const byCounty = (a: LocalAlertItem) => a.match === 'county' || !a.polygon
   const near = (a: LocalAlertItem) =>
-    a.match === 'county' || !a.polygon ? fips == null || a.sameCodes.some((c) => c.slice(-5) === fips) : a.where.covers === true || (a.where.km != null && a.where.km <= POINT_NEAR_KM)
+    byCounty(a) ? fips == null || a.sameCodes.some((c) => c.slice(-5) === fips) : a.where.covers === true || (a.where.km != null && a.where.km <= POINT_NEAR_KM)
   const alerts = measured.filter(near).sort(localAlertOrder)
-  const elsewhere = measured.length - alerts.length
-  if (alerts.length) return { ...l, alerts, elsewhere }
+  const left = measured.filter((a) => !near(a))
+  const counts: Pick<LocalAlertsOfficial, 'elsewhere' | 'nearby'> =
+    opts.source === 'box' ? { nearby: { county: left.filter(byCounty).length, area: left.filter((a) => !byCounty(a)).length } } : { elsewhere: left.length }
+  if (alerts.length) return { ...l, alerts, ...counts }
   // the area was checked, and no message's area reaches this point: "none here", never an all-clear
-  return { ...l, alerts: [], state: 'none', reason: null, elsewhere }
+  return { ...l, alerts: [], state: 'none', reason: null, ...counts }
+}
+
+export const LOCAL_LOWER48_REASON = "Fire-3d checks local officials' alerts in the lower 48 states only."
+export const LOCAL_LOOKUP_FAILED_REASON = 'Fire-3d could not tell which state this point is in.'
+
+/**
+ * Local alerts at a point, gated by the point's state (review round 2, N2; as for NWS fire weather, R2): Fire-3d's
+ * national request covers the lower 48 only, so while the point's state is being looked up (`pointState` undefined)
+ * the answer is "loading", and where it has none (outside the lower 48, or the lookup failed: null) "none here"
+ * becomes "not checked", never "none". Messages listed there stay listed (their area reaches the point).
+ */
+export function localAlertsForPointState(l: LocalAlertsOfficial, s: { pointState: string | null | undefined; lookupFailed?: boolean }): LocalAlertsOfficial {
+  if (l.state !== 'listed' && l.state !== 'none') return l
+  if (s.pointState === undefined) return { ...l, alerts: [], state: 'loading', reason: null, elsewhere: undefined, nearby: undefined }
+  if (s.pointState === null && l.state === 'none')
+    return { ...l, state: 'not-checked', reason: s.lookupFailed ? LOCAL_LOOKUP_FAILED_REASON : LOCAL_LOWER48_REASON, elsewhere: undefined, nearby: undefined }
+  return l
+}
+
+export interface LocalAtSelectedPointInput {
+  lon: number | null
+  lat: number | null
+  demo?: boolean
+  /** The current time: the live `?bbox=` answer for the point's small box (localAlertsState of it); else null. */
+  live: LocalAlertsOfficial | null
+  /** A past time, the point inside the open fire's area: the fire's own answer; else null. */
+  fire: LocalAlertsOfficial | null
+  countyFips?: string | null
+  /** The point's state (`placeState`): undefined while looked up, null outside the lower 48 or when the lookup failed. */
+  pointState: string | null | undefined
+  /** The lookup failed (rather than the point lying outside the lower 48). */
+  lookupFailed?: boolean
+}
+
+/**
+ * Local officials' alerts at the location card's point (useOfficialAtPoint): the live box answer, else the fire's own
+ * answer for a point in its area at a past time, else "not checked" (past times elsewhere). Measured from the point
+ * (`localAlertsAtPoint`, counting what it leaves out as the box's `nearby` or the fire's `elsewhere`; N3) and gated
+ * by the point's state (`localAlertsForPointState`; N2). Pure, so the hook's choices are tested.
+ */
+export function localAlertsAtSelectedPoint(i: LocalAtSelectedPointInput): LocalAlertsOfficial {
+  if (i.demo) return localAlertsState(null, { demo: true })
+  if (i.lon == null || i.lat == null || !Number.isFinite(i.lon) || !Number.isFinite(i.lat)) return localAlertsState(null)
+  const where = { pointState: i.pointState, lookupFailed: i.lookupFailed }
+  if (i.live) return localAlertsForPointState(localAlertsAtPoint(i.live, i.lon, i.lat, { countyFips: i.countyFips, source: 'box' }), where)
+  if (i.fire) return localAlertsForPointState(localAlertsAtPoint(i.fire, i.lon, i.lat, { countyFips: i.countyFips, source: 'fire' }), where)
+  return { ...localAlertsState(null), reason: "Past local alerts are checked for the selected fire's area only." }
 }
 
 /** The local alerts answer as an explicit state (never "none" where nothing was checked). */
@@ -268,7 +334,9 @@ export interface LocalFeedContext {
 }
 
 /** Feed rows (topic 'local-alert', kind official, key while in effect): one per message, with its issuer, own times,
- *  verbatim text, link, and the archive's notice. */
+ *  verbatim text, link, and the archive's notice. Where its area lies is the row's `place` ("area 18 mi from the
+ *  fire's reported location · may be about another fire"), which the feed shows in full on the collapsed row, never
+ *  clamped like `detail` (review round 2, N1). */
 export function localAlertFeedItems(l: LocalAlertsOfficial | null, ctx: LocalFeedContext): FeedItem[] {
   if (!l || l.state !== 'listed') return []
   return l.alerts.map((a) => {
@@ -292,7 +360,8 @@ export function localAlertFeedItems(l: LocalAlertsOfficial | null, ctx: LocalFee
       kind: 'official' as const,
       tMs: a.sentMs ?? 0,
       title: `${a.lead}: "${a.text}"`,
-      detail: [a.event, sentText(a, ctx.tf), channelText(a), localAlertPlace(a, { metric: ctx.metric ?? false })].filter(Boolean).join(' · '),
+      place: localAlertPlace(a, { metric: ctx.metric ?? false }),
+      detail: [a.event, sentText(a, ctx.tf), channelText(a)].filter(Boolean).join(' · '),
       source: a.archived ? `${a.issuer ?? 'Issuer not named'} (${ARCHIVE_CREDIT})` : `${a.issuer ?? 'Issuer not named'} (relayed by the National Weather Service)`,
       automated: false,
       key: a.phase === 'active',

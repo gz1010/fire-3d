@@ -274,6 +274,28 @@ fetching, envelope).
 - **R7:** comments of `ui/shell/dataStatus.ts` (the fire's zone, the preset's clock) and `official/runtime.ts`
   `fireWeatherFor` (the national answer per `states_checked`) updated.
 
+## Review fixes, round 2
+
+- **N1, the feed's collapsed rows say where each local alert's area lies.** `FeedItem.place` (optional, additive):
+  "area 18 mi from the fire's reported location · may be about another fire" for every `'local-alert'` row
+  (`localAlertFeedItems`), shown by `UpdatesFeed` as its own line under the title (`.uf-place`, never clamped; `detail`
+  is clamped to 1 line in Command and 2 in Public), and no longer repeated in `detail` (event · sent · channel).
+  Screenshots: `docs/screenshots/brief3-us-official-eaton-feed-command-desktop.png`,
+  `docs/screenshots/brief3-us-official-eaton-feed-public-desktop.png`.
+- **N2, "none here" needs the point's state.** `localAlertsForPointState(l, {pointState, lookupFailed?})`: while the
+  point's state is looked up, "Checking local officials' alerts…"; outside the lower 48 "none" becomes "Local
+  officials' alerts: not checked" with `LOCAL_LOWER48_REASON` ("Fire-3d checks local officials' alerts in the lower 48
+  states only."), or `LOCAL_LOOKUP_FAILED_REASON` when the lookup failed; listed messages stay. `useOfficialAtPoint`
+  calls the pure `localAlertsAtSelectedPoint({lon, lat, demo, live, fire, countyFips, pointState, lookupFailed})`.
+  The backend still answers `nws_api` 'available' for a box outside the lower 48 (us-pipeline's `api/official.py`;
+  the integration may make it 'not_checked' when `states_in_area` is empty). Screenshot:
+  `docs/screenshots/brief3-us-official-location-tijuana-desktop.png`.
+- **N3, the live box answer is not the fire's.** `localAlertsAtPoint(l, lon, lat, {countyFips, source})`: `source:
+  'fire'` (default) counts what it leaves out in `elsewhere` ("… of the fire's local alerts are for other places in its
+  area (see Updates)."); `'box'` (the live `?bbox=` answer) counts it in `LocalAlertsOfficial.nearby` {county, area}:
+  "1 nearby local alert is for a neighbouring county, not this point's county." / "… for an area that does not reach
+  this point."
+
 ## Deviations from §14 (also in the report)
 
 1. `sources[]` entries of `/api/extras/evacuations` carry one more additive field, `aggregator` ("Cal OES" / "Oregon
@@ -295,6 +317,10 @@ fetching, envelope).
 9. Local-alert lines carry a location phrase and the web orders them by relevance (review R1); the card filters the
    fire's (past) answer to the point (`localAlertsAtPoint`). §14.7 does not describe either; the integration should
    fold them in.
+10. `FeedItem.place` (optional) carries a local alert's location phrase on its own unclamped line (review round 2,
+    N1); at a point, local alerts follow the point's state like NWS fire weather (N2), and the live box answer counts
+    left-out messages as `nearby`, not `elsewhere` (N3). §14.7 does not describe these; the integration should fold
+    them in.
 
 ## Files (us-official, brief 3)
 

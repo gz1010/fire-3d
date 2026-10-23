@@ -19,7 +19,7 @@ import { recordStatus, type RecordStatus } from './record'
 import { useOfficialContext, type OfficialContext } from './context'
 import { fireWeatherStatewideUrl, localAlertsBboxUrl, OFFICIAL_REFRESH_MS } from './client'
 import { bboxContains } from './geo'
-import { localAlertsAtPoint, localAlertsState, type LocalAlertsOfficial } from './localAlerts'
+import { localAlertsAtSelectedPoint, localAlertsState, type LocalAlertsOfficial } from './localAlerts'
 import {
   evacuationAtPointState,
   evacuationNow,
@@ -144,7 +144,10 @@ export function useOfficialAtPoint(lon: number | null, lat: number | null): Offi
   const tf = useTimeFormat()
   // local officials' messages: live at the point's small box; at a past time the fire's own (archive) answer when the
   // point lies in its area, else not checked. Either way measured from the point, keeping the messages whose area
-  // reaches it, most relevant first (localAlertsAtPoint; review round 1, R1)
+  // reaches it, most relevant first (localAlertsAtPoint; review round 1, R1); the messages left out are the fire's
+  // ("elsewhere") only for the fire's answer, else the box's ("nearby"; review round 2, N3). Like NWS fire weather,
+  // the point's state decides what "none" means: loading while it is looked up, "not checked" outside the lower 48
+  // or when the lookup failed (localAlertsForPointState; review round 2, N2)
   const localLive = !ctx.past && !ctx.demo && lon != null && lat != null && Number.isFinite(lon) && Number.isFinite(lat)
   const lq = useJsonQuery<LocalAlertsResponse>(localLive ? localAlertsBboxUrl(pointQueryBbox(lon as number, lat as number)) : null, {
     refreshMs: OFFICIAL_REFRESH_MS.local,
@@ -153,14 +156,20 @@ export function useOfficialAtPoint(lon: number | null, lat: number | null): Offi
   })
   const incidentLocal = useIncidentLocal(ctx.incidentId)
   const countyFips = place?.countyFips ?? null
+  const lookupFailed = place?.status === 'error'
   const local = useMemo(() => {
-    if (ctx.demo) return localAlertsState(null, { demo: true })
-    if (lon == null || lat == null) return localAlertsState(null)
-    if (localLive) return localAlertsAtPoint(localAlertsState({ data: lq.data, loading: lq.loading, error: lq.error }), lon, lat, { countyFips })
-    const area = incidentLocal.data?.area_bbox ?? ctx.evacBbox
-    if (ctx.hasIncident && bboxContains(area, lon, lat)) return localAlertsAtPoint(localAlertsState(incidentLocal), lon, lat, { countyFips })
-    return { ...localAlertsState(null), reason: "Past local alerts are checked for the selected fire's area only." }
-  }, [ctx, lon, lat, localLive, lq.data, lq.loading, lq.error, incidentLocal, countyFips])
+    const inFireArea = !localLive && ctx.hasIncident && lon != null && lat != null && bboxContains(incidentLocal.data?.area_bbox ?? ctx.evacBbox, lon, lat)
+    return localAlertsAtSelectedPoint({
+      lon,
+      lat,
+      demo: ctx.demo,
+      live: localLive ? localAlertsState({ data: lq.data, loading: lq.loading, error: lq.error }) : null,
+      fire: inFireArea ? localAlertsState(incidentLocal) : null,
+      countyFips,
+      pointState,
+      lookupFailed,
+    })
+  }, [ctx, lon, lat, localLive, lq.data, lq.loading, lq.error, incidentLocal, countyFips, pointState, lookupFailed])
   const evacuation = useMemo(
     () =>
       evacuationAtPointState({

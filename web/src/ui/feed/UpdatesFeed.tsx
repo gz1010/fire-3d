@@ -327,6 +327,12 @@ const FeedRow = memo(function FeedRow({ item, selected, later, current, isNew, l
             {item.title}
             {isNew && <span className="uf-new">New</span>}
           </span>
+          {item.place && (
+            <span className="uf-place">
+              <MapPin size={11} aria-hidden="true" />
+              {item.place}
+            </span>
+          )}
           {item.detail && !compact && <span className="uf-detail">{item.detail}</span>}
           <span className="uf-meta">
             <span className={`uf-kind uf-kind-${item.kind}`}>
