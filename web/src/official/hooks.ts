@@ -13,7 +13,7 @@ import { useExtrasRuntime } from '../extras/runtime'
 import type { Coverage } from '../api/types'
 import { useGeoLookup } from '../location/geoLookup'
 import { useStore } from '../state/store'
-import { calfireStatus } from './calfire'
+import { recordStatus, type RecordStatus } from './record'
 import { useOfficialContext, type OfficialContext } from './context'
 import { fireWeatherStatewideUrl, OFFICIAL_REFRESH_MS } from './client'
 import {
@@ -50,7 +50,8 @@ export interface OfficialPlace {
   coverage: Coverage | null
 }
 
-/** The three official answers (I5), plus (brief 3, optional) the point's place. */
+/** The three official answers (I5), plus (brief 3, optional) the point's place. `calfire` is the fire's agency record
+ *  (CAL FIRE's or NIFC WFIGS's: a RecordStatus; the field name stays until the integration). */
 export interface OfficialInfo {
   evacuation: EvacuationOfficial
   fireWeather: FireWeatherOfficial
@@ -90,15 +91,28 @@ function useFireWeatherQuery() {
   return useMemo(() => ({ data, ...meta }), [data, meta])
 }
 
-function useCalfire(ctx: OfficialContext): CalFireOfficial {
-  const raw = useOfficialRuntime(useShallow((s) => ({ data: s.calfire.data, loading: s.calfire.loading, error: s.calfire.error })))
-  const q = useMemo(() => {
-    const data = forIncident(raw.data, ctx.incidentId)
-    return data === raw.data ? raw : { data, loading: true, error: null }
-  }, [raw, ctx.incidentId])
+/** The open fire's agency record (CONTRACT §14.5): CAL FIRE's or NIFC WFIGS's, labelled from the issuer, with every
+ *  record when the agencies disagree and a complex row's named members (official/record.ts). */
+export function useRecord(ctx?: OfficialContext): RecordStatus {
+  const own = useOfficialContext()
+  const c = ctx ?? own
+  const raw = useOfficialRuntime(
+    useShallow((s) => ({ cf: s.calfire.data, cfLoading: s.calfire.loading, cfError: s.calfire.error, rec: s.record.data, recLoading: s.record.loading, recError: s.record.error })),
+  )
   const summary = useStore((s) => (s.summary && s.summary.id === s.incidentId ? s.summary : null))
-  return useMemo(() => (ctx.hasIncident ? calfireStatus(q, summary, ctx.demo) : { state: 'unavailable' as const, reason: 'No fire selected.' }), [q, summary, ctx.hasIncident, ctx.demo])
+  return useMemo(() => {
+    const cfData = forIncident(raw.cf, c.incidentId)
+    const recData = forIncident(raw.rec, c.incidentId)
+    const calfire = cfData === raw.cf ? { data: raw.cf, loading: raw.cfLoading, error: raw.cfError } : { data: cfData, loading: true, error: null }
+    const record = recData === raw.rec ? { data: raw.rec, loading: raw.recLoading, error: raw.recError } : { data: recData, loading: true, error: null }
+    // until the summary says whose record it is, nothing is fetched: say "checking"
+    if (c.hasIncident && !c.demo && !summary) return { state: 'loading', source: null, issuer: 'Agency record', linkLabel: 'Agency record' }
+    return recordStatus({ calfire, record, summary, demo: c.demo, hasIncident: c.hasIncident })
+  }, [raw, summary, c.incidentId, c.hasIncident, c.demo])
 }
+
+/** @deprecated Brief 3: use `useRecord()` (the record is CAL FIRE's or NIFC WFIGS's). */
+export const useCalfire = useRecord
 
 /**
  * Official information at a point (I5): the state source's evacuation zones containing it (checked around the point
@@ -118,7 +132,7 @@ export function useOfficialAtPoint(lon: number | null, lat: number | null): Offi
   const swWanted = needsStatewideFireWeather({ lon, lat, hasIncident: ctx.hasIncident, demo: ctx.demo, past: ctx.past, fallbackArea: ctx.evacBbox, incidentData: fw.data })
   const swq = useJsonQuery<FireWeatherResponse>(swWanted ? fireWeatherStatewideUrl() : null, { refreshMs: OFFICIAL_REFRESH_MS.fireWeather, timeoutMs: 45_000, isCurrent: (d) => d.status === 'available' })
   const statewide = useMemo(() => ({ data: swq.data, loading: swq.loading, error: swq.error }), [swq.data, swq.loading, swq.error])
-  const calfire = useCalfire(ctx)
+  const calfire = useRecord(ctx)
   const evacuation = useMemo(
     () =>
       evacuationAtPointState({
@@ -157,7 +171,7 @@ export function useOfficialNow(): OfficialInfo {
   const ctx = useOfficialContext()
   const incident = useIncidentEvac(ctx.incidentId)
   const fw = useFireWeatherQuery()
-  const calfire = useCalfire(ctx)
+  const calfire = useRecord(ctx)
   const evacuation = useMemo(
     () => evacuationNow(ctx.hasIncident ? incident : null, ctx.fire, { hasIncident: ctx.hasIncident, layerOn: ctx.layerOn, marginKm: DEFAULT_MARGIN_KM.evacuations }),
     [ctx, incident],

@@ -17,9 +17,13 @@ export type FeedTopic =
   | 'imagery'
   | 'camera'
   // brief 2 (official-web): CAL FIRE record changes, NWS fire weather alerts, the live "no new heat" quiet row
+  /** @deprecated Brief 3: agency records use 'record' (labelled from the issuer); kept until the integration. */
   | 'calfire'
   | 'fire-weather'
   | 'quiet'
+  // brief 3 (us-official): an agency record (CAL FIRE or NIFC WFIGS), local officials' alerts relayed by NWS / archived by FEMA
+  | 'record'
+  | 'local-alert'
 
 /** One plain-language fact with the original scientific value kept next to it. */
 export interface FeedFact {

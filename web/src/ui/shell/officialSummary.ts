@@ -56,14 +56,18 @@ export function evacuationLine(e: EvacuationOfficial, metric: boolean): SummaryL
 }
 
 export function calfireLine(c: CalFireOfficial, nowMs: number): SummaryLine {
-  const base = { key: 'calfire' as const, label: 'CAL FIRE', source: null }
+  // labelled from the record's issuer (CONTRACT §14.5): "CAL FIRE", "USFS (USDA Forest Service) via NIFC WFIGS"
+  const base = { key: 'calfire' as const, label: c.issuer && c.issuer !== 'Agency record' ? c.issuer : 'Agency record', source: null }
   if (c.state === 'loading') return { ...base, text: 'Checking…', tone: 'muted' }
+  if (c.synthetic) return { ...base, text: 'Not available: synthetic or local data.', tone: 'muted' }
+  if (c.notChecked) return { ...base, text: 'Agency record not checked.', tone: 'muted' }
   // an outage is not "no record": say it could not be checked
   if (c.state === 'unavailable') return { ...base, text: c.unreachable ? 'Unavailable right now.' : 'No record for this fire.', tone: 'muted' }
   const parts = [
     c.acres != null ? fmtAcres(c.acres) : null,
     c.percentContained != null ? `${fmtNumber(c.percentContained)}% contained` : null,
     c.isActive !== true && c.final ? 'final record' : null,
+    c.blocks && c.blocks.length > 1 ? 'the agencies differ on whether it is active' : null,
     c.updatedMs != null ? `updated ${fmtWhen(c.updatedMs, nowMs)}` : null,
   ].filter(Boolean)
   return { ...base, text: parts.length ? parts.join(' · ') : 'Record without size or containment.', tone: 'quiet' }

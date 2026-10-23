@@ -36,6 +36,7 @@ import type { FireWeatherResponse } from './types'
 import { stateName } from '../lib/usStates'
 import { httpsUrl } from './url'
 import type { CalFireStatus } from './calfire'
+import type { RecordStatus } from './record'
 import type { FeedItemStatus } from '../ui/feed/types'
 
 export type { CalFireStatus } from './calfire'
@@ -685,8 +686,9 @@ export function officialBadge(evac: EvacuationOfficial, fw: FireWeatherOfficial)
 }
 
 // ---- CAL FIRE ---------------------------------------------------------------------------------------------------
-/** The I5 `calfire` shape (CalFireStatus: state, acres?, percentContained?, isActive?, updatedMs?, url? + extras). */
-export type CalFireOfficial = CalFireStatus
+/** The I5 `calfire` shape: the fire's agency record (brief 3: CAL FIRE's or NIFC WFIGS's, a RecordStatus; a brief-2
+ *  CalFireStatus with only state, acres?, percentContained?, isActive?, updatedMs?, url? still fits). */
+export type CalFireOfficial = CalFireStatus & Partial<Pick<RecordStatus, 'source' | 'issuer' | 'linkLabel' | 'blocks' | 'members' | 'complexName' | 'synthetic' | 'notChecked' | 'protectingUnit' | 'discoveredMs'>>
 
 /** End of the hazard for display, used by the card line ("until …"). */
 export const officialAlertEnd = (a: Pick<OfficialAlert, 'endsMs' | 'expiresMs'>): number | null => a.endsMs ?? a.expiresMs ?? null

@@ -86,7 +86,8 @@ export function calfireStatus(q: Pick<QueryState<CalFireResponse>, 'data' | 'loa
       containedMs: num(c.extinguished_ms) ?? num(summary?.contained_ms),
     }
   }
-  if (summary && summary.calfire_uid) {
+  // the summary is CAL FIRE's own record only for a CAL FIRE row (a WFIGS row's numbers are never labelled CAL FIRE)
+  if (summary && (summary.record_source ?? 'calfire') === 'calfire' && summary.calfire_uid) {
     return {
       state: 'available',
       acres: num(summary.acres),
@@ -157,7 +158,7 @@ export function calfireFeedItems(d: CalFireResponse | null, ctx: CalFireFeedCont
   const url = httpsUrl(d.incident_url) ?? httpsUrl(ctx.summary?.url) ?? null
   const location = reportedLocation(ctx)
   const base = {
-    topic: 'calfire' as const,
+    topic: 'record' as const,
     kind: 'official' as const,
     source: CALFIRE_SOURCE,
     automated: false,

@@ -66,7 +66,7 @@ function filterTips(items: readonly FeedItem[]): Record<FeedFilter, string> {
     [has('detection'), 'satellite passes'],
     [has('forecast'), 'the forecast run'],
     [has('evacuation'), 'official evacuation status'],
-    [has('calfire'), 'CAL FIRE record changes'],
+    [has('record') || has('calfire'), 'agency record changes'],
     [has('fire-weather'), 'NWS fire weather alerts'],
     [has('camera'), 'public cameras'],
     [has('imagery'), 'new satellite images'],
@@ -379,7 +379,7 @@ function ExtLink({ href, children }: { href: string; children: string }) {
 function OfficialDetails({ item, nowMs }: { item: FeedItem; nowMs: number }) {
   const times: { label: string; ms: number }[] = []
   if (item.issuedMs != null) times.push({ label: 'Issued', ms: item.issuedMs })
-  if (item.updatedMs != null) times.push({ label: item.topic === 'calfire' ? 'Updated by CAL FIRE' : 'Updated by the issuer', ms: item.updatedMs })
+  if (item.updatedMs != null) times.push({ label: (item.topic === 'record' || item.topic === 'calfire') && item.issuer ? `Updated by ${item.issuer}` : 'Updated by the issuer', ms: item.updatedMs })
   if (item.expiresMs != null) times.push({ label: item.status === 'expired' ? 'Ended' : 'Until', ms: item.expiresMs })
   return (
     <>

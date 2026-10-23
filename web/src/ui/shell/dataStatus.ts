@@ -6,7 +6,7 @@
 // (time_range.now_ms, SPEC 8.3): when the newest detection or mapped perimeter is more than an hour older, the row says
 // so and the detection row keeps the time the burned area is known up to.
 // Brief 2 (U-R9): one freshness pattern. Official sources get their own rows (evacuation zones from the state's
-// source, NWS fire weather, the fire's agency record) with the issuer's update time and Fire-3d's check time; a past fire's CAL FIRE row always
+// source, NWS fire weather, the fire's agency record) with the issuer's update time and Fire-3d's check time; a past fire's record row always
 // carries the year and says it is the record's last edit. Public gets one line (freshnessLine) with the same rows as
 // details.
 import type { DetectionsFile, ForecastManifest, IncidentManifest, IncidentSummary, PerimetersFile, WeatherFile } from '../../api/types'
@@ -40,7 +40,8 @@ export interface StatusRow {
 export interface OfficialStatusInput {
   evacuation?: (Pick<EvacuationOfficial, 'state'> & Partial<Pick<EvacuationOfficial, 'checkedMs' | 'sourceUpdatedMs' | 'reason' | 'sources' | 'checkedBy'>> & { zones?: readonly unknown[] }) | null
   fireWeather?: { state: string; checkedMs?: number | null; alerts?: readonly { archived?: boolean }[] } | null
-  calfire?: { state: string; updatedMs?: number | null; acres?: number | null; percentContained?: number | null; isActive?: boolean | null } | null
+  /** The fire's agency record (CAL FIRE's or NIFC WFIGS's; `issuer` / `source` from official/record.ts). */
+  calfire?: { state: string; updatedMs?: number | null; acres?: number | null; percentContained?: number | null; isActive?: boolean | null; issuer?: string; source?: 'calfire' | 'wfigs' | null; synthetic?: boolean } | null
 }
 
 export interface DataStatusInput {
@@ -220,21 +221,26 @@ export function officialRows(inp: Pick<DataStatusInput, 'summary' | 'official'>,
   }
 
   const cf = o?.calfire
-  const recordMs = cf?.updatedMs ?? inp.summary?.updated_ms ?? null
+  const recordMs = cf?.synthetic ? null : (cf?.updatedMs ?? inp.summary?.updated_ms ?? null)
   if (recordMs != null && Number.isFinite(recordMs)) {
     const facts = cf && cf.state === 'available' ? [cf.acres != null ? fmtAcres(cf.acres) : null, cf.percentContained != null ? `${cf.percentContained}% contained` : null].filter(Boolean).join(' · ') : ''
+    // labelled from the record's issuer (CONTRACT §14.5): never "CAL FIRE" for a NIFC WFIGS record
+    const wfigs = cf?.source === 'wfigs'
+    const issuer = cf?.issuer ?? 'CAL FIRE'
     out.push({
       key: 'record',
-      label: 'CAL FIRE record',
+      label: `${issuer} record`,
       // a past fire's record is often edited long after the fire: always show the year and say what the time is
       value: live ? fmtStatusTime(recordMs, nowMs) : fmtDateTimeYearTz(recordMs),
       tMs: recordMs,
-      detail: live ? facts || 'CAL FIRE’s latest update of the incident' : `Last edit of CAL FIRE’s record${facts ? ` · ${facts}` : ''}`,
+      detail: live ? facts || `${issuer}’s latest update of the incident` : `Last edit of ${issuer}’s record${facts ? ` · ${facts}` : ''}`,
       age: live ? fmtRelative(recordMs, nowMs) : null,
       stale: false,
-      tip: live
-        ? 'CAL FIRE updates its incident records by hand, usually a few times a day.'
-        : 'CAL FIRE keeps one final record per past fire; its last edit (final acreage, containment date) can come months after the fire. Its update-by-update history is not available.',
+      tip: wfigs
+        ? "NIFC WFIGS (IRWIN) publishes the protecting agency's own numbers with the record's own update time; Fire-3d does not record changes to it yet."
+        : live
+          ? 'CAL FIRE updates its incident records by hand, usually a few times a day.'
+          : 'CAL FIRE keeps one final record per past fire; its last edit (final acreage, containment date) can come months after the fire. Its update-by-update history is not available.',
     })
   }
   return out

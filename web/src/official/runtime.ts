@@ -1,6 +1,6 @@
 // Shared runtime of the official sources (owner: official-web; CONTRACT §13 I5 / I6). `useOfficialSync()` runs once in
-// the map workspace (from extras/ExtrasSync.tsx, which is always mounted there) and publishes the incident's CAL FIRE
-// record and NWS fire weather alerts here, whatever the map layers show. The hooks (hooks.ts), the "Official now"
+// the map workspace (from extras/ExtrasSync.tsx, which is always mounted there) and publishes the incident's agency
+// record (CAL FIRE's or NIFC WFIGS's, CONTRACT §14.5) and NWS fire weather alerts here, whatever the map layers show. The hooks (hooks.ts), the "Official now"
 // block, the feed producers and the official map layer read this store, so each source is fetched once.
 // Evacuation zones stay in useExtrasRuntime().evac (fetched for the incident whatever the layer toggle says).
 import { useLayoutEffect, useMemo, useState } from 'react'
@@ -10,14 +10,18 @@ import { nowMarkerMs, useStore } from '../state/store'
 import { isDemoBundle } from '../state/workspace'
 import { useNow } from '../ui/hooks'
 import { IDLE_QUERY, sameQueryState } from '../extras/hooks'
-import { calfireUrl, fireWeatherAtMs, fireWeatherStatewideUrl, fireWeatherUrl, OFFICIAL_REFRESH_MS } from './client'
+import { fireWeatherAtMs, fireWeatherStatewideUrl, fireWeatherUrl, OFFICIAL_REFRESH_MS, recordUrl, secondaryRecordUrl } from './client'
 import { alertEndMs, EXPIRED_KEEP_MS, isFireWeatherAlert, vtecKey } from './fireWeather'
 import { forIncident } from './guard'
 import { useJsonQuery, type QueryState } from './query'
-import type { CalFireResponse, FireWeatherResponse, NwsAlert, OfficialHighlight } from './types'
+import type { CalFireResponse, FireWeatherResponse, IncidentRecordResponse, NwsAlert, OfficialHighlight } from './types'
 
 export interface OfficialRuntimeState {
+  /** CAL FIRE's record (fires whose `record_source` is 'calfire'). */
   calfire: QueryState<CalFireResponse>
+  /** NIFC WFIGS (IRWIN) record (brief 3, CONTRACT §14.5): a WFIGS fire's own record, or a California fire's matched
+   *  record when the agencies disagree on whether it is active. Never fetched for a CAL FIRE complex row. */
+  record: QueryState<IncidentRecordResponse>
   fireWeather: QueryState<FireWeatherResponse>
   /** Every current NWS fire weather alert in California, fetched only on the overview (no fire open). */
   statewide: QueryState<FireWeatherResponse>
@@ -32,6 +36,7 @@ export interface OfficialRuntimeState {
 
 export const useOfficialRuntime = create<OfficialRuntimeState>()((set) => ({
   calfire: IDLE_QUERY,
+  record: IDLE_QUERY,
   fireWeather: IDLE_QUERY,
   statewide: IDLE_QUERY,
   seen: { incidentId: null, alerts: [] },
@@ -103,7 +108,15 @@ export function useOfficialSync(): void {
   if (!playing && held !== at) setHeld(at)
   const atMs = playing ? held : at
 
-  const calfire = useJsonQuery<CalFireResponse>(incidentId && !demo ? calfireUrl(incidentId) : null, { refreshMs: live ? OFFICIAL_REFRESH_MS.calfire : 0 })
+  // the fire's own record decides which endpoint answers (CONTRACT §14.5); wait for the summary
+  const rec = useStore(
+    useShallow((s) => {
+      const sum = s.summary && s.summary.id === s.incidentId ? s.summary : null
+      return sum ? { primary: recordUrl(sum), secondary: secondaryRecordUrl(sum), wfigs: (sum.record_source ?? 'calfire') === 'wfigs' } : null
+    }),
+  )
+  const calfire = useJsonQuery<CalFireResponse>(incidentId && !demo && rec && !rec.wfigs ? rec.primary : null, { refreshMs: live ? OFFICIAL_REFRESH_MS.calfire : 0 })
+  const record = useJsonQuery<IncidentRecordResponse>(incidentId && !demo && rec ? (rec.wfigs ? rec.primary : rec.secondary) : null, { refreshMs: live ? OFFICIAL_REFRESH_MS.calfire : 0 })
   const fireWeather = useJsonQuery<FireWeatherResponse>(incidentId && !demo && timeReady ? fireWeatherUrl(incidentId, timeReady === 'present' ? null : atMs) : null, {
     refreshMs: OFFICIAL_REFRESH_MS.fireWeather,
     timeoutMs: 45_000,
@@ -120,6 +133,7 @@ export function useOfficialSync(): void {
     const cur = useOfficialRuntime.getState()
     const patch: Partial<OfficialRuntimeState> = {}
     if (!sameQueryState(cur.calfire, calfire)) patch.calfire = calfire
+    if (!sameQueryState(cur.record, record)) patch.record = record
     if (!sameQueryState(cur.fireWeather, fireWeather)) patch.fireWeather = fireWeather
     if (!sameQueryState(cur.statewide, statewide)) patch.statewide = statewide
     const d = fireWeather.data

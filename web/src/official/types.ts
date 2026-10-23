@@ -76,6 +76,54 @@ export interface CalFireResponse extends OfficialEnvelope {
   incident_id?: string | null
 }
 
+// ---- agency fire records (brief 3, CONTRACT §14.5) -----------------------------------------------------------------
+/** The I7 envelope kinds (brief 3 widens them). */
+export type OfficialKind = 'calfire' | 'fire_weather' | 'incident_record' | 'local_alerts'
+export type OfficialReasonCode = 'past_date' | 'upstream_error' | 'not_covered' | 'state_not_available' | null
+
+export interface IncidentRecordCurrent {
+  /** The record's name, verbatim. */
+  name: string
+  acres: number | null
+  percent_contained: number | null
+  is_active: boolean
+  discovered_ms: number | null
+  contained_ms: number | null
+  controlled_ms: number | null
+  out_ms: number | null
+  /** ModifiedOnDateTime_dt: the record's own update time. */
+  updated_ms: number | null
+  ics209_report_ms: number | null
+}
+
+/** `GET /api/official/incident-record?incident=<id>`: the fire's NIFC WFIGS (IRWIN) record (us-catalog's endpoint). */
+export interface IncidentRecordResponse extends OfficialEnvelope {
+  kind?: 'incident_record'
+  incident_id?: string | null
+  record_source: 'wfigs'
+  irwin_id: string | null
+  unique_fire_id: string | null
+  publisher: 'NIFC WFIGS (IRWIN)' | string
+  /** Protecting-agency code, verbatim. */
+  agency_code: string | null
+  /** Its plain name (NWCG unit identifiers); null when the code is unknown. */
+  agency: string | null
+  protecting_unit: string | null
+  state: string | null
+  county: string | null
+  time_zone: string
+  /** The all-years layer's record page (https). */
+  incident_url: string | null
+  /** The NIFC Open Data item page ("about this source"). */
+  dataset_url: string
+  current: IncidentRecordCurrent | null
+  complex: { name: string; id: string | null } | null
+  /** History outside California is deferred: always []. */
+  changes: []
+  recording_since_ms: null
+  caveats?: string[]
+}
+
 // ---- NWS fire weather ------------------------------------------------------------------------------------------
 export interface NwsVtec {
   office: string

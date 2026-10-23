@@ -1,7 +1,7 @@
 // Client for /api/official/* (owner: official-web; endpoints by official-backend, CONTRACT §13 I7). Pure URL and
 // time helpers, tested in client.test.ts.
 import { API_BASE } from '../api/client'
-import type { Mode } from '../api/types'
+import type { IncidentSummary, Mode } from '../api/types'
 import { extrasAtMs } from '../extras/client'
 
 /** Refresh cadence while the answer is current: CAL FIRE edits its records by hand (the backend's list cache is
@@ -10,6 +10,28 @@ export const OFFICIAL_REFRESH_MS = { calfire: 300_000, fireWeather: 120_000 } as
 
 export function calfireUrl(incidentId: string): string {
   return `${API_BASE}/api/official/calfire?incident=${encodeURIComponent(incidentId)}`
+}
+
+/** NIFC WFIGS (IRWIN) record of a listed fire (CONTRACT §14.5; us-catalog's endpoint). */
+export function incidentRecordUrl(incidentId: string): string {
+  return `${API_BASE}/api/official/incident-record?incident=${encodeURIComponent(incidentId)}`
+}
+
+type RecordSummary = Pick<IncidentSummary, 'id'> & Partial<Pick<IncidentSummary, 'record_source' | 'irwin_id' | 'active_sources' | 'complex_members'>>
+
+/** The fire's own record (CONTRACT §14.5): CAL FIRE's for `record_source 'calfire'` (or an older summary without it),
+ *  NIFC WFIGS's for `'wfigs'`. */
+export function recordUrl(summary: RecordSummary): string {
+  return (summary.record_source ?? 'calfire') === 'wfigs' ? incidentRecordUrl(summary.id) : calfireUrl(summary.id)
+}
+
+/** The second record a California fire needs (round 3 item 2): its matched NIFC WFIGS record when the agencies
+ *  disagree on whether it is active (`active_sources.length === 1`). Never for a CAL FIRE complex row (no `irwin_id`;
+ *  its members come from the summary) and never for a WFIGS row. */
+export function secondaryRecordUrl(summary: RecordSummary): string | null {
+  if ((summary.record_source ?? 'calfire') !== 'calfire') return null
+  if (!summary.irwin_id || (summary.complex_members?.length ?? 0) > 0) return null
+  return summary.active_sources?.length === 1 ? incidentRecordUrl(summary.id) : null
 }
 
 /** Every NWS fire weather alert in California now (no incident): for points outside an open fire's area and the

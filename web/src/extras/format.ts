@@ -68,12 +68,15 @@ export function freshnessText(env: Pick<ExtrasEnvelope, 'source_updated_ms' | 'r
   return parts.join(' · ')
 }
 
+/** The error text of an HTTP 404 (an endpoint or an id the server does not know). */
+export const NOT_FOUND_TEXT = 'This incident is not known to the Fire-3d server.'
+
 /** Error text for a failed request to the Fire-3d API (status codes from the backend contract). */
 export function requestErrorText(e: unknown): string {
   const status = (e as { status?: number } | null)?.status
   if (status === 429) return 'Too many requests to this source right now. Try again in a minute.'
   if (status === 400) return 'The request was not valid for this source.'
-  if (status === 404) return 'This incident is not known to the Fire-3d server.'
+  if (status === 404) return NOT_FOUND_TEXT
   if (status != null && status >= 500) return 'The Fire-3d server could not get data from this source.'
   if (e instanceof DOMException && (e.name === 'TimeoutError' || e.name === 'AbortError')) return 'The request timed out.'
   return 'Could not reach the Fire-3d server.'

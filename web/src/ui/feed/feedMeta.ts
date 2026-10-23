@@ -1,7 +1,7 @@
 // Feed vocabulary (owner: official-web since brief 2, earlier timeline-feed): icon + colour per topic (events reuse
 // eventMeta) and the label, glyph and one-line meaning of each kind of information. Kinds are told apart by text and
 // glyph, never by colour alone.
-import { Camera, CircleDashed, Cpu, Eye, EyeOff, Flag, Hexagon, ImageIcon, Landmark, PenLine, Satellite, ShieldAlert, Sigma, TriangleAlert, Wind, type LucideIcon } from 'lucide-react'
+import { Camera, CircleDashed, Cpu, Eye, EyeOff, Flag, Hexagon, ImageIcon, Landmark, Megaphone, PenLine, Satellite, ShieldAlert, Sigma, TriangleAlert, Wind, type LucideIcon } from 'lucide-react'
 import { EVENT_STYLE, type EventKind } from '../eventMeta'
 import type { FeedKind, FeedTopic } from './types'
 
@@ -20,6 +20,8 @@ const FEED_TOPICS: Record<Exclude<FeedTopic, EventKind>, TopicStyle> = {
   imagery: { Icon: ImageIcon, color: 'var(--m-info)', label: 'Satellite image' },
   camera: { Icon: Camera, color: 'var(--m-info)', label: 'Camera' },
   calfire: { Icon: ShieldAlert, color: 'var(--m-official, #e8edf3)', label: 'CAL FIRE record' },
+  record: { Icon: ShieldAlert, color: 'var(--m-official, #e8edf3)', label: 'Agency record' },
+  'local-alert': { Icon: Megaphone, color: 'var(--m-evac-order)', label: "Local officials' alert" },
   'fire-weather': { Icon: Flag, color: 'var(--m-nws, #f472b6)', label: 'Fire weather alert' },
   quiet: { Icon: EyeOff, color: 'var(--m-text-2)', label: 'No new heat seen' },
 }
