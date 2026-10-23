@@ -19,7 +19,9 @@ import type { FeedItemStatus } from '../ui/feed/types'
 export type { CalFireStatus } from './calfire'
 
 // ---- evacuation ------------------------------------------------------------------------------------------------
-export type EvacuationState = 'listed' | 'none-listed' | 'not-checked' | 'past-date' | 'unavailable' | 'loading'
+/** 'not-available' (brief 3, CONTRACT §14.8.5): the point or fire is in a state without an official, free, public,
+ *  machine-readable evacuation feed ("Not available in this state (Nevada)"); never "none". */
+export type EvacuationState = 'listed' | 'none-listed' | 'not-checked' | 'not-available' | 'past-date' | 'unavailable' | 'loading'
 
 export interface OfficialZone {
   id: string

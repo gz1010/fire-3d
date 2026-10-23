@@ -35,6 +35,8 @@ export function evacuationLine(e: EvacuationOfficial, metric: boolean): SummaryL
       return { ...base, text: 'Unavailable right now.', tone: 'muted' }
     case 'not-checked':
       return { ...base, text: 'Not checked.', tone: 'muted' }
+    case 'not-available':
+      return { ...base, source: null, text: 'Not available in this state.', tone: 'muted' }
     case 'none-listed':
       return { ...base, text: `None listed within ${DEFAULT_MARGIN_KM.evacuations} km. Not an all-clear.`, tone: 'quiet' }
     default: {

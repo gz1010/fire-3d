@@ -20,6 +20,9 @@ import {
 } from './evacuation'
 import type { FireReference } from '../official/fire'
 import type { EvacuationsResponse, EvacZoneFeature, EvacZoneProps } from './types'
+import { timeFmt } from '../lib/time'
+
+const LA24 = timeFmt('America/Los_Angeles', '24h')
 
 function zone(id: string, status: string | null, key: EvacZoneProps['status_key'], rings: number[][][], extra: Partial<EvacZoneProps> = {}): EvacZoneFeature {
   return {
@@ -169,12 +172,12 @@ describe('zones at a point', () => {
 
 describe('panel details and feed items', () => {
   it('labels who set each time and keeps the official message verbatim', () => {
-    const z = zoneDetail(EVAC_SAMPLE.zones.features[0], EVAC_SAMPLE.now_ms)
+    const z = zoneDetail(EVAC_SAMPLE.zones.features[0], EVAC_SAMPLE.now_ms, LA24)
     expect(z.status).toBe('Evacuation Order')
     expect(z.jurisdiction).toBe('Los Angeles County')
     expect(z.updatedText).toMatch(/^Updated by the issuer Oct 1[45], \d\d:\d\d PDT$/)
     expect(z.message).toBe(EVAC_SAMPLE.zones.features[0].properties.notes)
-    const none = zoneDetail(zone('x', 'Evacuation Warning', 'warning', [square(0, 0, 1)]), EVAC_SAMPLE.now_ms)
+    const none = zoneDetail(zone('x', 'Evacuation Warning', 'warning', [square(0, 0, 1)]), EVAC_SAMPLE.now_ms, LA24)
     expect(none.updatedText).toBe('Update time not given by the issuer')
   })
 

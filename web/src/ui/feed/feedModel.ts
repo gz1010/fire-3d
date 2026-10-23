@@ -24,11 +24,12 @@ import {
   windSummary,
 } from '../../lib/plainLanguage'
 import { localToLonLat } from '../../lib/reproject'
-import { fmtDateTime, fmtDateTimeYear, fmtDay, fmtTime, startOfLaDay, tzLabel } from '../../lib/time'
+import { fmtAt, fmtClock, fmtDayDate, startOfLocalDay, type TimeFmt } from '../../lib/time'
 import { fitOfficialBounds } from '../../official/select'
 import { useOfficialRuntime } from '../../official/runtime'
 import type { Annotation } from '../../state/annotations'
 import { getTimeBounds, useStore } from '../../state/store'
+import { getTimeFormat } from '../../state/timeZone'
 import { useWorkspace, type Preset, type Units } from '../../state/workspace'
 import type { FeedFact, FeedItem, FeedKind, FeedTopic } from './types'
 
@@ -62,6 +63,10 @@ export interface FeedInput {
   groupPasses?: boolean
   /** The current time (live "today" wording and the quiet-period row); quantise it to limit rebuilds. */
   wallMs?: number
+  // ---- additions (brief 3, CONTRACT §14.9.6)
+  /** Zone and clock of every time in the items (the fire's zone; 12-hour in Public, 24-hour in Command and Forensic).
+   *  Default `getTimeFormat()` (the open fire's zone and the current workspace's clock). */
+  tf?: TimeFmt
 }
 
 function locate(m: IncidentManifest | null, x?: number, z?: number): FeedItem['location'] {
@@ -88,6 +93,7 @@ function hourIndex(ts: readonly number[], t: number): number {
 
 interface Ctx {
   manifest: IncidentManifest | null
+  tf: TimeFmt
   units: Units
   timeseries: TimeseriesFile | null
   weather: WeatherFile | null
@@ -382,7 +388,7 @@ export function plainRuns(members: number, ensemble: ForecastManifest['weather']
   return `${members} simulated fires, each with slightly different weather`
 }
 
-function forecastItem(f: ForecastManifest, m: IncidentManifest, preset: Preset): FeedItem {
+function forecastItem(f: ForecastManifest, m: IncidentManifest, preset: Preset, tf: TimeFmt): FeedItem {
   const live = m.mode === 'live'
   const command = preset === 'command'
   const runs = command ? ensemblePhrase(f.weather.ensemble, f.weather.members) : plainRuns(f.weather.members, f.weather.ensemble)
@@ -395,10 +401,10 @@ function forecastItem(f: ForecastManifest, m: IncidentManifest, preset: Preset):
     seekMs: f.start_ms,
     title: keepUnits(live ? `Spread forecast issued (${f.horizon_h} h)` : command ? `Hindcast starts (${f.horizon_h} h)` : `Model re-run on past weather starts (${f.horizon_h} h)`),
     detail: live
-      ? `Covers ${keepUnits(forecastPeriod(f))}: ${runs}. Shows where model runs spread the fire; experimental, not an official prediction.`
+      ? `Covers ${keepUnits(forecastPeriod(f, tf))}: ${runs}. Shows where model runs spread the fire; experimental, not an official prediction.`
       : command
-        ? `The forecast model was re-run on ${fmtDateTimeYear(f.issued_ms)} ${tzLabel(f.issued_ms)} for ${keepUnits(forecastPeriod(f))} (${runs}), to compare with what happened.`
-        : `Fire-3d re-ran its experimental spread model on the weather of ${keepUnits(forecastPeriod(f))} (${runs}), after the fire, to compare with what happened.`,
+        ? `The forecast model was re-run on ${fmtAt(f.issued_ms, tf, { year: 'always', zone: true })} for ${keepUnits(forecastPeriod(f, tf))} (${runs}), to compare with what happened.`
+        : `Fire-3d re-ran its experimental spread model on the weather of ${keepUnits(forecastPeriod(f, tf))} (${runs}), after the fire, to compare with what happened.`,
     source: 'Fire-3d spread model',
     automated: true,
     key: false,
@@ -416,10 +422,10 @@ function forecastItem(f: ForecastManifest, m: IncidentManifest, preset: Preset):
 
 /** A day's satellite passes as one row (live): "Satellite passes today: 9", each pass selectable in its details.
  *  Days with a single pass keep the pass row itself. */
-export function groupPassesByDay(passes: readonly FeedItem[], wallMs: number | null): FeedItem[] {
+export function groupPassesByDay(passes: readonly FeedItem[], wallMs: number | null, tf: TimeFmt = getTimeFormat()): FeedItem[] {
   const byDay = new Map<number, FeedItem[]>()
   for (const p of passes) {
-    const d = startOfLaDay(p.tMs)
+    const d = startOfLocalDay(p.tMs, tf.tz)
     byDay.set(d, [...(byDay.get(d) ?? []), p])
   }
   const out: FeedItem[] = []
@@ -431,15 +437,15 @@ export function groupPassesByDay(passes: readonly FeedItem[], wallMs: number | n
     const sorted = list.slice().sort((a, b) => a.tMs - b.tMs)
     const newest = sorted[sorted.length - 1]
     const dets = sorted.reduce((n, p) => n + (Number(p.facts?.find((f) => f.label === 'Heat detections')?.text.replace(/,/g, '')) || 0), 0)
-    const today = wallMs != null && startOfLaDay(wallMs) === day
+    const today = wallMs != null && startOfLocalDay(wallMs, tf.tz) === day
     const sats = [...new Set(sorted.map((p) => p.source.replace(/^NASA FIRMS \(|\)$/g, '')))]
     out.push({
       id: `passes:${day}`,
       topic: 'detection',
       kind: 'observation',
       tMs: newest.tMs,
-      title: `Satellite passes ${today ? 'today' : `on ${fmtDay(day)}`}: ${sorted.length}`,
-      detail: `${dets ? `${dets.toLocaleString('en-US')} heat detections in ` : ''}${sorted.length} passes (${sats.join('; ')}), newest ${fmtTime(newest.tMs)} ${tzLabel(newest.tMs)}. Detections show where heat was seen, not the exact fire edge.`,
+      title: `Satellite passes ${today ? 'today' : `on ${fmtDayDate(day, tf.tz)}`}: ${sorted.length}`,
+      detail: `${dets ? `${dets.toLocaleString('en-US')} heat detections in ` : ''}${sorted.length} passes (${sats.join('; ')}), newest ${fmtClock(newest.tMs, tf, { zone: true })}. Detections show where heat was seen, not the exact fire edge.`,
       source: 'NASA FIRMS',
       automated: true,
       key: false,
@@ -459,7 +465,7 @@ export function groupPassesByDay(passes: readonly FeedItem[], wallMs: number | n
 
 /** Live quiet-period row: no new heat seen by satellites since the latest detection (later passes saw none), or the
  *  newest detection is old. Never worded as "out" or "safe". Null when there is nothing to say. */
-export function quietItem(m: Pick<IncidentManifest, 'mode' | 'time_range'>, wallMs: number, staleAfterMs = 6 * HOUR): FeedItem | null {
+export function quietItem(m: Pick<IncidentManifest, 'mode' | 'time_range'>, wallMs: number, staleAfterMs = 6 * HOUR, tf: TimeFmt = getTimeFormat()): FeedItem | null {
   if (m.mode !== 'live') return null
   const det = m.time_range.last_detection_ms
   const pass = m.time_range.last_pass_ms
@@ -467,7 +473,7 @@ export function quietItem(m: Pick<IncidentManifest, 'mode' | 'time_range'>, wall
   const later = pass != null && Number.isFinite(pass) && pass > det + 10 * 60_000
   const old = wallMs - det > staleAfterMs
   if (!later && !old) return null
-  const when = `${fmtDateTime(det)} ${tzLabel(det)}`
+  const when = fmtAt(det, tf, { zone: true })
   return {
     id: `quiet:${det}`,
     topic: 'quiet',
@@ -475,7 +481,7 @@ export function quietItem(m: Pick<IncidentManifest, 'mode' | 'time_range'>, wall
     tMs: later ? (pass as number) : det,
     title: later ? `No new heat seen by satellites since ${when}` : `No new satellite heat detection since ${when}`,
     detail: later
-      ? `Later satellite passes (the newest at ${fmtDateTime(pass as number)} ${tzLabel(pass as number)}) saw no new heat over the fire. Smoke, cloud or smoldering can hide fire; this is not an all-clear.`
+      ? `Later satellite passes (the newest at ${fmtAt(pass as number, tf, { zone: true })}) saw no new heat over the fire. Smoke, cloud or smoldering can hide fire; this is not an all-clear.`
       : 'Satellites pass over only a few times a day, so gaps are normal. Smoke, cloud or smoldering can hide fire; this is not an all-clear.',
     source: 'NASA FIRMS and satellite pass times',
     automated: true,
@@ -497,8 +503,10 @@ const TOPIC_ORDER: Partial<Record<FeedTopic, number>> = { ignition: 0, forecast:
  *  the forecast run only when their inputs are given. */
 export function buildFeedItems(input: FeedInput): FeedItem[] {
   const { manifest, events, annotations } = input
+  const tf = input.tf ?? getTimeFormat()
   const c: Ctx = {
     manifest,
+    tf,
     units: input.units ?? 'us',
     timeseries: input.timeseries ?? null,
     weather: input.weather ?? null,
@@ -531,12 +539,12 @@ export function buildFeedItems(input: FeedInput): FeedItem[] {
   for (const p of c.perimeters) if (!eventTimes.some((t) => Math.abs(t - p.t_ms) <= SAME_TIME_MS)) items.push(perimeterItem(p, c))
   if (input.detections?.length) {
     const passes = satellitePasses(input.detections).map((p) => passItem(p, c))
-    items.push(...(input.groupPasses ? groupPassesByDay(passes, input.wallMs ?? null) : passes))
+    items.push(...(input.groupPasses ? groupPassesByDay(passes, input.wallMs ?? null, tf) : passes))
   }
   const f = input.forecast
-  if (f && manifest && f.incident_id === manifest.id && f.status === 'ready') items.push(forecastItem(f, manifest, input.preset ?? 'public'))
+  if (f && manifest && f.incident_id === manifest.id && f.status === 'ready') items.push(forecastItem(f, manifest, input.preset ?? 'public', tf))
   if (manifest && input.wallMs != null) {
-    const q = quietItem(manifest, input.wallMs)
+    const q = quietItem(manifest, input.wallMs, undefined, tf)
     if (q) items.push(q)
   }
   if (input.extra?.length) {

@@ -6,7 +6,8 @@
 // issuer and its own times; Fire-3d's fetch time is only ever called "checked". Nothing here is an all-clear.
 import type { CalFireOfficial, EvacuationOfficial, FireWeatherOfficial, OfficialAlert, OfficialInfo, OfficialZone } from '../official/hooks'
 import { area, distance } from '../lib/plainLanguage'
-import { fmtDateTime, fmtRelative, tzLabel } from '../lib/time'
+import { fmtAt, fmtRelative, type TimeFmt } from '../lib/time'
+import { getTimeFormat } from '../state/timeZone'
 import type { Units } from '../state/workspace'
 
 export type OfficialTone = 'order' | 'warning' | 'other' | 'quiet' | 'unknown' | 'loading'
@@ -53,10 +54,12 @@ export interface OfficialContext {
   incidentUrl: string | null
   /** Zones shown before "+N more". */
   maxZones?: number
+  /** Zone and clock of the times (the fire's zone, else the point's; CONTRACT §14.9.6). Default `getTimeFormat()`. */
+  tf?: TimeFmt
 }
 
 const CAL_OES_FALLBACK = 'https://gis.data.ca.gov/datasets/CalEMA::california-evacuation-aggregation-layer'
-const at = (ms: number) => `${fmtDateTime(ms)} ${tzLabel(ms)}`
+const at = (ms: number, tf: TimeFmt) => fmtAt(ms, tf, { zone: true })
 const https = (u: string | null | undefined) => (u && /^https:\/\//i.test(u) ? u : null)
 
 /** "Follow local officials." is said once, in its own line: drop it from a caveat. */
@@ -69,14 +72,14 @@ export function withoutFollow(s: string | null | undefined): string | null {
   return t || null
 }
 
-function zoneLine(z: OfficialZone, c: OfficialContext): OfficialLine {
-  const when = z.updatedMs != null ? `updated ${at(z.updatedMs)}` : z.listedMs != null ? `issuer time not given; listed by Cal OES ${at(z.listedMs)}` : 'issuer time not given'
+function zoneLine(z: OfficialZone, c: OfficialContext & { tf: TimeFmt }): OfficialLine {
+  const when = z.updatedMs != null ? `updated ${at(z.updatedMs, c.tf)}` : z.listedMs != null ? `issuer time not given; listed by Cal OES ${at(z.listedMs, c.tf)}` : 'issuer time not given'
   const far =
     z.outsideAnalysisArea && c.fireName
       ? `${z.distanceKm != null ? `${distance(z.distanceKm * 1000, c.units).text} from ${c.fireName}; ` : ''}Cal OES does not say which fire this is for`
       : null
   // phones keep the issuer, the source's own time and, for a zone away from the fire, that Cal OES does not name the fire
-  const whenShort = z.updatedMs != null ? `updated ${at(z.updatedMs)}` : z.listedMs != null ? `listed by Cal OES ${at(z.listedMs)}` : null
+  const whenShort = z.updatedMs != null ? `updated ${at(z.updatedMs, c.tf)}` : z.listedMs != null ? `listed by Cal OES ${at(z.listedMs, c.tf)}` : null
   return {
     key: `zone-${z.id}`,
     text: z.status,
@@ -88,7 +91,7 @@ function zoneLine(z: OfficialZone, c: OfficialContext): OfficialLine {
   }
 }
 
-function evacuationLines(e: EvacuationOfficial, c: OfficialContext): OfficialLine[] {
+function evacuationLines(e: EvacuationOfficial, c: OfficialContext & { tf: TimeFmt }): OfficialLine[] {
   const checked = e.checkedMs != null ? `checked ${fmtRelative(e.checkedMs, c.nowMs)}` : null
   switch (e.state) {
     case 'listed':
@@ -103,6 +106,19 @@ function evacuationLines(e: EvacuationOfficial, c: OfficialContext): OfficialLin
           key: 'evac-unchecked',
           text: 'Evacuation zones: not checked here',
           sub: withoutFollow(e.reason)?.replace(/^Not checked here:\s*/i, '') ?? 'Fire-3d reads Cal OES zones only near the open fire and the selected point.',
+          subCompact: null,
+          official: false,
+          tone: 'unknown',
+          url: null,
+        },
+      ]
+    case 'not-available':
+      // CONTRACT §14.14 short form; the reason names the state ("Not available in this state (Nevada)")
+      return [
+        {
+          key: 'evac-not-available',
+          text: 'Evacuation zones: not available in this state',
+          sub: withoutFollow(e.reason) ?? null,
           subCompact: null,
           official: false,
           tone: 'unknown',
@@ -145,7 +161,8 @@ function calfireUrl(cf: CalFireOfficial, fallback: string | null): string | null
   return https(cf.url) ?? https(fallback)
 }
 
-export function officialBlock(info: OfficialInfo, c: OfficialContext): OfficialBlock {
+export function officialBlock(info: OfficialInfo, ctx: OfficialContext): OfficialBlock {
+  const c = { ...ctx, tf: ctx.tf ?? getTimeFormat() }
   const evacuation = evacuationLines(info.evacuation, c)
   const fireWeather = alertsInEffect(info.fireWeather).map((a) => alertLine(a, info.fireWeather))
   const links: OfficialLink[] = []
@@ -163,16 +180,17 @@ export function officialBlock(info: OfficialInfo, c: OfficialContext): OfficialB
   }
 }
 
-/** The dryness reason may cite an official threshold: the Red Flag Warning (or Fire Weather Watch) in effect here. */
-export function officialFireWeatherNote(fw: FireWeatherOfficial): string | null {
+/** The dryness reason may cite an official threshold: the Red Flag Warning (or Fire Weather Watch) in effect here.
+ *  `tf` (CONTRACT §14.9.6) is accepted for the shared signature; the note has no time in it today. */
+export function officialFireWeatherNote(fw: FireWeatherOfficial, _tf?: TimeFmt): string | null {
   const a = alertsInEffect(fw).find((x) => x.phase === 'active')
   return a ? `NWS ${a.event} in effect` : null
 }
 
 /** CAL FIRE's own record, one line ("CAL FIRE: 14,021 acres, 100% contained · updated Jan 31, 2025, 10:48 PST"). */
-export function calfireLine(cf: CalFireOfficial, units: Units): string | null {
+export function calfireLine(cf: CalFireOfficial, units: Units, tf: TimeFmt = getTimeFormat()): string | null {
   if (cf.state !== 'available') return null
   const parts = [cf.acres != null ? area(cf.acres, units).text : null, cf.percentContained != null ? `${Math.round(cf.percentContained)}% contained` : null]
   const facts = parts.filter(Boolean).join(', ')
-  return facts ? `CAL FIRE: ${facts}${cf.updatedMs != null ? ` · updated ${at(cf.updatedMs)}` : ''}` : null
+  return facts ? `CAL FIRE: ${facts}${cf.updatedMs != null ? ` · updated ${at(cf.updatedMs, tf)}` : ''}` : null
 }

@@ -1,15 +1,16 @@
 // Plain-language time and status text for the optional sources (owner: optional-sources). Times show in
 // America/Los_Angeles with the zone label (lib/time.ts); every text says which clock it refers to (issuer update,
 // Fire-3d fetch, satellite acquisition, camera image).
-import { fmtDateTime, fmtDateTimeYear, tzLabel } from '../lib/time'
+import { fmtAt, fmtDateTime, fmtDateTimeYear, tzLabel, type TimeFmt } from '../lib/time'
 import type { ExtrasEnvelope } from './types'
 
 const MIN = 60_000
 const HOUR = 3_600_000
 const DAY = 86_400_000
 
-/** "Oct 17, 13:05 PDT" (the year is added when it differs from the reference year). */
-export function fmtWhen(ms: number, refMs?: number): string {
+/** "Oct 17, 13:05 PDT" (the year is added when it differs from the reference year), in `tf`'s zone and clock. */
+export function fmtWhen(ms: number, refMs?: number, tf?: TimeFmt): string {
+  if (tf) return fmtAt(ms, tf, { zone: true, year: refMs == null ? 'never' : 'auto', refMs })
   const sameYear = refMs == null || new Date(ms).getUTCFullYear() === new Date(refMs).getUTCFullYear()
   return `${sameYear ? fmtDateTime(ms) : fmtDateTimeYear(ms)} ${tzLabel(ms)}`
 }

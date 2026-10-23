@@ -11,7 +11,7 @@
 // details.
 import type { DetectionsFile, ForecastManifest, IncidentManifest, IncidentSummary, PerimetersFile, WeatherFile } from '../../api/types'
 import { fmtAcres, satelliteName } from '../../lib/format'
-import { fmtDate, fmtDateTimeTz, fmtDateTimeYearTz, fmtRelative, laParts } from '../../lib/time'
+import { fmtAt, fmtDate, fmtDateTimeTz, fmtDateTimeYearTz, fmtRelative, laParts, type TimeFmt } from '../../lib/time'
 import { STALE_AFTER_MS } from '../timeline/model'
 
 /** Gap between the newest detection / perimeter and the latest observation above which the latter is a quiet pass. */
@@ -69,9 +69,16 @@ export function weatherSourceLabel(source: string): string {
   return source
 }
 
-/** Absolute time with zone; the year is added when it differs from the year of `nowMs`. */
+/** Absolute time with zone; the year is added when it differs from the year of `nowMs`.
+ *  @deprecated Pacific-bound: use `fmtStatusTimeAt(tMs, nowMs, tf)` (CONTRACT §14.9.6). */
 export function fmtStatusTime(tMs: number, nowMs: number): string {
   return laParts(tMs).year === laParts(nowMs).year ? fmtDateTimeTz(tMs) : fmtDateTimeYearTz(tMs)
+}
+
+/** Absolute time in `tf`'s zone and clock with the zone abbreviation; the year is added when the local year differs
+ *  from `nowMs`'s ("Oct 22, 15:40 MDT", "Jan 8, 2025 4:00 AM PST"). */
+export function fmtStatusTimeAt(tMs: number, nowMs: number, tf: TimeFmt): string {
+  return fmtAt(tMs, tf, { zone: true, year: 'auto', refMs: nowMs })
 }
 
 export function buildDataStatus(inp: DataStatusInput, nowMs: number): StatusRow[] {

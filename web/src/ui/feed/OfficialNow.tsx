@@ -34,7 +34,7 @@ function SourceLink({ href, children }: { href: string | null | undefined; child
 
 type Tone = 'alert' | 'quiet' | 'muted' | 'info'
 
-function Row({ icon, label, source, tone, aside, more, children }: { icon: ReactNode; label: string; source: string; tone: Tone; aside?: ReactNode; more?: ReactNode; children: ReactNode }) {
+function Row({ icon, label, source, tone, aside, more, children }: { icon: ReactNode; label: string; source: string | null; tone: Tone; aside?: ReactNode; more?: ReactNode; children: ReactNode }) {
   const [open, setOpen] = useState(false)
   return (
     <li className={`on-row is-${tone}`}>
@@ -43,7 +43,7 @@ function Row({ icon, label, source, tone, aside, more, children }: { icon: React
           {icon}
         </span>
         <span className="on-row-label">{label}</span>
-        <span className="on-row-src">{source}</span>
+        {source && <span className="on-row-src">{source}</span>}
         {aside && <span className="on-row-aside">{aside}</span>}
       </div>
       {children}
@@ -103,11 +103,11 @@ function EvacuationRow({ e, nowMs, wallMs, metric }: { e: EvacuationOfficial; no
         </p>
       </Row>
     )
-  if (e.state === 'unavailable' || e.state === 'not-checked')
+  if (e.state === 'unavailable' || e.state === 'not-checked' || e.state === 'not-available')
     return (
-      <Row icon={icon} label={label} source={source} tone="muted" more={counties ?? undefined}>
+      <Row icon={icon} label={label} source={e.state === 'not-available' ? null : source} tone="muted" more={counties ?? undefined}>
         <p className="on-line">
-          <strong>{e.state === 'unavailable' ? 'Unavailable right now.' : 'Not checked.'}</strong> {e.reason ?? ''} Follow local officials.
+          <strong>{e.state === 'unavailable' ? 'Unavailable right now.' : e.state === 'not-available' ? 'Not available in this state.' : 'Not checked.'}</strong> {e.reason ?? ''} Follow local officials.
         </p>
       </Row>
     )

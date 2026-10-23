@@ -9,10 +9,12 @@ import type { Feature, FeatureCollection, Geometry } from 'geojson'
 import type { DataDrivenPropertyValueSpecification, LayerSpecification, Map as MapLibreMap } from 'maplibre-gl'
 import type { IncidentManifest } from '../api/types'
 import { lonLatToLocal } from '../lib/reproject'
+import type { TimeFmt } from '../lib/time'
 import { fireReferenceText, type FireReference } from '../official/fire'
 import { bboxContains, distanceText, geometriesBounds, geometryContains, polygonFireDistanceKm, polygonOverlapsRing } from '../official/geo'
 import type { GeoPolygon } from '../official/types'
 import { httpsUrl } from '../official/url'
+import { getTimeFormat } from '../state/timeZone'
 import type { FeedItem } from '../ui/feed/types'
 import { fmtWhen } from './format'
 import type { ExtrasLegendEntry } from './legend'
@@ -299,15 +301,16 @@ export interface ZoneDetail {
 }
 
 /** "Updated by the issuer Oct 17, 18:01 PDT", else Cal OES's copy time with "issuer time not given". */
-export function zoneTimeText(p: Pick<EvacZoneProps, 'status_updated_ms' | 'aggregated_ms'>, nowMs: number): string {
+export function zoneTimeText(p: Pick<EvacZoneProps, 'status_updated_ms' | 'aggregated_ms'>, nowMs: number, tf?: TimeFmt): string {
   const t = zoneTimes(p)
-  if (t.issuerMs != null) return `Updated by the issuer ${fmtWhen(t.issuerMs, nowMs)}`
-  if (t.aggregatedMs != null) return `Issuer time not given; listed by Cal OES ${fmtWhen(t.aggregatedMs, nowMs)}`
+  if (t.issuerMs != null) return `Updated by the issuer ${fmtWhen(t.issuerMs, nowMs, tf)}`
+  if (t.aggregatedMs != null) return `Issuer time not given; listed by Cal OES ${fmtWhen(t.aggregatedMs, nowMs, tf)}`
   return 'Update time not given by the issuer'
 }
 
-/** Text for one zone in the panel (official wording verbatim; times labelled by who set them). */
-export function zoneDetail(f: EvacZoneFeature, nowMs: number): ZoneDetail {
+/** Text for one zone in the panel (official wording verbatim; times labelled by who set them). `tf` (CONTRACT
+ *  §14.9.6): the zone and clock of the times, default `getTimeFormat()`. */
+export function zoneDetail(f: EvacZoneFeature, nowMs: number, tf: TimeFmt = getTimeFormat()): ZoneDetail {
   const p = f.properties
   const extra: string[] = []
   if (p.critical_info) extra.push(p.critical_info)
@@ -319,7 +322,7 @@ export function zoneDetail(f: EvacZoneFeature, nowMs: number): ZoneDetail {
     group: evacStyleGroup(p.status_key),
     title: p.zone_name ? `${p.zone_name} (${p.zone_id})` : p.zone_id,
     jurisdiction: p.jurisdiction ?? 'Jurisdiction not stated',
-    updatedText: zoneTimeText(p, nowMs),
+    updatedText: zoneTimeText(p, nowMs, tf),
     message: p.notes,
     extra,
   }
