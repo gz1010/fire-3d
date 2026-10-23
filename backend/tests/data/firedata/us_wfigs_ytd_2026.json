@@ -1,0 +1,3142 @@
+{
+"recorded": "2026-10-23T01:10Z",
+"query": "YearToDate: IncidentTypeCategory='WF' AND UniqueFireIdentifier LIKE '2026-%' AND IncidentSize>=300 (California + the largest per state + named cases)",
+"features": [
+{
+"attributes": {
+"IrwinID": "{CAF38716-4B9D-45FA-A830-8F7AE15720D9}",
+"UniqueFireIdentifier": "2026-CAFKU-006461",
+"IncidentName": "PARAMOUNT",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 1280,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1774475525000,
+"ContainmentDateTime": 1774484160000,
+"ControlDateTime": 1774499089000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1775077562460,
+"POOState": "US-CA",
+"POOCounty": "Kings",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CAFKU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1774504153000
+},
+"geometry": {
+"x": -119.887475,
+"y": 35.811
+}
+},
+{
+"attributes": {
+"IrwinID": "{19B4B6F0-8552-4158-A7C5-6A251EA97AD9}",
+"UniqueFireIdentifier": "2026-CARRU-054384",
+"IncidentName": "SPRINGS",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 4176,
+"PercentContained": 95,
+"FireDiscoveryDateTime": 1775239260000,
+"ContainmentDateTime": 1775611800000,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1776965348387,
+"POOState": "US-CA",
+"POOCounty": "Riverside",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CARRU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1775402388000
+},
+"geometry": {
+"x": -117.078427,
+"y": 33.891683
+}
+},
+{
+"attributes": {
+"IrwinID": "{5E22814A-22AE-496D-B0A3-96B17F6CAD0D}",
+"UniqueFireIdentifier": "2026-CALAC-116547",
+"IncidentName": "CROWN",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 345,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1775240430000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1776313974933,
+"POOState": "US-CA",
+"POOCounty": "Los Angeles",
+"POOProtectingAgency": "C&L",
+"POOProtectingUnit": "CALAC",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1776313974000
+},
+"geometry": {
+"x": -118.196992,
+"y": 34.465875
+}
+},
+{
+"attributes": {
+"IrwinID": "{FA80604E-CA8E-4F79-BDDE-F0BF4CDA4D64}",
+"UniqueFireIdentifier": "2026-CAFKU-008476",
+"IncidentName": "TUMEY",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 1600,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1776628315000,
+"ContainmentDateTime": 1776652800000,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1791581298907,
+"POOState": "US-CA",
+"POOCounty": "Fresno",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CAFKU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1777659541000
+},
+"geometry": {
+"x": -120.657683,
+"y": 36.622464
+}
+},
+{
+"attributes": {
+"IrwinID": "{02FCB0B7-D653-47F7-8E76-364B1912D022}",
+"UniqueFireIdentifier": "2026-CAKRN-017702",
+"IncidentName": "TOWER",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 2468.6,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1777846800000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1778022999760,
+"POOState": "US-CA",
+"POOCounty": "Kern",
+"POOProtectingAgency": "C&L",
+"POOProtectingUnit": "CAKRN",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1778022999000
+},
+"geometry": {
+"x": -118.803623,
+"y": 35.364449
+}
+},
+{
+"attributes": {
+"IrwinID": "{64EABB0F-3EA8-47F3-BC7F-19750DF7E579}",
+"UniqueFireIdentifier": "2026-CACDD-007101",
+"IncidentName": "CANYON",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 2278,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1778176995000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1779554566670,
+"POOState": "US-CA",
+"POOCounty": "Kern",
+"POOProtectingAgency": "BLM",
+"POOProtectingUnit": "CACDD",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1778631431000
+},
+"geometry": {
+"x": -117.858912,
+"y": 35.504785
+}
+},
+{
+"attributes": {
+"IrwinID": "{6B54EA91-4F1C-40D2-AB89-11F826491E96}",
+"UniqueFireIdentifier": "2026-CAKRN-018622",
+"IncidentName": "BRITE",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 665,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1778360940000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1778385347120,
+"POOState": "US-CA",
+"POOCounty": "Kern",
+"POOProtectingAgency": "C&L",
+"POOProtectingUnit": "CAKRN",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1778385347000
+},
+"geometry": {
+"x": -119.495846,
+"y": 35.341949
+}
+},
+{
+"attributes": {
+"IrwinID": "{5BE7B8CC-2C09-4F31-BF3B-5F1D26D5ADCD}",
+"UniqueFireIdentifier": "2026-CACDD-007308",
+"IncidentName": "NEURALIA",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 1196,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1778713620000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1792521777017,
+"POOState": "US-CA",
+"POOCounty": "Kern",
+"POOProtectingAgency": "BLM",
+"POOProtectingUnit": "CACDD",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1778979150000
+},
+"geometry": {
+"x": -117.985972,
+"y": 35.235793
+}
+},
+{
+"attributes": {
+"IrwinID": "{3ACB48ED-C3A5-49DA-BB7F-22B201FB7EBE}",
+"UniqueFireIdentifier": "2026-CASLU-007489",
+"IncidentName": "RANGE",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 8000,
+"PercentContained": null,
+"FireDiscoveryDateTime": 1778786396000,
+"ContainmentDateTime": 1778807460000,
+"ControlDateTime": 1778884200000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1778940743370,
+"POOState": "US-CA",
+"POOCounty": "Monterey",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CASLU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": null
+},
+"geometry": {
+"x": -120.811517,
+"y": 35.82957
+}
+},
+{
+"attributes": {
+"IrwinID": "{C0CA08F2-E210-4FDF-A312-420A581ECE3A}",
+"UniqueFireIdentifier": "2026-CACNP-001159",
+"IncidentName": "Santa Rosa Island",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 18379,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1778846226000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1780617206197,
+"POOState": "US-CA",
+"POOCounty": "Santa Barbara",
+"POOProtectingAgency": "NPS",
+"POOProtectingUnit": "CACNP",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1780617206000
+},
+"geometry": {
+"x": -120.086073,
+"y": 33.917238
+}
+},
+{
+"attributes": {
+"IrwinID": "{91C7775A-98F7-45B3-A8C1-3433796360CA}",
+"UniqueFireIdentifier": "2026-CAKRN-020086",
+"IncidentName": "RIVER",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 3535,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1779117660000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1779495643490,
+"POOState": "US-CA",
+"POOCounty": "Kern",
+"POOProtectingAgency": "C&L",
+"POOProtectingUnit": "CAKRN",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1779495643000
+},
+"geometry": {
+"x": -118.789179,
+"y": 35.445838
+}
+},
+{
+"attributes": {
+"IrwinID": "{A4EB258A-F5D1-46C3-9560-8FBC8042D9C3}",
+"UniqueFireIdentifier": "2026-CAVNC-042326",
+"IncidentName": "SANDY",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 2183,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1779124583000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1780643728090,
+"POOState": "US-CA",
+"POOCounty": "Ventura",
+"POOProtectingAgency": "C&L",
+"POOProtectingUnit": "CAVNC",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1779924217000
+},
+"geometry": {
+"x": -118.743696,
+"y": 34.250093
+}
+},
+{
+"attributes": {
+"IrwinID": "{A7C6F956-F17F-4A90-9FE7-011ADDDE290C}",
+"UniqueFireIdentifier": "2026-CARRU-080981",
+"IncidentName": "BAIN",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 1379,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1779215015000,
+"ContainmentDateTime": 1780102800000,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1780844906720,
+"POOState": "US-CA",
+"POOCounty": "Riverside",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CARRU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1780164627000
+},
+"geometry": {
+"x": -117.505901,
+"y": 33.975368
+}
+},
+{
+"attributes": {
+"IrwinID": "{5FA51A06-A7D8-4926-84CB-C4A1F2BBB6A8}",
+"UniqueFireIdentifier": "2026-CARRU-081019",
+"IncidentName": "VERONA",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 500,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1779218457000,
+"ContainmentDateTime": 1780102800000,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1780844894000,
+"POOState": "US-CA",
+"POOCounty": "Riverside",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CARRU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1780164760000
+},
+"geometry": {
+"x": -117.084422,
+"y": 33.762725
+}
+},
+{
+"attributes": {
+"IrwinID": "{1839E996-CB85-4D68-845A-FA8367DF7DD8}",
+"UniqueFireIdentifier": "2026-CASDU-011900",
+"IncidentName": "TUSIL",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 820,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1779220808000,
+"ContainmentDateTime": 1779328980000,
+"ControlDateTime": 1779728340000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1781891483450,
+"POOState": "US-CA",
+"POOCounty": "San Diego",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CASDU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1779727767000
+},
+"geometry": {
+"x": -116.338257,
+"y": 32.707873
+}
+},
+{
+"attributes": {
+"IrwinID": "{86678603-6464-406F-BD21-065BBB15A368}",
+"UniqueFireIdentifier": "2026-CACDD-007569",
+"IncidentName": "MTZ/SDU/TUSIL",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 550,
+"PercentContained": null,
+"FireDiscoveryDateTime": 1779221841000,
+"ContainmentDateTime": 1779473040000,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1779473206887,
+"POOState": "US-CA",
+"POOCounty": "San Diego",
+"POOProtectingAgency": "BLM",
+"POOProtectingUnit": "CACDD",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": null
+},
+"geometry": {
+"x": -116.362766,
+"y": 32.732899
+}
+},
+{
+"attributes": {
+"IrwinID": "{FE13EAC3-ABC4-49BE-87BF-1CC7B095EC74}",
+"UniqueFireIdentifier": "2026-CASBC-027077",
+"IncidentName": "Foothill",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 904,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1779231780000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1780423447147,
+"POOState": "US-CA",
+"POOCounty": "Santa Barbara",
+"POOProtectingAgency": "C&L",
+"POOProtectingUnit": "CASBC",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1779585914000
+},
+"geometry": {
+"x": -119.603624,
+"y": 34.829727
+}
+},
+{
+"attributes": {
+"IrwinID": "{BFF9F3BF-CEFE-437C-9B82-231526500EF1}",
+"UniqueFireIdentifier": "2026-CASDU-012832",
+"IncidentName": "BORDER 6",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 2525,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1780347232000,
+"ContainmentDateTime": 1780848000000,
+"ControlDateTime": 1780966800000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1781118182043,
+"POOState": "US-CA",
+"POOCounty": "San Diego",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CASDU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1780773888000
+},
+"geometry": {
+"x": -116.763892,
+"y": 32.566925
+}
+},
+{
+"attributes": {
+"IrwinID": "{B8F6D725-B08F-43A6-A286-4FA1E4686926}",
+"UniqueFireIdentifier": "2026-CAMMU-011236",
+"IncidentName": "WALTZ",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 1644,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1780689051000,
+"ContainmentDateTime": 1781059836000,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1781059915277,
+"POOState": "US-CA",
+"POOCounty": "Mariposa",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CAMMU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1780964030000
+},
+"geometry": {
+"x": -120.245525,
+"y": 37.378154
+}
+},
+{
+"attributes": {
+"IrwinID": "{B6995205-EEBC-4DAE-BA37-4D10CA04A0DD}",
+"UniqueFireIdentifier": "2026-CALNU-009543",
+"IncidentName": "PUTAH",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 860,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1780943698000,
+"ContainmentDateTime": 1781838000000,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1783907733817,
+"POOState": "US-CA",
+"POOCounty": "Yolo",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CALNU",
+"GACC": "ONCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1781916400000
+},
+"geometry": {
+"x": -122.075413,
+"y": 38.514805
+}
+},
+{
+"attributes": {
+"IrwinID": "{8A228972-3098-42AB-9D28-5E402CD514BF}",
+"UniqueFireIdentifier": "2026-CAKRN-024220",
+"IncidentName": "WYLY",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 1075,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1781386620000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1781625375510,
+"POOState": "US-CA",
+"POOCounty": "Kern",
+"POOProtectingAgency": "C&L",
+"POOProtectingUnit": "CAKRN",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1781625375000
+},
+"geometry": {
+"x": -118.634179,
+"y": 35.263894
+}
+},
+{
+"attributes": {
+"IrwinID": "{6520B94E-7CC5-404E-888C-8AFBB5BB31F9}",
+"UniqueFireIdentifier": "2026-CAPMQ-002208",
+"IncidentName": "MATEO",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 1335,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1781556776000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1785161551670,
+"POOState": "US-CA",
+"POOCounty": "San Diego",
+"POOProtectingAgency": "USMC",
+"POOProtectingUnit": "CAPMQ",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1781916753000
+},
+"geometry": {
+"x": -117.487679,
+"y": 33.462449
+}
+},
+{
+"attributes": {
+"IrwinID": "{03F662A5-8682-4222-802B-DB472AA03C6A}",
+"UniqueFireIdentifier": "2026-CARRU-096793",
+"IncidentName": "SHORE.",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 3085,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1781562234000,
+"ContainmentDateTime": 1782000000000,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1782419526477,
+"POOState": "US-CA",
+"POOCounty": "Riverside",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CARRU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1782419526000
+},
+"geometry": {
+"x": -117.103594,
+"y": 33.976661
+}
+},
+{
+"attributes": {
+"IrwinID": "{023A7052-D8C3-44C2-BDD6-88E163CC7D66}",
+"UniqueFireIdentifier": "2026-CAMMU-012074",
+"IncidentName": "LINCOLN",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 734,
+"PercentContained": null,
+"FireDiscoveryDateTime": 1781627732000,
+"ContainmentDateTime": 1781667780000,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1783032175090,
+"POOState": "US-CA",
+"POOCounty": "Merced",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CAMMU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": null
+},
+"geometry": {
+"x": -120.725908,
+"y": 37.277017
+}
+},
+{
+"attributes": {
+"IrwinID": "{673BA64E-64F5-4148-82CC-B4C96FB5E39A}",
+"UniqueFireIdentifier": "2026-CAKRN-025007",
+"IncidentName": "LOST",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 7834,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1781799660000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1782420510523,
+"POOState": "US-CA",
+"POOCounty": "Kern",
+"POOProtectingAgency": "C&L",
+"POOProtectingUnit": "CAKRN",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1782089037000
+},
+"geometry": {
+"x": -119.755013,
+"y": 35.418616
+}
+},
+{
+"attributes": {
+"IrwinID": "{74059FB5-FC95-495C-BF18-602DD0DE81F8}",
+"UniqueFireIdentifier": "2026-CAKRN-025235",
+"IncidentName": "STAR",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 577,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1781911920000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1782086244120,
+"POOState": "US-CA",
+"POOCounty": "Kern",
+"POOProtectingAgency": "C&L",
+"POOProtectingUnit": "CAKRN",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1782086244000
+},
+"geometry": {
+"x": -118.74779,
+"y": 35.290838
+}
+},
+{
+"attributes": {
+"IrwinID": "{670422EA-F771-466D-AA40-1F5E580352BA}",
+"UniqueFireIdentifier": "2026-CARRU-103569",
+"IncidentName": "IRON",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 635,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1782594890000,
+"ContainmentDateTime": 1782928800000,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1782930360803,
+"POOState": "US-CA",
+"POOCounty": "Riverside",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CARRU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1782930360000
+},
+"geometry": {
+"x": -117.128841,
+"y": 33.939179
+}
+},
+{
+"attributes": {
+"IrwinID": "{7F35CE16-9246-4FF1-9E0E-73BFF12CADBF}",
+"UniqueFireIdentifier": "2026-CANOD-003963",
+"IncidentName": "ROMERO",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 699,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1782689766000,
+"ContainmentDateTime": 1782782280000,
+"ControlDateTime": 1782782280000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1790615520827,
+"POOState": "US-CA",
+"POOCounty": "Modoc",
+"POOProtectingAgency": "BLM",
+"POOProtectingUnit": "CANOD",
+"GACC": "ONCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1782783408000
+},
+"geometry": {
+"x": -120.503422,
+"y": 41.285509
+}
+},
+{
+"attributes": {
+"IrwinID": "{2BEA53B4-2F66-48D7-A796-4E03896E61B3}",
+"UniqueFireIdentifier": "2026-CAPMQ-002408",
+"IncidentName": "MUTUAL AID/RANGE",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 429,
+"PercentContained": null,
+"FireDiscoveryDateTime": 1782852927000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1782954466467,
+"POOState": "US-CA",
+"POOCounty": "San Diego",
+"POOProtectingAgency": "USMC",
+"POOProtectingUnit": "CAPMQ",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": null
+},
+"geometry": {
+"x": -117.365912,
+"y": 33.410101
+}
+},
+{
+"attributes": {
+"IrwinID": "{F7CC57B4-2A3B-4817-8E55-1B99DB614C73}",
+"UniqueFireIdentifier": "2026-CAMMU-013212",
+"IncidentName": "POINT",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 650,
+"PercentContained": null,
+"FireDiscoveryDateTime": 1782922157000,
+"ContainmentDateTime": 1783032645000,
+"ControlDateTime": 1783032650000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1783444246003,
+"POOState": "US-CA",
+"POOCounty": "Santa Clara",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CAMMU",
+"GACC": "ONCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": null
+},
+"geometry": {
+"x": -121.213222,
+"y": 37.068135
+}
+},
+{
+"attributes": {
+"IrwinID": "{69DD692F-9D85-4D69-91E9-AB82AEB5AEB5}",
+"UniqueFireIdentifier": "2026-CALMU-004201",
+"IncidentName": "3-1 PIT",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 1055,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1783456502000,
+"ContainmentDateTime": 1787604281000,
+"ControlDateTime": 1787604392000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1787631462997,
+"POOState": "US-CA",
+"POOCounty": "Lassen",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CALMU",
+"GACC": "ONCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1787631463000
+},
+"geometry": {
+"x": -121.268513,
+"y": 40.948838
+}
+},
+{
+"attributes": {
+"IrwinID": "{5B0ED051-E269-47DC-BC33-F1D2993889C2}",
+"UniqueFireIdentifier": "2026-CASLU-010527",
+"IncidentName": "BEAR",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 542.8,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1783462051000,
+"ContainmentDateTime": 1783540800000,
+"ControlDateTime": 1783552980000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1783632781983,
+"POOState": "US-CA",
+"POOCounty": "San Luis Obispo",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CASLU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1783558754000
+},
+"geometry": {
+"x": -119.898358,
+"y": 35.314901
+}
+},
+{
+"attributes": {
+"IrwinID": "{15784EDD-38BD-4F9D-9439-B0E24D560AF0}",
+"UniqueFireIdentifier": "2026-CAMMU-013885",
+"IncidentName": "VAN",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 1107,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1783543949000,
+"ContainmentDateTime": 1783774800000,
+"ControlDateTime": 1783815420000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1783981459570,
+"POOState": "US-CA",
+"POOCounty": "Mariposa",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CAMMU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1783774908000
+},
+"geometry": {
+"x": -120.06133,
+"y": 37.327643
+}
+},
+{
+"attributes": {
+"IrwinID": "{5A2DB248-4450-48D2-925C-0B1404F927A8}",
+"UniqueFireIdentifier": "2026-CALAC-240823",
+"IncidentName": "SUMMIT",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 2690,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1783712885000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1787929597300,
+"POOState": "US-CA",
+"POOCounty": "Los Angeles",
+"POOProtectingAgency": "C&L",
+"POOProtectingUnit": "CALAC",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1784849137000
+},
+"geometry": {
+"x": -117.686022,
+"y": 34.454995
+}
+},
+{
+"attributes": {
+"IrwinID": "{20BACABE-DCC0-4B41-A0DA-997AED50D8C4}",
+"UniqueFireIdentifier": "2026-CALMU-004291",
+"IncidentName": "LOOMIS",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 656,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1783796555000,
+"ContainmentDateTime": 1785097500000,
+"ControlDateTime": 1788195000000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1790803817063,
+"POOState": "US-CA",
+"POOCounty": "Lassen",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CALMU",
+"GACC": "ONCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1788200645000
+},
+"geometry": {
+"x": -121.15468,
+"y": 40.965838
+}
+},
+{
+"attributes": {
+"IrwinID": "{6AD80DE9-CD41-40D3-8939-A86CCF775981}",
+"UniqueFireIdentifier": "2026-CATNF-001154",
+"IncidentName": "ELEPHANT",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 13930,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1783801620000,
+"ContainmentDateTime": 1785546000000,
+"ControlDateTime": 1790010840000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1790025404150,
+"POOState": "US-CA",
+"POOCounty": "Plumas",
+"POOProtectingAgency": "USFS",
+"POOProtectingUnit": "CATNF",
+"GACC": "ONCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1785106396000
+},
+"geometry": {
+"x": -120.19318,
+"y": 39.710838
+}
+},
+{
+"attributes": {
+"IrwinID": "{03C8555B-5842-496F-B327-63DFF323756F}",
+"UniqueFireIdentifier": "2026-CASDU-016203",
+"IncidentName": "THORN",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 1234,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1784155184000,
+"ContainmentDateTime": 1784422800000,
+"ControlDateTime": 1785249000000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1787878083667,
+"POOState": "US-CA",
+"POOCounty": "San Diego",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CASDU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1784492046000
+},
+"geometry": {
+"x": -116.332939,
+"y": 32.691109
+}
+},
+{
+"attributes": {
+"IrwinID": "{E3094E35-8B33-4A82-BE4B-D2E83652C29F}",
+"UniqueFireIdentifier": "2026-CANOD-004474",
+"IncidentName": "BISCAR",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 69355,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1784397969000,
+"ContainmentDateTime": 1786238400000,
+"ControlDateTime": 1786238400000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1786238467650,
+"POOState": "US-CA",
+"POOCounty": "Lassen",
+"POOProtectingAgency": "BLM",
+"POOProtectingUnit": "CANOD",
+"GACC": "ONCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1785632462000
+},
+"geometry": {
+"x": -120.303846,
+"y": 40.618172
+}
+},
+{
+"attributes": {
+"IrwinID": "{7AAA913F-9B4C-4E78-9A90-674C3F7BECA7}",
+"UniqueFireIdentifier": "2026-CASHU-008640",
+"IncidentName": "BROOK",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 502,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1784416277000,
+"ContainmentDateTime": 1785091837000,
+"ControlDateTime": 1785362421000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1787315667303,
+"POOState": "US-CA",
+"POOCounty": "Shasta",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CASHU",
+"GACC": "ONCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1785197843000
+},
+"geometry": {
+"x": -122.194014,
+"y": 40.696005
+}
+},
+{
+"attributes": {
+"IrwinID": "{5F1293E8-BC81-4265-83ED-D06EE6361BD6}",
+"UniqueFireIdentifier": "2026-CALNU-012618",
+"IncidentName": "RUMSEY",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 396,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1784587258000,
+"ContainmentDateTime": 1785356437000,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1785459453880,
+"POOState": "US-CA",
+"POOCounty": "Yolo",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CALNU",
+"GACC": "ONCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1785459453000
+},
+"geometry": {
+"x": -122.253177,
+"y": 38.901764
+}
+},
+{
+"attributes": {
+"IrwinID": "{4D14BE09-9B6D-4656-8CE9-F9145290CDA5}",
+"UniqueFireIdentifier": "2026-CABDU-011136",
+"IncidentName": "ROCK",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 12008,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1784590433000,
+"ContainmentDateTime": 1786496400000,
+"ControlDateTime": 1786843200000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1786891011700,
+"POOState": "US-CA",
+"POOCounty": "Inyo",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CABDU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1785978228000
+},
+"geometry": {
+"x": -118.241201,
+"y": 36.91682
+}
+},
+{
+"attributes": {
+"IrwinID": "{A48BE346-73E4-469C-AE01-A6A8166B1AA1}",
+"UniqueFireIdentifier": "2026-CASCU-003908",
+"IncidentName": "LITTLE",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 1007.3,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1784670151000,
+"ContainmentDateTime": 1784706480000,
+"ControlDateTime": 1785788280000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1786748320940,
+"POOState": "US-CA",
+"POOCounty": "Alameda",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CASCU",
+"GACC": "ONCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1785025869000
+},
+"geometry": {
+"x": -121.84675,
+"y": 37.602413
+}
+},
+{
+"attributes": {
+"IrwinID": "{72C28B64-91AE-46FF-9D43-C16E2AC8CB09}",
+"UniqueFireIdentifier": "2026-CASDU-016718",
+"IncidentName": "CREELMAN",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 347,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1784756988000,
+"ContainmentDateTime": 1784940960000,
+"ControlDateTime": 1785113760000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1792688754557,
+"POOState": "US-CA",
+"POOCounty": "San Diego",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CASDU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1784940371000
+},
+"geometry": {
+"x": -116.84346,
+"y": 33.018359
+}
+},
+{
+"attributes": {
+"IrwinID": "{896FD68A-9817-4DB6-8D11-082E5AD32B5E}",
+"UniqueFireIdentifier": "2026-CAMMU-015106",
+"IncidentName": "FIELDS",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 1280,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1784839576000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1785284968500,
+"POOState": "US-CA",
+"POOCounty": "Merced",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CAMMU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1785284968000
+},
+"geometry": {
+"x": -120.429696,
+"y": 37.528028
+}
+},
+{
+"attributes": {
+"IrwinID": "{F2F72D4F-9DAC-4285-B013-3A4EC85ADE32}",
+"UniqueFireIdentifier": "2026-CABDU-011375",
+"IncidentName": "CINDER",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 2062,
+"PercentContained": null,
+"FireDiscoveryDateTime": 1784945968000,
+"ContainmentDateTime": 1784991600000,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1786729172963,
+"POOState": "US-CA",
+"POOCounty": "Inyo",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CABDU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": "CINDER COMPLEX",
+"CpxID": "{B0B0E959-6D11-4831-951A-C464F0F3AB45}",
+"ICS209ReportDateTime": null
+},
+"geometry": {
+"x": -118.253996,
+"y": 37.001447
+}
+},
+{
+"attributes": {
+"IrwinID": "{EF21EAD9-CE4D-48F6-964F-46A398857263}",
+"UniqueFireIdentifier": "2026-CABDU-011385",
+"IncidentName": "5-3",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 744,
+"PercentContained": null,
+"FireDiscoveryDateTime": 1784962280000,
+"ContainmentDateTime": 1786383600000,
+"ControlDateTime": 1786729200000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1786729261020,
+"POOState": "US-CA",
+"POOCounty": "Inyo",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CABDU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": "CINDER COMPLEX",
+"CpxID": "{B0B0E959-6D11-4831-951A-C464F0F3AB45}",
+"ICS209ReportDateTime": 1785978419000
+},
+"geometry": {
+"x": -118.284012,
+"y": 36.996172
+}
+},
+{
+"attributes": {
+"IrwinID": "{553795BB-902A-4D1C-9A22-5F4609EC8141}",
+"UniqueFireIdentifier": "2026-CABDU-011386",
+"IncidentName": "5-4",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 1318,
+"PercentContained": null,
+"FireDiscoveryDateTime": 1784962317000,
+"ContainmentDateTime": 1786383600000,
+"ControlDateTime": 1786729200000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1786729235137,
+"POOState": "US-CA",
+"POOCounty": "Inyo",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CABDU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": "CINDER COMPLEX",
+"CpxID": "{B0B0E959-6D11-4831-951A-C464F0F3AB45}",
+"ICS209ReportDateTime": 1785978422000
+},
+"geometry": {
+"x": -118.258012,
+"y": 37.015838
+}
+},
+{
+"attributes": {
+"IrwinID": "{64E33F82-1EA7-4427-A234-05256B79CB7D}",
+"UniqueFireIdentifier": "2026-CAKRN-031524",
+"IncidentName": "FISH",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 4201,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1785179100000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1785801693940,
+"POOState": "US-CA",
+"POOCounty": "Kern",
+"POOProtectingAgency": "C&L",
+"POOProtectingUnit": "CAKRN",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1785801693000
+},
+"geometry": {
+"x": -118.650012,
+"y": 35.281672
+}
+},
+{
+"attributes": {
+"IrwinID": "{779D8BC3-AF1A-4AEC-A878-D34DE4F88AF3}",
+"UniqueFireIdentifier": "2026-CASDU-017420",
+"IncidentName": "GRADE",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 689,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1785530428000,
+"ContainmentDateTime": 1785555120000,
+"ControlDateTime": 1786410000000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1788212404447,
+"POOState": "US-CA",
+"POOCounty": "San Diego",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CASDU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1785888298000
+},
+"geometry": {
+"x": -116.768039,
+"y": 33.266263
+}
+},
+{
+"attributes": {
+"IrwinID": "{5AC0B49D-3F64-4344-826A-5DBB1925E757}",
+"UniqueFireIdentifier": "2026-CAMEU-008929",
+"IncidentName": "FELIZ",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 872,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1785623948000,
+"ContainmentDateTime": 1786400580000,
+"ControlDateTime": 1786991160000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1790970285683,
+"POOState": "US-CA",
+"POOCounty": "Mendocino",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CAMEU",
+"GACC": "ONCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1786578334000
+},
+"geometry": {
+"x": -123.161153,
+"y": 38.992465
+}
+},
+{
+"attributes": {
+"IrwinID": "{A7C819CA-FCE9-4E9E-9A7F-C89F2160F102}",
+"UniqueFireIdentifier": "2026-CATCU-011483",
+"IncidentName": "GANN",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 10339,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1785803276000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1787102908750,
+"POOState": "US-CA",
+"POOCounty": "Calaveras",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CATCU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1786581106000
+},
+"geometry": {
+"x": -120.76681,
+"y": 38.107933
+}
+},
+{
+"attributes": {
+"IrwinID": "{E53D7A7B-30F7-40CE-B772-2AD3253A9B27}",
+"UniqueFireIdentifier": "2026-CAKRN-032905",
+"IncidentName": "BUZZARD",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 902,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1785941460000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1786637959307,
+"POOState": "US-CA",
+"POOCounty": "Kern",
+"POOProtectingAgency": "C&L",
+"POOProtectingUnit": "CAKRN",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1786637959000
+},
+"geometry": {
+"x": -118.92279,
+"y": 34.899727
+}
+},
+{
+"attributes": {
+"IrwinID": "{BAF0D8B7-48FA-43F7-A249-349644693C63}",
+"UniqueFireIdentifier": "2026-CALAC-278844",
+"IncidentName": "RIDGE",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 1134,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1786138986000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1786578837620,
+"POOState": "US-CA",
+"POOCounty": "Los Angeles",
+"POOProtectingAgency": "C&L",
+"POOProtectingUnit": "CALAC",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1786578837000
+},
+"geometry": {
+"x": -118.830002,
+"y": 34.791085
+}
+},
+{
+"attributes": {
+"IrwinID": "{3BF54E17-87D6-40E1-B913-81B97515E1D5}",
+"UniqueFireIdentifier": "2026-CAHVT-000753",
+"IncidentName": "MP18",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 7599,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1786146300000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1789605202537,
+"POOState": "US-CA",
+"POOCounty": "Humboldt",
+"POOProtectingAgency": "TRIBE",
+"POOProtectingUnit": "CAHVT",
+"GACC": "ONCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1789605202000
+},
+"geometry": {
+"x": -123.685014,
+"y": 41.133061
+}
+},
+{
+"attributes": {
+"IrwinID": "{286B7F1D-8945-4A5D-9D81-5235C18AF1FE}",
+"UniqueFireIdentifier": "2026-NVCCD-030683",
+"IncidentName": "Bug",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 93733,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1786228249000,
+"ContainmentDateTime": 1787873400000,
+"ControlDateTime": 1789434000000,
+"FireOutDateTime": 1789952400000,
+"ModifiedOnDateTime_dt": 1790879929670,
+"POOState": "US-CA",
+"POOCounty": "Lassen",
+"POOProtectingAgency": "BLM",
+"POOProtectingUnit": "NVCCD",
+"GACC": "GBCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1787875642000
+},
+"geometry": {
+"x": -120.03813,
+"y": 39.727888
+}
+},
+{
+"attributes": {
+"IrwinID": "{CAF44ABF-B1E4-4209-95AA-74E003C343BE}",
+"UniqueFireIdentifier": "2026-CASLU-012547",
+"IncidentName": "ANTELOPE",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 2410.24,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1786230807000,
+"ContainmentDateTime": 1786253640000,
+"ControlDateTime": 1786498260000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1787673177487,
+"POOState": "US-CA",
+"POOCounty": "San Luis Obispo",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CASLU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1786497344000
+},
+"geometry": {
+"x": -120.264577,
+"y": 35.739845
+}
+},
+{
+"attributes": {
+"IrwinID": "{51374D2C-D96B-40F7-940B-6CB8E0A483A2}",
+"UniqueFireIdentifier": "2026-CALPF-002271",
+"IncidentName": "Timber",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 25350,
+"PercentContained": 97,
+"FireDiscoveryDateTime": 1786246500000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1792621790853,
+"POOState": "US-CA",
+"POOCounty": "Monterey",
+"POOProtectingAgency": "USFS",
+"POOProtectingUnit": "CALPF",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1792621790000
+},
+"geometry": {
+"x": -121.717521,
+"y": 36.215899
+}
+},
+{
+"attributes": {
+"IrwinID": "{3AB91FBB-41DD-4958-9977-E0DEBEA96FC7}",
+"UniqueFireIdentifier": "2026-CATUU-001016",
+"IncidentName": "HATCHET",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 606,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1786269999000,
+"ContainmentDateTime": 1786310160000,
+"ControlDateTime": 1786579726000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1786659024200,
+"POOState": "US-CA",
+"POOCounty": "Tulare",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CATUU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1786659024000
+},
+"geometry": {
+"x": -118.823788,
+"y": 36.124178
+}
+},
+{
+"attributes": {
+"IrwinID": "{542C1FBE-9AFA-449F-AD23-7CCB8BCA9779}",
+"UniqueFireIdentifier": "2026-CASLU-012768",
+"IncidentName": "PLAINS",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 2588,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1786563320000,
+"ContainmentDateTime": 1786588200000,
+"ControlDateTime": 1786669200000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1787094274413,
+"POOState": "US-CA",
+"POOCounty": "San Luis Obispo",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CASLU",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1786669368000
+},
+"geometry": {
+"x": -120.001469,
+"y": 35.416597
+}
+},
+{
+"attributes": {
+"IrwinID": "{C257FBA6-F90E-431F-9464-067E8FBF79D7}",
+"UniqueFireIdentifier": "2026-CALPF-002475",
+"IncidentName": "Plaskett",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 29993,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1787761560000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1790728545227,
+"POOState": "US-CA",
+"POOCounty": "Monterey",
+"POOProtectingAgency": "USFS",
+"POOProtectingUnit": "CALPF",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1790728545000
+},
+"geometry": {
+"x": -121.412513,
+"y": 35.905672
+}
+},
+{
+"attributes": {
+"IrwinID": "{06749CFD-DE8B-4CFA-8C11-075F7D8AB353}",
+"UniqueFireIdentifier": "2026-CAMEU-010693",
+"IncidentName": "LUCAS",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 1099,
+"PercentContained": null,
+"FireDiscoveryDateTime": 1789057088000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1789094795437,
+"POOState": "US-CA",
+"POOCounty": "Lake",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CAMEU",
+"GACC": "ONCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": null
+},
+"geometry": {
+"x": -123.00323,
+"y": 39.233122
+}
+},
+{
+"attributes": {
+"IrwinID": "{0330E46B-236E-4706-8A32-04AC4A27AC1F}",
+"UniqueFireIdentifier": "2026-CALNU-016127",
+"IncidentName": "LUCAS",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 4128,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1789075281000,
+"ContainmentDateTime": 1790002800000,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1790196033140,
+"POOState": "US-CA",
+"POOCounty": "Lake",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CALNU",
+"GACC": "ONCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1789951684000
+},
+"geometry": {
+"x": -123.002769,
+"y": 39.231861
+}
+},
+{
+"attributes": {
+"IrwinID": "{AACFD673-4C1B-4CDF-B9DD-128E34BD7272}",
+"UniqueFireIdentifier": "2026-CAYNP-000100",
+"IncidentName": "DOME",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 6788,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1789486080000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1792282277720,
+"POOState": "US-CA",
+"POOCounty": "Mariposa",
+"POOProtectingAgency": "NPS",
+"POOProtectingUnit": "CAYNP",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1792282277000
+},
+"geometry": {
+"x": -119.61618,
+"y": 37.566205
+}
+},
+{
+"attributes": {
+"IrwinID": "{80DC9935-6CE8-4B42-B4EC-2BA47CE13AA5}",
+"UniqueFireIdentifier": "2026-CANEU-029037",
+"IncidentName": "FLORISTON",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 622,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1789578056000,
+"ContainmentDateTime": 1791163240000,
+"ControlDateTime": 1791744457000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1791744467547,
+"POOState": "US-CA",
+"POOCounty": "Nevada",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CANEU",
+"GACC": "GBCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1790294535000
+},
+"geometry": {
+"x": -120.025229,
+"y": 39.39443
+}
+},
+{
+"attributes": {
+"IrwinID": "{DF96EDA9-9B27-47FB-86D5-DFB97A879A22}",
+"UniqueFireIdentifier": "2026-CAMRN-002615",
+"IncidentName": "CHILENO",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 341,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1789947600000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1790469945303,
+"POOState": "US-CA",
+"POOCounty": "Marin",
+"POOProtectingAgency": "C&L",
+"POOProtectingUnit": "CAMRN",
+"GACC": "ONCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1790469945000
+},
+"geometry": {
+"x": -122.812236,
+"y": 38.213061
+}
+},
+{
+"attributes": {
+"IrwinID": "{0BACAA4F-B941-4883-91AA-907242FBD87D}",
+"UniqueFireIdentifier": "2026-CAANF-264196",
+"IncidentName": "BOUQUET",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 1048,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1791062160000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1791868881907,
+"POOState": "US-CA",
+"POOCounty": "Los Angeles",
+"POOProtectingAgency": "USFS",
+"POOProtectingUnit": "CAANF",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1791856756000
+},
+"geometry": {
+"x": -118.401842,
+"y": 34.56184
+}
+},
+{
+"attributes": {
+"IrwinID": "{AD30FEBB-78D6-48C2-B71C-DA2CC3A9331C}",
+"UniqueFireIdentifier": "2026-CAPMQ-003992",
+"IncidentName": "HENDERSON",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 3260,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1792098031000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1792454901157,
+"POOState": "US-CA",
+"POOCounty": "San Diego",
+"POOProtectingAgency": "USMC",
+"POOProtectingUnit": "CAPMQ",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1792454901000
+},
+"geometry": {
+"x": -117.409392,
+"y": 33.343295
+}
+},
+{
+"attributes": {
+"IrwinID": "{3C8A0BFF-1034-4509-917D-B3B2158C1239}",
+"UniqueFireIdentifier": "2026-CAORC-149182",
+"IncidentName": "NORTE",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 570,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1792175576000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1792714797890,
+"POOState": "US-CA",
+"POOCounty": "Orange",
+"POOProtectingAgency": "C&L",
+"POOProtectingUnit": "CAORC",
+"GACC": "OSCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1792714797000
+},
+"geometry": {
+"x": -117.634842,
+"y": 33.479656
+}
+},
+{
+"attributes": {
+"IrwinID": "{730A7DAE-E447-4B05-BFF0-CCC274788DE5}",
+"UniqueFireIdentifier": "2026-CAMEU-012265",
+"IncidentName": "COOLEY",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 1365,
+"PercentContained": 80,
+"FireDiscoveryDateTime": 1792195539000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1792714568820,
+"POOState": "US-CA",
+"POOCounty": "Mendocino",
+"POOProtectingAgency": "CAL FIRE",
+"POOProtectingUnit": "CAMEU",
+"GACC": "ONCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1792714568000
+},
+"geometry": {
+"x": -123.188069,
+"y": 38.819727
+}
+},
+{
+"attributes": {
+"IrwinID": "{3DE0062D-B07C-4545-9E47-709846D3CAF9}",
+"UniqueFireIdentifier": "2026-NENES-260157",
+"IncidentName": "Morrill",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 642029,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1773411253000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1784654516140,
+"POOState": "US-NE",
+"POOCounty": "Garden",
+"POOProtectingAgency": "SFS",
+"POOProtectingUnit": "NENES",
+"GACC": "RMCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1774481819000
+},
+"geometry": {
+"x": -102.15697,
+"y": 41.474367
+}
+},
+{
+"attributes": {
+"IrwinID": "{6B0C72B3-0E12-4695-9022-E1113C0AA8D1}",
+"UniqueFireIdentifier": "2026-ORVAD-260201",
+"IncidentName": "BIG GRASS",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 578637,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1784838600000,
+"ContainmentDateTime": 1789254000000,
+"ControlDateTime": 1790713800000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1790861248040,
+"POOState": "US-OR",
+"POOCounty": "Malheur",
+"POOProtectingAgency": "BLM",
+"POOProtectingUnit": "ORVAD",
+"GACC": "NWCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1789254720000
+},
+"geometry": {
+"x": -117.303363,
+"y": 42.649806
+}
+},
+{
+"attributes": {
+"IrwinID": "{22417EB2-8828-46A3-9D59-CCDB3BC07B51}",
+"UniqueFireIdentifier": "2026-OKOKS-260221",
+"IncidentName": "Ranger Road",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 283283,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1771348740000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1771978334467,
+"POOState": "US-OK",
+"POOCounty": "Beaver",
+"POOProtectingAgency": "DVF",
+"POOProtectingUnit": "OKOKS",
+"GACC": "SACC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1771978334000
+},
+"geometry": {
+"x": -100.503898,
+"y": 36.81084
+}
+},
+{
+"attributes": {
+"IrwinID": "{091081ED-BD23-4610-AE4A-270F95D1711E}",
+"UniqueFireIdentifier": "2026-WAOWF-260406",
+"IncidentName": "LITTLE GIANT",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 172912,
+"PercentContained": 95,
+"FireDiscoveryDateTime": 1784164674000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1792625312240,
+"POOState": "US-WA",
+"POOCounty": "Chelan",
+"POOProtectingAgency": "USFS",
+"POOProtectingUnit": "WAOWF",
+"GACC": "NWCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1792625312000
+},
+"geometry": {
+"x": -120.846632,
+"y": 48.016223
+}
+},
+{
+"attributes": {
+"IrwinID": "{DB5448A6-FCAC-4041-A817-6F8198161DBA}",
+"UniqueFireIdentifier": "2026-IDBOD-265460",
+"IncidentName": "Tartar",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 158027,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1784908800000,
+"ContainmentDateTime": 1788400800000,
+"ControlDateTime": 1790013600000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1790982161490,
+"POOState": "US-ID",
+"POOCounty": "Washington",
+"POOProtectingAgency": "BLM",
+"POOProtectingUnit": "IDBOD",
+"GACC": "GBCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1788392903000
+},
+"geometry": {
+"x": -117.093013,
+"y": 44.541339
+}
+},
+{
+"attributes": {
+"IrwinID": "{07C99ED8-E61D-43F0-AF86-B3A75F30781C}",
+"UniqueFireIdentifier": "2026-UTFIF-260341",
+"IncidentName": "Widemouth 2",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 129742,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1785193348000,
+"ContainmentDateTime": 1790633280000,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1790885870653,
+"POOState": "US-UT",
+"POOCounty": "Millard",
+"POOProtectingAgency": "USFS",
+"POOProtectingUnit": "UTFIF",
+"GACC": "GBCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1790633441000
+},
+"geometry": {
+"x": -112.498995,
+"y": 38.728923
+}
+},
+{
+"attributes": {
+"IrwinID": "{1CDF5E5A-F22E-4352-A582-C2A47663B93D}",
+"UniqueFireIdentifier": "2026-COCUX-001160",
+"IncidentName": "Aspen Acres",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 102007,
+"PercentContained": 94,
+"FireDiscoveryDateTime": 1782734686000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1792712380667,
+"POOState": "US-CO",
+"POOCounty": "Custer",
+"POOProtectingAgency": "C&L",
+"POOProtectingUnit": "COCUX",
+"GACC": "RMCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1792712380000
+},
+"geometry": {
+"x": -105.071278,
+"y": 38.019321
+}
+},
+{
+"attributes": {
+"IrwinID": "{3D41F0AF-3EDE-4394-A814-27C839544715}",
+"UniqueFireIdentifier": "2026-KSMEX-000678",
+"IncidentName": "Meade Lake",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 92733,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1778787000000,
+"ContainmentDateTime": 1779328800000,
+"ControlDateTime": 1779404400000,
+"FireOutDateTime": 1779409800000,
+"ModifiedOnDateTime_dt": 1780666993443,
+"POOState": "US-KS",
+"POOCounty": "Meade",
+"POOProtectingAgency": "C&L",
+"POOProtectingUnit": "KSMEX",
+"GACC": "RMCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1779378890000
+},
+"geometry": {
+"x": -100.374009,
+"y": 37.165026
+}
+},
+{
+"attributes": {
+"IrwinID": "{B16158E2-C479-4CAB-AB57-2B2677D44A7A}",
+"UniqueFireIdentifier": "2026-TXTXS-267549",
+"IncidentName": "Ross",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 89989,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1787593289000,
+"ContainmentDateTime": 1789596198000,
+"ControlDateTime": 1790125200000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1790889516690,
+"POOState": "US-TX",
+"POOCounty": "Palo Pinto",
+"POOProtectingAgency": "SFS",
+"POOProtectingUnit": "TXTXS",
+"GACC": "SACC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1789591143000
+},
+"geometry": {
+"x": -98.342578,
+"y": 32.759824
+}
+},
+{
+"attributes": {
+"IrwinID": "{DCEBA814-01D4-4814-B421-3113FB326D0D}",
+"UniqueFireIdentifier": "2026-NVNAFQ-500729",
+"IncidentName": "MOUSE MEADOW",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 52000,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1784854852000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1790973695953,
+"POOState": "US-NV",
+"POOCounty": "Nye",
+"POOProtectingAgency": "USAF",
+"POOProtectingUnit": "NVNAFQ",
+"GACC": "GBCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1788652526000
+},
+"geometry": {
+"x": -116.157579,
+"y": 37.266705
+}
+},
+{
+"attributes": {
+"IrwinID": "{CDFB675E-7147-4BC5-AAE7-301DB9DBE20F}",
+"UniqueFireIdentifier": "2026-AKFAS-611246",
+"IncidentName": "Tatlanika",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 38636.22,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1782021900000,
+"ContainmentDateTime": 1791273600000,
+"ControlDateTime": 1791273600000,
+"FireOutDateTime": 1791334860000,
+"ModifiedOnDateTime_dt": 1792092351567,
+"POOState": "US-AK",
+"POOCounty": "Denali",
+"POOProtectingAgency": "DVF",
+"POOProtectingUnit": "AKFAS",
+"GACC": "AICC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1791829368000
+},
+"geometry": {
+"x": -148.351692,
+"y": 64.270502
+}
+},
+{
+"attributes": {
+"IrwinID": "{84FD3D7E-6B04-49CD-A729-ED3178A49C42}",
+"UniqueFireIdentifier": "2026-MTBDF-266319",
+"IncidentName": "Sand Creek",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 35520,
+"PercentContained": 83,
+"FireDiscoveryDateTime": 1785612660000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1792706120010,
+"POOState": "US-MT",
+"POOCounty": "Beaverhead",
+"POOProtectingAgency": "USFS",
+"POOProtectingUnit": "MTBDF",
+"GACC": "NRCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1792706120000
+},
+"geometry": {
+"x": -113.32568,
+"y": 45.554673
+}
+},
+{
+"attributes": {
+"IrwinID": "{C765308B-9A9C-49EC-AB26-4F14E998957C}",
+"UniqueFireIdentifier": "2026-FLBCP-000580",
+"IncidentName": "National",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 35027,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1771821240000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1792603494087,
+"POOState": "US-FL",
+"POOCounty": "Collier",
+"POOProtectingAgency": "NPS",
+"POOProtectingUnit": "FLBCP",
+"GACC": "SACC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1774026657000
+},
+"geometry": {
+"x": -81.33692,
+"y": 26.119055
+}
+},
+{
+"attributes": {
+"IrwinID": "{C62C2AF2-B5F3-4666-9516-6B9B1305C9F1}",
+"UniqueFireIdentifier": "2026-GAGAS-320025",
+"IncidentName": "Pineland Road",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 32031,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1776540600000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1781120064973,
+"POOState": "US-GA",
+"POOCounty": "Clinch",
+"POOProtectingAgency": "FC",
+"POOProtectingUnit": "GAGAS",
+"GACC": "SACC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1781120065000
+},
+"geometry": {
+"x": -82.768059,
+"y": 30.756395
+}
+},
+{
+"attributes": {
+"IrwinID": "{CEE6FE44-48EB-42FA-B351-5F3D8DFE5A2F}",
+"UniqueFireIdentifier": "2026-NMLNF-000335",
+"IncidentName": "SEVEN CABINS",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 31860,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1778745978000,
+"ContainmentDateTime": 1781220240000,
+"ControlDateTime": 1784063520000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1788975902970,
+"POOState": "US-NM",
+"POOCounty": "Lincoln",
+"POOProtectingAgency": "USFS",
+"POOProtectingUnit": "NMLNF",
+"GACC": "SWCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1781219676000
+},
+"geometry": {
+"x": -105.35751,
+"y": 33.606422
+}
+},
+{
+"attributes": {
+"IrwinID": "{1BB1F12F-DB68-40B0-8D7B-FA0E4FCEE2E4}",
+"UniqueFireIdentifier": "2026-MNSUF-002394",
+"IncidentName": "Bear Trap",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 30804,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1783462320000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1790692000673,
+"POOState": "US-MN",
+"POOCounty": "St. Louis",
+"POOProtectingAgency": "USFS",
+"POOProtectingUnit": "MNSUF",
+"GACC": "EACC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1788896301000
+},
+"geometry": {
+"x": -91.924675,
+"y": 48.184509
+}
+},
+{
+"attributes": {
+"IrwinID": "{21164556-6ADD-4481-810D-637569005FDC}",
+"UniqueFireIdentifier": "2026-AZCOF-000781",
+"IncidentName": "Pocket",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 27393,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1781913660000,
+"ContainmentDateTime": 1785443400000,
+"ControlDateTime": 1790784000000,
+"FireOutDateTime": 1790784000000,
+"ModifiedOnDateTime_dt": 1790785374067,
+"POOState": "US-AZ",
+"POOCounty": "Yavapai",
+"POOProtectingAgency": "USFS",
+"POOProtectingUnit": "AZCOF",
+"GACC": "SWCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1785452693000
+},
+"geometry": {
+"x": -111.787432,
+"y": 34.967217
+}
+},
+{
+"attributes": {
+"IrwinID": "{F544AE86-CD8F-4C07-8D41-EFA39315DE48}",
+"UniqueFireIdentifier": "2026-WYWBD-000294",
+"IncidentName": "WEISER KNOLL",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 15817,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1786306666000,
+"ContainmentDateTime": 1787082300000,
+"ControlDateTime": 1788886800000,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1788886859840,
+"POOState": "US-WY",
+"POOCounty": "Fremont",
+"POOProtectingAgency": "BLM",
+"POOProtectingUnit": "WYWBD",
+"GACC": "RMCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1787082401000
+},
+"geometry": {
+"x": -108.607558,
+"y": 42.636444
+}
+},
+{
+"attributes": {
+"IrwinID": "{DDBD3FEE-02CB-43E5-B9A9-4B62C9F6F3BA}",
+"UniqueFireIdentifier": "2026-SDPRA-000126",
+"IncidentName": "Potato Creek",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 10944.33,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1785180060000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1786388216240,
+"POOState": "US-SD",
+"POOCounty": "Jackson",
+"POOProtectingAgency": "BIA",
+"POOProtectingUnit": "SDPRA",
+"GACC": "RMCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1786051450000
+},
+"geometry": {
+"x": -102.07304,
+"y": 43.563364
+}
+},
+{
+"attributes": {
+"IrwinID": "{E6B424F3-6D0F-4DBE-9A36-A0DD38323708}",
+"UniqueFireIdentifier": "2026-LASBR-000257",
+"IncidentName": "South Line",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 5500,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1786208871000,
+"ContainmentDateTime": 1786287600000,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1786293760090,
+"POOState": "US-LA",
+"POOCounty": "Cameron",
+"POOProtectingAgency": "USFWS",
+"POOProtectingUnit": "LASBR",
+"GACC": "SACC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1786293759000
+},
+"geometry": {
+"x": -93.598007,
+"y": 29.838005
+}
+},
+{
+"attributes": {
+"IrwinID": "{EEB94BE8-6448-4694-90BB-C0AB3EFD0299}",
+"UniqueFireIdentifier": "2026-MSMSS-017716",
+"IncidentName": "Carroll - The Big Hungry Fire",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 4030,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1774560600000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1774993185163,
+"POOState": "US-MS",
+"POOCounty": "Carroll",
+"POOProtectingAgency": "FC",
+"POOProtectingUnit": "MSMSS",
+"GACC": "SACC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1774993185000
+},
+"geometry": {
+"x": -89.955561,
+"y": 33.374451
+}
+},
+{
+"attributes": {
+"IrwinID": "{AE24F076-6918-458D-AC31-5C0CBB7D708D}",
+"UniqueFireIdentifier": "2026-IAIAS-000295",
+"IncidentName": "Bronson",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 3500,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1774712100000,
+"ContainmentDateTime": 1774731600000,
+"ControlDateTime": 1774825200000,
+"FireOutDateTime": 1774904400000,
+"ModifiedOnDateTime_dt": 1778001982553,
+"POOState": "US-IA",
+"POOCounty": "Woodbury",
+"POOProtectingAgency": "DNR",
+"POOProtectingUnit": "IAIAS",
+"GACC": "EACC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1775145639000
+},
+"geometry": {
+"x": -96.200558,
+"y": 42.386607
+}
+},
+{
+"attributes": {
+"IrwinID": "{542AE118-1613-43C6-8216-EBF4DDE89868}",
+"UniqueFireIdentifier": "2026-ARARS-100236",
+"IncidentName": "Bunker Fire",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 2849,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1789409748000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": 1792429200000,
+"ModifiedOnDateTime_dt": 1792679234913,
+"POOState": "US-AR",
+"POOCounty": "Calhoun",
+"POOProtectingAgency": "FC",
+"POOProtectingUnit": "ARARS",
+"GACC": "SACC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1792594269000
+},
+"geometry": {
+"x": -92.586239,
+"y": 33.574493
+}
+},
+{
+"attributes": {
+"IrwinID": "{1D6A6A30-6D99-4B3F-A965-327EE1170335}",
+"UniqueFireIdentifier": "2026-ALALS-20260327-5",
+"IncidentName": "Hall Thompson Lane",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 2500,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1774634340000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1776095524457,
+"POOState": "US-AL",
+"POOCounty": "Shelby",
+"POOProtectingAgency": "FC",
+"POOProtectingUnit": "ALALS",
+"GACC": "SACC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1776095524000
+},
+"geometry": {
+"x": -86.540838,
+"y": 33.407784
+}
+},
+{
+"attributes": {
+"IrwinID": "{C9A1B818-C5B5-4230-B2FC-2C3EF5B0E136}",
+"UniqueFireIdentifier": "2026-SCSCS-262470",
+"IncidentName": "Woodbury",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 1750,
+"PercentContained": 95,
+"FireDiscoveryDateTime": 1774209600000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1785949467097,
+"POOState": "US-SC",
+"POOCounty": "Marion",
+"POOProtectingAgency": "FC",
+"POOProtectingUnit": "SCSCS",
+"GACC": "SACC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1777656446000
+},
+"geometry": {
+"x": -79.283336,
+"y": 33.74984
+}
+},
+{
+"attributes": {
+"IrwinID": "{FFB9C705-43CF-4CDA-B434-AD3686D67BD2}",
+"UniqueFireIdentifier": "2026-MDMDS-000170",
+"IncidentName": "Julie Pond",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 1500,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1774377000000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": 1774958400000,
+"ModifiedOnDateTime_dt": 1774978784950,
+"POOState": "US-MD",
+"POOCounty": "Dorchester",
+"POOProtectingAgency": "DNRF",
+"POOProtectingUnit": "MDMDS",
+"GACC": "EACC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1774978784000
+},
+"geometry": {
+"x": -75.976252,
+"y": 38.396093
+}
+},
+{
+"attributes": {
+"IrwinID": "{5F3E07DD-E615-4FEE-B678-E72340E8BBC2}",
+"UniqueFireIdentifier": "2026-NCALR-260076",
+"IncidentName": "EAST TOWER",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 1410,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1772650800000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1776270692147,
+"POOState": "US-NC",
+"POOCounty": "Dare",
+"POOProtectingAgency": "USFWS",
+"POOProtectingUnit": "NCALR",
+"GACC": "SACC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1773406160000
+},
+"geometry": {
+"x": -75.826835,
+"y": 35.64684
+}
+},
+{
+"attributes": {
+"IrwinID": "{42F677E6-96E2-4AD1-B985-6E109AD92A39}",
+"UniqueFireIdentifier": "2026-KYDBF-260154",
+"IncidentName": "STE - Alum",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 1100,
+"PercentContained": 93,
+"FireDiscoveryDateTime": 1775992937000,
+"ContainmentDateTime": 1777561200000,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1781704635373,
+"POOState": "US-KY",
+"POOCounty": "McCreary",
+"POOProtectingAgency": "USFS",
+"POOProtectingUnit": "KYDBF",
+"GACC": "SACC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1777152775000
+},
+"geometry": {
+"x": -84.531484,
+"y": 36.758977
+}
+},
+{
+"attributes": {
+"IrwinID": "{C9AFC13E-7DAB-4401-AEE8-6D0C6504C5BF}",
+"UniqueFireIdentifier": "2026-WVWVS-000208",
+"IncidentName": "Old House Branch",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 1000,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1775849940000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1783431409813,
+"POOState": "US-WV",
+"POOCounty": "Mingo",
+"POOProtectingAgency": "DVF",
+"POOProtectingUnit": "WVWVS",
+"GACC": "EACC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1777558140000
+},
+"geometry": {
+"x": -81.941863,
+"y": 37.639732
+}
+},
+{
+"attributes": {
+"IrwinID": "{B9417BF1-9332-435E-B1A1-6772173EE9AC}",
+"UniqueFireIdentifier": "2026-MOMTF-000188",
+"IncidentName": "Natural Bridge",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 850,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1773411429000,
+"ContainmentDateTime": 1773498000000,
+"ControlDateTime": 1774374060000,
+"FireOutDateTime": 1775314800000,
+"ModifiedOnDateTime_dt": 1780069064740,
+"POOState": "US-MO",
+"POOCounty": "Barry",
+"POOProtectingAgency": "USFS",
+"POOProtectingUnit": "MOMTF",
+"GACC": "EACC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1774452677000
+},
+"geometry": {
+"x": -93.75664,
+"y": 36.60179
+}
+},
+{
+"attributes": {
+"IrwinID": "{6F9FF006-40E3-4082-AAEA-2BEB215FE03F}",
+"UniqueFireIdentifier": "2026-NDFTA-000151",
+"IncidentName": "Lemon 2",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 819,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1776909600000,
+"ContainmentDateTime": 1776927600000,
+"ControlDateTime": 1776931200000,
+"FireOutDateTime": 1778508000000,
+"ModifiedOnDateTime_dt": 1778606528207,
+"POOState": "US-ND",
+"POOCounty": "Benson",
+"POOProtectingAgency": "BIA",
+"POOProtectingUnit": "NDFTA",
+"GACC": "NRCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1777998197000
+},
+"geometry": {
+"x": -99.04751,
+"y": 47.988897
+}
+},
+{
+"attributes": {
+"IrwinID": "{4B86C01A-42B9-4688-81EA-6CEEAF46E440}",
+"UniqueFireIdentifier": "2026-TNCNF-000220",
+"IncidentName": "Appalachia",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 651,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1776189720000,
+"ContainmentDateTime": 1776808800000,
+"ControlDateTime": 1777996800000,
+"FireOutDateTime": 1778167320000,
+"ModifiedOnDateTime_dt": 1785262874430,
+"POOState": "US-TN",
+"POOCounty": "Polk",
+"POOProtectingAgency": "USFS",
+"POOProtectingUnit": "TNCNF",
+"GACC": "SACC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1781029798000
+},
+"geometry": {
+"x": -84.376948,
+"y": 35.165285
+}
+},
+{
+"attributes": {
+"IrwinID": "{82BA10A4-02ED-49B8-BE2A-066F3570F1B3}",
+"UniqueFireIdentifier": "2026-MIMIS-070006",
+"IncidentName": "Craig Lake 1",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 606,
+"PercentContained": 90,
+"FireDiscoveryDateTime": 1791484680000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1792705507917,
+"POOState": "US-MI",
+"POOCounty": "Baraga",
+"POOProtectingAgency": "DNR",
+"POOProtectingUnit": "MIMIS",
+"GACC": "EACC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1792705507000
+},
+"geometry": {
+"x": -88.16961,
+"y": 46.633322
+}
+},
+{
+"attributes": {
+"IrwinID": "{7834C262-D526-4ED3-9FD0-C9E08CA0997F}",
+"UniqueFireIdentifier": "2026-ILILS-260175",
+"IncidentName": "Green River State FWA",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 517,
+"PercentContained": 0,
+"FireDiscoveryDateTime": 1772212860000,
+"ContainmentDateTime": 1772244000000,
+"ControlDateTime": 1772314140000,
+"FireOutDateTime": 1772833560000,
+"ModifiedOnDateTime_dt": 1777314477720,
+"POOState": "US-IL",
+"POOCounty": "Lee",
+"POOProtectingAgency": "DFR",
+"POOProtectingUnit": "ILILS",
+"GACC": "EACC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1777314415000
+},
+"geometry": {
+"x": -89.49648,
+"y": 41.637291
+}
+},
+{
+"attributes": {
+"IrwinID": "{E9E1F1EC-F068-466B-8ACD-F861F929F4A8}",
+"UniqueFireIdentifier": "2026-HIHAWX-001140",
+"IncidentName": "KAWAIHEA ROAD",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 500,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1785028080000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1787614686877,
+"POOState": "US-HI",
+"POOCounty": "Hawaii",
+"POOProtectingAgency": "C&L",
+"POOProtectingUnit": "HIHAWX",
+"GACC": "ONCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1785452182000
+},
+"geometry": {
+"x": -155.792531,
+"y": 20.019783
+}
+},
+{
+"attributes": {
+"IrwinID": "{59ACEBF5-AD98-4A73-AD2E-7EEC668F3AE6}",
+"UniqueFireIdentifier": "2026-VAVAS-26WR00317",
+"IncidentName": "Gilligan's Island",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 400,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1774386420000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1774605429430,
+"POOState": "US-VA",
+"POOCounty": "Lee",
+"POOProtectingAgency": "DOF",
+"POOProtectingUnit": "VAVAS",
+"GACC": "SACC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1774605429000
+},
+"geometry": {
+"x": -82.999171,
+"y": 36.625285
+}
+},
+{
+"attributes": {
+"IrwinID": "{EE6FCF97-7637-4721-B125-741098779D99}",
+"UniqueFireIdentifier": "2026-ORPRD-000449",
+"IncidentName": "0449 PORCUPINE RIDGE",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 79200,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1784164020000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1789417422320,
+"POOState": "US-OR",
+"POOCounty": "Gilliam",
+"POOProtectingAgency": "BLM",
+"POOProtectingUnit": "ORPRD",
+"GACC": "NWCC",
+"IsCpxChild": 1,
+"CpxName": "HAY CREEK COMPLEX",
+"CpxID": "{851DDF21-4EAD-4835-B54B-B3CF7BD6AC21}",
+"ICS209ReportDateTime": 1789417422000
+},
+"geometry": {
+"x": -120.350271,
+"y": 45.188946
+}
+},
+{
+"attributes": {
+"IrwinID": "{14E08B9C-1F24-40B2-AC5E-BA04112F33D0}",
+"UniqueFireIdentifier": "2026-ORPRD-000460",
+"IncidentName": "0460 HOPKIN",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 11366,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1784168820000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1789417431990,
+"POOState": "US-OR",
+"POOCounty": "Gilliam",
+"POOProtectingAgency": "BLM",
+"POOProtectingUnit": "ORPRD",
+"GACC": "NWCC",
+"IsCpxChild": 1,
+"CpxName": "HAY CREEK COMPLEX",
+"CpxID": "{851DDF21-4EAD-4835-B54B-B3CF7BD6AC21}",
+"ICS209ReportDateTime": 1789417432000
+},
+"geometry": {
+"x": -120.242964,
+"y": 45.336339
+}
+},
+{
+"attributes": {
+"IrwinID": "{BDEE108D-26F1-47F6-9299-06F352072FCB}",
+"UniqueFireIdentifier": "2026-TXRGR-000022",
+"IncidentName": "Zamora Bend",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 113.28,
+"PercentContained": null,
+"FireDiscoveryDateTime": 1773885265000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1791560541287,
+"POOState": "US-TX",
+"POOCounty": "Hidalgo",
+"POOProtectingAgency": "USFWS",
+"POOProtectingUnit": "TXRGR",
+"GACC": "SACC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": null
+},
+"geometry": {
+"x": -98.481077,
+"y": 26.201911
+}
+},
+{
+"attributes": {
+"IrwinID": "{6122EACF-706C-45A8-91B4-4F9ECCF25098}",
+"UniqueFireIdentifier": "2026-OKOKS-260752",
+"IncidentName": "Sharpe",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 29209,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1778889600000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1788560612203,
+"POOState": "US-OK",
+"POOCounty": "Cimarron",
+"POOProtectingAgency": "DVF",
+"POOProtectingUnit": "OKOKS",
+"GACC": "SACC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1779382758000
+},
+"geometry": {
+"x": -102.666676,
+"y": 36.893339
+}
+},
+{
+"attributes": {
+"IrwinID": "{59686F08-125A-4DC7-91E9-AF37F0968CCD}",
+"UniqueFireIdentifier": "2026-COPSF-000699",
+"IncidentName": "Sharpe",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 16240,
+"PercentContained": 0,
+"FireDiscoveryDateTime": 1779031054000,
+"ContainmentDateTime": 1779408000000,
+"ControlDateTime": 1780605600000,
+"FireOutDateTime": 1781472300000,
+"ModifiedOnDateTime_dt": 1781541465933,
+"POOState": "US-CO",
+"POOCounty": "Baca",
+"POOProtectingAgency": "USFS",
+"POOProtectingUnit": "COPSF",
+"GACC": "RMCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1779154987000
+},
+"geometry": {
+"x": -102.624396,
+"y": 36.996841
+}
+},
+{
+"attributes": {
+"IrwinID": "{C8034780-D588-48DA-8BC9-C6CED34CD8DF}",
+"UniqueFireIdentifier": "2026-ORUMF-000302",
+"IncidentName": "Paradise",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 9656,
+"PercentContained": 86,
+"FireDiscoveryDateTime": 1784230680000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1792715805890,
+"POOState": "US-OR",
+"POOCounty": "Wallowa",
+"POOProtectingAgency": "USFS",
+"POOProtectingUnit": "ORUMF",
+"GACC": "NWCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1792715806000
+},
+"geometry": {
+"x": -117.974296,
+"y": 45.998145
+}
+},
+{
+"attributes": {
+"IrwinID": "{E171694F-C0E0-409E-B805-F87002F4AB47}",
+"UniqueFireIdentifier": "2026-OR953S-000484",
+"IncidentName": "FOSSIL COMPLEX",
+"IncidentTypeCategory": "CX",
+"IncidentSize": 0.1,
+"PercentContained": null,
+"FireDiscoveryDateTime": 1784228820000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1784951072920,
+"POOState": "US-OR",
+"POOCounty": "Wheeler",
+"POOProtectingAgency": "DOF",
+"POOProtectingUnit": "OR953S",
+"GACC": "NWCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": null
+},
+"geometry": {
+"x": -119.882086,
+"y": 44.91167
+}
+}
+]
+}

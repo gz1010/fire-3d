@@ -17,6 +17,15 @@ SCRIPT = config.REPO_ROOT / "backend" / "scripts" / "make_fixture.py"
 EAST = config.REPO_ROOT / "data" / "incidents" / "fixture-east"
 
 
+@pytest.fixture(autouse=True)
+def _no_live_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``TestClient(app)`` runs the app's lifespan: never start the live loop (it would auto-build fires)."""
+    from fire3d import config as _cfg
+
+    monkeypatch.setattr(_cfg, "LIVE_ENABLED", False)
+    monkeypatch.setattr(_cfg, "AUTO_BUILD_LIVE", False)
+
+
 def _make_fixture_module():
     spec = importlib.util.spec_from_file_location("make_fixture_for_tests", SCRIPT)
     mod = importlib.util.module_from_spec(spec)

@@ -170,6 +170,12 @@ milestone commit; other roles read it instead of guessing. Kept current at every
 - `SUMMARY_SYNC_FIELDS` also copies `active_sources`, `other_records`, `complex_members`, `irwin_id`, `gacc`,
   `accuracy_region` into ready live bundles' summaries.
 
+- A CAL FIRE fire matched by two WFIGS records (CAL FIRE's Dale Fire: DALE and BRADFORD BRANCH) keeps both in
+  `other_records` and takes the `irwin_id` of the one with the same name tokens (null when there is no single one).
+- Samples (`backend/tests/data/firedata/us_*`, PROVENANCE.md "Brief 3") and `tests/test_us_catalog_samples.py`: the
+  2025 merge gives 69 same-fire matches, 8 complex members (Orleans: Butler; Swift: PEAK; TCU: 2-2, 2-7, 2-8, 6-2, 6-5
+  after the duplicate 2-2 is dropped) and 2 WFIGS rows (Alpaugh, Big Cliff).
+
 ### Changes other roles need
 - `backend/tests/test_official_calfire.py:224` (us-pipeline) asserts the old default year: `catalog.get_catalog
   ("historical")` now lists the current UTC year (§14.1). Replace that line with

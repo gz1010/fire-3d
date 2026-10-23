@@ -1,0 +1,34 @@
+{
+"recorded": "2026-10-23T01:10Z",
+"query": "all years: IrwinID LIKE '{889237%'",
+"features": [
+{
+"attributes": {
+"IrwinID": "{889237AA-38DC-45D4-A8D0-B70D8990F5B7}",
+"UniqueFireIdentifier": "2024-MTHLF-000367",
+"IncidentName": "Horse Gulch",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 15167,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1720553520000,
+"ContainmentDateTime": 1722042000000,
+"ControlDateTime": 1725057000000,
+"FireOutDateTime": 1729780200000,
+"ModifiedOnDateTime_dt": 1732043016340,
+"POOState": "US-MT",
+"POOCounty": "Lewis and Clark",
+"POOProtectingAgency": "USFS",
+"POOProtectingUnit": "MTHLF",
+"GACC": "NRCC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1725058219000
+},
+"geometry": {
+"x": -111.696146,
+"y": 46.688707
+}
+}
+]
+}

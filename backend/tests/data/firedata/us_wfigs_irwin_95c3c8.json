@@ -1,0 +1,34 @@
+{
+"recorded": "2026-10-23T01:10Z",
+"query": "all years: IrwinID LIKE '{95C3C8%'",
+"features": [
+{
+"attributes": {
+"IrwinID": "{95C3C8D3-BA4E-435B-A996-D469B449DEF5}",
+"UniqueFireIdentifier": "2025-NCNCS-250019",
+"IncidentName": "Black Cove",
+"IncidentTypeCategory": "WF",
+"IncidentSize": 3502,
+"PercentContained": 100,
+"FireDiscoveryDateTime": 1742410800000,
+"ContainmentDateTime": null,
+"ControlDateTime": null,
+"FireOutDateTime": null,
+"ModifiedOnDateTime_dt": 1744317272020,
+"POOState": "US-NC",
+"POOCounty": "Polk",
+"POOProtectingAgency": "DFR",
+"POOProtectingUnit": "NCNCS",
+"GACC": "SACC",
+"IsCpxChild": 0,
+"CpxName": null,
+"CpxID": null,
+"ICS209ReportDateTime": 1744317272000
+},
+"geometry": {
+"x": -82.297504,
+"y": 35.285562
+}
+}
+]
+}

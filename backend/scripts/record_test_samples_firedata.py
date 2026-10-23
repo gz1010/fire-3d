@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import time
 import json
 import math
 import os
@@ -410,11 +411,222 @@ def check_wfigs(geoms: dict) -> None:
 
 
 # ------------------------------------------------------------------------------------------------------------------
+# Brief 3 (us-catalog): national WFIGS lists, the California merge set, IRWIN lookups and national FIRMS rows
+# ------------------------------------------------------------------------------------------------------------------
+WFIGS_SERVICE = "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services"
+L48_BOX = (-125.4, 23.9, -66.4, 49.9)
+
+
+def _wfigs_query(layer: str, where: str) -> list[dict]:
+    """Every feature of one WFIGS query (the fields and paging of ``fire3d.sources.wfigs``)."""
+    from fire3d.sources import wfigs
+
+    url = f"{WFIGS_SERVICE}/{layer}/FeatureServer/0/query"
+    out: list[dict] = []
+    offset = 0
+    while True:
+        params = wfigs._params(where, offset)
+        data = fhttp.request("GET", url, params=params, ttl_s=3600, timeout=120.0).json()
+        if "features" not in data:
+            raise SystemExit(f"WFIGS {layer}: unexpected answer {str(data)[:200]}")
+        out += data["features"]
+        if not data.get("exceededTransferLimit") or not data["features"]:
+            return out
+        offset += len(data["features"])
+
+
+def _trim_feature(f: dict) -> dict:
+    from fire3d.sources.wfigs import OUT_FIELDS
+
+    a = f.get("attributes") or {}
+    g = f.get("geometry") or {}
+    return {"attributes": {k: a.get(k) for k in OUT_FIELDS},
+            "geometry": {"x": round(float(g["x"]), 6), "y": round(float(g["y"]), 6)} if g else None}
+
+
+def _calfire_pool_sample(years: list[int], wf_rows: list[dict]) -> list[dict]:
+    """CAL FIRE fire records of ``years`` that the merge can touch (a complex named by a WFIGS row, or a record within
+    the merge windows of one), plus every fire of 300 ac or more (the CAL FIRE side of the year lists)."""
+    from fire3d import catalog
+    from fire3d.sources.calfire import normalize_incident
+
+    keep: list[dict] = []
+    cpx = {catalog.norm_name(r.get("cpx_name")) for r in wf_rows if r.get("cpx_name")}
+    for y in years:
+        for raw in calfire_list(y):
+            rec = normalize_incident(raw)
+            if (rec.get("type") or "").lower() not in catalog.FIRE_TYPES:
+                continue
+            hit = (rec.get("acres") or 0) >= 300 or catalog.norm_name(rec.get("name")) in cpx
+            hit = hit or any(int(w["year"]) - int(rec.get("year") or 0) in (0, 1) and _near_miss(rec, w) for w in wf_rows)
+            if hit:
+                keep.append({k: raw.get(k) for k in CALFIRE_KEYS})
+    return keep
+
+
+def _near_miss(rec: dict, wf: dict) -> bool:
+    """A CAL FIRE record the merge rules look at for this WFIGS row, matched or not: within 3 km (any name, any
+    time; e.g. Marshall, 0.8 km from McCovey but 9 days earlier) or with equal name tokens within 30 km."""
+    from fire3d import catalog
+
+    if rec.get("lat") is None or rec.get("lon") is None or rec.get("started_ms") is None:
+        return False
+    d = catalog._km(float(rec["lat"]), float(rec["lon"]), float(wf["lat"]), float(wf["lon"]))
+    return d <= 3.0 or (d <= 30.0 and catalog.name_tokens(rec.get("name")) == catalog.name_tokens(wf.get("source_name")))
+
+
+CALFIRE_KEYS = ("Name", "UniqueId", "Type", "Started", "Updated", "ExtinguishedDate", "AcresBurned", "PercentContained",
+                "Latitude", "Longitude", "IsActive", "Final", "County", "Location", "AdminUnit", "Url", "AgencyNames")
+
+
+def _feed_rows(window: str) -> list[list[str]]:
+    url = FEED.format(dir="suomi-npp-viirs-c2", prefix="SUOMI_VIIRS_C2", window=window)
+    body = fhttp.request("GET", url, ttl_s=600, timeout=90.0).text
+    rows = list(csv.reader(body.splitlines()))
+    return rows
+
+
+def build_us_feed() -> tuple[str, dict[str, int]]:
+    """A national 24 h (else 7 d) SNPP feed sample: rows in TX, FL and ME, rows within the 0.5-degree margin beyond the
+    Canada and Mexico borders, rows in Hawaii, and two hand-made Alaska rows (the feed has no Alaska)."""
+    from fire3d import regions
+
+    picks: dict[str, list[list[str]]] = {k: [] for k in ("TX", "FL", "ME", "canada", "mexico", "HI")}
+    header: list[str] = []
+    for window in ("24h", "7d"):
+        rows = _feed_rows(window)
+        header = rows[0]
+        ilat, ilon = header.index("latitude"), header.index("longitude")
+        for r in rows[1:]:
+            la, lo = float(r[ilat]), float(r[ilon])
+            st = regions.state_at(lo, la, max_km=0.0)
+            in_box = L48_BOX[0] <= lo <= L48_BOX[2] and L48_BOX[1] <= la <= L48_BOX[3]
+            key = None
+            if st in ("TX", "FL", "ME"):
+                key = st
+            elif 18.5 <= la <= 22.5 and -161 <= lo <= -154:
+                key = "HI"
+            elif in_box and st is None and la >= 48.9:
+                key = "canada"
+            elif in_box and st is None and la <= 32.8 and -117.2 <= lo <= -97.0:
+                key = "mexico"
+            if key and len(picks[key]) < 3:
+                picks[key].append(r)
+        if all(picks.values()):
+            break
+    made = {k: 0 for k in picks}
+    template = next(iter(r for v in picks.values() for r in v), None)
+    if template is None:
+        raise SystemExit("FIRMS feed: no rows at all")
+    for key, (la, lo) in (("canada", (49.3, -114.6)), ("mexico", (31.1, -108.7))):
+        if not picks[key]:                                            # hand-made, marked in PROVENANCE.md
+            r = list(template)
+            r[header.index("latitude")], r[header.index("longitude")] = f"{la:.5f}", f"{lo:.5f}"
+            picks[key].append(r)
+            made[key] = 1
+    alaska = []
+    for la, lo in ((64.8, -147.7), (61.2, -149.9)):                   # hand-made: the feed covers CONUS + Hawaii only
+        r = list(template)
+        r[header.index("latitude")], r[header.index("longitude")] = f"{la:.5f}", f"{lo:.5f}"
+        alaska.append(r)
+    lines = [",".join(header)] + [",".join(r) for k in ("TX", "FL", "ME", "canada", "mexico", "HI") for r in picks[k]]
+    lines += [",".join(r) for r in alaska]
+    counts = {k: len(v) for k, v in picks.items()} | {"AK (hand-made)": 2} | {f"{k} hand-made": v for k, v in made.items() if v}
+    return "\n".join(lines) + "\n", counts
+
+
+def build_mt_yearly() -> str:
+    """Suomi NPP VIIRS standard-processing rows of the Horse Gulch Fire (MT, July 2024) from the FIRMS area API, in
+    the yearly archive's column layout (the keyless Montana test serves it as the yearly CSV)."""
+    key = config.FIRMS_MAP_KEY
+    if not key:
+        raise SystemExit("FIRMS_MAP_KEY is needed for the Montana sample")
+    url = AREA.format(key=key, product="VIIRS_SNPP_SP", bbox="-111.95,46.55,-111.45,46.85", days=5, day="2024-07-09")
+    body = fhttp.request("GET", url, ttl_s=3600, timeout=90.0).text
+    rows = list(csv.reader(body.splitlines()))
+    if len(rows) < 4:
+        raise SystemExit(f"Montana sample: only {len(rows) - 1} rows")
+    header = rows[0]
+    keep = rows[1:13]
+    if "type" not in header:
+        header = header + ["type"]
+        keep = [r + ["0"] for r in keep]
+    return "\n".join([",".join(header)] + [",".join(r) for r in keep]) + "\n"
+
+
+def build_brief3() -> tuple[dict[str, str], dict]:
+    from fire3d import catalog
+    from fire3d.sources import wfigs
+
+    stamp = time.strftime("%Y-%m-%dT%H:%MZ", time.gmtime())
+    cur = _wfigs_query("WFIGS_Incident_Locations_Current", wfigs.current_where())
+    rxcx = _wfigs_query("WFIGS_Incident_Locations_Current", "IncidentTypeCategory IN ('RX','CX') AND POOState IN ('US-OR','US-UT','US-MT','US-ID','US-TX')")
+    rx = [f for f in rxcx if f["attributes"]["IncidentTypeCategory"] == "RX"][:2]
+    cx_cur = [f for f in rxcx if f["attributes"]["IncidentTypeCategory"] == "CX"][:1]
+    ytd_all = _wfigs_query("WFIGS_Incident_Locations_YearToDate", wfigs.year_where(2026, 300))
+    special = _wfigs_query("WFIGS_Incident_Locations_YearToDate",
+                           "(IncidentName='Paradise' AND POOState='US-OR') OR IncidentName='Zamora Bend' OR (IncidentName='Sharpe' AND POOState IN ('US-CO','US-OK'))")
+    cx_ytd = _wfigs_query("WFIGS_Incident_Locations_YearToDate", "IncidentTypeCategory='CX' AND CpxName IS NULL AND IncidentName LIKE '%COMPLEX%' AND POOState='US-OR'")[:1]
+    members = [f for f in ytd_all if f["attributes"].get("IsCpxChild") == 1 and f["attributes"].get("CpxName") == "HAY CREEK COMPLEX"][:2]
+    by_state: dict[str, dict] = {}
+    for f in sorted(ytd_all, key=lambda f: -(f["attributes"].get("IncidentSize") or 0)):
+        st = f["attributes"].get("POOState")
+        if st != "US-CA" and st not in by_state:
+            by_state[st] = f
+    ytd = [f for f in ytd_all if f["attributes"].get("POOState") == "US-CA"] + list(by_state.values()) + members + special + cx_ytd
+    seen: set[str] = set()
+    ytd = [f for f in ytd if not (f["attributes"]["IrwinID"] in seen or seen.add(f["attributes"]["IrwinID"]))]
+    y2025 = _wfigs_query("WFIGS_Incident_Locations", wfigs.year_where(2025, 300) + " AND POOState='US-CA'")
+    irwin = {p: _wfigs_query("WFIGS_Incident_Locations", f"IrwinID LIKE '{{{p}%' AND IncidentTypeCategory='WF'") for p in ("889237", "95C3C8")}
+    norm = lambda fs: [r for r in (wfigs.normalize(f) for f in fs) if r is not None]  # noqa: E731
+    ca_cur = [r for r in norm(cur) if r["poo_state"] == "CA"]
+    ca_ytd = [r for r in norm(ytd) if r["poo_state"] == "CA"]
+    pool_2026 = _calfire_pool_sample([2026, 2025], ca_cur + ca_ytd)
+    pool_2025 = _calfire_pool_sample([2025, 2024], norm(y2025))
+    live = [{k: r.get(k) for k in CALFIRE_KEYS} for r in fhttp.request("GET", CALFIRE_URL, params={"inactive": "false"}, ttl_s=600, timeout=60.0).json()]
+    feed, feed_counts = build_us_feed()
+    mt = build_mt_yearly()
+    dump = lambda fs, q: json.dumps({"recorded": stamp, "query": q, "features": [_trim_feature(f) for f in fs]}, indent=0) + "\n"  # noqa: E731
+    files = {
+        "us_wfigs_current.json": dump(cur + rx + cx_cur, "Current: " + wfigs.current_where() + " (+2 RX, +1 CX rows of OR/UT/MT/ID/TX)"),
+        "us_wfigs_ytd_2026.json": dump(ytd, "YearToDate: " + wfigs.year_where(2026, 300) + " (California + the largest per state + named cases)"),
+        "us_wfigs_ca_2025.json": dump(y2025, "all years: " + wfigs.year_where(2025, 300) + " AND POOState='US-CA'"),
+        "us_wfigs_irwin_889237.json": dump(irwin["889237"], "all years: IrwinID LIKE '{889237%'"),
+        "us_wfigs_irwin_95c3c8.json": dump(irwin["95C3C8"], "all years: IrwinID LIKE '{95C3C8%'"),
+        "us_calfire_live.json": json.dumps(live, indent=0) + "\n",
+        "us_calfire_pool_2026.json": json.dumps(pool_2026, indent=0) + "\n",
+        "us_calfire_pool_2025.json": json.dumps(pool_2025, indent=0) + "\n",
+        "us_firms_feed_24h.csv": feed,
+        "us_viirs_snpp_sp_mt_2024.csv": mt,
+    }
+    info = {"stamp": stamp, "current": len(cur), "rx": len(rx), "cx": len(cx_cur) + len(cx_ytd), "ytd": len(ytd), "ca_2025": len(y2025),
+            "pool_2026": len(pool_2026), "pool_2025": len(pool_2025), "live": len(live), "feed": feed_counts,
+            "members": len(members), "special": [f["attributes"]["IncidentName"] for f in special]}
+    return files, info
+
+
+# ------------------------------------------------------------------------------------------------------------------
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--out", type=Path, default=OUT_DIR, help="output folder (default: tests/data/firedata)")
     ap.add_argument("--dry-run", action="store_true", help="fetch, trim and check; write nothing")
+    ap.add_argument("--brief3", action="store_true", help="record only the brief-3 national samples (us_*.json/csv)")
     args = ap.parse_args()
+
+    if args.brief3:
+        files, info = build_brief3()
+        key = config.FIRMS_MAP_KEY
+        if key and any(key in body for body in files.values()):
+            raise SystemExit("the FIRMS key reached a sample: nothing written")
+        print(json.dumps(info))
+        for name, body in files.items():
+            print(f"{name}: {len(body.encode()):,} bytes")
+        if not args.dry_run:
+            args.out.mkdir(parents=True, exist_ok=True)
+            for name, body in files.items():
+                (args.out / name).write_text(body, encoding="utf-8")
+            print(f"wrote {len(files)} files to {args.out}")
+        return 0
 
     live, past = build_calfire()
     check_calfire(live, past)

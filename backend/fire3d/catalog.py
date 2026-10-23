@@ -553,7 +553,8 @@ def enrich_calfire(s: IncidentSummary, matched: list[dict], members: list[dict],
                    is_complex: bool = False) -> IncidentSummary:
     """What a CAL FIRE row carries from the WFIGS rows dropped into it (CONTRACT 14.2): rule (2), one fire: its
     ``irwin_id``, ``unique_fire_id``, ``gacc``, one ``other_records`` entry and "wfigs" in ``active_sources`` when that
-    record is active; rule (1), a complex: ``irwin_id`` null, ``complex_members`` (every member name verbatim), one
+    record is active (two records of one fire, e.g. DALE and BRADFORD BRANCH for CAL FIRE's Dale Fire: both in
+    ``other_records``, the ``irwin_id`` of the one with the same name, else null); rule (1), a complex: ``irwin_id`` null, ``complex_members`` (every member name verbatim), one
     named ``other_records`` entry per member, the members' GACC when they all agree, and "wfigs" when any member is
     active. ``is_active`` follows :data:`CA_ACTIVE_RULE`. CAL FIRE's own name, acres, containment and times stay."""
     recs = members + matched
@@ -567,12 +568,16 @@ def enrich_calfire(s: IncidentSummary, matched: list[dict], members: list[dict],
     gacc = _common([r.get("gacc") for r in recs])
     upd: dict[str, Any] = {"other_records": ors, "active_sources": srcs, "is_active": active, "gacc": gacc,
                            "accuracy_region": accuracy_region_for(gacc, s.state)}
-    if members or is_complex or len(recs) > 1:
-        upd.update(irwin_id=None, unique_fire_id=None)
+    primary = None
+    if not (members or is_complex):
+        same_name = [r for r in matched if name_tokens(r.get("source_name")) == name_tokens(s.name)]
+        primary = matched[0] if len(matched) == 1 else (same_name[0] if len(same_name) == 1 else None)
+    if primary is None:
+        upd.update(irwin_id=None, unique_fire_id=None)       # a complex, or several records with no single same-name one
         if members:
             upd["complex_members"] = [r.get("source_name") or "" for r in members]
     else:
-        upd.update(irwin_id=recs[0]["irwin_id"], unique_fire_id=recs[0].get("unique_fire_id"))
+        upd.update(irwin_id=primary["irwin_id"], unique_fire_id=primary.get("unique_fire_id"))
     return s.model_copy(update=upd)
 
 

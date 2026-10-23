@@ -9,6 +9,15 @@ from fastapi.testclient import TestClient
 from fire3d import regions
 from fire3d.contracts import GeoLookup, IncidentSummary, contract_problems
 
+
+@pytest.fixture(autouse=True)
+def _no_live_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``TestClient(app)`` runs the app's lifespan: never start the live loop (it would auto-build fires)."""
+    from fire3d import config as _cfg
+
+    monkeypatch.setattr(_cfg, "LIVE_ENABLED", False)
+    monkeypatch.setattr(_cfg, "AUTO_BUILD_LIVE", False)
+
 # (lon, lat), expected IANA zone (CONTRACT 14.3 "Required test points")
 TZ_POINTS = {
     "El Paso TX": ((-106.4850, 31.7619), "TX", "America/Denver"),

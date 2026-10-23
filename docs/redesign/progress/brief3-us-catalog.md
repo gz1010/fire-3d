@@ -15,9 +15,12 @@ national search). Ports API 8711, Vite 5181. Started 2026-10-23 ~00:20 UTC.
   live.py national, app.py list (state, sources, gzip) + build gate texts; synthetic tests
   (test_us_catalog_list.py, test_us_catalog_firms.py, test_us_catalog_mock.py helpers).
 
+- M3 samples: `record_test_samples_firedata.py --brief3` -> tests/data/firedata/us_* (PROVENANCE.md "Brief 3");
+  tests/test_us_catalog_samples.py (merge 69/8/2, TCU 5 members, Timber, McCovey/Marshall, Dale two records, RX/CX,
+  Hay Creek members, POOState cases, Horse Gulch/Black Cove by IRWIN, feed box, Montana keyless).
+  Live-loop guard added to my TestClient tests (lifespan would auto-build).
+
 ## Next
-- M3 samples: record WFIGS + national FIRMS samples, regression tests on them (Timber, TCU, McCovey/Marshall,
-  Alpaugh, RX/CX, POOState mismatches, Montana keyless).
 - M4 records endpoint + accuracy seed/endpoint. M5 gazetteer.
 
 ## Decisions

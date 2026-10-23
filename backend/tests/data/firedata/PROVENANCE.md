@@ -143,3 +143,21 @@ Look-alikes that the matching must reject:
 | 108 | Another "Test" fire 50 km east. It is downloaded, then dropped for being more than 30 km away. |
 | 109 | "Contest": matches `LIKE '%TEST%'` but not as a whole token |
 | 110 | A "Test" fire discovered 400 days earlier |
+
+## Brief 3 (us-catalog): national samples, `us_*` files
+
+Recorded on **2026-10-23 at about 01:10 UTC** by `uv run python scripts/record_test_samples_firedata.py --brief3`
+(about 15 GETs through `fire3d.http`, cache in a temporary folder; the FIRMS key is used only in the area-API URL of
+the Montana sample and never written: a count-only scan of the files finds 0 copies). Read by
+`tests/test_us_catalog_samples.py`. Credits: NIFC WFIGS (IRWIN); CAL FIRE; NASA FIRMS.
+
+| File | Source and query | Trimming | Real? |
+|---|---|---|---|
+| `us_wfigs_current.json` | WFIGS `Incident_Locations_Current`, `IncidentTypeCategory='WF'`, the fields of `fire3d.sources.wfigs.OUT_FIELDS` | every wildfire row (289, all states incl. AK and VI) plus 2 prescribed burns (`RX`) of OR/UT/MT/ID/TX | real, attributes trimmed to `OUT_FIELDS`, coordinates to 6 decimals |
+| `us_wfigs_ytd_2026.json` | WFIGS `Incident_Locations_YearToDate`, wildfires of 2026 of 300 ac or more | every California row, the largest row of each other state, 2 members of the HAY CREEK COMPLEX (OR), the named POOState cases (Paradise OR, Zamora Bend TX, Sharpe CO and Sharpe OK) and 1 complex parent (`CX`, OR) | real, trimmed as above |
+| `us_wfigs_ca_2025.json` | WFIGS all-years layer, California wildfires of 2025 of 300 ac or more | all 79 rows | real, trimmed as above |
+| `us_wfigs_irwin_889237.json`, `us_wfigs_irwin_95c3c8.json` | WFIGS all-years layer, `IrwinID LIKE '{889237%'` / `'{95C3C8%'` (Horse Gulch MT 2024, Black Cove NC 2025) | all rows (1 each) | real, trimmed as above |
+| `us_calfire_live.json` | CAL FIRE `IncidentApi/List?inactive=false` | all records (3), keys trimmed to the ones `sources.calfire` reads | real |
+| `us_calfire_pool_2026.json`, `us_calfire_pool_2025.json` | CAL FIRE year lists 2026 + 2025, and 2025 + 2024 | fire-type records of 300 ac or more, every complex a WFIGS row names, and every record within 3 km of a WFIGS-CA row (any time) or with its name tokens within 30 km (so the merge sees what it would see on the full lists, Marshall included) | real, keys trimmed |
+| `us_firms_feed_24h.csv` | FIRMS keyless `SUOMI_VIIRS_C2/.../SUOMI_VIIRS_C2_USA_contiguous_and_Hawaii_24h.csv` | up to 3 rows each in TX, FL, ME (1 that day), within the lower-48 box north of the Canada border, in Mexico inside the box, and in Hawaii | real rows, plus **2 hand-made Alaska rows** (64.8, -147.7) and (61.2, -149.9) copied from the first TX row with new coordinates: the feed covers CONUS and Hawaii only |
+| `us_viirs_snpp_sp_mt_2024.csv` | FIRMS area API `VIIRS_SNPP_SP`, bbox -111.95,46.55,-111.45,46.85, 5 days from 2024-07-09 (Horse Gulch) | 3 rows; a `type` column of 0 is added so it has the yearly archive's layout | real rows; the test serves them as the 2024 yearly archive CSV |

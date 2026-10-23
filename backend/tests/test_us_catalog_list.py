@@ -20,6 +20,15 @@ from test_us_catalog_mock import WfigsServer, feature, feed_csv
 NOW = "2026-10-22T18:00:00Z"
 
 
+@pytest.fixture(autouse=True)
+def _no_live_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``TestClient(app)`` runs the app's lifespan: never start the live loop (it would auto-build fires)."""
+    from fire3d import config as _cfg
+
+    monkeypatch.setattr(_cfg, "LIVE_ENABLED", False)
+    monkeypatch.setattr(_cfg, "AUTO_BUILD_LIVE", False)
+
+
 def cal(name: str, uid: str, lat: float, lon: float, started: str, *, active: bool, acres: float = 500.0,
         pct: float | None = 50.0, updated: str = "2026-10-21T03:41:00Z", typ: str = "Wildfire") -> dict:
     return {"Name": name, "UniqueId": uid, "Started": started, "Updated": updated, "AcresBurned": acres,
