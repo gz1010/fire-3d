@@ -192,9 +192,14 @@ def test_wfigs_bundle_text_never_says_cal_fire(tmp_data_dir, monkeypatch) -> Non
                                        "percent_contained": 100.0, "agency": None, "agency_code": "USFS",
                                        "uid": MT_IRWIN, "active_sources": []})
     ctx.summary, ctx.time_zone = s, "America/Denver"
-    bundle.update_manifest(ctx.bundle_dir, lambda m: m.update(summary=s.model_dump(), data_sources=[]))
+    bundle.update_manifest(ctx.bundle_dir, lambda m: m.update(summary=s.model_dump()))
+    from fire3d.build.pipeline import incident_record_source
+
+    bundle.update_manifest(ctx.bundle_dir, lambda m: m.update(data_sources=[incident_record_source(s, 1)]))
     obs.build_observed_stats(ctx)
     assert seen == {"record_source": "wfigs", "state": "MT", "irwin_id": MT_IRWIN}
+    names = [d["name"] for d in bundle.load_manifest(ctx.bundle_dir)["data_sources"]]
+    assert names[0] == "NIFC WFIGS incident record (IRWIN)" and "NIFC WFIGS fire perimeters" in names
     events = bundle.read_json(ctx.bundle_dir / "events.json")["events"]
     ign = next(e for e in events if e["type"] == "ignition")
     assert ign["detail"].startswith("Reported by USFS via NIFC WFIGS ") and ("MDT" in ign["detail"] or "MST" in ign["detail"])
@@ -328,3 +333,28 @@ def test_land_masks_at_the_mexican_border() -> None:
     land0, abroad0 = aoi.land_masks(fire, sea)
     assert not land0.any() and not abroad0.any()                           # 0 m: sea, neither land nor abroad
     assert landfire.OUTSIDE_COVERAGE == "outside fuel data coverage: not modeled (unknown, not low)"
+
+
+# ----------------------------------------------------------------------------------------------------------------
+# Skill: growth Sørensen (14.12.7, cut-line item d)
+# ----------------------------------------------------------------------------------------------------------------
+def test_forecast_skill_carries_growth_sorensen(tmp_data_dir, monkeypatch) -> None:
+    from fire3d.build import weather_bundle
+    from fire3d.contracts import ForecastManifest, contract_problems
+    from fire3d.spread import ensemble, validate
+    from test_spread_support import ORIGIN, H, make_bundle, make_weather
+
+    bdir = make_bundle(tmp_data_dir / "incidents", iid="growth-test", m=32, ignition_rc=(16, 8))
+    monkeypatch.setattr(weather_bundle, "member_weathers",
+                        lambda *a, **k: [make_weather(t0=ORIGIN - 72 * H, hours=300, speed_kmh=15.0, label="m")])
+    fm = ensemble.run_forecast(bdir, start_ms=ORIGIN + 6 * H, horizon_h=24, workers=1)
+    assert fm.skill and all(s.growth_sorensen is not None and 0.0 <= s.growth_sorensen <= 1.0 for s in fm.skill)
+    doc = bundle.read_json(bdir / "forecasts" / fm.run_id / "forecast.json")
+    assert contract_problems(ForecastManifest, doc) == [] and "growth_sorensen" in doc["skill"][0]
+    obs = bundle.read_layer(bdir, "observed_arrival")
+    start_h = (fm.start_ms - ORIGIN) / H
+    rows = validate.skill_from_arrays(bundle.read_array(bdir, doc["layers"]["arrival_p50"]), obs, start_h, 30.0,
+                                      growth=True, horizon_h=24, data_end_h=60.0)
+    assert [s.growth_sorensen for s in fm.skill] == [r["sorensen_growth"] for r in rows]
+    assert validate.skill_entry({"lead_h": 12.0, "sorensen": 0.5, "observed_acres": 1.0, "forecast_acres_p50": 2.0}) == {
+        "lead_h": 12.0, "sorensen": 0.5, "observed_acres": 1.0, "forecast_acres_p50": 2.0}

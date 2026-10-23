@@ -184,7 +184,9 @@ SHIFT_MAX_GAP_H = 18
 GOES_THIN_MS = 10 * 60_000
 GOES_THIN_CELL_M = 2000.0
 WARNING_PREFIX = "Observations: "
-SOURCE_PREFIXES = ("NASA FIRMS", "NIFC WFIGS", "NASA CMR")
+# data_sources entries this step owns (replaced on every run); "NIFC WFIGS incident record (IRWIN)", the fire's own
+# record written by the pipeline, is not one of them.
+SOURCE_PREFIXES = ("NASA FIRMS", "NIFC WFIGS fire perimeters", "NASA CMR")
 SATELLITE_NAMES = {"N": "Suomi NPP", "N20": "NOAA-20", "N21": "NOAA-21", "Terra": "Terra", "Aqua": "Aqua",
                    "G16": "GOES-16", "G17": "GOES-17", "G18": "GOES-18", "G19": "GOES-19", "L8": "Landsat 8", "L9": "Landsat 9"}
 EVENT_PRIORITY = ("ignition", "containment", "rapid_growth", "spot_fire", "ridge_crossing", "wind_shift", "perimeter_update")

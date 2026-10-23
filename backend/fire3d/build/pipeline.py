@@ -819,11 +819,18 @@ def _refresh_locked(incident_id: str, bdir: Path, progress: ProgressFn | None) -
         ctx.end_ms, ctx.now_ms = int(tr.get("end_ms", t_now)), int(tr.get("now_ms", t_now))
         ctx.progress = prog.stage_fn("weather")
         prog.report("weather", 0.0, "refreshing weather")
-        try:
-            build_weather(ctx)
-        except WeatherQuotaExceeded as e:     # keep the bundle's last weather (nothing was written), say so
-            weather_note = weather_not_refreshed(e)
+        skip = live_weather_skip(bdir, t_now)
+        if skip == "budget":
+            weather_note = WEATHER_BUDGET_NOTE
             log.warning("refresh_live(%s): %s", incident_id, weather_note)
+        elif skip == "recent":
+            log.info("refresh_live(%s): weather fetched less than an hour ago; kept", incident_id)
+        else:
+            try:
+                build_weather(ctx)
+            except WeatherQuotaExceeded as e:     # keep the bundle's last weather (nothing was written), say so
+                weather_note = weather_not_refreshed(e)
+                log.warning("refresh_live(%s): %s", incident_id, weather_note)
     except BaseException as e:
         try:
             add_warning(bdir, f"{REFRESH_FAILED_PREFIX} at {time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime())}: {short_error(e)}")
@@ -846,6 +853,26 @@ def _refresh_locked(incident_id: str, bdir: Path, progress: ProgressFn | None) -
     _validate(final)
     prog.finish("behavior", "live bundle refreshed")
     return True
+
+
+WEATHER_BUDGET_NOTE = WEATHER_NOT_REFRESHED_PREFIX + "daily request budget reached."
+
+
+def live_weather_skip(bdir: Path, now: int) -> str | None:
+    """Why a live refresh keeps the bundle's weather (CONTRACT 14.12.2, cut-line item b): ``"budget"`` when today's
+    weighted Open-Meteo calls exceed ``config.OPEN_METEO_DAILY_SOFT_CAP``, ``"recent"`` when the stored weather was
+    fetched less than ``config.LIVE_WEATHER_REFETCH_S`` ago (hourly at most), else None (fetch)."""
+    from ..build.weather_bundle import load_grid_weather
+    from ..sources import weather
+
+    stored = load_grid_weather(bdir)
+    if stored is None or stored.synthetic:
+        return None
+    if weather.over_soft_cap(now):
+        return "budget"
+    if stored.fetched_ms and now - int(stored.fetched_ms) < config.LIVE_WEATHER_REFETCH_S * 1000:
+        return "recent"
+    return None
 
 
 def weather_not_refreshed(exc: WeatherQuotaExceeded) -> str:

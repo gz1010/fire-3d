@@ -66,7 +66,10 @@ def test_official_endpoints_degrade_honestly(client: TestClient, iid: str, man: 
     _clean(r.content)
     d = r.json()
     assert d["status"] == "unavailable" and d["reason_code"] in ("upstream_error", "not_covered")
-    assert (d["reason_code"] == "not_covered") == iid.startswith("fixture")
+    wfigs = (man.get("summary") or {}).get("record_source") == "wfigs"       # brief 3: NIFC WFIGS's record, not CAL FIRE's
+    assert (d["reason_code"] == "not_covered") == (iid.startswith("fixture") or wfigs)
+    if wfigs and not iid.startswith("fixture"):
+        assert d["reason"] == "CAL FIRE does not list this fire; its official record is published by NIFC WFIGS."
     tr = man["time_range"]
     at = (tr["start_ms"] + tr["end_ms"]) // 2
     for params in ({"incident": iid}, {"incident": iid, "at_ms": at}):

@@ -7,6 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import httpx
+import numpy as np
 import pytest
 
 import fire3d.http as fhttp
@@ -498,3 +499,91 @@ def test_format_probe_lines() -> None:
     assert [ln.split()[:2] for ln in lines] == [["forecast", "ok"], ["ensemble", "daily_limit"], ["overall", "ok"],
                                                 ["live", "daily_limit"]]
     assert "(HTTP 429 daily limit)" in lines[1]
+
+
+# ----------------------------------------------------------------------------------------------------------------
+# Weighted usage, soft cap and hourly live refetch (cut-line item b)
+# ----------------------------------------------------------------------------------------------------------------
+def test_request_cost_weights() -> None:
+    one = {"latitude": "40.0", "hourly": "temperature_2m", "start_date": "2025-01-01", "end_date": "2025-01-01"}
+    assert W.request_cost(one) == 1.0
+    grid = {"latitude": ",".join(["40.0"] * 16), "hourly": ",".join(W.VARS), "models": "gfs_hrrr,gfs_seamless",
+            "start_date": "2025-01-01", "end_date": "2025-01-31"}
+    assert W.request_cost(grid) == pytest.approx(16 * (14 / 10) * (31 / 14))
+    assert W.request_cost({"latitude": "1,2", "hourly": "a", "forecast_days": "1"}) == 2.0
+
+
+def test_usage_is_counted_per_real_request_and_resets_daily(hosts, monkeypatch) -> None:
+    monkeypatch.setattr(W, "now_ms", lambda: NOW)
+    hosts()
+    params = {"latitude": "40.0,41.0", "hourly": "temperature_2m", "start_date": "2026-10-15", "end_date": "2026-10-15"}
+    W.om_request(W.FORECAST_URL, params, W.LIVE_TTL_S)
+    W.om_request(W.FORECAST_URL, params, W.LIVE_TTL_S)            # cache hit: free
+    u = W.open_meteo_usage(NOW)
+    assert u == {"date": "2026-10-16", "weighted_calls": 2.0}
+    assert (Path(config.CACHE_DIR) / W.USAGE_FILE).is_file()
+    assert W.open_meteo_usage(NOW + DAY_MS)["weighted_calls"] == 0.0          # a new UTC day
+    assert not W.over_soft_cap(NOW)
+    W.record_usage(config.OPEN_METEO_DAILY_SOFT_CAP, NOW)
+    assert W.over_soft_cap(NOW)
+
+
+def test_live_refresh_keeps_weather_over_budget_and_when_recent(fake, monkeypatch) -> None:
+    from fire3d.build.weather_bundle import GridWeather, save_grid_weather
+
+    pipeline.build_incident(LIVE_ID)
+    bdir = bundle.bundle_dir(LIVE_ID)
+    t = np.arange(10, dtype=np.int64) * 3_600_000 + NOW              # weather fetched just now (not a fixture)
+    z = np.zeros((10, 4, 4))
+    save_grid_weather(bdir, GridWeather(t_ms=t, temp_c=z + 20, rh_pct=z + 30, wind_speed_ms=z + 3, wind_dir_deg=z,
+                                        precip_mm=z, wind_gust_ms=z + 4, dewpoint_c=z, hrrr=np.ones(10, dtype=bool),
+                                        source="open-meteo:test", forecast_from_ms=None, fetched_ms=pipeline.now_ms()))
+    weather_calls = fake.calls["weather"]
+    assert pipeline.refresh_live(LIVE_ID, force=True) is True
+    assert fake.calls["weather"] == weather_calls                       # fetched less than an hour ago: kept
+    W.record_usage(config.OPEN_METEO_DAILY_SOFT_CAP + 1)
+    monkeypatch.setattr(config, "LIVE_WEATHER_REFETCH_S", 0.0)
+    assert pipeline.refresh_live(LIVE_ID, force=True) is True
+    assert fake.calls["weather"] == weather_calls
+    assert "Weather not refreshed: daily request budget reached." in bundle.load_manifest(bdir)["warnings"]
+
+
+def test_minutely_limit_is_waited_out_once(hosts, monkeypatch) -> None:
+    clock = {"t": NOW}
+    monkeypatch.setattr(W, "now_ms", lambda: clock["t"])
+    slept: list[float] = []
+
+    def fake_sleep(s: float) -> None:
+        slept.append(s)
+        clock["t"] += int(s * 1000)
+
+    monkeypatch.setattr(W, "_sleep", fake_sleep)
+    minutely = {"reason": "Minutely API request limit exceeded. Please try again in one minute.", "error": True}
+    h = hosts({"archive": (429, minutely)})
+    calls = {"n": 0}
+    orig = h.__call__
+
+    def answer(request):                             # refused once, then answered
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return orig(request)
+        return httpx.Response(200, json={"daily": {"precipitation_sum": [1.0]}})
+
+    monkeypatch.setattr(fhttp, "_transport", httpx.MockTransport(answer))
+    r = W.om_request(W.ARCHIVE_URL, {"q": 1}, W.HISTORICAL_TTL_S)
+    assert r.json() == {"daily": {"precipitation_sum": [1.0]}} and calls["n"] == 2
+    assert len(slept) == 1 and 1.0 <= slept[0] <= W.MINUTELY_WAIT_MAX_S
+    # refused twice: raises after one wait
+    W.clear_host_blocks()
+    monkeypatch.setattr(fhttp, "_transport", httpx.MockTransport(lambda r: httpx.Response(429, json=minutely)))
+    slept.clear()
+    with pytest.raises(W.WeatherQuotaExceeded) as ei:
+        W.om_request(W.ARCHIVE_URL, {"q": 2}, W.HISTORICAL_TTL_S)
+    assert ei.value.period == "minutely" and len(slept) == 1
+    # a daily refusal is never waited out
+    W.clear_host_blocks()
+    monkeypatch.setattr(fhttp, "_transport", httpx.MockTransport(lambda r: httpx.Response(429, json=DAILY_BODY)))
+    slept.clear()
+    with pytest.raises(W.WeatherQuotaExceeded):
+        W.om_request(W.ARCHIVE_URL, {"q": 3}, W.HISTORICAL_TTL_S)
+    assert slept == []

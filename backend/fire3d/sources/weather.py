@@ -207,25 +207,119 @@ def deterministic_hosts(start_ms: int, end_ms: int, now: int | None = None) -> l
     return out
 
 
-def om_request(url: str, params: dict, ttl_s: float | None, timeout: float = 120.0) -> http.Response:
-    """GET an Open-Meteo URL through :mod:`fire3d.http`, honouring the per-host block: a blocked host answers from
-    the disk cache or raises :class:`WeatherQuotaExceeded` without a network call; a limit answer blocks the host
-    and raises it (never retried)."""
-    label = host_label(url)
-    blk = host_block(label)
-    if blk is not None:
-        hit = http.peek_cache("GET", url, params, ttl_s)
-        if hit is not None:
-            return hit
-        raise WeatherQuotaExceeded(label, blk[1], blk[0])
+# ---------------------------------------------------------------------------------------------------------------
+# Weighted daily usage (CONTRACT 14.12.2, us-pipeline cut-line item b)
+# ---------------------------------------------------------------------------------------------------------------
+USAGE_FILE = "open_meteo_usage.json"          # in config.CACHE_DIR (data/cache): {"date", "weighted_calls"}
+_usage_lock = threading.Lock()
+
+
+def request_cost(params: dict | None) -> float:
+    """Open-Meteo's weighting of one request (its terms: more than 10 variables or 2 weeks, or several locations,
+    count as several calls): locations x max(1, series / 10) x max(1, days / 14), series = variables x models."""
+    p = dict(params or {})
+    locations = max(1, len([v for v in str(p.get("latitude", "")).split(",") if v.strip()]))
+    variables = [v for key in ("hourly", "daily") for v in str(p.get(key, "")).split(",") if v.strip()]
+    models = max(1, len([m for m in str(p.get("models", "")).split(",") if m.strip()]))
+    series = max(1, len(variables)) * models
+    days = 1.0
+    if p.get("start_date") and p.get("end_date"):
+        try:
+            days = (iso_to_ms(str(p["end_date"])) - iso_to_ms(str(p["start_date"]))) / DAY_MS + 1.0
+        except ValueError:
+            days = 1.0
+    elif p.get("forecast_days") or p.get("past_days"):
+        days = float(p.get("forecast_days") or 7) + float(p.get("past_days") or 0)
+    return float(locations * max(1.0, series / 10.0) * max(1.0, days / 14.0))
+
+
+def _usage_path():
+    from pathlib import Path
+
+    from .. import config
+
+    return Path(config.CACHE_DIR) / USAGE_FILE
+
+
+def open_meteo_usage(now: int | None = None) -> dict:
+    """``{"date": "YYYY-MM-DD" (UTC), "weighted_calls": float}`` of today's Open-Meteo requests from this machine
+    (cache hits are free; persisted in ``data/cache/open_meteo_usage.json``)."""
+    import orjson
+
+    today = ms_to_iso(now_ms() if now is None else int(now))[:10]
     try:
-        return http.request("GET", url, params=params, ttl_s=ttl_s, timeout=timeout)
-    except http.HttpError as e:
-        period = http.quota_period(e.message) if e.status == 429 else None
-        if period is None:
-            raise
-        until = block_host(label, period)
-        raise WeatherQuotaExceeded(label, period, until, e.message) from None
+        doc = orjson.loads(_usage_path().read_bytes())
+    except (OSError, ValueError):
+        doc = {}
+    if not isinstance(doc, dict) or doc.get("date") != today:
+        return {"date": today, "weighted_calls": 0.0}
+    return {"date": today, "weighted_calls": float(doc.get("weighted_calls") or 0.0)}
+
+
+def record_usage(cost: float, now: int | None = None) -> dict:
+    """Add ``cost`` weighted calls to today's count (a new UTC day starts at 0). Never raises."""
+    import orjson
+
+    with _usage_lock:
+        u = open_meteo_usage(now)
+        u["weighted_calls"] = round(u["weighted_calls"] + float(cost), 2)
+        try:
+            http.atomic_write_bytes(_usage_path(), orjson.dumps(u))
+        except OSError as e:
+            log.warning("weather: could not store the Open-Meteo usage count: %s", e)
+    return u
+
+
+def over_soft_cap(now: int | None = None) -> bool:
+    """True when today's weighted Open-Meteo calls exceed ``config.OPEN_METEO_DAILY_SOFT_CAP``."""
+    from .. import config
+
+    return open_meteo_usage(now)["weighted_calls"] > float(config.OPEN_METEO_DAILY_SOFT_CAP)
+
+
+MINUTELY_WAIT_MAX_S = 65.0          # a per-minute refusal is waited out once (Open-Meteo: "try again in one minute")
+
+
+def _sleep(seconds: float) -> None:          # tests replace this
+    import time
+
+    time.sleep(seconds)
+
+
+def om_request(url: str, params: dict, ttl_s: float | None, timeout: float = 120.0, *,
+               wait_minutely: bool = True) -> http.Response:
+    """GET an Open-Meteo URL through :mod:`fire3d.http`, honouring the per-host block: a blocked host answers from
+    the disk cache or raises :class:`WeatherQuotaExceeded` without a network call; a daily or hourly limit answer
+    blocks the host and raises it (never retried). A per-minute limit answer (other tenants of a shared IP can use up
+    the 600 calls a minute) is waited out once, until the next minute, then asked again; a second refusal raises."""
+    label = host_label(url)
+    for attempt in (0, 1):
+        blk = host_block(label)
+        if blk is not None:
+            hit = http.peek_cache("GET", url, params, ttl_s)
+            if hit is not None:
+                return hit
+            if blk[1] == "minutely" and wait_minutely and attempt == 0:
+                _sleep(min(MINUTELY_WAIT_MAX_S, max(0.0, (blk[0] - now_ms()) / 1000.0) + 1.0))
+                continue
+            raise WeatherQuotaExceeded(label, blk[1], blk[0])
+        try:
+            resp = http.request("GET", url, params=params, ttl_s=ttl_s, timeout=timeout)
+        except http.HttpError as e:
+            if e.status is not None:
+                record_usage(request_cost(params))
+            period = http.quota_period(e.message) if e.status == 429 else None
+            if period is None:
+                raise
+            until = block_host(label, period)
+            if period == "minutely" and wait_minutely and attempt == 0:
+                _sleep(min(MINUTELY_WAIT_MAX_S, max(0.0, (until - now_ms()) / 1000.0) + 1.0))
+                continue
+            raise WeatherQuotaExceeded(label, period, until, e.message) from None
+        if not resp.from_cache:
+            record_usage(request_cost(params))
+        return resp
+    raise WeatherQuotaExceeded(label, "minutely", quota_reset_ms("minutely", now_ms()))   # pragma: no cover
 
 
 def _probe_params(label: str, now: int) -> dict[str, str]:
@@ -260,6 +354,7 @@ def probe_open_meteo(timeout: float = PROBE_TIMEOUT_S) -> dict:
     detail: dict[str, str] = {}
     for label, url in HOSTS.items():
         try:
+            record_usage(1.0, now)
             resp = http.request("GET", url, params=_probe_params(label, now), ttl_s=0, timeout=timeout, retries=0)
             if http.is_error_body(resp.content, resp.content_type):
                 hosts[label], detail[label] = "unreachable", "error body: " + resp.text[:120]

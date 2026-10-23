@@ -12,7 +12,9 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
 | M3 NWS and local alerts (§14.6, §14.7) | `brief 3 us-pipeline: M3 national NWS and local alerts` | done |
 | Cut-line (a) OpenFEMA prefetch | `brief 3 us-pipeline: M3 OpenFEMA archive channel` | done (done early, while waiting for `us-catalog` M3) |
 | M2 build anywhere (§14.2 gate, §14.12.3/5/6/8/10, §14.9.7) | `brief 3 us-pipeline: M2 build anywhere` | done |
-| M4 smoke builds (§14.12.11) | - | after M2 |
+| Cut-line (b) weighted Open-Meteo counter, soft cap, hourly live refetch | `brief 3 us-pipeline: M4 cut-line b and d` | done |
+| Cut-line (d) `SkillEntry.growth_sorensen` writer | `brief 3 us-pipeline: M4 cut-line b and d` | done |
+| M4 smoke builds (§14.12.11) | - | in progress |
 
 ## §14.12.2 Weather quota (as built, M1)
 
@@ -71,8 +73,15 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
   live fuel moisture uses the month table (<reason>)".
 - `fire3d.types.BuildContext` gains `time_zone: str | None = None` and `require_hrrr: bool = False`.
 - Tests: `backend/tests/test_us_pipeline_quota.py` (34 tests).
-- Below the cut line, not built: the weighted counter `open_meteo_usage()`, `OPEN_METEO_DAILY_SOFT_CAP` and the
-  hourly live refetch.
+- Cut-line (b), built: `weather.request_cost(params)` = locations × max(1, series / 10) × max(1, days / 14) (series =
+  variables × models; days from start/end dates, else forecast + past days); every real Open-Meteo request
+  (`om_request`, also refused ones, never cache hits; each probe request counts 1) adds its cost to
+  `open_meteo_usage() -> {"date", "weighted_calls"}`, persisted in `data/cache/open_meteo_usage.json` (a new UTC day
+  starts at 0); `over_soft_cap()` compares with `config.OPEN_METEO_DAILY_SOFT_CAP = 6000.0`. `config.
+  LIVE_WEATHER_REFETCH_S = 3600`. `pipeline.live_weather_skip(bdir, now)`: a live refresh keeps the bundle's weather
+  when over the cap (warning "Weather not refreshed: daily request budget reached.") or when the stored weather is
+  under an hour old (no warning); `weather_bundle.deterministic_grid(prefer_fresh=True)` (live forecasts) uses the
+  stored weather in the same two cases (the cap case adds the same warning to the forecast).
 
 ## §14.6 NWS fire weather nationally (as built, M3)
 
@@ -259,6 +268,13 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
   (`INTERIM_LFM_NOTE`), which every forecast appends to its warnings. California notes are unchanged.
 - Tests: `tests/test_us_pipeline_build.py` (24), `tests/test_us_pipeline_perimeters.py` (8); recorded data in
   `tests/data/pipeline_us/` (PROVENANCE.md).
+
+## §14.12.7 Skill (as built, cut-line item d)
+
+- `spread/validate.skill_entry(row)` maps a `skill_from_arrays(..., growth=True)` row to the `SkillEntry` shape with
+  `growth_sorensen` (= the row's `sorensen_growth`, new growth only). `spread/ensemble.run_forecast` writes it on every
+  skill entry (any run with observed data inside the horizon: historical runs and hindcasts); `validate.hindcast_skill`
+  returns the same shape. Test: `test_us_pipeline_build.py::test_forecast_skill_carries_growth_sorensen`.
 
 ## Files
 

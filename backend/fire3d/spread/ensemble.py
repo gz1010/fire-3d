@@ -45,7 +45,7 @@ from ..contracts import ForecastManifest, validate_strict
 from ..timeutil import local_month, ms_to_dt, ms_to_iso, now_ms, zone_of
 from ..types import MemberWeather, ProgressFn, SpreadSettings, StaticInputs, no_progress, record_issuer_of
 from . import engine, moisture
-from .validate import skill_from_arrays
+from .validate import skill_entry, skill_from_arrays
 
 log = logging.getLogger(__name__)
 
@@ -1132,8 +1132,9 @@ def run_forecast(
         skill = None
         if setup.observed is not None and setup.data_end_ms is not None:
             data_end_h = (setup.data_end_ms - setup.time_origin_ms) / config.MS_PER_H
-            skill = skill_from_arrays(agg["arrival_p50"], setup.observed, setup.start_h, setup.res_m, LEAD_HOURS,
-                                      horizon_h=setup.horizon_h, data_end_h=data_end_h) or None
+            rows = skill_from_arrays(agg["arrival_p50"], setup.observed, setup.start_h, setup.res_m, LEAD_HOURS,
+                                     horizon_h=setup.horizon_h, data_end_h=data_end_h, growth=True)
+            skill = [skill_entry(r) for r in rows] or None
         progress("write", 0.0, f"writing {rel_dir}")
         layers = {
             name: fbundle.write_layer(bdir, name, agg[name], "fire", units, desc, rel_dir=rel_dir, register=False)

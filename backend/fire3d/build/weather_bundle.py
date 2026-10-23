@@ -529,6 +529,15 @@ def deterministic_grid(bdir: Path, manifest: dict, a_ms: int, b_ms: int, source:
     nearest hour held if the fetch fails. ``prefer_fresh`` (live) fetches even when the stored data cover it."""
     stored = load_grid_weather(bdir)
     covers = stored is not None and int(stored.t_ms[0]) <= a_ms and int(stored.t_ms[-1]) >= b_ms
+    if covers and prefer_fresh and stored is not None and not stored.synthetic:
+        from ..sources.weather import over_soft_cap
+
+        recent = bool(stored.fetched_ms) and now_ms() - int(stored.fetched_ms or 0) < config.LIVE_WEATHER_REFETCH_S * 1000
+        if over_soft_cap():
+            warnings.append("Weather not refreshed: daily request budget reached.")
+            prefer_fresh = False
+        elif recent:                      # live weather is refetched at most hourly (CONTRACT 14.12.2)
+            prefer_fresh = False
     if stored is not None and (stored.synthetic or (covers and not prefer_fresh)):
         gw, held = stored.window(a_ms, b_ms)
         if held:
