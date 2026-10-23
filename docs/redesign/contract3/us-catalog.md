@@ -62,5 +62,49 @@ milestone commit; other roles read it instead of guessing. Kept current at every
   `method`, `assignment`), `AccuracyRegion`, `AccuracyFire`, `GeoLookup.county`, `skill[]`.
 - `web/src/api/records.test.ts`, `web/src/api/client.test.ts`.
 
+## M2: regions, UTM, fixture-east (commit `brief 3 us-catalog: M2 ...`)
+
+### `backend/fire3d/regions.py` (§14.3, exactly the listed API)
+- `L48`, `STATE_NAMES` (also names AK, HI and the territories for messages), `County(fips, name, state)`,
+  `state_at(lon, lat, *, max_km=5.0)`, `states_in_bbox(bbox, margin_km=0.0)`, `county_at`, `counties_in_bbox`,
+  `same_codes` ("0" + 5-digit FIPS), `time_zone_at`, `main_zone`, `zone_name`, `coverage_at`, `lookup`.
+  Extras: `is_supported_state(state)`, `sources_meta()`, constants `MAIN_ZONE`, `ZONE_NAMES`, `OUTSIDE_L48_BOXES`,
+  `NOT_SUPPORTED_NOTE`, `OUTSIDE_US_NOTE`, `COVERAGE_TOLERANCE_KM`.
+- Data (built by `backend/scripts/build_us_regions.py`, about 12 GETs; each file has a top-level `meta` with sources,
+  licences, retrieval date and simplification):
+  - `backend/fire3d/data/us_states.geojson` (49 features, 274 KB; TIGERweb `State_County/MapServer/0`, 0.005°);
+  - `backend/fire3d/data/us_counties.geojson` (3,109 counties and equivalents, 1.5 MB; `State_County/MapServer/1`,
+    0.01°, 3 decimals);
+  - `backend/fire3d/data/us_timezones.geojson` (NTAD Eastern/Central/Mountain/Pacific + Navajo Nation Reservation +
+    Hopi Reservation, 168 KB). Rule: the highest-priority feature containing the point wins (Hopi 3 > Navajo 2 > NTAD
+    1); an NTAD Mountain point in Arizona outside the Navajo Nation is America/Phoenix.
+- Terms checked 2026-10-23: NTAD Time Zones' own `copyrightText` ("This NTAD dataset is a work of the United States
+  government ... available for unrestricted public use."); TIGERweb "Source: U.S. Census Bureau" (public domain).
+- All 15 required points of §14.3 pass, plus Boise, DC, Shiprock NM and Tuba City AZ (Navajo Nation, America/Denver),
+  Key West, Windsor ON and Mexico City.
+
+### `GET /api/geo/lookup?lon=&lat=` (in `api/app.py`)
+- `GeoLookup` body; 400 for a missing, non-numeric, non-finite or out-of-range value; `Cache-Control: public,
+  max-age=86400`. Not supported: `state`, `county`, `time_zone` null and `note` = the §14.14 sentence.
+
+### UTM (§14.12.4)
+- `grid.utm_epsg_for(lon) = 32600 + floor((lon + 180) / 6) + 1` (new helper `grid.utm_zone_for(lon)`, clamped 1..60).
+  California unchanged (tests on -120.0 / -120.0001, Eaton, Palisades, fixture-demo zone 11, fixture-live zone 10,
+  and the real bundles on disk). `scripts/check_bundle.py` expects the standard zone of the AOI centre or of the
+  incident point, and checks `utm_zone` against `crs`.
+
+### `fixture-east` (§14.12.9)
+- `uv run python scripts/make_fixture.py --only east` (about 40 s) writes `data/incidents/fixture-east`: historical
+  2025-03-22 18:10 UTC (14:10 EDT), 12 km AOI at (35.29, -82.30), EPSG:32617, ~3,950 ac. Summary: `state` "NC",
+  `time_zone` "America/New_York", `record_source` "wfigs", `record_issuer` "NIFC WFIGS (IRWIN)", `irwin_id` null,
+  `calfire_uid` "", `uid` "", name "Fixture East (synthetic)"; event and ignition text say "NIFC WFIGS (IRWIN)" and
+  "ET" (no "CAL FIRE" anywhere in the bundle). The default run (demo + live) is unchanged.
+- `check_bundle.py fixture-east` reports one problem, "forecast fx-001: arrival before the start", which
+  `fixture-demo` and `fixture-live` already report on the same synthetic forecast (pre-existing, not brief 3).
+
 ## Deviations
+- `coverage_at` uses a **1 km** tolerance around the state polygons, not 5 km: the TIGERweb state polygons already
+  include near-shore water, and 5 km would put central Tijuana (2.0 km south of the border; §14.3 requires
+  `outside_us`) and Windsor, ON (2.8 km from Detroit) in the United States. `state_at` keeps `max_km=5.0` (filling a
+  missing `POOState`), and `time_zone_at` keeps the 5 km nearest-zone rule.
 - §14.1 "before-validator" is an after-validator with the same effect (reason above).

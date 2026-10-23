@@ -589,5 +589,28 @@ def incident_aircraft(incident_id: str, all: str = "0") -> Response:  # noqa: A0
 
 @app.get("/api/live/status")
 def live_status() -> Response:
-    """``{last_refresh_ms, next_refresh_ms, active_incidents, detections_24h_ca, auto_build}``."""
+    """``{last_refresh_ms, next_refresh_ms, active_incidents, detections_24h_ca, auto_build, detections_24h}``."""
     return _json(dump(live.live_status()))
+
+
+def _coord(raw: str | None, name: str, lo: float, hi: float) -> float:
+    try:
+        v = float(str(raw).strip())
+    except (TypeError, ValueError):
+        raise _http_error(400, f"{name} must be a number") from None
+    if not math.isfinite(v) or not lo <= v <= hi:
+        raise _http_error(400, f"{name} must be between {lo:g} and {hi:g}")
+    return v
+
+
+@app.get("/api/geo/lookup")
+def geo_lookup(lon: str | None = None, lat: str | None = None) -> Response:
+    """Brief 3 (CONTRACT 14.3): state, county, time zone and coverage at a point, offline (``fire3d.regions``).
+    400 on missing or bad numbers; cached by browsers for a day (the region files change only with a release)."""
+    from .. import regions
+    from ..contracts import GeoLookup
+
+    x = _coord(lon, "lon", -180.0, 180.0)
+    y = _coord(lat, "lat", -90.0, 90.0)
+    body = dump(GeoLookup.model_validate(regions.lookup(x, y)))
+    return _json(body, headers={"Cache-Control": "public, max-age=86400"})

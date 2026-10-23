@@ -35,6 +35,39 @@ def test_utm_zone_choice_at_minus_120() -> None:
     assert utm_epsg_for(-124.0) == 32610
 
 
+# Brief 3 (CONTRACT 14.12.4): the standard zone 32600 + floor((lon + 180) / 6) + 1 across the lower 48.
+@pytest.mark.parametrize("place,lon,zone", [
+    ("Seattle WA", -122.33, 10), ("fixture-live (Santa Lucia Range)", -121.60, 10), ("Cape Mendocino", -124.41, 10),
+    ("Eaton / fixture-demo (Altadena)", -118.07, 11), ("Palisades", -118.55, 11), ("Boise ID", -116.20, 11),
+    ("Needles CA (easternmost CA)", -114.13, 11),
+    ("Bozeman MT", -111.04, 12), ("Phoenix AZ", -112.07, 12), ("Horse Gulch MT", -111.80, 12),
+    ("Denver CO", -104.99, 13), ("El Paso TX", -106.49, 13),
+    ("Oklahoma City OK", -97.52, 14), ("Dallas TX", -96.80, 14),
+    ("Houston TX", -95.37, 15), ("Minneapolis MN", -93.27, 15),
+    ("Chicago IL", -87.63, 16), ("Atlanta GA", -84.39, 16),
+    ("Black Cove NC", -82.30, 17), ("Miami FL", -80.19, 17), ("Key West FL", -81.78, 17),
+    ("New York NY", -74.00, 18), ("Burlington VT", -73.21, 18),
+    ("Boston MA", -71.06, 19), ("Bangor ME", -68.77, 19), ("West Quoddy Head ME", -66.95, 19),
+])
+def test_utm_zone_lower48(place: str, lon: float, zone: int) -> None:
+    assert utm_epsg_for(lon) == 32600 + zone, place
+
+
+@pytest.mark.parametrize("lon,zone", [(-102.0, 14), (-102.0001, 13), (-108.0, 13), (-108.0001, 12), (-84.0, 17),
+                                      (-84.0001, 16), (-72.0, 19), (-72.0001, 18), (-180.0, 1), (179.99, 60), (180.0, 60)])
+def test_utm_zone_lines(lon: float, zone: int) -> None:
+    assert utm_epsg_for(lon) == 32600 + zone
+
+
+def test_california_aoi_zones_unchanged() -> None:
+    eaton, _ = make_aoi(-118.07, 34.20, (-118.15, 34.15, -117.99, 34.25), "historical")
+    pal, _ = make_aoi(-118.55, 34.07, (-118.68, 34.02, -118.48, 34.12), "historical")
+    live, _ = make_aoi(-121.6, 36.2, None, "live", acres=5000)
+    assert (eaton.epsg, pal.epsg, live.epsg) == (32611, 32611, 32610)
+    east, _ = make_aoi(-82.30, 35.29, None, "historical", acres=3000)
+    assert east.epsg == 32617 and east.utm_zone == 17
+
+
 def test_basic_properties(g: Grid) -> None:
     assert g.res_m == pytest.approx(12000 / 1024)
     assert g.bounds == (395000.0, 3779000.0, 407000.0, 3791000.0)
@@ -197,3 +230,19 @@ def test_manifest_grid_round_trip(g: Grid) -> None:
     assert d["crs"] == "EPSG:32611" and d["utm_zone"] == 11 and d["fire"]["res_m"] == pytest.approx(30.0)
     r2, f2 = grids_from_manifest({"grid": d})
     assert r2 == g and f2 == f
+
+
+@pytest.mark.parametrize("bundle_id,zone", [("2025-eaton-fire-dbfa57", 11), ("2025-palisades-fire-abfed7", 11),
+                                            ("fixture-demo", 11), ("fixture-live", 10)])
+def test_existing_bundles_keep_their_zone(bundle_id: str, zone: int) -> None:
+    """Bundles built before brief 3 keep their grid: the new rule gives the same zone for their AOI and point."""
+    import json
+
+    p = config.REPO_ROOT / "data" / "incidents" / bundle_id / "manifest.json"
+    if not p.is_file():
+        pytest.skip(f"{bundle_id} not on disk")
+    m = json.loads(p.read_text())
+    w, _, e, _ = m["grid"]["bbox_lonlat"]
+    assert m["grid"]["utm_zone"] == zone and m["grid"]["crs"] == f"EPSG:{32600 + zone}"
+    assert utm_epsg_for((w + e) / 2.0) == 32600 + zone
+    assert utm_epsg_for(m["summary"]["lon"]) == 32600 + zone

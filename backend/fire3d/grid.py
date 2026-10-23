@@ -1,8 +1,9 @@
 """Grid + AOI math (SPEC 4.1, 7.2, 8.1).
 
 Conventions (Contract):
-  * An AOI is a square of side ``extent_m`` centred on (``center_e``, ``center_n``) in the incident's UTM zone
-    (EPSG:32610 if the centre longitude is < -120, else EPSG:32611).
+  * An AOI is a square of side ``extent_m`` centred on (``center_e``, ``center_n``) in the incident's standard UTM
+    zone: EPSG ``32600 + floor((lon + 180) / 6) + 1`` of the centre longitude (brief 3; zones 10-19 in the lower 48;
+    California unchanged: 32610 west of -120, else 32611).
   * Arrays are row-major, **row 0 = north edge, col 0 = west edge**. Pixel (r, c) centre:
     ``e = minx + (c + .5) * res``, ``n = maxy - (r + .5) * res``.
   * Local/world coordinates: ``x = e - center_e`` (east +), ``z = -(n - center_n)`` (**south +**), metres.
@@ -56,9 +57,15 @@ def _out(a, b, scalar: bool):
     return a, b
 
 
+def utm_zone_for(lon: float) -> int:
+    """Standard UTM zone number of a longitude: ``floor((lon + 180) / 6) + 1``, clamped to 1..60 (lon 180 -> 60)."""
+    return int(min(60, max(1, math.floor((float(lon) + 180.0) / 6.0) + 1)))
+
+
 def utm_epsg_for(lon: float) -> int:
-    """UTM EPSG for California: 32610 when ``lon < -120``, else 32611 (SPEC 4.1)."""
-    return 32610 if float(lon) < -120.0 else 32611
+    """WGS84 / UTM north EPSG of a longitude (SPEC 4.1, brief 3): ``32600 + floor((lon + 180) / 6) + 1``. The lower 48
+    span zones 10-19; California is unchanged (32610 when ``lon < -120``, else 32611)."""
+    return 32600 + utm_zone_for(lon)
 
 
 def utm_zone_for_epsg(epsg: int) -> int:

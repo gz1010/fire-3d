@@ -33,7 +33,7 @@ from fire3d.contracts import (  # noqa: E402
     DetectionsFile, EventsFile, ForecastManifest, IncidentManifest, PerimetersFile, TimeseriesFile, WeatherFile,
     contract_problems,
 )
-from fire3d.grid import fire_grid_size, grids_from_manifest  # noqa: E402
+from fire3d.grid import fire_grid_size, grids_from_manifest, utm_epsg_for  # noqa: E402
 from fire3d.timeutil import HOUR_MS, time_origin_for  # noqa: E402
 from fire3d.types import STATIC_NPZ_KEYS  # noqa: E402
 
@@ -136,8 +136,16 @@ def check_bundle(bdir: Path) -> tuple[Report, dict]:
     M = fire_grid_size(float(g["extent_m"]))
     rep.check(g["fire"]["width"] == M == g["fire"]["height"], f"fire grid {g['fire']['width']} != SPEC M {M}")
     rep.check(abs(g["fire"]["res_m"] - g["extent_m"] / M) < 1e-6, "fire res_m != extent/M")
-    exp_epsg = 32610 if s.get("lon", 0) < -120 else 32611
-    rep.check(g["crs"] == f"EPSG:{exp_epsg}", f"crs {g['crs']} but the incident longitude says EPSG:{exp_epsg}")
+    # Standard UTM zone (SPEC 4.1, brief 3): of the AOI centre (the analysis area's bbox, as grid.make_aoi chose it),
+    # or of the incident point; both agree except for a fire within an AOI's half-width of a zone line.
+    bb = g.get("bbox_lonlat") or []
+    exp = {utm_epsg_for(float(s.get("lon", 0)))}
+    if len(bb) == 4:
+        exp.add(utm_epsg_for((float(bb[0]) + float(bb[2])) / 2.0))
+    rep.check(g["crs"] in {f"EPSG:{e}" for e in exp},
+              f"crs {g['crs']} but the incident longitude says EPSG:{'/'.join(str(e) for e in sorted(exp))}")
+    rep.check(int(g.get("utm_zone", -1)) == int(str(g["crs"]).split(":")[-1]) - 32600,
+              f"utm_zone {g.get('utm_zone')} does not match crs {g['crs']}")
     lay = m.get("layers") or {}
     for k in REQUIRED_LAYERS:
         rep.check(k in lay, f"required layer {k!r} missing")
