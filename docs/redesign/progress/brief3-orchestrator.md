@@ -41,6 +41,13 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
   reviews running.
 - The user's usage limit resets 2:20 AM EDT (06:20 UTC). Wake-ups scheduled at 06:25 and 07:25 UTC to resume
   automatically (stopped workflows from their journals, stopped agents via SendMessage).
+- ~04:15 UTC: us-pipeline review pass (20f33d3, eab069d); Black Cove still pending (7 probes 02:57-03:59 all
+  daily_limit). For the integration: R6 dataStatus/Official now Pacific times (check after us-official M6), R7 contract
+  LocalAlert.polygon MultiPolygon, R8 resolve_listed outage says 'local or synthetic', N1 SPEC §8.4 text after R2/R3,
+  R3 hourly re-check of daily blocks departs from §14.12.2 (decide). R4: an OpenFEMA sample had a real LEW naming a
+  private person; replaced, but it stays in branch history (b12dd1e, private repo); user decision (squash-merge keeps it
+  out of main).
+- 04:20 UTC: validation started (Agent-tool agent) while us-web and us-official reviews run.
 - Lesson: never SendMessage a workflow agent (it starts a second copy); relay through files or Agent-tool agents.
 
 ## Carry-over items for later stages (integration unless a role owns the file)
