@@ -43,6 +43,16 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
   effect-running harness; no new dependency), (b) a single layer larger than the 256 MiB cap stays cached,
   (c) two layer names sharing one URL each keep their own name. (minor, from the restore skeptic)
 - Baseline counts after restore: see "Gates" below.
+- From the us-catalog review (pass after fix round 1, 4e3c8d6), for the integration:
+  - N1: SPEC.md lags us-pipeline's commit 20f33d3 in two passages (Open-Meteo limits text; OpenFEMA prefetch now in
+    the background for API jobs).
+  - N2: the new "several records" reason reads like a glitch when the WFIGS records share the fire's name (Lucas
+    Fire, 2026-lucas-fire-21bc39, matched to two WFIGS records both named LUCAS): merge or pick, don't show it.
+  - R4/R5 (us-official files): Official now block headed "California" nationally, NWS issue times in Pacific; a
+    Florida WFIGS fire showed "CAL FIRE · No record" at 1c14914 (check after us-official's M4-M6).
+  - CONTRACT §14.5: add the several-records case.
+  - Hand-off: us-pipeline may now update backend/tests/test_api.py build-gate tests (us-catalog's review is
+    done); its fixer was told to wait, so the integration does it if still needed.
 
 ## User questions
 - Asked and answered 2026-10-22 ~21:50 UTC (8 questions from the four audits); recorded in BRIEF-3.md
