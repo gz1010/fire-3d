@@ -38,6 +38,10 @@ that a daily block is re-checked with one tiny probe request at most once an hou
 a shared IP's daily-limit answer can be transient) and lifted when the host answers.
 A refused HRRR / forecast request fails :meth:`OpenMeteoSource.deterministic` (no silent ERA5 fill);
 :func:`probe_open_meteo` asks each host once, uncached, for ``fire3d.cli weather-probe``.
+
+:func:`gsi_inputs` fetches the daily inputs of the NFDRS 2016 Growing Season Index (live fuel moisture outside
+California, CONTRACT 14.12.10): hourly 2 m temperature and humidity at the fire, aggregated to local days, from the ERA5
+archive (``models=era5``; historical builds) or the forecast host's past days (live builds).
 """
 
 from __future__ import annotations

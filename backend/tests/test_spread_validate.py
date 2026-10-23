@@ -138,3 +138,34 @@ def test_live_start_check_on_a_synthetic_fire(tmp_data_dir, monkeypatch) -> None
     q = s["quiet"]
     assert q["latest_pass_decay"]["forecast_growth_acres_mean"] <= q["last_detection"]["forecast_growth_acres_mean"]
     assert s["all"]["old"]["n"] == s["all"]["new"]["n"]
+
+
+def test_batch_hindcast_absolute_starts_match_offsets(tmp_data_dir, monkeypatch) -> None:
+    """Pre-registered absolute UTC starts (docs/validation.md 10.1) give the same runs as the equal offset."""
+    from fire3d import bundle
+
+    b1 = make_bundle(tmp_data_dir / "incidents", iid="fire-a", m=32, ignition_rc=(16, 8))
+
+    def fake(bundle_dir, start_ms, horizon_h, ens, members=None):
+        return [make_weather(t0=ORIGIN - 72 * H, hours=300, speed_kmh=5.0)]
+
+    monkeypatch.setattr(weather_bundle, "member_weathers", fake)
+    t_ign = (bundle.load_manifest(b1).get("ignition") or {}).get("t_ms") or bundle.load_manifest(b1)["summary"]["started_ms"]
+    by_off = validate.batch_hindcast([b1], (6.0,), (0.5,), horizon_h=24, lead_hours=(12, 24), workers=1)
+    by_abs = validate.batch_hindcast([b1], (), (0.5,), horizon_h=24, lead_hours=(12, 24), workers=1,
+                                     start_times_ms=[int(t_ign + 6 * H)])
+    strip = lambda rs: [{k: v for k, v in r.items()} for r in rs]
+    assert strip(by_abs) == strip(by_off) and by_abs[0]["start_offset_h"] == 6.0
+
+
+def test_cli_absolute_start_spec(monkeypatch) -> None:
+    seen = []
+
+    def fake_batch(bundles, offsets, adjustments, **kw):
+        seen.append((bundles, tuple(offsets), kw.get("start_times_ms")))
+        return []
+
+    monkeypatch.setattr(validate, "batch_hindcast", fake_batch)
+    monkeypatch.setattr(validate, "_bundle_path", lambda ref: ref)
+    assert validate.main(["hindcast", "x@2025-08-25T19:30Z,2025-05-13T23:47:56Z", "--adjustments", "0.5"]) == 0
+    assert seen == [(["x"], (), [1756150200000, 1747180076000])]

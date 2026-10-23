@@ -448,10 +448,22 @@ def test_water_year_refused_fails_california_with_flag_and_warns_otherwise(tmp_d
 
 
 def test_water_year_refused_outside_california_is_a_warning_even_with_flag(tmp_data_dir, monkeypatch) -> None:
+    # Outside California the live fuel moisture comes from the GSI series (validation, CONTRACT 14.12.10): with it the
+    # water-year total is not used, so its refusal neither fails a --require-hrrr build nor becomes a warning; without
+    # the series (no flag) the month-table fallback names the missing water-year total.
+    from test_gsi import _fake_gsi_inputs, _rows
+
     monkeypatch.setattr(WB, "water_year_precip", _refused_water_year)
+    monkeypatch.setattr(WB, "gsi_inputs", _fake_gsi_inputs(_rows("2025-06-20", 60)))
     ctx = _hist_ctx(tmp_data_dir, state="MT", require=True)
     WB.build_weather(ctx, source=FakeSource(ctx.fire_grid))
-    assert any("water-year precipitation unavailable" in w for w in bundle.load_manifest(ctx.bundle_dir)["warnings"])
+    warns = bundle.load_manifest(ctx.bundle_dir)["warnings"]
+    assert WB.load_lfm_gsi(ctx.bundle_dir) is not None and not any("water-year" in w for w in warns)
+    monkeypatch.setattr(WB, "gsi_inputs", _fake_gsi_inputs(None, refused=True))
+    ctx = _hist_ctx(tmp_data_dir, state="MT", require=False)
+    WB.build_weather(ctx, source=FakeSource(ctx.fire_grid))
+    warns = bundle.load_manifest(ctx.bundle_dir)["warnings"]
+    assert any("water-year precipitation unavailable" in w for w in warns) and WB.INTERIM_LFM_WARNING in warns
 
 
 def test_is_california_rule() -> None:
