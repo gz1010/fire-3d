@@ -30,6 +30,35 @@ RECENT_PIXELS = 50               # pixels used for the front location when nothi
 M_PER_FT = 0.3048
 
 
+def _live_moisture_by_hour(bdir: Path, man: dict, tz: str | None, precip_wy: float | None):
+    """``f(t_ms) -> (herb, woody)``: outside California the NFDRS 2016 GSI of that local day (``sim/lfm_gsi.json``,
+    CONTRACT 14.12.10), else (California, or no series / no 21 days: the never-silent fallback whose note the
+    manifest and every forecast carry) the month table with the drought adjustment, as before brief 3."""
+    gsi_doc = None
+    try:
+        from ..build.weather_bundle import gsi_at, is_california, load_lfm_gsi
+
+        if not is_california(man.get("summary") or {}) and not config.LFM_FORCE_CALIFORNIA:
+            gsi_doc = load_lfm_gsi(bdir)
+    except Exception as e:  # noqa: BLE001 - the month table is the documented fallback
+        log.info("annotate_weather_with_behavior: no GSI series (%s)", e)
+    by_day: dict = {}
+
+    def f(t_ms: int) -> tuple[float, float]:
+        if gsi_doc is not None:
+            from ..timeutil import local_dt
+
+            day = local_dt(int(t_ms), tz).date()
+            if day not in by_day:
+                g = gsi_at(gsi_doc, int(t_ms))
+                by_day[day] = None if g is None else moisture.gsi_live_fuel_moisture(g["gsi"])
+            if by_day[day] is not None:
+                return by_day[day]
+        return moisture.live_fuel_moisture(local_month(int(t_ms), tz), precip_wy)
+
+    return f
+
+
 def _clip(v: float, lo: float, hi: float) -> float:
     v = float(v)
     if not math.isfinite(v):
@@ -233,6 +262,7 @@ def annotate_weather_with_behavior(bundle_dir: Path) -> None:
         precip_wy, _ = precip_to(bdir, man, int(t[0]), fetch=False)
     except Exception as e:  # noqa: BLE001 - the plain month table is a safe fallback
         log.info("annotate_weather_with_behavior: no water-year precipitation (%s)", e)
+    live_fm = _live_moisture_by_hour(bdir, man, tz, precip_wy)
     flame_ft = np.zeros(n)
     ros_ch = np.zeros(n)
     for k in range(n):
@@ -242,8 +272,7 @@ def annotate_weather_with_behavior(bundle_dir: Path) -> None:
         z = zones[key]
         if z is None:
             continue
-        month = local_month(int(t[k]), tz)
-        herb, woody = moisture.live_fuel_moisture(month, precip_wy)
+        herb, woody = live_fm(int(t[k]))
         b = surface_behavior(z["fuel_code"], fm1[k], fm10[k], fm100[k], herb, woody, float(wind[k]) * 3.6, z["slope"],
                              canopy_cover=z["canopy_cover"], canopy_height_m=z["canopy_height"])
         flame_ft[k] = b["flame_length_ft"]

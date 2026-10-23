@@ -906,3 +906,102 @@ def water_year_precip(lat: float, lon: float, start_ms: int) -> dict:
         out.update(precip_mm=round(total, 1), days=days, source="open-meteo:" + "+".join(sources),
                    fetched_ms=max(fetched))
     return out
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Daily inputs of the NFDRS 2016 Growing Season Index (live fuel moisture outside California, CONTRACT 14.12.10)
+# ---------------------------------------------------------------------------------------------------------------
+GSI_HOURLY = ("temperature_2m", "relative_humidity_2m")
+GSI_DAILY = ("daylight_duration",)
+GSI_MIN_HOURS = 20          # a local day counts only with at least this many hourly values
+GSI_LIVE_TTL_S = 6 * 3600.0  # live GSI inputs (daily values) are re-asked at most every 6 h
+
+
+def gsi_daily_rows(payload: dict, tz: str | None) -> list[dict]:
+    """Local-day rows ``{date, tmin_c, tmax_c, rhmin_pct, hours, daylight_s}`` from one Open-Meteo answer with hourly
+    ``temperature_2m`` / ``relative_humidity_2m`` (``timeformat=unixtime``) and daily ``daylight_duration``; days are
+    the fire's local calendar days (``tz``; the request asks for the same ``timezone``). Days with fewer than
+    :data:`GSI_MIN_HOURS` values of either variable are left out."""
+    from ..timeutil import local_dt
+
+    hourly = (payload or {}).get("hourly") or {}
+    times = hourly.get("time") or []
+    temp = hourly.get("temperature_2m") or []
+    rh = hourly.get("relative_humidity_2m") or []
+    days: dict[str, dict[str, list[float]]] = {}
+    for i, t in enumerate(times):
+        try:
+            d = local_dt(int(t) * 1000, tz).date().isoformat()
+        except (TypeError, ValueError, OverflowError):
+            continue
+        slot = days.setdefault(d, {"t": [], "rh": []})
+        if i < len(temp) and temp[i] is not None:
+            slot["t"].append(float(temp[i]))
+        if i < len(rh) and rh[i] is not None:
+            slot["rh"].append(float(rh[i]))
+    daylight: dict[str, float] = {}
+    daily = (payload or {}).get("daily") or {}
+    for t, v in zip(daily.get("time") or [], daily.get("daylight_duration") or []):
+        try:
+            if v is not None:
+                daylight[local_dt(int(t) * 1000, tz).date().isoformat()] = float(v)
+        except (TypeError, ValueError, OverflowError):
+            continue
+    rows = []
+    for d in sorted(days):
+        s = days[d]
+        if len(s["t"]) < GSI_MIN_HOURS or len(s["rh"]) < GSI_MIN_HOURS:
+            continue
+        rows.append({"date": d, "tmin_c": round(min(s["t"]), 2), "tmax_c": round(max(s["t"]), 2),
+                     "rhmin_pct": round(min(s["rh"]), 1), "hours": min(len(s["t"]), len(s["rh"])),
+                     "daylight_s": daylight.get(d)})
+    return rows
+
+
+def gsi_inputs(lat: float, lon: float, start_ms: int, end_ms: int, tz: str | None, *, live: bool = False,
+               past_days: int = 28) -> dict:
+    """Daily GSI inputs at (lat, lon) in the fire's local days (pre-registered, docs/validation.md section 10.1).
+
+    * historical (``live=False``): one request to the ERA5 archive (``ARCHIVE_URL``, ``models=era5``) for the local
+      days ``start_ms - past_days`` .. ``end_ms`` (cut at ``now - ERA5_DELAY_DAYS``);
+    * live: the forecast host (``FORECAST_URL``) with ``past_days`` (ERA5 lags about 6 days) and one forecast day.
+
+    Returns ``{rows, source, url, params, from, to, fetched_ms, warnings, refused}``; ``rows`` is None when the request
+    failed (``refused`` True for Open-Meteo's request limit; the reason in ``warnings``). Never raises for provider
+    failures."""
+    from ..timeutil import local_dt
+
+    now = now_ms()
+    out: dict[str, Any] = {"rows": None, "source": "", "url": "", "params": {}, "from": None, "to": None,
+                           "fetched_ms": now, "warnings": [], "refused": False}
+    base = {"latitude": f"{lat:.4f}", "longitude": f"{lon:.4f}", "hourly": ",".join(GSI_HOURLY),
+            "daily": ",".join(GSI_DAILY), "timezone": tz or "GMT", "timeformat": "unixtime"}
+    if live:
+        url, ttl = FORECAST_URL, GSI_LIVE_TTL_S
+        params = {**base, "past_days": str(int(past_days)), "forecast_days": "1"}
+        source = "open-meteo:forecast (past days)"
+    else:
+        a = local_dt(int(start_ms) - int(past_days) * DAY_MS, tz).date()
+        b = local_dt(min(int(end_ms), now - ERA5_DELAY_DAYS * DAY_MS), tz).date()
+        if b < a:
+            out["warnings"].append(f"GSI inputs: the ERA5 archive has no days for {a.isoformat()} yet")
+            return out
+        url, ttl = ARCHIVE_URL, HISTORICAL_TTL_S
+        params = {**base, "models": "era5", "start_date": a.isoformat(), "end_date": b.isoformat()}
+        source = "open-meteo:archive:era5"
+    out.update(url=url, params=params, source=source)
+    try:
+        resp = om_request(url, params, ttl, REQUEST_TIMEOUT_S)
+        rows = gsi_daily_rows(resp.json(), tz)
+    except WeatherQuotaExceeded as e:
+        out["refused"] = True
+        out["warnings"].append(f"GSI inputs refused ({e})")
+        return out
+    except (http.HttpError, WeatherError, ValueError, TypeError, AttributeError, RuntimeError) as e:
+        out["warnings"].append(f"GSI inputs unavailable ({getattr(e, 'message', str(e))[:160]})")
+        return out
+    if not rows:
+        out["warnings"].append("GSI inputs: the answer had no complete local day")
+        return out
+    out.update(rows=rows, fetched_ms=int(resp.fetched_ms or now), **{"from": rows[0]["date"], "to": rows[-1]["date"]})
+    return out

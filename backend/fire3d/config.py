@@ -183,6 +183,23 @@ GREENUP_MIN_PRECIP_MM = 25.0
 GREENUP_FULL_PRECIP_MM = 100.0
 DROUGHT_ADJUSTED_LFM = True                                         # False: the plain month table (SPEC 8.4)
 
+# Live fuel moisture outside California (CONTRACT 14.12.10; pre-registered in docs/validation.md section 10.1): the
+# NFDRS 2016 Growing Season Index (Jolly et al. 2005) with the default parameters of the US Forest Service reference
+# code NFDRS4 (github.com/firelab/NFDRS4, livefuelmoisture.cpp). Not fitted to any fire. California keeps the month
+# table above (the switch is summary.state, spread/moisture.py and build/weather_bundle.py).
+GSI_TMIN_C: tuple[float, float] = (-2.0, 5.0)                       # iTmin 0 at -2 °C .. 1 at 5 °C (daily minimum)
+GSI_VPD_PA: tuple[float, float] = (900.0, 4100.0)                   # iVPD 1 at 900 Pa .. 0 at 4100 Pa
+GSI_DAYL_S: tuple[float, float] = (36000.0, 39600.0)                # iDayl 0 at 10 h .. 1 at 11 h
+GSI_RH_FLOOR_PCT = 5.0                                              # VPD uses max(daily minimum RH, 5 %)
+GSI_MA_DAYS = 21                                                    # moving average of the daily index
+GSI_MAX = 1.0                                                       # MaxGSI (scales the mean before the mapping)
+GSI_GREENUP = 0.5                                                   # green-up threshold of the scaled index
+GSI_HERB_LFM: tuple[float, float] = (0.30, 2.50)                    # herbaceous: 30 % below green-up .. 250 % at 1
+GSI_WOODY_LFM: tuple[float, float] = (0.60, 2.00)                   # woody: 60 % .. 200 %
+GSI_SERIES_PAST_DAYS = 28                                           # daily inputs from start - 28 d
+# Validation ablation only (spread/validate.py --lfm table): force California's rule outside California too.
+LFM_FORCE_CALIFORNIA = False
+
 # ----------------------------------------------------------------------------------------------------------------
 # Calibrated forecast settings (docs/validation.md: deterministic hindcasts of the 2025 Eaton, Madre and Palisades
 # fires from 8 start times, 32 scored leads; highest mean growth-only Sorensen). These are the SpreadSettings that
