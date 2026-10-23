@@ -59,12 +59,77 @@ class ContractModel(BaseModel):
 # ----------------------------------------------------------------------------------------------------------------
 # SPEC 5.1 - bundle
 # ----------------------------------------------------------------------------------------------------------------
+# Brief 3 (CONTRACT 14.1): whose record a list row is, and the ten accuracy regions (14.4).
+RecordSource = Literal["calfire", "wfigs"]
+AccuracyRegionId = Literal["NWCC", "NRCC", "GBCC", "SWCC", "SACC-SP", "SACC-SE", "RMCC", "EACC", "ONCC", "OSCC"]
+
+
+class OtherRecord(ContractModel):
+    """Another agency's record of the same fire (California rows matched to WFIGS records; CONTRACT 14.1)."""
+
+    source: RecordSource
+    id: str                             # CAL FIRE UniqueId or IRWIN id
+    name: str                           # that record's name, verbatim (a complex member's own name)
+    issuer: str                         # same rule as record_issuer
+    agency: str | None                  # plain protecting-agency name, null if unknown
+    agency_code: str | None             # verbatim code ("USFS"), null for CAL FIRE
+    acres: float | None
+    percent_contained: float | None
+    is_active: bool                     # that agency's own active status
+    updated_ms: int | None              # that record's own update time
+    url: str | None                     # that record's human-readable page (https)
+
+
+def _fill_summary_defaults(s: IncidentSummary) -> None:
+    """CONTRACT 14.1 defaults for old manifests and fixtures (CAL FIRE rows without the brief-3 fields): ``uid <-
+    calfire_uid``, ``record_source "calfire"``, ``record_issuer "CAL FIRE"``, ``agency "CAL FIRE"``, ``source_name <-
+    name``, ``active_sources ["calfire"] if is_active else []``, and ``state`` / ``time_zone`` from the location
+    (``regions.state_at`` / ``regions.time_zone_at``; fallback the state's main zone, then "UTC"; never
+    America/Los_Angeles by default). Only fields the input did not give are filled (``model_fields_set``).
+
+    Runs after validation (not as a before-validator), so strict JSON checks keep their JSON semantics."""
+    given = s.model_fields_set
+    put = lambda k, v: object.__setattr__(s, k, v)  # no validate_assignment on contract models
+    if "record_source" not in given or s.record_source is None:
+        put("record_source", "calfire")
+    cal = s.record_source == "calfire"
+    if "uid" not in given:
+        put("uid", s.calfire_uid)
+    if "record_issuer" not in given and cal:
+        put("record_issuer", "CAL FIRE")
+    if "agency" not in given and cal:
+        put("agency", "CAL FIRE")
+    if "source_name" not in given:
+        put("source_name", s.name)
+    if "active_sources" not in given and cal:
+        put("active_sources", ["calfire"] if s.is_active else [])
+    if "state" not in given or "time_zone" not in given:
+        _fill_place(s, given, put)
+
+
+def _fill_place(s: IncidentSummary, given: set[str], put: Any) -> None:
+    """``state`` / ``time_zone`` of a summary from its location (``fire3d.regions``, offline). Without the regions
+    module (before us-catalog M2) both stay unset, so readers show the viewer's zone, labelled (never Pacific)."""
+    try:
+        from . import regions
+    except ImportError:
+        return
+    lon, lat = float(s.lon), float(s.lat)
+    if "state" not in given:
+        put("state", regions.state_at(lon, lat))
+    if "time_zone" not in given:
+        tz = regions.time_zone_at(lon, lat)
+        if tz is None and s.state:
+            tz = regions.main_zone(s.state)
+        put("time_zone", tz or "UTC")
+
+
 class IncidentSummary(ContractModel):
     id: str
     name: str
     mode: Mode
     year: int
-    calfire_uid: str
+    calfire_uid: str                    # DEPRECATED (brief 3): the CAL FIRE UniqueId, or "" when not CAL FIRE's record
     started_ms: int
     updated_ms: int | None
     contained_ms: int | None
@@ -80,6 +145,30 @@ class IncidentSummary(ContractModel):
     detections_24h: int | None          # live only
     bundle_status: BundleStatus
     bundle_built_ms: int | None
+    # Brief 3 additions (CONTRACT 14.1). All defaulted in wave 1 (14.0); the (R) ones become required at the
+    # integration. The before-validator fills old manifests and fixtures, so responses always carry them.
+    uid: str | None = Optional_()                       # (R) CAL FIRE UniqueId, or IRWIN id (upper case, no braces)
+    record_source: RecordSource | None = Optional_()    # (R) whose record this row is; absent = "calfire"
+    record_issuer: str | None = Optional_()             # (R) "CAL FIRE" | "USFS via NIFC WFIGS" | "NIFC WFIGS (IRWIN)"
+    state: str | None = Optional_()                     # (R) USPS code of the point of origin (48 + "DC")
+    time_zone: str | None = Optional_()                 # (R) IANA zone of the reported location, never assumed
+    agency: str | None = None                           # protecting agency, plain name; "CAL FIRE" for CAL FIRE rows
+    agency_code: str | None = None                      # protecting-agency code, verbatim ("USFS", "C&L")
+    irwin_id: str | None = None                         # WFIGS rows; CAL FIRE rows matched to ONE WFIGS fire
+    unique_fire_id: str | None = None                   # NWCG UniqueFireIdentifier, e.g. "2026-TXTXS-000006"
+    source_name: str | None = Optional_()               # the record's name verbatim
+    gacc: str | None = None                             # WFIGS GACC code verbatim
+    accuracy_region: AccuracyRegionId | None = None     # null: "Accuracy not yet tested here" (14.4)
+    active_sources: list[RecordSource] = Field(default_factory=list)   # which records call the fire active
+    other_records: list[OtherRecord] = Field(default_factory=list)     # California rows matched to WFIGS records
+    complex_name: str | None = None                     # a member fire outside California: "Part of the X Complex"
+    complex_members: list[str] = Field(default_factory=list)          # a CAL FIRE complex row: WFIGS member names
+    aliases: list[str] = Field(default_factory=list)    # other ids that resolve to this row (14.2 "Id pinning")
+
+    @model_validator(mode="after")
+    def _brief3_defaults(self) -> IncidentSummary:
+        _fill_summary_defaults(self)
+        return self
 
 
 class LayerInfo(ContractModel):
@@ -338,6 +427,7 @@ class SkillEntry(ContractModel):
     sorensen: float
     observed_acres: float
     forecast_acres_p50: float
+    growth_sorensen: float | None = Optional_()   # (R) brief 3 (CONTRACT 14.12.7): Sørensen of the new growth only
 
 
 class ForecastManifest(ContractModel):
@@ -407,11 +497,22 @@ class IncidentListRow(IncidentSummary):
     bbox_lonlat: tuple[float, float, float, float] | None    # w, s, e, n of manifest.grid; null unless ready
 
 
+class ListSource(ContractModel):
+    """One source list behind ``GET /api/incidents`` (CONTRACT 14.1)."""
+
+    id: RecordSource
+    name: str                           # "CAL FIRE" | "NIFC WFIGS (IRWIN)"
+    status: Literal["available", "unavailable"]
+    retrieved_ms: int | None            # when Fire-3d fetched that list (never an issue time)
+    reason: str | None                  # plain words when unavailable
+
+
 class IncidentListResponse(ContractModel):
     mode: Mode
     updated_ms: int
     incidents: list[IncidentListRow]
-    year: int | None = Optional_()      # historical lists: the CAL FIRE year listed
+    year: int | None = Optional_()      # historical lists: the year listed
+    sources: list[ListSource] | None = Optional_()   # (R) brief 3: which source lists answered (14.1)
 
 
 class IncidentDetailResponse(ContractModel):
@@ -439,15 +540,115 @@ class LiveStatus(ContractModel):
     last_refresh_ms: int | None
     next_refresh_ms: int | None
     active_incidents: int
-    detections_24h_ca: int | None
+    detections_24h_ca: int | None       # kept for one release (brief 3)
     auto_build: bool
+    detections_24h: int | None = Optional_()   # (R) brief 3: FIRMS feed rows of the last 24 h in the lower-48 states
+
+
+# ----------------------------------------------------------------------------------------------------------------
+# Brief 3 (CONTRACT 14.3, 14.4): point lookup and accuracy regions
+# ----------------------------------------------------------------------------------------------------------------
+Coverage = Literal["lower48", "alaska", "hawaii", "territory", "outside_us"]
+AccuracyStatus = Literal["tested", "limited", "untested"]
+
+
+class GeoCounty(ContractModel):
+    fips: str
+    name: str
+
+
+class GeoLookup(ContractModel):
+    """``GET /api/geo/lookup?lon=&lat=`` (CONTRACT 14.3)."""
+
+    lon: float
+    lat: float
+    coverage: Coverage
+    supported: bool                     # coverage == "lower48"
+    state: str | None                   # USPS (lower 48 + DC only)
+    state_name: str | None
+    county: GeoCounty | None
+    time_zone: str | None               # IANA; null when not supported
+    time_zone_name: str | None          # "Mountain Time"
+    note: str | None                    # the 14.14 coverage sentence when not supported, else null
+
+
+class AccuracyFire(ContractModel):
+    id: str
+    name: str
+    state: str
+    n_leads: int
+    growth_sorensen: float
+    fuels_edition: str
+    lfm_method: str
+    era5_hours: float
+    gfs_fill_hours: float | None = Optional_()   # hours where HRRR was missing and GFS filled it
+    weather_source: str | None = Optional_()     # the bundle's verbatim weather source
+    replaced: str | None = Optional_()           # the V 3 fire this one replaced and the failed check, else null
+
+
+class AccuracyRegion(ContractModel):
+    id: AccuracyRegionId
+    name: str
+    status: AccuracyStatus
+    in_sample: bool | None = Optional_()
+    seed: bool | None = Optional_()
+    n_fires: int
+    n_leads: int | None = Optional_()
+    growth_sorensen: float | None = Optional_()  # mean over fires of each fire's mean growth Sørensen
+    range: tuple[float, float] | None = Optional_()
+    pooled_leads: float | None = Optional_()
+    ignition_relative: float | None = Optional_()
+    by_lead: dict[str, float] | None = Optional_()   # keys "12", "24", "48", "72"
+    growth_ratio_median: float | None = Optional_()
+    years: list[int] | None = Optional_()
+    lfm_method: str | None = Optional_()
+    fuels_editions: list[str] | None = Optional_()
+    fuel_groups_tested: list[str] | None = Optional_()
+    caveats: list[str] | None = Optional_()
+    fires: list[AccuracyFire] | None = Optional_()
+
+
+class AccuracyModelInfo(ContractModel):
+    engine: str
+    settings: str
+
+
+class AccuracyMethod(ContractModel):
+    metric: Literal["growth_sorensen"]
+    forecast: str
+    leads_h: list[float]
+    aggregate: Literal["mean_of_fire_means"]
+    min_fires: int
+    min_leads: int
+    weather: str
+    starts: str
+    secondary: str
+
+
+class AccuracyAssignment(ContractModel):
+    by: str
+    split: dict[str, list[str]]
+    fallback: str
+
+
+class AccuracyRegionsResponse(ContractModel):
+    """``GET /api/accuracy-regions``: ``regional_accuracy.json`` plus ``served_ms`` (CONTRACT 14.4)."""
+
+    schema_version: Literal[1]
+    generated_ms: int
+    served_ms: int
+    model: AccuracyModelInfo
+    method: AccuracyMethod
+    assignment: AccuracyAssignment
+    regions: list[AccuracyRegion]       # all ten ids, always
 
 
 # ----------------------------------------------------------------------------------------------------------------
 # BRIEF-2 official endpoints (api/official.py; docs/redesign/CONTRACT.md section 13, official-backend)
 # ----------------------------------------------------------------------------------------------------------------
 OfficialStatus = Literal["available", "unavailable", "not_available_for_past_dates"]
-OfficialReasonCode = Literal["past_date", "upstream_error", "not_covered"]
+OfficialKind = Literal["calfire", "fire_weather", "incident_record", "local_alerts"]       # brief 3 widened (14.5)
+OfficialReasonCode = Literal["past_date", "upstream_error", "not_covered", "state_not_available"]   # brief 3 widened
 AlertPhase = Literal["upcoming", "in_effect", "ended"]
 
 
@@ -462,7 +663,7 @@ class OfficialSource(ContractModel):
 class OfficialEnvelope(ContractModel):
     """The extras-style envelope shared by the official endpoints."""
 
-    kind: Literal["calfire", "fire_weather"]
+    kind: OfficialKind
     status: OfficialStatus
     reason_code: OfficialReasonCode | None
     reason: str | None
@@ -533,6 +734,7 @@ class FireWeatherAlert(ContractModel):
     nearest_km: float | None
     archived: bool
     phase: AlertPhase
+    time_zone: str | None = Optional_()   # (R) brief 3 (14.6): IANA zone of the alert's first zone, else its state's
 
 
 class FireWeatherResponse(OfficialEnvelope):
@@ -540,6 +742,111 @@ class FireWeatherResponse(OfficialEnvelope):
     zones: dict[str, Any]               # GeoJSON FeatureCollection; properties ugc, name, alert_ids
     area_bbox: tuple[float, float, float, float] | None
     reported_location: tuple[float, float] | None    # lon, lat
+    states_checked: list[str] | None = Optional_()   # (R) brief 3 (14.6): the states this answer covers; absent = ["CA"]
+    alert_states: list[str] | None = Optional_()     # (R) brief 3 (14.6): the states with at least one alert here
+
+
+# ----------------------------------------------------------------------------------------------------------------
+# Brief 3 official endpoints (CONTRACT 14.5 incident record, 14.7 local officials' messages)
+# ----------------------------------------------------------------------------------------------------------------
+class IncidentRecordCurrent(ContractModel):
+    name: str                           # verbatim
+    acres: float | None
+    percent_contained: float | None
+    is_active: bool
+    discovered_ms: int | None
+    contained_ms: int | None
+    controlled_ms: int | None
+    out_ms: int | None
+    updated_ms: int | None              # ModifiedOnDateTime_dt: the record's own update time
+    ics209_report_ms: int | None
+
+
+class IncidentRecordComplex(ContractModel):
+    name: str
+    id: str | None
+
+
+class IncidentRecordResponse(OfficialEnvelope):
+    """``GET /api/official/incident-record?incident=<id>`` (kind "incident_record", CONTRACT 14.5)."""
+
+    kind: Literal["incident_record"]
+    record_source: Literal["wfigs"]
+    irwin_id: str | None
+    unique_fire_id: str | None
+    publisher: Literal["NIFC WFIGS (IRWIN)"]
+    agency_code: str | None             # protecting-agency code, verbatim
+    agency: str | None                  # its plain name (nwcg_agency_codes.json); null when the code is unknown
+    protecting_unit: str | None
+    state: str | None
+    county: str | None
+    time_zone: str
+    incident_url: str | None            # the all-years layer's f=html query by IrwinID (https)
+    dataset_url: str                    # the NIFC Open Data item page ("about this source")
+    current: IncidentRecordCurrent | None
+    complex: IncidentRecordComplex | None
+    changes: list[Any] = Field(max_length=0)   # history outside California is deferred: always []
+    recording_since_ms: None
+
+
+LocalChannel = Literal["nws_api", "openfema_archive"]
+
+
+class LocalAlert(ContractModel):
+    id: str                             # the CAP identifier, verbatim
+    channel: LocalChannel
+    archived: bool
+    event: str                          # verbatim ("Fire Warning", "Evacuation Immediate")
+    event_code: str                     # FRW | EVI | SPW | CDW | CEM | LAE
+    message_type: Literal["Alert", "Update", "Cancel"] | None
+    references: list[str]
+    sender_name: str | None             # verbatim; never the operator's sender address
+    sender_is_platform: bool
+    sent_ms: int | None
+    effective_ms: int | None
+    onset_ms: int | None
+    expires_ms: int | None
+    headline: str | None
+    description: str | None
+    instruction: str | None
+    wea_text: str | None
+    wea_long_text: str | None
+    web: str | None                     # https only; the issuer's own link
+    source_url: str                     # always set, https: where this copy of the message can be read
+    area_desc: str | None
+    same_codes: list[str]
+    ugcs: list[str]
+    polygon: dict[str, Any] | None      # GeoJSON Polygon
+    match: Literal["polygon", "county"]
+    covers_reported_location: bool | None
+    nearest_km: float | None
+    time_zone: str | None               # IANA of its area
+    phase: AlertPhase                   # relative to at_ms when given, else to now
+
+
+class LocalChannelStatus(ContractModel):
+    id: LocalChannel
+    status: Literal["available", "unavailable", "pending", "not_checked"]
+    retrieved_ms: int | None
+    source_updated_ms: int | None
+    reason: str | None
+
+
+class LocalAlertCounty(ContractModel):
+    fips: str
+    name: str
+    state: str
+
+
+class LocalAlertsResponse(OfficialEnvelope):
+    """``GET /api/official/local-alerts`` (kind "local_alerts", CONTRACT 14.7)."""
+
+    kind: Literal["local_alerts"]
+    alerts: list[LocalAlert]
+    channels: list[LocalChannelStatus]
+    area_bbox: tuple[float, float, float, float] | None
+    reported_location: tuple[float, float] | None
+    counties: list[LocalAlertCounty]    # the counties searched (SAME matching)
 
 
 # ----------------------------------------------------------------------------------------------------------------

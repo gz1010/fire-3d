@@ -1,8 +1,10 @@
 // Typed helpers for the Fire-3d HTTP API (SPEC 6). All paths are relative to VITE_API_BASE ('' = same origin;
 // the Vite dev server proxies /api to the backend).
 import type {
+  AccuracyRegionsResponse,
   AircraftResponse,
   ForecastRequest,
+  GeoLookup,
   HealthResponse,
   IncidentDetailResponse,
   IncidentListResponse,
@@ -72,21 +74,27 @@ const enc = encodeURIComponent
 export const getHealth = (opts?: FetchOptions) => fetchJson<HealthResponse>(api('/health'), opts)
 
 export interface IncidentListOptions extends FetchOptions {
-  /** Historical lists: the CAL FIRE year (brief 2, I2). The server default stays 2025, so callers pass it explicitly. */
+  /** Historical lists: the year (brief 2, I2). The server default is the current UTC year (brief 3); callers pass it
+   *  explicitly anyway. */
   year?: number
+  /** Brief 3 (CONTRACT 14.1): only the rows of one state (USPS code, e.g. "OR"); both modes. */
+  state?: string
 }
 
-/** GET /api/incidents?mode=&min_acres=&year= (historical default min_acres = 300 and year = 2025 server-side). */
+/** GET /api/incidents?mode=&min_acres=&year=&state= (historical default min_acres = 300 and year = the current UTC
+ *  year server-side). */
 export function getIncidents(mode: Mode, minAcres?: number, opts?: IncidentListOptions) {
-  const { year, ...fetchOpts } = opts ?? {}
-  return fetchJson<IncidentListResponse>(api(`/incidents?${incidentListQuery(mode, minAcres, year)}`), fetchOpts)
+  const { year, state, ...fetchOpts } = opts ?? {}
+  return fetchJson<IncidentListResponse>(api(`/incidents?${incidentListQuery(mode, minAcres, year, state)}`), fetchOpts)
 }
 
-/** Query string of the incident list request (exported for tests). */
-export function incidentListQuery(mode: Mode, minAcres?: number, year?: number): string {
+/** Query string of the incident list request (exported for tests). `state` (brief 3) filters both modes. */
+export function incidentListQuery(mode: Mode, minAcres?: number, year?: number, state?: string): string {
   const q = new URLSearchParams({ mode })
   if (minAcres != null) q.set('min_acres', String(minAcres))
   if (year != null && mode === 'historical') q.set('year', String(year))
+  const st = state?.trim().toUpperCase()
+  if (st) q.set('state', st)
   return q.toString()
 }
 
@@ -112,6 +120,22 @@ export function getAircraft(id: string, all = false, opts?: FetchOptions) {
 }
 
 export const getLiveStatus = (opts?: FetchOptions) => fetchJson<LiveStatus>(api('/live/status'), opts)
+
+/** Query string of the point lookup (exported for tests): lon and lat rounded to 1e-5 degrees (about 1 m), so
+ *  nearby repeats share the browser cache (`Cache-Control: public, max-age=86400`). */
+export function geoLookupQuery(lon: number, lat: number): string {
+  const r = (v: number) => String(Math.round(v * 1e5) / 1e5)
+  return new URLSearchParams({ lon: r(lon), lat: r(lat) }).toString()
+}
+
+/** GET /api/geo/lookup?lon=&lat= (brief 3, CONTRACT 14.3): state, county, time zone and coverage at a point. */
+export function getGeoLookup(lon: number, lat: number, opts?: FetchOptions): Promise<GeoLookup> {
+  return fetchJson<GeoLookup>(api(`/geo/lookup?${geoLookupQuery(lon, lat)}`), opts)
+}
+
+/** GET /api/accuracy-regions (brief 3, CONTRACT 14.4): the regional accuracy file plus `served_ms`. */
+export const getAccuracyRegions = (opts?: FetchOptions): Promise<AccuracyRegionsResponse> =>
+  fetchJson<AccuracyRegionsResponse>(api('/accuracy-regions'), opts)
 
 /** URL of a bundle file; `v` (manifest.built_ms) busts caches when the bundle is rebuilt. */
 export function bundleUrl(id: string, path: string, v?: number | string | null): string {

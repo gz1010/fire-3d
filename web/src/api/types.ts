@@ -6,11 +6,31 @@ export type Mode = 'live' | 'historical'
 
 export const NEVER = 1.0e6
 
+// Brief 3 (CONTRACT 14.1): whose record a list row is, and the ten accuracy regions (14.4).
+export type RecordSource = 'calfire' | 'wfigs'
+export type AccuracyRegionId = 'NWCC' | 'NRCC' | 'GBCC' | 'SWCC' | 'SACC-SP' | 'SACC-SE' | 'RMCC' | 'EACC' | 'ONCC' | 'OSCC'
+
+/** Another agency's record of the same fire (California rows matched to WFIGS records; a complex row: one per member). */
+export interface OtherRecord {
+  source: RecordSource
+  id: string // CAL FIRE UniqueId or IRWIN id
+  name: string // that record's name, verbatim (a complex member's own name)
+  issuer: string // same rule as record_issuer
+  agency: string | null // plain protecting-agency name, null if unknown
+  agency_code: string | null // verbatim code ("USFS"), null for CAL FIRE
+  acres: number | null
+  percent_contained: number | null
+  is_active: boolean // that agency's own active status
+  updated_ms: number | null // that record's own update time
+  url: string | null // that record's human-readable page (https)
+}
+
 export interface IncidentSummary {
   id: string
   name: string
   mode: Mode
   year: number
+  /** @deprecated Brief 3: the CAL FIRE UniqueId, or '' when the row is not CAL FIRE's record. Use `uid` + `record_source`. */
   calfire_uid: string
   started_ms: number
   updated_ms: number | null
@@ -30,6 +50,25 @@ export interface IncidentSummary {
   /** List rows only (brief 2, I2): the built bundle's analysis-area box [w, s, e, n] in lon/lat; null or absent when the
    *  fire has no ready bundle. */
   bbox_lonlat?: [number, number, number, number] | null
+  // Brief 3 additions (CONTRACT 14.1). Optional in wave 1; the five (R) fields become required at the integration.
+  // The backend always sends every field. A missing time_zone means the viewer's zone, labelled: never Pacific.
+  uid?: string // (R) CAL FIRE UniqueId, or IRWIN id (upper case, no braces)
+  record_source?: RecordSource // (R) whose record this row is; absent = 'calfire' (old fixtures)
+  record_issuer?: string // (R) "CAL FIRE" | "USFS via NIFC WFIGS" | "NIFC WFIGS (IRWIN)" (14.2)
+  state?: string | null // (R) USPS code of the point of origin (48 states + "DC"); null only off-US fixtures
+  time_zone?: string // (R) IANA zone of the reported location (regions.time_zone_at), never assumed
+  agency?: string | null // protecting agency, plain name: "USDA Forest Service"; "CAL FIRE" for CAL FIRE rows; null if unknown
+  agency_code?: string | null // protecting-agency code, verbatim ("USFS", "C&L"); null for CAL FIRE rows
+  irwin_id?: string | null // WFIGS rows; CAL FIRE rows matched to ONE WFIGS fire; null on a CAL FIRE complex row
+  unique_fire_id?: string | null // NWCG UniqueFireIdentifier, e.g. "2026-TXTXS-000006"
+  source_name?: string // the record's name verbatim (WFIGS names are often ALL CAPS)
+  gacc?: string | null // WFIGS GACC code verbatim ("NWCC", "OSCC", ...)
+  accuracy_region?: AccuracyRegionId | null // null: "Accuracy not yet tested here" (14.4)
+  active_sources?: RecordSource[] // which records call the fire active (California may list both)
+  other_records?: OtherRecord[] // [] unless a California row matched WFIGS records (a complex row: one per member)
+  complex_name?: string | null // a member fire outside California: "Part of the X Complex"
+  complex_members?: string[] // a CAL FIRE complex row: its WFIGS member names, verbatim; [] otherwise
+  aliases?: string[] // other ids that resolve to this row (14.2 "Id pinning"); [] otherwise
 }
 
 export type LayerGrid = 'render' | 'fire' | 'image' | 'points'
@@ -267,7 +306,7 @@ export interface ForecastManifest {
     area_acres_p90: number[]
     ros_ch_per_h_p50: number[]
   }
-  skill?: { lead_h: number; sorensen: number; observed_acres: number; forecast_acres_p50: number }[] // historical runs only
+  skill?: { lead_h: number; sorensen: number; observed_acres: number; forecast_acres_p50: number; growth_sorensen?: number | null }[] // historical runs only; growth_sorensen: brief 3 (14.12.7)
   runtime_s: number
   warnings: string[]
 }
@@ -317,12 +356,23 @@ export interface HealthResponse {
   version: string
 }
 
+/** One source list behind `GET /api/incidents` (brief 3, CONTRACT 14.1). */
+export interface ListSource {
+  id: 'calfire' | 'wfigs'
+  name: string // "CAL FIRE" | "NIFC WFIGS (IRWIN)"
+  status: 'available' | 'unavailable'
+  retrieved_ms: number | null // when Fire-3d fetched that list (never an issue time)
+  reason: string | null // plain words when unavailable
+}
+
 export interface IncidentListResponse {
   mode: Mode
   updated_ms: number
   incidents: IncidentSummary[]
-  /** Historical lists: the CAL FIRE year served (brief 2: `?year=`; the server default stays 2025). */
+  /** Historical lists: the year served (`?year=`; brief 3: the server default is the current UTC year). */
   year?: number
+  /** (R) Brief 3: which source lists answered; a WFIGS or CAL FIRE outage shows here (14.1, 14.14). */
+  sources?: ListSource[]
 }
 
 export interface IncidentDetailResponse {
@@ -352,6 +402,86 @@ export interface LiveStatus {
   last_refresh_ms: number | null
   next_refresh_ms: number | null
   active_incidents: number
+  /** @deprecated Brief 3: kept for one release; use `detections_24h` (lower 48). */
   detections_24h_ca: number | null
   auto_build: boolean
+  /** (R) Brief 3: FIRMS feed rows of the last 24 h inside the lower-48 state polygons. */
+  detections_24h?: number | null
+}
+
+// ---------------------------------------------------------------------------------------------- Brief 3 (CONTRACT 14.3, 14.4)
+
+export type Coverage = 'lower48' | 'alaska' | 'hawaii' | 'territory' | 'outside_us'
+
+/** `GET /api/geo/lookup?lon=&lat=`: state, county, time zone and coverage at a point (offline, CONTRACT 14.3). */
+export interface GeoLookup {
+  lon: number
+  lat: number
+  coverage: Coverage
+  supported: boolean // coverage === 'lower48'
+  state: string | null // USPS (lower 48 + DC only)
+  state_name: string | null
+  county: { fips: string; name: string } | null
+  time_zone: string | null // IANA; null when not supported
+  time_zone_name: string | null // "Mountain Time"
+  note: string | null // the 14.14 coverage sentence when not supported, else null
+}
+
+export type AccuracyStatus = 'tested' | 'limited' | 'untested'
+
+export interface AccuracyFire {
+  id: string
+  name: string
+  state: string
+  n_leads: number
+  growth_sorensen: number
+  fuels_edition: string
+  lfm_method: string
+  era5_hours: number
+  gfs_fill_hours?: number // hours of the model window where HRRR was missing and GFS filled it (0 for pure HRRR)
+  weather_source?: string // the bundle's verbatim source ("open-meteo:historical-forecast:gfs_hrrr")
+  replaced?: string | null // the V §3 fire this one replaced and the failed check, else null
+}
+
+export interface AccuracyRegion {
+  id: AccuracyRegionId
+  name: string
+  status: AccuracyStatus
+  in_sample?: boolean
+  seed?: boolean
+  n_fires: number
+  n_leads?: number
+  growth_sorensen?: number | null // mean over fires of each fire's mean growth Sørensen (31-member p50)
+  range?: [number, number] | null // min-max of the per-fire values
+  pooled_leads?: number | null
+  ignition_relative?: number | null
+  by_lead?: Record<string, number> // keys "12", "24", "48", "72" (lead hours as strings)
+  growth_ratio_median?: number | null
+  years?: number[]
+  lfm_method?: string
+  fuels_editions?: string[]
+  fuel_groups_tested?: string[]
+  caveats?: string[]
+  fires?: AccuracyFire[]
+}
+
+/** `GET /api/accuracy-regions`: `regional_accuracy.json` plus `served_ms` (CONTRACT 14.4). */
+export interface AccuracyRegionsResponse {
+  schema_version: 1
+  generated_ms: number
+  served_ms: number
+  model: { engine: string; settings: string }
+  method: {
+    metric: 'growth_sorensen'
+    forecast: string
+    leads_h: number[]
+    aggregate: 'mean_of_fire_means'
+    min_fires: number
+    min_leads: number
+    weather: string
+    starts: string
+    secondary: string
+  }
+  assignment: { by: string; split: Record<string, string[]>; fallback: string }
+  regions: AccuracyRegion[] // all ten ids, always
 }
