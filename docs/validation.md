@@ -751,3 +751,30 @@ Nothing else justifies a replacement, and no fire is dropped after it has a scor
 **No tuning to these fires.** Any change tried after the first score outside California is reported with its
 values on every fire and on California's 32 leads; a change is adopted only if it also improves the California
 result, and then every region whose fires informed it is marked `in_sample: true`.
+
+### 10.2 California baseline (re-measured 2026-10-23)
+
+Madre (`2025-madre-fire-01e7e8`) was rebuilt here with `--require-hrrr` (06:36-06:43 UTC, 394 s, after a weather
+probe said `overall ok`): 225 h of HRRR, 0 GFS-filled and 0 ERA5 hours; observed final area 81,938 ac (CAL FIRE
+80,779 ac, ratio 1.014, the same as section 1); water-year precipitation 207 mm in `sim/antecedent.json` (section
+3.1's value); LANDFIRE LF2024; UTM 11; 7 WFIGS perimeters. Eaton and Palisades are the bundles rebuilt earlier in this
+session (full HRRR, LF2024).
+
+The 31-member p50 hindcasts at section 5.1's starts (Eaton and Palisades ignition + 6/12/24 h: Jan 8 08:18, 14:18 and
+Jan 9 02:18 UTC = Jan 8 00:18, 06:18 and 18:18 PST; Jan 8 00:20, 06:20 and 18:20 UTC = Jan 7 16:20, 22:20 and Jan 8
+10:20 PST; Madre ignition + 24/48 h: Jul 3 and Jul 4 20:07 UTC = 13:07 PDT), operational settings, multiplier 0.5:
+
+| run | Eaton | Madre | Palisades | 32 leads | +12 h | +24 h | +48 h | +72 h | growth ratio (median) | total Sørensen |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| section 5.1 (2026-10-18, the user's local bundles) | 0.438 | 0.395 | 0.467 | 0.438 | 0.349 | 0.432 | 0.481 | 0.490 | 1.85 | – |
+| **step 1**: brief-3 wave-1 code before GSI (commit 29f0e2d, a separate worktree on the same bundles) | 0.4379 | 0.3949 | 0.4670 | 0.4381 | 0.3491 | 0.4319 | 0.4809 | 0.4904 | 1.85 | 0.827 |
+| **step 2**: with the GSI code (commit 3283526 and later) | 0.4379 | 0.3949 | 0.4670 | 0.4381 | 0.3491 | 0.4319 | 0.4809 | 0.4904 | 1.85 | 0.827 |
+
+- Step 1 equals section 5.1 to the third decimal: brief 3's changes (perimeters by IRWIN id outside California,
+  issuer text, fire-local time zones, LANDFIRE editions, weather quota handling) did not change California's scores.
+- Step 2 equals step 1 exactly on every one of the 32 leads (largest difference 0.0 in growth and total Sørensen; the
+  seeds are fixed). California's live fuel moisture is unchanged by the GSI code: herb 30 %, woody 70 % at every start
+  (Eaton and Palisades: the January drought adjustment with 12 mm and 9 mm of water-year rain; Madre: the July row,
+  207 mm), `lfm_method` `ca_month_table_drought`; `backend/tests/test_gsi.py` checks the values and notes against a
+  frozen copy of the pre-GSI code on the three bundles and `fixture-demo`.
+- These scores stay **in-sample**: the multiplier and its decay were fitted on these three fires (section 3.3).

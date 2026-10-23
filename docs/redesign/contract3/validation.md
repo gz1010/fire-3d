@@ -57,8 +57,9 @@ fires, the regional accuracy file and docs/validation.md section 10. This note i
   settings, in_sample_regions, region_caveats, starts, secondary)`; CLI `validate regional <fires.json> --out <file>`.
   Region value = mean of the fire means; `pooled_leads`, `by_lead` (keys "12"/"24"/"48"/"72", pooled per lead),
   `range` (min-max of the fire means), `growth_ratio_median` (median of per-lead forecast/observed growth ratios),
-  `ignition_relative` (mean of the fire means of the ignition rows), `fuel_groups_tested` (union of the fires'
-  FBFM40 families with >= 20 % of the burned area, as grass / shrub / timber). Never writes `seed`.
+  `ignition_relative` (mean of the fire means of the ignition rows), `fuel_groups_tested` (union of the fires' fuel
+  words: grass / shrub / timber whose summed LANDFIRE FBFM40 family shares reach 25 % of the fire's burnable burned
+  area; GR grass, GS half grass and half shrub, SH shrub, TU/TL/SB timber). Never writes `seed`.
 - `batch_hindcast(..., start_times_ms=[...])` and the CLI spec `'<id>@2025-08-25T19:30Z,...'`: absolute UTC starts.
 - `live_start_check(..., until_h=)` / `live-start --until`: last issue time after ignition (long-lived fires).
 - `backend/scripts/validate_us_fires.py`: `FIRES` (pre-registered), `starts`, `checks` (protocol step 2),

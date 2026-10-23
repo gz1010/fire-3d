@@ -165,7 +165,7 @@ def starts_markdown() -> str:
 # ----------------------------------------------------------------------------------------------------------------
 FAMILY_WORDS = (("GR", 101, 109, ("grass",)), ("GS", 121, 124, ("grass", "shrub")), ("SH", 141, 149, ("shrub",)),
                 ("TU", 161, 165, ("timber",)), ("TL", 181, 189, ("timber",)), ("SB", 201, 204, ("timber",)))
-FUEL_GROUP_MIN_SHARE = 0.20      # a fuel family counts as tested when >= 20 % of the fire's burnable burned area
+FUEL_GROUP_MIN_SHARE = 0.25      # a fuel word counts as tested when >= 25 % of the fire's burnable burned area
 
 
 def fuel_families(fuel_model, burned) -> dict[str, float]:
@@ -183,12 +183,13 @@ def fuel_families(fuel_model, burned) -> dict[str, float]:
 
 
 def fuel_groups(families: dict[str, float], min_share: float = FUEL_GROUP_MIN_SHARE) -> list[str]:
-    """Plain fuel words (grass, shrub, timber) of the families with at least ``min_share`` of the burned area."""
-    words: set[str] = set()
+    """Plain fuel words (grass, shrub, timber) whose summed FBFM40 family shares reach ``min_share`` of the burnable
+    burned area (GR -> grass; GS half grass, half shrub; SH -> shrub; TU, TL, SB -> timber)."""
+    share: dict[str, float] = {}
     for fam, _, _, w in FAMILY_WORDS:
-        if families.get(fam, 0.0) >= min_share:
-            words.update(w)
-    return sorted(words)
+        for word in w:
+            share[word] = share.get(word, 0.0) + families.get(fam, 0.0) / len(w)
+    return sorted(word for word, v in share.items() if v >= min_share - 1e-9)
 
 
 def bundle_checks(fid: str, fire: TestFire | None = None) -> dict:
@@ -197,7 +198,7 @@ def bundle_checks(fid: str, fire: TestFire | None = None) -> dict:
     hours (with the fill hours that fall inside a scored window), no observed pixel > 2 km outside the final WFIGS
     perimeter, the GSI series, fuel families of the burned area."""
     import numpy as np
-    from shapely.geometry import Point, Polygon
+    from shapely.geometry import Polygon
     from shapely.ops import unary_union
 
     from fire3d import bundle as fb
@@ -269,8 +270,10 @@ def bundle_checks(fid: str, fire: TestFire | None = None) -> dict:
         _, fire_grid = grids_from_manifest(man)
         r, c = np.nonzero(burned)
         x, z = fire_grid.pixel_center_local(r, c)
+        import shapely
+
         zone = shape.buffer(2000.0)
-        outside = sum(1 for xi, zi in zip(np.asarray(x), np.asarray(z)) if not zone.contains(Point(float(xi), float(zi))))
+        outside = int((~shapely.contains_xy(zone, np.asarray(x, dtype=float), np.asarray(z, dtype=float))).sum())
         out["observed_cells_over_2km_outside_final_perimeter"] = int(outside)
         out["final_perimeter_source"] = final.get("source")
         if outside:
@@ -362,6 +365,18 @@ def _load_rows(run_dir: Path, fid: str, what: str) -> list[dict] | None:
     return [r for r in json.loads(p.read_text()).get("rows") or [] if r.get("spread_adjustment", 0.5) == 0.5]
 
 
+def ignition_rows(run_dir: Path, f: TestFire) -> list[dict]:
+    """The ignition + 6/12/24 h rows: their own run, else (Horse Gulch, Greer, Rush, whose label starts include
+    them) the label rows at those starts."""
+    own = _load_rows(run_dir, f.id, "ignition")
+    if own is not None:
+        return own
+    want = {to_ms(x) for x in f.ignition_starts_utc()}
+    if not want <= {to_ms(x) for x in f.main_starts_utc}:
+        return []
+    return [r for r in _load_rows(run_dir, f.id, "main") or [] if r.get("start_ms") in want]
+
+
 def _mean(rows: list[dict] | None, key: str = "sorensen_growth") -> float | None:
     sc = [float(r[key]) for r in rows or [] if "lead_h" in r and r.get(key) is not None]
     return sum(sc) / len(sc) if sc else None
@@ -378,7 +393,7 @@ def collect(run_dir: Path, checks: list[dict], california_meta: dict) -> dict:
             continue
         methods = sorted({x["method"] for x in c.get("live_fuel_moisture") or [] if x["start"] in f.main_starts_utc})
         fires.append({"id": f.id, "name": f.name, "state": f.state, "region": f.region, "year": f.discovery.year,
-                      "rows": rows, "ignition_rows": _load_rows(run_dir, f.id, "ignition") or [],
+                      "rows": rows, "ignition_rows": ignition_rows(run_dir, f),
                       "fuels_edition": c.get("fuels_edition"), "lfm_method": "+".join(methods) or None,
                       "era5_hours": c.get("era5_hours") or 0, "gfs_fill_hours": c.get("gfs_fill_hours") or 0,
                       "weather_source": c.get("weather_source"), "replaced": None,
@@ -430,7 +445,7 @@ def tables_markdown(run_dir: Path, checks: list[dict]) -> str:
             continue
         sc = [r for r in main_rows if "lead_h" in r]
         det = _mean(_load_rows(run_dir, f.id, "main_det"))
-        ign = _mean(_load_rows(run_dir, f.id, "ignition"))
+        ign = _mean(ignition_rows(run_dir, f))
         abl = _mean(_load_rows(run_dir, f.id, "ablation_det"))
         tot = _mean(main_rows, "sorensen")
         og = _mean(main_rows, "observed_growth_acres")

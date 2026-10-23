@@ -51,8 +51,10 @@ def test_fuel_families_and_groups(vf) -> None:
     burned = np.array([[True, True, True, True], [True, True, True, False]])
     fam = vf.fuel_families(fuel, burned)
     assert fam == {"GR": pytest.approx(2 / 6, abs=1e-3), "TU": pytest.approx(1 / 6, abs=1e-3), "TL": 0.5}
-    assert vf.fuel_groups(fam) == ["grass", "timber"]                     # TU 17 % alone would not count; TL does
-    assert vf.fuel_groups({"GS": 0.6, "SH": 0.1}) == ["grass", "shrub"]
+    assert vf.fuel_groups(fam) == ["grass", "timber"]                     # timber = TU + TL = 67 %
+    assert vf.fuel_groups({"GS": 0.6, "SH": 0.1}) == ["grass", "shrub"]  # GS is half grass, half shrub
+    assert vf.fuel_groups({"TU": 0.53, "TL": 0.11, "SH": 0.15, "GS": 0.10, "GR": 0.10}) == ["timber"]
+    assert vf.fuel_groups({"GR": 0.25, "TL": 0.75}) == ["grass", "timber"]
     assert vf.fuel_groups({}) == []
 
 
@@ -70,3 +72,14 @@ def test_collect_skips_failed_checks(vf, tmp_path: Path) -> None:
     f = spec["fires"][0]
     assert f["lfm_method"] == "gsi_nfdrs2016" and f["region"] == "NWCC" and f["year"] == 2025 and f["replaced"] is None
     assert spec["region_caveats"]["NWCC"][0].startswith("Two fires") and spec["in_sample_regions"] == ["OSCC"]
+
+
+def test_ignition_rows_reuse_label_starts(vf, tmp_path: Path) -> None:
+    gr = vf.fire_by_id("2025-greer-a746c6")
+    rows = [{"lead_h": 12.0, "sorensen": 0.8, "sorensen_growth": 0.1 * (i + 1), "start_ms": vf.to_ms(s)}
+            for i, s in enumerate(gr.main_starts_utc)]
+    (tmp_path / f"{gr.id}.main.json").write_text(json.dumps({"rows": rows}))
+    assert [r["sorensen_growth"] for r in vf.ignition_rows(tmp_path, gr)] == [0.1, 0.2, 0.30000000000000004]
+    em = vf.fire_by_id("2025-emigrant-241e2b")                 # its ignition starts are not label starts
+    (tmp_path / f"{em.id}.main.json").write_text(json.dumps({"rows": rows}))
+    assert vf.ignition_rows(tmp_path, em) == []

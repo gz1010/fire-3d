@@ -37,6 +37,12 @@ Role `validation` (wave 2). Ports: API 8716, no Vite. Scratch: session scratchpa
 | 04:40:33 | probe | forecast ok, historical-forecast and archive daily_limit; then the usage limit stopped the session |
 | 06:27:23 | probe | forecast and historical-forecast unreachable (connect timeout), archive ok, ensemble ok |
 | 06:28 | queue q2 started | log: scratchpad validation/logs/queue_q2.log |
+| 06:28:33 | probe | forecast unreachable, historical-forecast ok, archive ok -> Black Cove --force |
+| 06:29:03 | Black Cove build | **ready** in 28 s (GSI series ERA5 2025-02-16..03-30); checks ok (ratio 1.077) |
+| 06:29:08 | probe overall ok -> Emigrant | failed in 65 s: one HRRR chunk answered a non-JSON body (424 h missing, no ERA5 allowed) |
+| 06:30:32 | probe (archive, hf ok) -> Lower Sugarloaf | **ready** in 370 s; checks ok (ratio 1.006) |
+| 06:36:56 | probe overall ok -> Madre (CA) | **ready** in 394 s; 225 h HRRR, antecedent 207 mm, 81,938 ac |
+| 06:43:52 | probe (hf, archive ok) -> Emigrant | **ready** in 48 s; 424 h HRRR, 33,132 ac |
 
 ## Open problems
 - none yet
