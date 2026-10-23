@@ -11,9 +11,11 @@ import {
   areaSub,
   cancelledLookup,
   decide,
+  fireResultFacts,
   incidentAction,
   likelyMissingWestSign,
   looksLikeAddress,
+  noMatchMessage,
   noPlaceMessage,
   NOT_SUPPORTED_NOTE,
   OUTSIDE_LOWER48_WARNING,
@@ -344,6 +346,18 @@ describe('national search (brief 3, §14.10, W6)', () => {
     expect(stripStateWords('new mexico 87501')).toBe('87501')
     expect(looksLikeZip('Boise 83702')).toBe(false)
   })
+  it('fire results say where each fire is with its state, so same-name fires of different states differ (review UX-M2)', () => {
+    const ne = inc('2026-cottonwood-ne', 'Cottonwood', { year: 2026, county: 'Lincoln', state: 'NE', acres: 129253, is_active: true })
+    const nv = inc('2025-cottonwood-nv', 'Cottonwood Canyon', { year: 2025, county: 'Lincoln', state: 'NV', acres: 500, is_active: false, percent_contained: 100 })
+    const la = inc('2026-cottonwood-la', 'Cottonwood', { year: 2026, county: 'Calcasieu', state: 'LA', acres: null, is_active: false, percent_contained: null })
+    const noCounty = inc('2026-cottonwood-ut', 'Cottonwood', { year: 2026, county: null, location: null, admin_unit: null, state: 'UT', acres: 40 })
+    expect(fireResultFacts(ne, 'us')).toEqual(['Lincoln Co., NE', '2026', '129,253 acres', 'active'])
+    expect(fireResultFacts(nv, 'us')).toEqual(['Lincoln Co., NV', '2025', '500 acres', '100% contained'])
+    expect(fireResultFacts(la, 'us')).toEqual(['Calcasieu Parish, LA', '2026'])
+    expect(fireResultFacts(noCounty, 'us')[0]).toBe('UT')
+    // the two Lincoln County fires read differently
+    expect(fireResultFacts(ne, 'us')[0]).not.toBe(fireResultFacts(nv, 'us')[0])
+  })
   it('incident search matches the state ("Garfield, CO" is not "Garfield, MT")', () => {
     expect(searchIncidents('Garfield CO', NATIONAL).map((h) => h.summary.name)).toEqual(['Pine Gulch'])
     expect(searchIncidents('Garfield Montana', NATIONAL).map((h) => h.summary.name)).toEqual(['Big Dry'])
@@ -352,7 +366,10 @@ describe('national search (brief 3, §14.10, W6)', () => {
   it('US wording: no "California" in the messages', () => {
     expect(planSearch('9100', NATIONAL)).toMatchObject({ kind: 'invalid', message: 'Enter a street address with a house number, a US town ("Boise, ID") or a ZIP code, or paste coordinates.' })
     const none = decide(lookupPlan('Nowheresville'), res([]))
-    expect(none).toEqual({ kind: 'none', message: 'No US city, town, county or ZIP code matches “Nowheresville”.' })
+    // fire names are searched too (integration review UX-m8): the message says so when nothing matched at all
+    expect(none).toEqual({ kind: 'none', message: 'No listed fire, US city, town, county or ZIP code matches “Nowheresville”.' })
+    expect(noMatchMessage('x')).toBe('No listed fire, US city, town, county or ZIP code matches “x”.')
+    // fires matched but no place: the place sentence stays, and the fires are listed
     expect(noPlaceMessage('x')).toBe('No US city, town, county or ZIP code matches “x”.')
     expect(OUTSIDE_LOWER48_WARNING).toBe('This point is outside the area Fire-3d covers (the lower 48 states).')
   })

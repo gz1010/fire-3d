@@ -2,7 +2,6 @@
 // useStore.selectIncident, so state/history.ts records it as a history entry; a build starts only for "Prepare
 // analysis (1-3 min)", never because a fire was opened.
 import { isHistoryEntry } from '../../state/history'
-import { analysisState, findFire, fireFlyTo } from '../../state/overview'
 import { getTimeBounds, useStore, type AppState } from '../../state/store'
 import { useWorkspace } from '../../state/workspace'
 import { switchWorkspace } from './handoff'
@@ -77,14 +76,7 @@ export function goToOverview(): void {
   st.closeIncident()
 }
 
-/** A fire picked from a list: open its card and fly the map to it (the camera stays when the map is not shown). */
-export function showFireCard(id: string): void {
-  const st = useStore.getState()
-  const ws = useWorkspace.getState()
-  ws.setFireCard(id)
-  const fire = findFire(id, st.summary, st.catalog)
-  const fly = fire ? fireFlyTo(fire) : null
-  // an unprepared fire's card holds the map's zoom focus (map/focus.ts FocusHold): a prepared fire whose area the view
-  // covers must not open instead of the fire the user picked; a prepared fire is opened by the zoom as before
-  if (fly && ws.workspace === 'map') ws.requestMapFlyTo(fire && analysisState(fire) !== 'ready' ? { ...fly, source: 'fire-card' } : fly)
-}
+/** A fire picked from a list (the overview list row, the header picker): open its card and fly the map to it. The
+ *  same function serves the map marker, the search box's fire result and the location card's nearest fires
+ *  (state/fireCard.ts). */
+export { showFireCard } from '../../state/fireCard'

@@ -2566,10 +2566,18 @@ From `us-web.md` (M2, cut line b/c, review round 1).
   (Home, End, arrows over the whole list); W15 phone fixes (the search message never pushes the map controls; framing
   keeps the last usable padding while the list sheet covers the map).
 - The empty view or empty filter carries the list-absence line itself, so the footer is not repeated.
-- **Integration:** a flight to an unprepared fire's card (`showFireCard`, list row or marker) carries
-  `MapFlyTo.source: 'fire-card'`, which holds the zoom focus like an official flight (`map/focus.ts` `FocusHold`)
-  until the user moves the map: picking Little Giant (WA) opened the prepared Lower Sugarloaf Fire, whose analysis
-  area the card's view covered, instead of Little Giant's card. A prepared fire is still opened by the zoom.
+- **Integration:** a flight to an unprepared fire's card carries `MapFlyTo.source: 'fire-card'`, which holds the
+  zoom focus like an official flight (`map/focus.ts` `FocusHold`) until the user moves the map: picking Little Giant
+  (WA) opened the prepared Lower Sugarloaf Fire, whose analysis area the card's view covered, instead of Little
+  Giant's card. A prepared fire is still opened by the zoom.
+- **Part 1 review fixes (R1, R3):** every path that shows a fire's card and flies to it goes through one function,
+  `state/fireCard.ts` `showFireCard(id, row?)`: the overview list row and the header picker (`ui/shell/fireActions`
+  re-exports it), a click on a fire's map marker or label (`mapController.openFireFromOverview`), the search box's
+  fire result (`location/SearchBox`, which then closes its popover) and the location card's nearest-fire rows
+  (`location/OverviewCard`). When the map is shown and the picked fire has no ready analysis, another fire that is
+  open closes first (an ordinary history step: Back returns to it), so the header, the updates and the coordinate
+  strip never describe a fire other than the one the map shows with its card; the close comes before the flight,
+  because the map releases the hold whenever the open fire changes. Forensic only opens the card.
 
 ### 14.12 Pipeline interfaces (`us-pipeline` unless noted)
 

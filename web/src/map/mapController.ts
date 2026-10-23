@@ -45,7 +45,8 @@ import { aoiCornersLonLat, localToLonLat, overlayMapping } from '../lib/reprojec
 import { fmtAt, timeFmt, type TimeFmt } from '../lib/time'
 import { mountOfficialLayers, type OfficialLayersHandle } from '../official/mapLayer'
 import { useAnnotations } from '../state/annotations'
-import { findFire, fireFlyTo, overviewFires, PAST_YEAR, SEASON_YEAR, type OverviewCatalog } from '../state/overview'
+import { showFireCard } from '../state/fireCard'
+import { findFire, overviewFires, PAST_YEAR, SEASON_YEAR, type OverviewCatalog } from '../state/overview'
 import { readUrlParams } from '../state/runtime'
 import { useStore } from '../state/store'
 import { getTimeFormat } from '../state/timeZone'
@@ -680,13 +681,11 @@ export class MapController {
     return typeof id === 'string' ? id : null
   }
 
-  /** Open a fire's card from the overview map and fly to its area (decision 1: clicking a fire flies to it). */
+  /** Open a fire's card from the overview map and fly to its area (decision 1: clicking a fire flies to it). The same
+   *  path as the list and the picker (state/fireCard.ts): an unprepared fire holds the zoom focus, so a nearby prepared
+   *  fire does not open instead (brief-3 integration review R1). */
   private openFireFromOverview(id: string): void {
-    const ws = useWorkspace.getState()
-    ws.setFireCard(id)
-    const s = findFire(id, useStore.getState().summary, catalogOf())
-    const req = s ? fireFlyTo(s) : null
-    if (req) ws.requestMapFlyTo(req)
+    showFireCard(id)
   }
 
   // ------------------------------------------------------------------------------------------------ camera

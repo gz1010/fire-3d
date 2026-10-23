@@ -11,6 +11,9 @@
 import type { IncidentSummary } from '../api/types'
 import { LOWER48_BOX, parseLatLonDetailed, type ParsedLatLon } from '../lib/geodesy'
 import { stateCode, stateName, stateWords } from '../lib/usStates'
+import { area } from '../lib/plainLanguage'
+import { fireWhere } from '../state/overview'
+import type { Units } from '../state/workspace'
 import type { GeocodeMatch, GeocodeResponse } from './types'
 
 export interface IncidentHit {
@@ -156,6 +159,9 @@ export const NOT_SUPPORTED_NOTE = 'Fire-3d does not support Alaska, Hawaii or US
 export const OUTSIDE_LOWER48_WARNING = 'This point is outside the area Fire-3d covers (the lower 48 states).'
 export const SEARCH_EXAMPLES = 'e.g. 150 N Capitol Blvd, Boise, ID; Springfield, IL; 83702'
 export const noPlaceMessage = (q: string) => `No US city, town, county or ZIP code matches “${q}”.`
+/** Nothing matched at all: fire names are searched too (brief-3 integration review UX-m8). Only the listed fires are
+ *  searched (active fires, 2026 and 2025, and the open fire); a prepared fire of another year opens by its link. */
+export const noMatchMessage = (q: string) => `No listed fire, US city, town, county or ZIP code matches “${q}”.`
 
 // ------------------------------------------------------------------------------------------------- incidents
 /** Whether an incident's analysis can be opened now. Only 'ready' (or a build in progress) opens without asking. */
@@ -179,6 +185,21 @@ export const READINESS_LABEL: Record<Readiness, string> = {
   building: 'Being prepared',
   'not-prepared': 'Data not prepared',
   failed: 'Preparation failed',
+}
+
+/** The facts under a fire's search result: where (county and state, "Lincoln Co., NE", as the overview list says, so
+ *  same-name fires of different states can be told apart), the year, the area and the agency's status. */
+export function fireResultFacts(
+  s: Pick<IncidentSummary, 'year' | 'county' | 'location' | 'admin_unit' | 'state' | 'acres' | 'is_active' | 'percent_contained'>,
+  units: Units,
+): string[] {
+  const facts = [
+    fireWhere(s) || null,
+    String(s.year),
+    s.acres ? area(s.acres, units).text : null,
+    s.is_active ? 'active' : s.percent_contained != null ? `${Math.round(s.percent_contained)}% contained` : null,
+  ]
+  return facts.filter((f): f is string => !!f)
 }
 
 /** What to do with an incident the user picked (or typed exactly). Never a build: an unprepared fire asks first. */
@@ -231,7 +252,7 @@ export function decide(plan: Extract<SearchPlan, { kind: 'lookup' }>, res: Geoco
   }
   const exact = ms.filter((m) => m.exact)
   if (candidate && !exact.length) return { kind: 'incident', hit: candidate }
-  if (!ms.length && !incidents.length) return { kind: 'none', message: res.note ?? noPlaceMessage(plan.query) }
+  if (!ms.length && !incidents.length) return { kind: 'none', message: res.note ?? noMatchMessage(plan.query) }
   // one match, or one exact name whose other matches are only partial: go there and keep the rest listed
   const go = ms.length === 1 ? ms[0] : exact.length === 1 ? exact[0] : null
   if (go && (!incidents.length || !candidate)) return { kind: 'area', match: go, others: splitMatches(res, incidents, go) }
