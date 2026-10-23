@@ -50,3 +50,23 @@ validation's progress/report, tests that test only those.
 ## Open problems
 - Startup race: a search answered before the map controller exists is dropped (mapController.ts:286); minor.
 - Forensic screenshots time out under swiftshader here (not a functional finding).
+
+# part2 (integration part 2 of 2), 2026-10-23 from ~14:45 UTC
+
+Ports API 8716, Vite 5186. Scratch: session scratchpad `integration2/`. Only agent editing the repo; may edit any file
+(never data/, no builds, never press "Prepare analysis").
+
+## Done
+- 14:50Z read part 1 report/progress, orchestrator carry-over, validation report and review leftovers.
+
+## Next
+- Backend: source-list outage 503 (ListsUnavailable); Lucas same-name merge; remove deprecated names; INTERIM_LFM
+  warning text; optional per-fire growth_ratio_median.
+- Docs: CONTRACT §14.4/§14.12.10 fold of contract3/validation.md; SPEC §8.4 GSI; validation.md 10.11 6 days.
+- Web: feed vs panel time (one time), afterSpan from minute-cut time; accuracy wording (W-M2, W-m1..m8, m5);
+  FireCard analysis line without a model run; rasters.test.ts check.
+- Verify end to end (screenshots brief3-final-*), gates, report part2_done.
+
+## Decisions
+
+## Open problems
