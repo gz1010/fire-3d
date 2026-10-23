@@ -48,6 +48,9 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
   private person; replaced, but it stays in branch history (b12dd1e, private repo); user decision (squash-merge keeps it
   out of main).
 - 04:20 UTC: validation started (Agent-tool agent) while us-web and us-official reviews run.
+- ~04:35 UTC: us-web review pass after fixes (94c978f; R1 blocker: CAL FIRE's own status on the card when agencies
+  disagree). For the integration: N1 credit NWCG names and NTAD zones also when a fire is open; N2 stale statements in
+  us-web's report/progress (us-official's pieces have landed).
 - Lesson: never SendMessage a workflow agent (it starts a second copy); relay through files or Agent-tool agents.
 
 ## Carry-over items for later stages (integration unless a role owns the file)
