@@ -340,5 +340,74 @@
    "The browser console shows one 'Failed to load resource: 404' on each overview map run (check_notch.mjs), before and after the fix; it is not from the API (its access log has no 404) and was not investigated further. The Horse Gulch runs logged no response with status 400 or more.",
    "INPUT_MOVE_START_MS (3 s) means a wheel that MapLibre ignores (at the zoom limit) makes the next non-ours move within 3 s the user's; the only such moves are MapLibre's own (a container resize), so at worst a hold ends early, never a move of ours counted as the user's."
   ]
+ },
+ "part1_review_fixes_round4": {
+  "role": "integration fixer (part 1, round 4), 2026-10-23 about 13:45-14:15 UTC. API 8711 (FIRE3D_LIVE=0), Vite 5181 (both stopped).",
+  "commits": [
+   "brief 3 integration: part 1 review fixes round 4 (this commit)"
+  ],
+  "issues": {
+   "N4-regression (round 3)": "confirmed and fixed. Verified first in the browser (Horse Gulch, t=1720655400000, Jul 10, 2024 5:50 PM MDT): Public Details listed MTHelenaPoliceDepartment's 'Urgent! Evacuation for Horse Gulch Fire ...' (sent 5:45 PM, effective and onset 5:00 PM) with 'not yet in effect' and the short Official-now line quoted the 3:53 PM Cave Gulch message; the re-checker's phone shot at 2:50 PM (t=1720644600000) had no Updates badge. Cause: the query's at_ms is hour-quantised (fireWeatherAtMs -> extrasAtMs), the backend's phase is decided at that hour, and round 3's toLocalAlertItem / officialBadge judged against requested_at_ms (the hour) while localPhaseText used the panel's time. Fix (web only): official/localAlerts.ts localPhaseAt decides each message's phase from its own times at the panel's time refMs: in effect when sent_ms <= refMs, max(sent, onset else effective) <= refMs and expires_ms is null or later; 'sent N min after this time' when sent_ms > refMs (never current, never counted); 'not yet in effect' only when sent and its own onset still ahead; ended from its expiry or for a Cancel. localAlertsState(q, { refMs }) decides at the given time (else requested_at_ms, else now_ms; the backend's phase is only the hint for an answer with no time at all); localAlertsAt(l, refMs) re-decides the phases and the order at another time (the same object when nothing changes). Callers: useOfficialNow at the new useOfficialPanelTime() (official/context.ts: now for a live fire or no fire, else the replay minute: the rule of Official now, Public's short summary and the location card); useOfficialAtPoint and the feed (extras/runtime.ts) at the official context's refMs; LocalAlertsRow, localAlertsLine and localAlertLines re-decide at the time their panel passes; officialBadge(evac, fw, local, refMs) re-decides at refMs and useOfficialBadge passes useOfficialPanelTime(). LocalAlertItem gains onsetMs (onset, else effective) and cancelled. Design: the query stays hour-quantised because the answer at an hour lists every message sent in [hour - 24 h, hour + 1 h] (nws.PAST_BEFORE_MS / PAST_AFTER_MS; openfema.answer), which covers every minute of that hour, so the web decides at the minute with no refetch while the timeline is scrubbed or played, and the per-URL cache and the backend's archive cache stay keyed by the hour (an exact-time query would be a request per minute of scrubbing). Backend unchanged except a docstring sentence in nws.local_phase."
+  },
+  "verified_in_browser": {
+   "public_1720655400000": "short line: 'Archived alert from MTHelenaPoliceDepartment: “Urgent! Evacuation for Horse Gulch Fire: Residences between Cave Gulch to Magpie Gulch” · sent Jul 10, 2024 5:45 PM MDT · FEMA archive · area covers the fire's reported location · +2 more in Details'; Details lists it first with no phase words, then the 3:53 PM and 2:45 PM messages; no 'not yet in effect' anywhere.",
+   "command_1720655400000": "Official now lists the 5:45 PM evacuation first ('sent Jul 10, 2024 17:45 MDT · FEMA archive', no phase words), then the 15:53 message.",
+   "phone_1720655400000": "badge 3 ('3 official items active, the most urgent an evacuation order'); the Updates sheet lists the three messages, none 'not yet in effect'.",
+   "public_1720644600000": "short line quotes the 2:45 PM pre-evacuation Fire Warning ('sent Jul 10, 2024 2:45 PM MDT · FEMA archive · matched by county, not by an exact area · may be about another fire'); Details: the same, no phase words.",
+   "command_1720644600000": "the Fire Warning, 'sent Jul 10, 2024 14:45 MDT', no phase words.",
+   "phone_1720644600000": "badge 1 ('1 official item active, the most urgent a local officials' alert').",
+   "round3_kept": "5:00 PM (t=1720652400000): Public's short line quotes the 3:53 PM Cave Gulch message, Details lists the 5:45 PM message last with 'sent 45 min after this time', phone badge 2; 6:00 PM (t=1720656000000): phone badge 3."
+  },
+  "tests": "web/src/ui/shell/officialSummary.test.ts: a new block 'Horse Gulch local messages at the panel's own time, from an hour-quantised answer (review round 4)' builds the backend's answer for the hour (window [hour - 24 h, hour + 1 h], the hour-level hint phase) and checks 5:50 PM (all three in effect, exact short line, badge 3, the answer decided at the hour re-decided by the panel and the badge gives the same, the location card's lines with no phase words), 2:50 PM (Fire Warning in effect, exact short line, badge 1; at 2:20 PM 'sent 26 min after this time', badge 0), 5:00 PM (exact short line, 'sent 45 min after this time', listed last, badge 2), 6:00 PM (badge 3) and expiry (7:45 PM badge 3; 7:50 PM the 5:45 PM message 'ended', listed last, short line '+1 more', badge 2). web/src/official/localAlerts.test.ts: localPhaseAt (onset before sent, sent later, scheduled onset 'not yet in effect', expiry at and just after, Cancel, no times) and localAlertsAt (re-decides and re-orders; same object when unchanged). Updated for the new rule: the round-3 badge test's live case (a live answer is decided at its own now_ms: these 2024 messages have expired, badge 0; at 6:00 PM 3), the Sheridan WY case (sent 93 s after the answer's time: upcoming there; expired at its own expiry; its hand-set 'ended' is only the hint) and the location card case (decided at the card's own time: the LA message in effect at the answer's now, 'ended' two days later; the Kern archive at its replay time).",
+  "gates": {
+   "backend": "cd backend && uv run pytest -q: 975 passed, 0 failed (54 s).",
+   "web": "npm run typecheck: exit 0; npm run lint: exit 0, 55 warnings, all in src/scene (0 elsewhere); npm test: 75 files, 1173 passed, 2 skipped (was 1166); npm run build: OK.",
+   "time_checker": "node web/scripts/check-time-api.mjs web/src: 303 files, 0 deprecated uses, 0 America/Los_Angeles literals.",
+   "validation_files": "no failure in validation's files (its uncommitted changes from this morning were checkpoint-committed by the orchestrator in 02932cd before these gates).",
+   "non_get_requests": "0: the API 8711 access log has 296 GET and 0 POST/PUT/PATCH/DELETE; every browser run's counter printed nonGet []. No build, no 'Prepare analysis'.",
+   "secrets": "count-only scans for FIRMS_MAP_KEY (the name and its value) in the diff, the scratch folder and docs/redesign: 0."
+  },
+  "files": [
+   "web/src/official/localAlerts.ts (localPhaseAt, localAlertsAt, LocalAlertItem onsetMs / cancelled, localAlertsState opts.refMs)",
+   "web/src/official/context.ts (useOfficialPanelTime)",
+   "web/src/official/hooks.ts (useOfficialNow, useOfficialAtPoint, useOfficialBadge)",
+   "web/src/official/model.ts (officialBadge refMs)",
+   "web/src/ui/shell/officialSummary.ts (localAlertsLine)",
+   "web/src/ui/feed/OfficialNow.tsx (LocalAlertsRow)",
+   "web/src/location/official.ts (localAlertLines)",
+   "web/src/extras/runtime.ts (feed items at the official time)",
+   "web/src/official/localAlerts.test.ts",
+   "web/src/ui/shell/officialSummary.test.ts",
+   "web/src/location/official.test.ts",
+   "backend/fire3d/sources/nws.py (local_phase docstring only)",
+   "docs/redesign/CONTRACT.md (14.7 as built round 4, 14.15 round 4)",
+   "docs/redesign/reports/brief3-integration.json"
+  ],
+  "screenshots": [
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix4/before/n4-public-1720655400000-scrolled.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix4/after/n4-public-1720655400000.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix4/after/n4-public-1720655400000-scrolled.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix4/after/n4-command-1720655400000.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix4/after/n4-command-1720655400000-scrolled.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix4/after/n4-phone-1720655400000.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix4/after/phone-sheet-1720655400000.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix4/after/n4-public-1720644600000.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix4/after/n4-public-1720644600000-scrolled.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix4/after/n4-command-1720644600000.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix4/after/n4-command-1720644600000-scrolled.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix4/after/n4-phone-1720644600000.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix4/after/n4-public-1720652400000-scrolled.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix4/after/n4-phone-1720652400000.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix4/after/n4-phone-1720656000000.png"
+  ],
+  "scripts": [
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix4/n4.mjs (the re-checker's script, copied)",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix4/phone_sheet.mjs"
+  ],
+  "screenshot_note": "swiftshader, 1440x1000 for Public and Command, 390x844 for the phone; Forensic was not opened.",
+  "notes": [
+   "A live fire whose timeline is more than 6 h before its NOW marker: the local query asks the archive for that past hour, and the panels (Official now, the short summary, the location card) and now the badge decide at their own time, which for a live fire is now (the rule they already used); the official context's refMs (used by fire weather, the at-point hook and the feed) is the timeline time there. Both rules are unchanged by this round; they differ only in that corner.",
+   "Each historical map load asks /api/official/local-alerts once with the manifest's end hour (at_ms=1720836000000 for Horse Gulch) before the link's t is applied, then with the link's hour; seen before and after this fix, GET only, not investigated further."
+  ]
  }
 }
