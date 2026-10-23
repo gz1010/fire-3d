@@ -9,6 +9,9 @@
   fraction is the whole job's (pipeline builds report weighted overall progress); with ``"steps"`` it is a
   fraction within ``step`` and :class:`StepProgress` turns it into a monotone overall value.
 * Errors: ``error`` is a short secret-masked message; the full traceback (masked) goes to the log.
+* Follow-ups: a job runs inside ``pipeline.background_followups()``, so a build only *starts* the fetches that warm a
+  cache once its bundle is ready (the OpenFEMA archive, CONTRACT 14.7) and ends without waiting for them;
+  :meth:`JobManager.drain` also waits for those threads.
 """
 
 from __future__ import annotations
@@ -28,7 +31,7 @@ import orjson
 from pydantic import BaseModel
 
 from .. import config
-from ..build.pipeline import short_error
+from ..build.pipeline import background_followups, short_error
 from ..contracts import JobStatus
 from ..timeutil import now_ms
 
@@ -154,6 +157,7 @@ class JobManager:
         self._jobs: dict[str, _Job] = {}
         self._seq = itertools.count(1)
         self._max_finished = max_finished
+        self._followups: list[threading.Thread] = []
         self.closed = False
         self._pools = {
             "build": _WorkerPool("build", build_workers, self._run),
@@ -224,18 +228,30 @@ class JobManager:
         return self.get(job_id)
 
     def drain(self, timeout: float | None = None) -> bool:
-        """Wait until no job is queued or running (e.g. after :meth:`shutdown`); False on timeout."""
+        """Wait until no job is queued or running and the follow-up threads the jobs started (the OpenFEMA archive
+        fetch after a build) have ended (e.g. after :meth:`shutdown`); False on timeout."""
         deadline = None if timeout is None else time.monotonic() + timeout
         while True:
             with self._lock:
                 pending = [j for j in self._jobs.values() if j.status in ACTIVE]
             if not pending:
-                return True
+                break
             for j in pending:
                 left = None if deadline is None else deadline - time.monotonic()
                 if left is not None and left <= 0:
                     return False
                 j.done.wait(left)
+        while True:
+            with self._lock:
+                self._followups = [t for t in self._followups if t.is_alive()]
+                alive = list(self._followups)
+            if not alive:
+                return True
+            for t in alive:
+                left = None if deadline is None else deadline - time.monotonic()
+                if left is not None and left <= 0:
+                    return False
+                t.join(left)
 
     def shutdown(self) -> None:
         """Stop accepting jobs, cancel queued ones and stop the workers (running jobs end with the process)."""
@@ -282,8 +298,10 @@ class JobManager:
                 job.step = str(step)[:80]
                 job.message = config.mask_secrets(str(message))[:300]
 
+        started: list[threading.Thread] = []
         try:
-            result = _jsonable(job.fn(progress))
+            with background_followups() as started:
+                result = _jsonable(job.fn(progress))
         except BaseException as e:  # noqa: BLE001 - every failure is recorded on the job
             tb = config.mask_secrets("".join(traceback.format_exception(e)))
             log.error("job %s (%s %s) failed:\n%s", job.id, job.kind, job.incident_id, tb)
@@ -296,6 +314,8 @@ class JobManager:
                 msg = result.get("message") if isinstance(result, dict) else None
                 job.message = config.mask_secrets(str(msg))[:300] if msg else "finished"
         finally:
+            with self._lock:
+                self._followups = [t for t in self._followups if t.is_alive()] + [t for t in started if t.is_alive()]
             job.done.set()
 
 

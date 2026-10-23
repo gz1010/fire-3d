@@ -26,6 +26,7 @@ import math
 import os
 import re
 import shutil
+import threading
 import time
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
@@ -672,18 +673,40 @@ def _build_locked(bdir: Path, summary: IncidentSummary, prog: BuildProgress, *, 
     return model
 
 
-def archive_prefetch(summary: IncidentSummary, manifest: IncidentManifest) -> bool:
-    """After a successful build: fetch the incident's FEMA IPAWS archive (OpenFEMA) so the local-alerts endpoint
-    answers past days at once (CONTRACT 14.7). Best effort; never fails the build."""
+_job_ctx = threading.local()      # api.jobs marks its worker threads with background_followups()
+
+
+@contextmanager
+def background_followups() -> Iterator[list[threading.Thread]]:
+    """Run a build as an API job (``api.jobs``): steps that only warm a cache once the bundle is ready (the OpenFEMA
+    archive) start in the background instead of holding the job, and their threads are collected in the yielded
+    list (``JobManager.drain`` waits for them). Outside it (the CLI, scripts) they run in the build itself."""
+    prev = getattr(_job_ctx, "followups", None)
+    started: list[threading.Thread] = []
+    _job_ctx.followups = started
+    try:
+        yield started
+    finally:
+        _job_ctx.followups = prev
+
+
+def archive_prefetch(summary: IncidentSummary, manifest: IncidentManifest, *, background: bool | None = None) -> str:
+    """After a successful build: warm the incident's FEMA IPAWS archive (OpenFEMA) so the local-alerts endpoint
+    answers past days at once (CONTRACT 14.7). In an API job (or with ``background``) it only starts the
+    deduplicated background fetch, so "Prepare analysis" ends when the bundle is ready; in a CLI build it fetches
+    now, at most 15 s per request and no retry. Best effort; never fails the build. Returns the
+    ``openfema.prefetch`` status ("stored", "started", "skipped", "failed")."""
+    followups = getattr(_job_ctx, "followups", None)
+    bg = followups is not None if background is None else bool(background)
     try:
         from ..sources import openfema
 
         tr = manifest.time_range
         end = int(tr.end_ms) if summary.mode == "historical" and tr is not None else None
-        return openfema.prefetch(int(summary.started_ms), end)
+        return openfema.prefetch(int(summary.started_ms), end, background=bg, threads=followups)
     except Exception as e:  # noqa: BLE001
         log.info("%s: archive prefetch skipped: %s", summary.id, config.mask_secrets(e))
-        return False
+        return "failed"
 
 
 def _optional_steps(bdir: Path, prog: BuildProgress, mode: str, *, forecast: bool = True) -> None:

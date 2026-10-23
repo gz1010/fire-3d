@@ -156,6 +156,63 @@ def test_daily_limit_raises_quota_error_and_blocks_only_that_host(hosts, monkeyp
     assert h.count("historical-forecast") == 2 and W.blocked_hosts() == {}
 
 
+def test_daily_block_is_rechecked_once_an_hour_and_lifted_when_the_host_answers(hosts, monkeypatch) -> None:
+    """Review round 1 R3: a shared IP's daily-limit answer can be transient, so a long-running API re-checks a daily
+    block with one tiny probe request at most once an hour (no network call in between)."""
+    clock = {"t": NOW}
+    monkeypatch.setattr(W, "now_ms", lambda: clock["t"])
+    h = hosts({"historical-forecast": (429, DAILY_BODY)})
+    with pytest.raises(W.WeatherQuotaExceeded):
+        W.om_request(W.HISTORICAL_URL, {"q": 1}, W.HISTORICAL_TTL_S)
+    assert h.count("historical-forecast") == 1
+    clock["t"] = NOW + 59 * 60_000                                  # within the hour: no network call
+    with pytest.raises(W.WeatherQuotaExceeded):
+        W.om_request(W.HISTORICAL_URL, {"q": 2}, W.HISTORICAL_TTL_S)
+    with pytest.raises(W.WeatherQuotaExceeded):
+        W.raise_if_blocked(["historical-forecast"])
+    assert h.count("historical-forecast") == 1
+    clock["t"] = NOW + 61 * 60_000                                  # due: one tiny re-check, still refused
+    with pytest.raises(W.WeatherQuotaExceeded) as ei:
+        W.om_request(W.HISTORICAL_URL, {"q": 3}, W.HISTORICAL_TTL_S)
+    assert ei.value.period == "daily" and h.count("historical-forecast") == 2
+    probe = h.calls[-1][1]
+    assert probe["latitude"] == "39.7392" and probe["hourly"] == "temperature_2m" and "q" not in probe
+    assert probe["start_date"] == probe["end_date"]                 # one day
+    with pytest.raises(W.WeatherQuotaExceeded):                    # renewed: the next re-check is an hour later
+        W.om_request(W.HISTORICAL_URL, {"q": 3}, W.HISTORICAL_TTL_S)
+    assert h.count("historical-forecast") == 2 and _cache_files() == []
+    clock["t"] = NOW + 122 * 60_000                                 # due again; the host answers now
+    h.answers.pop("historical-forecast")
+    resp = W.om_request(W.HISTORICAL_URL, {"q": 4}, W.HISTORICAL_TTL_S)
+    assert resp.status == 200 and not resp.from_cache
+    assert [c[1].get("q") for c in h.calls if c[0] == "historical-forecast"][-2:] == [None, "4"]   # re-check, request
+    assert W.blocked_hosts() == {}
+    W.om_request(W.HISTORICAL_URL, {"q": 5}, W.HISTORICAL_TTL_S)   # no further re-checks once lifted
+    assert h.count("historical-forecast") == 5
+
+
+def test_recheck_applies_to_daily_blocks_only_and_to_the_build_gate(hosts, monkeypatch) -> None:
+    clock = {"t": NOW}
+    monkeypatch.setattr(W, "now_ms", lambda: clock["t"])
+    h = hosts()
+    W.block_host("ensemble", "hourly")
+    W.block_host("forecast", "daily")
+    W.block_host("archive", "daily")
+    clock["t"] = NOW + 25 * 60_000                                  # 12:55: the hourly block is never re-checked
+    with pytest.raises(W.WeatherQuotaExceeded):
+        W.om_request(W.ENSEMBLE_URL, {"q": 1}, W.LIVE_TTL_S)
+    assert h.count("ensemble") == 0
+    clock["t"] = NOW + 61 * 60_000
+    W.raise_if_blocked(["forecast"])                                # the build gate re-checks and lets it through
+    assert h.count("forecast") == 1 and "forecast" not in W.blocked_hosts()
+    h.answers["archive"] = (503, "down")                            # unreachable: block kept, no retry
+    with pytest.raises(W.WeatherQuotaExceeded):
+        W.raise_if_blocked(["archive"])
+    assert h.count("archive") == 1 and "archive" in W.blocked_hosts()
+    assert W.recheck_daily_block("archive") is False and h.count("archive") == 1   # not due again for an hour
+    assert W.recheck_daily_block("not-a-host") is False
+
+
 def test_blocked_host_still_answers_from_the_cache(hosts, monkeypatch) -> None:
     monkeypatch.setattr(W, "now_ms", lambda: NOW)
     h = hosts()

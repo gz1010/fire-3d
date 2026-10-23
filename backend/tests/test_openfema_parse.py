@@ -38,7 +38,13 @@ def test_scope_filter_on_the_recorded_window() -> None:
 def test_law_enforcement_sample_keeps_only_its_event_code() -> None:
     """The LEW record is in the sample for the scope filter only; its texts are a neutral placeholder (it named a
     private person), and the recorder removes them the same way on a re-record."""
-    import record_test_samples_official as rec
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "record_test_samples_official", Path(__file__).resolve().parents[1] / "scripts" / "record_test_samples_official.py")
+    assert spec is not None and spec.loader is not None
+    rec = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rec)
 
     lew = [inf for r in ROWS for inf in r.get("info") or []
            if any(e.get("value") == "LEW" for e in inf.get("eventCode") or [])]
@@ -229,7 +235,67 @@ def test_prefetch_after_a_build(tmp_data_dir, monkeypatch: pytest.MonkeyPatch) -
     _fema_server(monkeypatch, lambda r: httpx.Response(200, json={"metadata": {"count": len(ROWS)}, "IpawsArchivedAlerts": ROWS}))
     now = iso_to_ms("2026-10-23T00:41:00Z")
     start, end = iso_to_ms("2026-10-09T20:00:00Z"), iso_to_ms("2026-10-11T00:00:00Z")
-    assert openfema.prefetch(start, end, now=now) is True
+    assert openfema.prefetch(start, end, now=now) == "stored"
     w = openfema.incident_window(start, end, start + 24 * HOUR_MS, now)
     assert openfema.load_cached(w, now) is not None
-    assert openfema.prefetch(now - HOUR_MS, None, now=now) is False                    # nothing archived yet
+    assert openfema.prefetch(start, end, now=now, background=True) == "stored"          # already on disk
+    assert openfema.prefetch(now - HOUR_MS, None, now=now) == "skipped"                 # nothing archived yet
+
+
+def test_prefetch_in_a_cli_build_is_capped_and_never_retried(tmp_data_dir, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Review round 1 R2: a CLI build waits at most 15 s per archive request, with no retry."""
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        return httpx.Response(503)
+
+    _fema_server(monkeypatch, handler)
+    seen: list[tuple[float, int]] = []
+    real = fhttp.request
+
+    def spy(*a, **kw):
+        seen.append((kw.get("timeout"), kw.get("retries")))
+        return real(*a, **kw)
+
+    monkeypatch.setattr(fhttp, "request", spy)
+    now = iso_to_ms("2026-10-23T00:41:00Z")
+    start, end = iso_to_ms("2026-10-09T20:00:00Z"), iso_to_ms("2026-10-11T00:00:00Z")
+    assert openfema.prefetch(start, end, now=now) == "failed"
+    assert seen == [(openfema.PREFETCH_TIMEOUT_S, 0)] and openfema.PREFETCH_TIMEOUT_S == 15.0 and len(calls) == 1
+
+
+def test_prefetch_in_an_api_job_only_starts_the_background_fetch(tmp_data_dir, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Review round 1 R2: in the API (a build job) the prefetch starts the one deduplicated background fetch and
+    returns at once; a window that failed less than 10 min ago is not started again."""
+    import threading
+
+    gate = threading.Event()
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        gate.wait(5)
+        return httpx.Response(200, json={"metadata": {"count": len(ROWS)}, "IpawsArchivedAlerts": ROWS})
+
+    _fema_server(monkeypatch, handler)
+    now = iso_to_ms("2026-10-23T00:41:00Z")
+    start, end = iso_to_ms("2026-10-09T20:00:00Z"), iso_to_ms("2026-10-11T00:00:00Z")
+    threads: list[threading.Thread] = []
+    assert openfema.prefetch(start, end, now=now, background=True, threads=threads) == "started"
+    assert len(threads) == 1 and threads[0].is_alive()                 # returned while FEMA had not answered
+    again: list[threading.Thread] = []
+    assert openfema.prefetch(start, end, now=now, background=True, threads=again) == "started"
+    assert again == threads                                            # joined, not a second fetch
+    gate.set()
+    threads[0].join(5)
+    w = openfema.incident_window(start, end, start + 24 * HOUR_MS, now)
+    assert openfema.load_cached(w, now) is not None and len(calls) == 2    # the messages + the updates' XML
+    assert openfema.prefetch(start, end, now=now, background=True) == "stored"
+
+    _fema_server(monkeypatch, lambda r: httpx.Response(503))
+    start2, end2 = iso_to_ms("2026-09-01T20:00:00Z"), iso_to_ms("2026-09-03T00:00:00Z")
+    t: list[threading.Thread] = []
+    assert openfema.prefetch(start2, end2, now=now, background=True, threads=t) == "started"
+    t[0].join(10)
+    assert openfema.prefetch(start2, end2, now=now, background=True, threads=t) == "failed" and len(t) == 1

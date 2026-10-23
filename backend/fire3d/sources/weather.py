@@ -33,7 +33,9 @@ Every request goes through :mod:`fire3d.http` (disk cache, retries, 4 concurrent
 Quota (CONTRACT 14.12.2). Open-Meteo's free API has a daily, hourly and per-minute request limit per IP, counted per
 host. Its "Daily API request limit exceeded" answer (HTTP 429) raises :class:`WeatherQuotaExceeded` with no retries
 and blocks that host in this process until the reset (00:00 UTC; the next hour or minute for the shorter limits):
-a later request to a blocked host is answered from the disk cache or raises at once, without a network call.
+a later request to a blocked host is answered from the disk cache or raises at once, without a network call, except
+that a daily block is re-checked with one tiny probe request at most once an hour (:func:`recheck_daily_block`;
+a shared IP's daily-limit answer can be transient) and lifted when the host answers.
 A refused HRRR / forecast request fails :meth:`OpenMeteoSource.deterministic` (no silent ERA5 fill);
 :func:`probe_open_meteo` asks each host once, uncached, for ``fire3d.cli weather-probe``.
 """
@@ -134,6 +136,11 @@ class WeatherQuotaExceeded(WeatherError):
 
 _blocks: dict[str, tuple[int, str]] = {}     # host label -> (blocked until epoch ms, period); per process
 _blocks_lock = threading.Lock()
+_checked: dict[str, int] = {}                 # host label -> when its block was set or last re-checked (epoch ms)
+# A daily block is re-checked with one tiny probe request at most this often (deviation from CONTRACT 14.12.2,
+# review round 1 R3): on a shared IP Open-Meteo's "daily limit" answer was transient (02:04Z refused, 02:13Z
+# answered on 2026-10-23), and a long-running API must not refuse every build on that host until 00:00 UTC.
+DAILY_RECHECK_S = 3600.0
 
 
 def host_label(url: str) -> str:
@@ -156,11 +163,13 @@ def quota_reset_ms(period: str, now: int) -> int:
 
 def block_host(label: str, period: str = "daily", now: int | None = None) -> int:
     """Mark ``label`` refused until its reset; returns that time (epoch ms)."""
-    until = quota_reset_ms(period, now_ms() if now is None else int(now))
+    t = now_ms() if now is None else int(now)
+    until = quota_reset_ms(period, t)
     with _blocks_lock:
         cur = _blocks.get(label)
         if cur is None or cur[0] < until:
             _blocks[label] = (until, period)
+        _checked[label] = t
     log.warning("weather: %s refused by Open-Meteo (%s limit); no requests to it until %s", label, period, ms_to_iso(until))
     return until
 
@@ -185,13 +194,52 @@ def clear_host_blocks() -> None:
     """Forget every block (tests, or after a successful probe)."""
     with _blocks_lock:
         _blocks.clear()
+        _checked.clear()
+
+
+def _lift(label: str) -> None:
+    with _blocks_lock:
+        _blocks.pop(label, None)
+        _checked.pop(label, None)
+
+
+def recheck_daily_block(label: str, now: int | None = None) -> bool:
+    """For a host under a *daily* block: at most once per :data:`DAILY_RECHECK_S` since the block was set or last
+    re-checked, send one tiny uncached probe request (one location, one variable, one day; no retries). An answer
+    lifts the block (True); a limit answer renews it; anything else keeps it. Without a due re-check, no network
+    call (False)."""
+    t = now_ms() if now is None else int(now)
+    url = HOSTS.get(label)
+    with _blocks_lock:
+        cur = _blocks.get(label)
+        if url is None or cur is None or cur[1] != "daily" or cur[0] <= t:
+            return False
+        if t - _checked.get(label, t) < DAILY_RECHECK_S * 1000.0:
+            return False
+        _checked[label] = t                   # one re-check per period, even with concurrent callers
+    try:
+        record_usage(1.0, t)
+        resp = http.request("GET", url, params=_probe_params(label, t), ttl_s=0, timeout=PROBE_TIMEOUT_S, retries=0)
+    except http.HttpError as e:
+        period = http.quota_period(e.message) if e.status == 429 else None
+        if period is not None:
+            block_host(label, period, t)
+        else:
+            log.info("weather: re-check of %s failed (%s); block kept", label, e.status or "no response")
+        return False
+    if http.is_error_body(resp.content, resp.content_type):
+        return False
+    _lift(label)
+    log.warning("weather: %s answers again (hourly re-check); block lifted", label)
+    return True
 
 
 def raise_if_blocked(labels: Sequence[str], now: int | None = None) -> None:
-    """Raise :class:`WeatherQuotaExceeded` (no network call) when one of ``labels`` is blocked."""
+    """Raise :class:`WeatherQuotaExceeded` when one of ``labels`` is blocked (no network call, except the hourly
+    re-check of a daily block, :func:`recheck_daily_block`)."""
     for lab in labels:
         blk = host_block(lab, now)
-        if blk is not None:
+        if blk is not None and not recheck_daily_block(lab, now):
             raise WeatherQuotaExceeded(lab, blk[1], blk[0])
 
 
@@ -289,8 +337,9 @@ def _sleep(seconds: float) -> None:          # tests replace this
 def om_request(url: str, params: dict, ttl_s: float | None, timeout: float = 120.0, *,
                wait_minutely: bool = True) -> http.Response:
     """GET an Open-Meteo URL through :mod:`fire3d.http`, honouring the per-host block: a blocked host answers from
-    the disk cache or raises :class:`WeatherQuotaExceeded` without a network call; a daily or hourly limit answer
-    blocks the host and raises it (never retried). A per-minute limit answer (other tenants of a shared IP can use up
+    the disk cache or raises :class:`WeatherQuotaExceeded` without a network call (a daily block is re-checked at
+    most once an hour, :func:`recheck_daily_block`, and the request goes ahead when the host answers again); a daily
+    or hourly limit answer blocks the host and raises it (never retried). A per-minute limit answer (other tenants of a shared IP can use up
     the 600 calls a minute) is waited out once, until the next minute, then asked again; a second refusal raises."""
     label = host_label(url)
     for attempt in (0, 1):
@@ -302,7 +351,8 @@ def om_request(url: str, params: dict, ttl_s: float | None, timeout: float = 120
             if blk[1] == "minutely" and wait_minutely and attempt == 0:
                 _sleep(min(MINUTELY_WAIT_MAX_S, max(0.0, (blk[0] - now_ms()) / 1000.0) + 1.0))
                 continue
-            raise WeatherQuotaExceeded(label, blk[1], blk[0])
+            if not recheck_daily_block(label):
+                raise WeatherQuotaExceeded(label, blk[1], blk[0])
         try:
             resp = http.request("GET", url, params=params, ttl_s=ttl_s, timeout=timeout)
         except http.HttpError as e:
@@ -360,8 +410,7 @@ def probe_open_meteo(timeout: float = PROBE_TIMEOUT_S) -> dict:
                 hosts[label], detail[label] = "unreachable", "error body: " + resp.text[:120]
                 continue
             hosts[label], detail[label] = "ok", f"HTTP {resp.status}"
-            with _blocks_lock:
-                _blocks.pop(label, None)
+            _lift(label)
         except http.HttpError as e:
             period = http.quota_period(e.message) if e.status == 429 else None
             if period is not None:
