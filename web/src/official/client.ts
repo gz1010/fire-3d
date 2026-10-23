@@ -6,7 +6,7 @@ import { extrasAtMs } from '../extras/client'
 
 /** Refresh cadence while the answer is current: CAL FIRE edits its records by hand (the backend's list cache is
  *  10 min); NWS alerts are cached 2 min by the backend. Archived answers are never refreshed. */
-export const OFFICIAL_REFRESH_MS = { calfire: 300_000, fireWeather: 120_000 } as const
+export const OFFICIAL_REFRESH_MS = { calfire: 300_000, fireWeather: 120_000, local: 60_000 } as const
 
 export function calfireUrl(incidentId: string): string {
   return `${API_BASE}/api/official/calfire?incident=${encodeURIComponent(incidentId)}`
@@ -34,8 +34,8 @@ export function secondaryRecordUrl(summary: RecordSummary): string | null {
   return summary.active_sources?.length === 1 ? incidentRecordUrl(summary.id) : null
 }
 
-/** Every NWS fire weather alert in California now (no incident): for points outside an open fire's area and the
- *  overview. The backend answers "not available for past dates" for any past time. */
+/** Every current NWS fire weather alert the backend checks (no incident; `states_checked` says where: the lower 48
+ *  once the national request is live): for points outside an open fire's area and the overview. */
 export function fireWeatherStatewideUrl(): string {
   return `${API_BASE}/api/official/fire-weather`
 }
@@ -53,6 +53,19 @@ export function fireWeatherUrl(incidentId: string, atMs: number | null): string 
  */
 export function fireWeatherAtMs(mode: Mode, timeMs: number, nowMs: number, liveNowMs?: number | null): number | null {
   return extrasAtMs('evacuations', mode, timeMs, nowMs, liveNowMs)
+}
+
+/** Local officials' messages for a fire's area (CONTRACT §14.7): live (`atMs` null), or at a past time (NWS for the
+ *  last 7 days, FEMA's OpenFEMA archive for times older than 24 h). */
+export function localAlertsUrl(incidentId: string, atMs: number | null): string {
+  const p = new URLSearchParams({ incident: incidentId })
+  if (atMs != null && Number.isFinite(atMs)) p.set('at_ms', String(Math.max(0, Math.round(atMs))))
+  return `${API_BASE}/api/official/local-alerts?${p.toString()}`
+}
+
+/** Local officials' messages at a point's small box, live only (the location card). */
+export function localAlertsBboxUrl(b: readonly [number, number, number, number]): string {
+  return `${API_BASE}/api/official/local-alerts?bbox=${b.map((v) => Math.round(v * 1e4) / 1e4).join(',')}`
 }
 
 /** Demo / fixture bundles have no CAL FIRE record or NWS area of their own. */

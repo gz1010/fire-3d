@@ -146,3 +146,49 @@ fetching, envelope).
   a WFIGS fire.
 - Tests: `official/record.test.ts` (11), `location/official.test.ts` (record link/line). `calfire.test.ts`: one
   expectation changed by the contract (feed `topic: 'calfire'` → `'record'`); its California strings are unchanged.
+
+## 14.6 / 14.7 NWS nationally and local officials' alerts, web (M5)
+
+- Types (`official/types.ts`): `FireWeatherResponse.states_checked` / `alert_states`, `NwsAlert.time_zone` (optional);
+  `LocalChannel`, `LocalAlert`, `LocalChannelStatus`, `LocalAlertsResponse` exactly as §14.7 (`polygon` may be a
+  MultiPolygon).
+- "Checked" from `states_checked` only (`official/model.ts`, M3): `statesChecked` (missing → `["CA"]`, `[]` = nothing
+  checked), `coversLower48`, `checkedScope` ("the lower 48 states" only with all 49 codes; "California"; "these
+  states (…)"), `officialNowScope` (header "lower 48 states" / "California"). `FireWeatherOfficial` gains
+  `statesChecked`, `alertStates`, `scope`. The overview: header "Official now · lower 48 states" (or the states the
+  answer covers), quiet line "No Red Flag Warning or Fire Weather Watch in effect in the lower 48 states. Not an
+  all-clear.", "{N} alerts in effect in {M} states; the 3 most recent:" (M from `alert_states`), footer "Official
+  evacuation information and each fire's agency record are shown for a fire: zoom in on a fire or pick one, or check
+  an address." Alert times are in each alert's own zone (`alertTimeFmt`: `time_zone`, else the fire's / point's zone;
+  the preset's clock).
+- Location card (`location/official.ts`): `fireWeatherLines` always gives the NWS status at the point ("Fire weather
+  alerts (NWS): checked, none in effect here" + "Not an all-clear", the alert lines, "… not checked here", "… not
+  checked for this time", "… unavailable right now", "Checking …"); `localAlertLines` then adds the local lines, both
+  in the existing `OfficialBlock.fireWeather` array (no new block field). `OfficialLine.urlLabel` (optional) names the
+  link ("issuer's link", "source record (NWS)", "source record (FEMA archive)").
+- `official/localAlerts.ts` (new): `localAlertsState` ('listed' | 'none' | 'not-checked' | 'unavailable' | 'loading';
+  "none" only when a channel answered; HTTP 404 → not checked; a pending archive alone is not a check),
+  `toLocalAlertItem` (issuer verbatim, or "issuer not named" for a platform sender; quoted text = WEA text, else
+  headline, else description, verbatim, cut at 220 characters with "…"), `localAlertLink` (`web` when https, else
+  `source_url`; a message without an https link is never shown), `sentText` (its own zone), `localAlertFeedItems`
+  (topic `'local-alert'`), constants `LOCAL_STANDING_CAVEAT`, `ARCHIVE_CAVEAT`, `OPENFEMA_NOTICE` (exact §14.7 text,
+  no full stop), `LIVE_CREDIT`, `ARCHIVE_CREDIT`, `OPENFEMA_TERMS_URL`.
+- Card line wording: `Alert from <issuer>: "<text>"` / `Alert, issuer not named: "<text>"`; sub "<event> · sent <time
+  in its zone> · relayed by the National Weather Service"; archived: `Archived alert from <issuer>: "<text>"`, sub "… ·
+  FEMA archive · FEMA IPAWS archive via OpenFEMA: This product uses …"; none: "Local officials' alerts relayed by NWS:
+  none here · not an all-clear" (sub: the standing caveat); missing endpoint / failure: "Local officials' alerts: not
+  checked" (never "none"); pending: "FEMA's archive of local alerts: still being checked".
+- Client and runtime: `localAlertsUrl(id, atMs)` (`?incident=` + `at_ms` at the same time as the fire weather query)
+  and `localAlertsBboxUrl(bbox)`; `OFFICIAL_REFRESH_MS.local` = 60 s (live, and while the archive is `pending`);
+  `useOfficialRuntime().local`. `useOfficialAtPoint` asks `?bbox=` (the point's small box) at the current time; at a
+  past time it uses the fire's own answer when the point is in its area, else "not checked"; `OfficialInfo.local`.
+  `useOfficialNow` adds the fire's local answer (overview: not checked, "checked for a selected fire, or at an
+  address").
+- Official now: `LocalAlertsRow` (exported for the dev preset) with the quoted text, its link, "FEMA archive" and the
+  notice for archived messages, the pending line, the not-checked channels' reasons and the standing caveat behind
+  "More". The feed lists local alerts (`localAlertFeedItems`).
+- Dev preset `us-official` (§14.8.7): `extras/dev/presets.ts` entry (`standalone`, `US_OFFICIAL_PRESET_ID`),
+  `extras/dev/UsOfficialPreset.tsx` and `usOfficialSeed.ts` (stores seeded before the first render; no backend
+  request); `extras-dev.html?preset=us-official`. Fixtures: `official/__fixtures__/national.ts` (the recorded national
+  NWS sample, 3 Red Flag Warnings in Montana and Wyoming, 49 `states_checked`), `official/__fixtures__/localAlerts.ts`
+  (recorded NWEM and OpenFEMA messages parsed by the backend's own parsers).

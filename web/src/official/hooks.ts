@@ -12,10 +12,14 @@ import { useEvacuations } from '../extras/hooks'
 import { useExtrasRuntime } from '../extras/runtime'
 import type { Coverage } from '../api/types'
 import { useGeoLookup } from '../location/geoLookup'
+import { timeFmt } from '../lib/time'
 import { useStore } from '../state/store'
+import { useTimeFormat } from '../state/timeZone'
 import { recordStatus, type RecordStatus } from './record'
 import { useOfficialContext, type OfficialContext } from './context'
-import { fireWeatherStatewideUrl, OFFICIAL_REFRESH_MS } from './client'
+import { fireWeatherStatewideUrl, localAlertsBboxUrl, OFFICIAL_REFRESH_MS } from './client'
+import { bboxContains } from './geo'
+import { localAlertsState, type LocalAlertsOfficial } from './localAlerts'
 import {
   evacuationAtPointState,
   evacuationNow,
@@ -33,7 +37,7 @@ import {
 import { forIncident } from './guard'
 import { useJsonQuery } from './query'
 import { useFireWeatherData, useOfficialRuntime } from './runtime'
-import type { FireWeatherResponse } from './types'
+import type { FireWeatherResponse, LocalAlertsResponse } from './types'
 
 export type { CalFireOfficial, EvacuationOfficial, FireWeatherOfficial, OfficialAlert, OfficialBadge, OfficialZone } from './model'
 export { useOfficialContext, type OfficialContext } from './context'
@@ -57,6 +61,8 @@ export interface OfficialInfo {
   fireWeather: FireWeatherOfficial
   calfire: CalFireOfficial
   place?: OfficialPlace | null
+  /** Local officials' messages relayed by NWS / archived by FEMA (brief 3, CONTRACT §14.7; optional for brief-2 shapes). */
+  local?: LocalAlertsOfficial
 }
 
 /** The point's state for the models: undefined while unknown, null outside the lower 48 or when the lookup failed. */
@@ -133,6 +139,24 @@ export function useOfficialAtPoint(lon: number | null, lat: number | null): Offi
   const swq = useJsonQuery<FireWeatherResponse>(swWanted ? fireWeatherStatewideUrl() : null, { refreshMs: OFFICIAL_REFRESH_MS.fireWeather, timeoutMs: 45_000, isCurrent: (d) => d.status === 'available' })
   const statewide = useMemo(() => ({ data: swq.data, loading: swq.loading, error: swq.error }), [swq.data, swq.loading, swq.error])
   const calfire = useRecord(ctx)
+  const tf = useTimeFormat()
+  // local officials' messages: live at the point's small box; at a past time the fire's own (archive) answer when the
+  // point lies in its area, else not checked
+  const localLive = !ctx.past && !ctx.demo && lon != null && lat != null && Number.isFinite(lon) && Number.isFinite(lat)
+  const lq = useJsonQuery<LocalAlertsResponse>(localLive ? localAlertsBboxUrl(pointQueryBbox(lon as number, lat as number)) : null, {
+    refreshMs: OFFICIAL_REFRESH_MS.local,
+    timeoutMs: 45_000,
+    isCurrent: () => true,
+  })
+  const incidentLocal = useIncidentLocal(ctx.incidentId)
+  const local = useMemo(() => {
+    if (ctx.demo) return localAlertsState(null, { demo: true })
+    if (lon == null || lat == null) return localAlertsState(null)
+    if (localLive) return localAlertsState({ data: lq.data, loading: lq.loading, error: lq.error })
+    const area = incidentLocal.data?.area_bbox ?? ctx.evacBbox
+    if (ctx.hasIncident && bboxContains(area, lon, lat)) return localAlertsState(incidentLocal)
+    return { ...localAlertsState(null), reason: "Past local alerts are checked for the selected fire's area only." }
+  }, [ctx, lon, lat, localLive, lq.data, lq.loading, lq.error, incidentLocal])
   const evacuation = useMemo(
     () =>
       evacuationAtPointState({
@@ -160,10 +184,19 @@ export function useOfficialAtPoint(lon: number | null, lat: number | null): Offi
         past: ctx.past,
         fallbackArea: ctx.evacBbox,
         pointState,
+        tf: place?.timeZone && !ctx.hasIncident ? timeFmt(place.timeZone, tf.clock) : tf,
       }),
-    [fw, statewide, swWanted, lon, lat, ctx, pointState],
+    [fw, statewide, swWanted, lon, lat, ctx, pointState, place, tf],
   )
-  return useMemo(() => ({ evacuation, fireWeather, calfire, place }), [evacuation, fireWeather, calfire, place])
+  return useMemo(() => ({ evacuation, fireWeather, calfire, place, local }), [evacuation, fireWeather, calfire, place, local])
+}
+
+function useIncidentLocal(incidentId: string | null) {
+  const q = useOfficialRuntime(useShallow((s) => ({ data: s.local.data, loading: s.local.loading, error: s.local.error })))
+  return useMemo(() => {
+    const data = forIncident(q.data, incidentId)
+    return data === q.data ? q : { data, loading: true, error: null }
+  }, [q, incidentId])
 }
 
 /** Official information for the open fire (I5; the "Official now" block): zones near it, its NWS alerts, its record. */
@@ -172,17 +205,30 @@ export function useOfficialNow(): OfficialInfo {
   const incident = useIncidentEvac(ctx.incidentId)
   const fw = useFireWeatherQuery()
   const calfire = useRecord(ctx)
+  const tf = useTimeFormat()
   const evacuation = useMemo(
     () => evacuationNow(ctx.hasIncident ? incident : null, ctx.fire, { hasIncident: ctx.hasIncident, layerOn: ctx.layerOn, marginKm: DEFAULT_MARGIN_KM.evacuations }),
     [ctx, incident],
   )
-  // the overview (no fire open): California's current NWS alerts; evacuation zones and CAL FIRE need a fire
+  // the overview (no fire open): the national answer's current NWS alerts (scope from states_checked); evacuation
+  // zones, the agency record and local alerts need a fire
   const statewide = useOfficialRuntime(useShallow((s) => ({ data: s.statewide.data, loading: s.statewide.loading, error: s.statewide.error })))
   const fireWeather = useMemo(
-    () => (ctx.hasIncident ? fireWeatherNow(fw, ctx.refMs, { demo: ctx.demo, hasIncident: true }) : fireWeatherNow(statewide, ctx.refMs, { demo: false, hasIncident: false, statewide: true })),
-    [fw, statewide, ctx],
+    () =>
+      ctx.hasIncident
+        ? fireWeatherNow(fw, ctx.refMs, { demo: ctx.demo, hasIncident: true, tf })
+        : fireWeatherNow(statewide, ctx.refMs, { demo: false, hasIncident: false, statewide: true, tf }),
+    [fw, statewide, ctx, tf],
   )
-  return useMemo(() => ({ evacuation, fireWeather, calfire }), [evacuation, fireWeather, calfire])
+  const incidentLocal = useIncidentLocal(ctx.incidentId)
+  const local = useMemo(
+    () =>
+      ctx.hasIncident
+        ? localAlertsState(incidentLocal, { demo: ctx.demo })
+        : { ...localAlertsState(null), reason: "Local officials' alerts are checked for a selected fire, or at an address." },
+    [ctx, incidentLocal],
+  )
+  return useMemo(() => ({ evacuation, fireWeather, calfire, local }), [evacuation, fireWeather, calfire, local])
 }
 
 /** The phone Updates badge (I5): active official items near the open fire and the most urgent level (none on the

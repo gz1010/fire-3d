@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { EvacuationOfficial, FireWeatherOfficial, OfficialAlert, OfficialInfo, OfficialZone } from '../official/hooks'
 import { fmtAt, timeFmt } from '../lib/time'
+import { NOT_FOUND_TEXT } from '../extras/format'
+import { LOCAL_ARCHIVE_KERN_FRW, LOCAL_ARCHIVE_PENDING_BLACK_COVE, LOCAL_ARCHIVE_SHERIDAN_WY, LOCAL_LIVE_LA_CEM, LOCAL_LIVE_NONE_RENO } from '../official/__fixtures__/localAlerts'
+import { localAlertsState } from '../official/localAlerts'
+
+const ok = <T,>(data: T | null, extra: { loading?: boolean; error?: string | null } = {}) => ({ data, loading: false, error: null, ...extra })
 import { alertsInEffect, calfireLine, officialBlock, officialFireWeatherNote, withoutFollow, type OfficialContext } from './official'
 
 const NOW = Date.UTC(2026, 9, 18, 15, 30)
@@ -110,8 +115,10 @@ describe('officialBlock: the evacuation line is always present and honest', () =
 })
 
 describe('NWS fire weather in the card', () => {
-  it('a line only while an alert is in effect or upcoming here, verbatim, with sender, time and archive label', () => {
-    expect(officialBlock(info({}, { state: 'none' }), CTX).fireWeather).toEqual([])
+  it('the alert lines while one is in effect or upcoming here, verbatim, with sender, time and archive label; else the NWS status (brief 3)', () => {
+    expect(officialBlock(info({}, { state: 'none' }), CTX).fireWeather).toEqual([
+      { key: 'nws-none', text: 'Fire weather alerts (NWS): checked, none in effect here', sub: 'Not an all-clear', subCompact: 'Not an all-clear', official: true, tone: 'quiet', url: null },
+    ])
     const b = officialBlock(info({}, { state: 'active', alerts: [alert({}), alert({ id: 'old', phase: 'expired', timeText: 'Expired Oct 17, 18:00 PDT' })] }), CTX)
     expect(b.fireWeather).toHaveLength(1)
     expect(b.fireWeather[0]).toMatchObject({ text: 'Fire weather alert here: Red Flag Warning until Oct 20, 18:00 PDT', official: true, url: 'https://api.weather.gov/alerts/a1' })
@@ -194,5 +201,43 @@ describe('the fire record link and line (brief 3, CONTRACT §14.5)', () => {
     expect(b.links).toEqual([{ label: 'NIFC WFIGS', url: 'https://nifc.example/horse-gulch' }])
     expect(calfireLine(rec, 'us', timeFmt('America/Denver', '24h'))).toBe('USFS (USDA Forest Service) via NIFC WFIGS: 9,450 acres, 100% contained · updated Aug 2, 09:30 MDT')
     expect(JSON.stringify(b)).not.toMatch(/CAL FIRE|Cal OES/)
+  })
+})
+
+describe('NWS status and local officials\' alerts in the card (brief 3, CONTRACT §14.6, §14.7)', () => {
+  const LA12 = timeFmt('America/Los_Angeles', '12h')
+  const na = info({ state: 'not-available', checkedMs: null, sourceUrl: null, reason: 'Not available in this state (Nevada)', notAvailableIn: ['Nevada'], sources: [] })
+  it('NWS not checked here (the answer does not cover the point\'s state)', () => {
+    const b = officialBlock({ ...na, fireWeather: fw({ state: 'unavailable', reasonCode: 'not_checked', reason: 'Fire-3d did not check NWS fire weather alerts in Nevada for this answer.' }) }, CTX)
+    expect(b.fireWeather[0]).toMatchObject({ key: 'nws-unchecked', text: 'Fire weather alerts (NWS): not checked here', official: false })
+    expect(JSON.stringify(b)).not.toMatch(/lower 48/)
+  })
+  it('a live relayed alert and an archived one with the FEMA notice; every local line links', () => {
+    const live = officialBlock({ ...na, local: localAlertsState(ok(LOCAL_LIVE_LA_CEM)) }, { ...CTX, tf: LA12 })
+    const l = live.fireWeather.find((x) => x.key.startsWith('local-'))!
+    expect(l).toMatchObject({ text: 'Alert, issuer not named: "Alert from AlertLACounty"', official: true, tone: 'warning', url: 'https://api.weather.gov/alerts/v2-3.13.8-1556392-1792113838542', urlLabel: 'source record (NWS)' })
+    expect(l.sub).toBe('Civil Emergency Message · sent Oct 15, 6:23 PM PDT · relayed by the National Weather Service')
+    const arch = officialBlock({ ...na, local: localAlertsState(ok(LOCAL_ARCHIVE_KERN_FRW)) }, { ...CTX, tf: LA12 })
+    const a = arch.fireWeather.find((x) => x.key.startsWith('local-'))!
+    expect(a.text).toBe('Archived alert from Kern County OES: "Kern County Sheriff: Cyrus Fire updated to an Evacuation Order. Leave NOW."')
+    expect(a.sub).toMatch(/· FEMA archive · FEMA IPAWS archive via OpenFEMA: This product uses the Federal Emergency Management Agency's OpenFEMA API, but is not endorsed by FEMA$/)
+    expect(a.urlLabel).toBe('source record (FEMA archive)')
+    for (const b of [live, arch, officialBlock({ ...na, local: localAlertsState(ok(LOCAL_ARCHIVE_SHERIDAN_WY)) }, CTX)])
+      for (const line of b.fireWeather.filter((x) => x.key.startsWith('local-') && !['local-none', 'local-unchecked', 'local-unavailable', 'local-loading', 'local-pending', 'local-more'].includes(x.key)))
+        expect(line.url).toMatch(/^https:\/\//)
+  })
+  it('none here: one status line with the standing caveat; HTTP 404: "not checked", never "none"', () => {
+    const none = officialBlock({ ...na, local: localAlertsState(ok(LOCAL_LIVE_NONE_RENO)) }, CTX)
+    expect(none.fireWeather.find((x) => x.key === 'local-none')).toMatchObject({ text: "Local officials' alerts relayed by NWS: none here · not an all-clear", official: true, tone: 'quiet' })
+    expect(none.fireWeather.find((x) => x.key === 'local-none')!.sub).toMatch(/^Fire-3d lists only the local alerts the National Weather Service relays/)
+    const missing = officialBlock({ ...na, local: localAlertsState(ok(null, { error: NOT_FOUND_TEXT })) }, CTX)
+    expect(missing.fireWeather.find((x) => x.key.startsWith('local-'))).toMatchObject({ key: 'local-unchecked', text: "Local officials' alerts: not checked" })
+    expect(JSON.stringify(missing.fireWeather)).not.toMatch(/none here/)
+    const pending = officialBlock({ ...na, local: localAlertsState(ok(LOCAL_ARCHIVE_PENDING_BLACK_COVE)) }, CTX)
+    expect(pending.fireWeather.find((x) => x.key.startsWith('local-'))!.text).toBe("Local officials' alerts: not checked")
+  })
+  it('NWS first, then the local lines, in the existing fireWeather array (no new block field)', () => {
+    const b = officialBlock({ ...info({}, { state: 'none' }), local: localAlertsState(ok(LOCAL_LIVE_LA_CEM)) }, CTX)
+    expect(b.fireWeather.map((x) => x.key.split('-')[0])).toEqual(['nws', 'local'])
   })
 })

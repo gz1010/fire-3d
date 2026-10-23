@@ -1,8 +1,9 @@
 // The location card's official block (owner: us-official in brief 3; brief 2 C-R7). Pure. It words the I5 answers of
 // useOfficialAtPoint (web/src/official/hooks.ts) for the card: always at least one evacuation line, in every state
 // (listed / none listed where checked / not checked here / not available in this state / past date / unavailable /
-// loading), on phones, in replay and with the map layer off; an NWS line only while an alert is in effect or upcoming
-// at the point; and "Follow local officials" with the fire's agency record and the state evacuation source's page.
+// loading), on phones, in replay and with the map layer off; always the NWS status at the point (the alerts in effect,
+// "checked, none in effect here" or "not checked here"; brief 3), then the local officials' alerts relayed by NWS or
+// archived by FEMA; and "Follow local officials" with the fire's agency record and the state evacuation source's page.
 // Issuer, aggregator ("Cal OES", "Oregon OEM") and times come from the answer's sources. Official wording stays
 // verbatim, with its issuer and its own times (Oregon's levels are flagged as Fire-3d's wording of OEM's level number,
 // with OEM's definition); Fire-3d's fetch time is only ever called "checked". Nothing here is an all-clear.
@@ -11,6 +12,7 @@ import { area, distance } from '../lib/plainLanguage'
 import { fmtAt, fmtRelative, type TimeFmt } from '../lib/time'
 import { getTimeFormat } from '../state/timeZone'
 import type { Units } from '../state/workspace'
+import { ARCHIVE_CREDIT, LOCAL_STANDING_CAVEAT, OPENFEMA_NOTICE, sentText, type LocalAlertsOfficial } from '../official/localAlerts'
 
 export type OfficialTone = 'order' | 'warning' | 'other' | 'quiet' | 'unknown' | 'loading'
 
@@ -28,6 +30,9 @@ export interface OfficialLine {
   tone: OfficialTone
   /** The source's own page for this item (https). */
   url: string | null
+  /** What the link is (brief 3, local alerts): "issuer's link", "source record (NWS)", "source record (FEMA archive)";
+   *  renderers that show no label may ignore it. */
+  urlLabel?: string
 }
 
 export interface OfficialLink {
@@ -38,7 +43,9 @@ export interface OfficialLink {
 export interface OfficialBlock {
   /** Always at least one line. */
   evacuation: OfficialLine[]
-  /** Fire weather alerts in effect or upcoming at the point (empty otherwise: no "none" line in the card). */
+  /** Brief 3 (CONTRACT §14.6/§14.7): the NWS status line(s) at the point (always one: the alerts in effect, "checked,
+   *  none in effect here", or "not checked here"), then the local officials' alert lines (the field name stays until
+   *  the integration; us-web's OfficialSection renders the array as it is). */
   fireWeather: OfficialLine[]
   /** "Follow local officials." */
   follow: string
@@ -177,6 +184,77 @@ function alertLine(a: OfficialAlert, fw: FireWeatherOfficial): OfficialLine {
   }
 }
 
+/**
+ * The NWS status at the point, always (CONTRACT §14.6): the alert lines while one is in effect or upcoming, else
+ * "Fire weather alerts (NWS): checked, none in effect here · Not an all-clear", or "… not checked here" where the
+ * answer's `states_checked` does not hold the point's state; loading, past times and outages said as such.
+ */
+export function fireWeatherLines(fw: FireWeatherOfficial): OfficialLine[] {
+  const alerts = alertsInEffect(fw)
+  if (alerts.length) return alerts.map((a) => alertLine(a, fw))
+  const line = (key: string, text: string, sub: string | null, tone: OfficialTone, official = false): OfficialLine => ({ key, text, sub, subCompact: sub, official, tone, url: null })
+  switch (fw.state) {
+    case 'loading':
+      return [line('nws-loading', 'Checking NWS fire weather alerts…', null, 'loading')]
+    case 'none':
+    case 'active':
+      return [line('nws-none', 'Fire weather alerts (NWS): checked, none in effect here', fw.archived ? 'Archived copy · not an all-clear' : 'Not an all-clear', 'quiet', true)]
+    case 'past-date':
+      return [line('nws-past', 'Fire weather alerts (NWS): not checked for this time', withoutFollow(fw.reason) ?? null, 'unknown')]
+    default:
+      if (fw.reasonCode === 'not_checked' || fw.reasonCode === 'demo') return [line('nws-unchecked', 'Fire weather alerts (NWS): not checked here', withoutFollow(fw.reason) ?? null, 'unknown')]
+      return [line('nws-unavailable', 'Fire weather alerts (NWS): unavailable right now', withoutFollow(fw.reason) ?? null, 'unknown')]
+  }
+}
+
+/**
+ * Local officials' messages at the point (CONTRACT §14.7): "Alert from <issuer>: "<verbatim text>" · sent <time> ·
+ * relayed by the National Weather Service", archived "Archived alert from <issuer> … (FEMA archive)" with the OpenFEMA
+ * notice; every line links (the issuer's own link, else the record it was read from). None: "Local officials' alerts
+ * relayed by NWS: none here · not an all-clear" with the standing caveat; endpoint missing or failed: "Local
+ * officials' alerts: not checked", never "none".
+ */
+export function localAlertLines(l: LocalAlertsOfficial | undefined, tf: TimeFmt, max = 3): OfficialLine[] {
+  if (!l) return []
+  const status = (key: string, text: string, sub: string | null, tone: OfficialTone, official = false): OfficialLine => ({ key, text, sub, subCompact: sub, official, tone, url: null })
+  switch (l.state) {
+    case 'loading':
+      return [status('local-loading', "Checking local officials' alerts…", null, 'loading')]
+    case 'unavailable':
+      return [status('local-unavailable', "Local officials' alerts: not checked", withoutFollow(l.reason) ? `${withoutFollow(l.reason)} That does not mean there were none.` : 'That does not mean there were none.', 'unknown')]
+    case 'not-checked':
+      return [status('local-unchecked', "Local officials' alerts: not checked", withoutFollow(l.reason) ?? null, 'unknown')]
+    case 'none':
+      return [
+        {
+          ...status('local-none', "Local officials' alerts relayed by NWS: none here · not an all-clear", withoutFollow(LOCAL_STANDING_CAVEAT), 'quiet', true),
+          subCompact: 'Most local alerts are not relayed by NWS',
+        },
+        ...(l.archivePending ? [status('local-pending', "FEMA's archive of local alerts: still being checked", 'Ask again in a minute.', 'loading')] : []),
+      ]
+    case 'listed': {
+      const out = l.alerts.slice(0, max).map((a): OfficialLine => {
+        const when = sentText(a, tf)
+        const sub = [a.event, when, a.archived ? 'FEMA archive' : 'relayed by the National Weather Service', a.archived ? `${ARCHIVE_CREDIT}: ${OPENFEMA_NOTICE}` : null].filter(Boolean).join(' · ')
+        const subCompact = [when, a.archived ? 'FEMA archive' : 'relayed by NWS'].filter(Boolean).join(' · ')
+        return {
+          key: `local-${a.id}`,
+          text: `${a.lead}: "${a.text}"`,
+          sub,
+          subCompact,
+          official: true,
+          tone: a.phase === 'active' || a.phase === 'upcoming' ? 'warning' : 'other',
+          url: a.link.url,
+          urlLabel: a.link.label,
+        }
+      })
+      if (l.alerts.length > max) out.push(status('local-more', `+${l.alerts.length - max} more local alerts (see Updates)`, null, 'other'))
+      if (l.archivePending) out.push(status('local-pending', "FEMA's archive of local alerts: still being checked", 'Ask again in a minute.', 'loading'))
+      return out
+    }
+  }
+}
+
 function calfireUrl(cf: CalFireOfficial, fallback: string | null): string | null {
   return https(cf.url) ?? https(fallback)
 }
@@ -184,7 +262,7 @@ function calfireUrl(cf: CalFireOfficial, fallback: string | null): string | null
 export function officialBlock(info: OfficialInfo, ctx: OfficialContext): OfficialBlock {
   const c = { ...ctx, tf: ctx.tf ?? getTimeFormat() }
   const evacuation = evacuationLines(info.evacuation, c)
-  const fireWeather = alertsInEffect(info.fireWeather).map((a) => alertLine(a, info.fireWeather))
+  const fireWeather = [...fireWeatherLines(info.fireWeather), ...localAlertLines(info.local, c.tf)]
   const links: OfficialLink[] = []
   const cf = calfireUrl(info.calfire, c.incidentUrl)
   // the fire's agency record, labelled from its publisher ("CAL FIRE", "NIFC WFIGS"; CONTRACT §14.5)

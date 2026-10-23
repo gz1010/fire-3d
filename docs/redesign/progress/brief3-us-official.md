@@ -22,8 +22,13 @@ Started 2026-10-23 ~01:45 UTC (late start; us-catalog finished, us-web past M5, 
   calfire.ts:192, fireWeather.ts:178-184) in M6; Official now header must follow states_checked ("lower 48
   states") in M5; restart API after backend commits before screenshots.
 
+- M4 committed 4dcb81b. M5: national NWS wording, alert zones, local alerts (types, model, card lines, Official now row,
+  feed), dev preset us-official (screenshot docs/screenshots/brief3-us-official-dev-preset-desktop.png, 0 non-GET).
+  Gates: tc 0, lint 55, 67 files / 1077, build OK. Servers: API 8713 + Vite 5183 running (kill before finishing).
+
 ## Next
-- M5 NWS national + local alerts UI, dev preset us-official.
+- M6 time migration (check-time-api --role us-official → 0 and 0), then screenshots (overview, Reno, Brookings,
+  fixture-east, cameras non-CA, Eaton, Horse Gulch), wording scan, report.
 
 ## Decisions
 - State check before the past-date check (a Nevada replay says not available, not 'past dates').

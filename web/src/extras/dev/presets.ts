@@ -12,11 +12,18 @@ export interface DevTime {
   fromMarker?: boolean
 }
 
+/** Brief 3 (CONTRACT §14.8.7): the fixture-only official preset, rendered by UsOfficialPreset.tsx instead of the map
+ *  page (extras-dev.html?preset=us-official): the national NWS answer, local officials' alerts (live, archived,
+ *  pending) and the location card at a Jackson County, OR point with Oregon OEM's zones. No backend request. */
+export const US_OFFICIAL_PRESET_ID = 'us-official'
+
 export interface DevPreset {
   id: string
   label: string
   mode: 'live' | 'historical'
   incidentId: string | null
+  /** Rendered by its own fixture-only page (no map, no backend): the button reloads the page with ?preset=<id>. */
+  standalone?: boolean
   /** For presets without a bundle: the reported incident location. */
   point?: { lat: number; lon: number; name: string; startedMs: number; note: string }
   times: DevTime[]
@@ -25,6 +32,14 @@ export interface DevPreset {
 const H = 3_600_000
 
 export const DEV_PRESETS: DevPreset[] = [
+  {
+    id: US_OFFICIAL_PRESET_ID,
+    label: 'US official (fixtures, no backend)',
+    mode: 'live',
+    incidentId: null,
+    standalone: true,
+    times: [{ label: 'Now', offsetMs: 0 }],
+  },
   {
     id: 'cooley',
     label: 'Cooley Fire (live)',

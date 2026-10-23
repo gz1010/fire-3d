@@ -13,6 +13,7 @@ import {
   groupZones,
   insideCalifornia,
   LOWER48_CODES,
+  officialNowScope,
   statesChecked,
   needsPointQuery,
   needsStatewideFireWeather,
@@ -23,6 +24,9 @@ import {
 } from './model'
 import { FW_COOLEY_LIVE_QUIET, FW_EATON_ARCHIVE, NWS_LIVE_LOX_RFW } from './__fixtures__/samples'
 import type { FireWeatherResponse } from './types'
+import { timeFmt } from '../lib/time'
+
+const LA24 = timeFmt('America/Los_Angeles', '24h')
 
 const ok = <T,>(data: T | null, extra: { loading?: boolean; error?: string | null } = {}) => ({ data, loading: false, error: null, ...extra })
 const ORDER = EVAC_SAMPLE.zones.features[0]
@@ -120,7 +124,7 @@ describe('NWS fire weather states', () => {
   })
 
   it('near the fire: in effect, quiet ("not an all-clear"), past date and demo', () => {
-    const fw = fireWeatherNow(ok(FW_EATON_ARCHIVE), REPLAY, { demo: false, hasIncident: true })
+    const fw = fireWeatherNow(ok(FW_EATON_ARCHIVE), REPLAY, { demo: false, hasIncident: true, tf: LA24 })
     expect(fw.state).toBe('active')
     expect(fw.archived).toBe(true)
     expect(fw.credit).toBe('National Weather Service via Iowa Environmental Mesonet archive')
@@ -129,17 +133,17 @@ describe('NWS fire weather states', () => {
       ['Fire Weather Watch', 'upcoming'],
     ])
     expect(fw.alerts[0]).toMatchObject({ senderName: 'National Weather Service Los Angeles/Oxnard CA', timeText: 'until Jan 10, 14:48 PST', coversReportedLocation: true, archived: true })
-    const quiet = fireWeatherNow(ok(FW_COOLEY_LIVE_QUIET), Date.now(), { demo: false, hasIncident: true })
+    const quiet = fireWeatherNow(ok(FW_COOLEY_LIVE_QUIET), Date.now(), { demo: false, hasIncident: true, tf: LA24 })
     expect(quiet).toMatchObject({ state: 'none', archived: false, credit: 'National Weather Service' })
     expect(quiet.caveat).toMatch(/near this fire\. That is not an all-clear/)
-    expect(fireWeatherNow(ok({ ...FW_COOLEY_LIVE_QUIET, status: 'not_available_for_past_dates', reason: 'Archive down.' }), Date.now(), { demo: false, hasIncident: true })).toMatchObject({ state: 'past-date', reason: 'Archive down.' })
-    expect(fireWeatherNow(ok(FW_COOLEY_LIVE_QUIET), Date.now(), { demo: true, hasIncident: true })).toMatchObject({ state: 'unavailable', reasonCode: 'demo' })
-    expect(fireWeatherNow(ok(live()), LIVE_AT, { demo: false, hasIncident: false, statewide: true }).state).toBe('active')
-    expect(fireWeatherNow(ok({ ...live([]) }), LIVE_AT, { demo: false, hasIncident: false, statewide: true }).caveat).toMatch(/in California\. That is not an all-clear/)
+    expect(fireWeatherNow(ok({ ...FW_COOLEY_LIVE_QUIET, status: 'not_available_for_past_dates', reason: 'Archive down.' }), Date.now(), { demo: false, hasIncident: true, tf: LA24 })).toMatchObject({ state: 'past-date', reason: 'Archive down.' })
+    expect(fireWeatherNow(ok(FW_COOLEY_LIVE_QUIET), Date.now(), { demo: true, hasIncident: true, tf: LA24 })).toMatchObject({ state: 'unavailable', reasonCode: 'demo' })
+    expect(fireWeatherNow(ok(live()), LIVE_AT, { demo: false, hasIncident: false, statewide: true, tf: LA24 }).state).toBe('active')
+    expect(fireWeatherNow(ok({ ...live([]) }), LIVE_AT, { demo: false, hasIncident: false, statewide: true, tf: LA24 }).caveat).toMatch(/in California\. That is not an all-clear/)
   })
 
   it("at a point: the fire's area decides inside it; the statewide answer elsewhere; never 'none' unchecked", () => {
-    const base = { refMs: LIVE_AT, hasIncident: true, demo: false, past: false, fallbackArea: null, statewide: null, pointState: 'CA' }
+    const base = { refMs: LIVE_AT, hasIncident: true, demo: false, past: false, fallbackArea: null, statewide: null, pointState: 'CA', tf: LA24 }
     // inside the fire's checked area (Cooley's area_bbox), no alert there
     const [w, s, e, n] = FW_COOLEY_LIVE_QUIET.area_bbox!
     expect(fireWeatherAtPointState({ ...base, lon: (w + e) / 2, lat: (s + n) / 2, incident: ok(FW_COOLEY_LIVE_QUIET) }).state).toBe('none')
@@ -276,7 +280,7 @@ describe('NWS "checked" follows states_checked only (CONTRACT §14.6)', () => {
     expect(statesChecked(legacy as FireWeatherResponse)).toEqual(['CA'])
     expect(coversLower48(caOnly)).toBe(false)
     expect(checkedScope(caOnly)).toBe('California')
-    const quiet = fireWeatherNow(ok(caOnly), LIVE_AT, { demo: false, hasIncident: false, statewide: true })
+    const quiet = fireWeatherNow(ok(caOnly), LIVE_AT, { demo: false, hasIncident: false, statewide: true, tf: LA24 })
     expect(quiet.caveat).toMatch(/in California\. That is not an all-clear/)
     expect(JSON.stringify(quiet)).not.toMatch(/lower 48/)
   })
@@ -286,7 +290,11 @@ describe('NWS "checked" follows states_checked only (CONTRACT §14.6)', () => {
     expect(fireWeatherAtPointState({ ...base, lon: -149.9, lat: 61.2, statewide: ok(national), pointState: null }).reasonCode).toBe('not_checked') // Alaska
     expect(coversLower48(national)).toBe(true)
     expect(checkedScope(national)).toBe('the lower 48 states')
-    expect(fireWeatherNow(ok(national), LIVE_AT, { demo: false, hasIncident: false, statewide: true }).caveat).toMatch(/in the lower 48 states\. That is not an all-clear/)
+    expect(fireWeatherNow(ok(national), LIVE_AT, { demo: false, hasIncident: false, statewide: true, tf: LA24 }).caveat).toMatch(/in the lower 48 states\. That is not an all-clear/)
     expect(checkedScope({ states_checked: [] })).toBeNull()
+    // the Official now header follows states_checked
+    expect(officialNowScope(fireWeatherNow(ok(national), LIVE_AT, { demo: false, hasIncident: false, statewide: true, tf: LA24 }))).toBe('lower 48 states')
+    expect(officialNowScope(fireWeatherNow(ok(caOnly), LIVE_AT, { demo: false, hasIncident: false, statewide: true, tf: LA24 }))).toBe('California')
+    expect(officialNowScope(fireWeatherNow(ok({ ...caOnly, states_checked: ['CA', 'OR'] }), LIVE_AT, { demo: false, hasIncident: false, statewide: true, tf: LA24 }))).toBe('California, Oregon')
   })
 })
