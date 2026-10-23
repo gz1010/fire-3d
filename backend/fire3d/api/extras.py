@@ -554,9 +554,12 @@ def _evac_zone_features(b: BBox, ad: evac.EvacAdapter | None = None) -> tuple[li
 
 
 def _source_entry(sid: str, home_state: str, **fields: Any) -> dict[str, Any]:
-    """A ``sources[]`` entry with the §14.8.2 per-source fields (a copy: SOURCES stays unchanged)."""
+    """A ``sources[]`` entry with the §14.8.2 per-source fields (a copy: SOURCES stays unchanged), plus
+    ``aggregator``, the short name the web uses in sentences ("Cal OES", "Oregon OEM")."""
+    ad = evac.ADAPTERS.get(sid)
     return {**SOURCES[sid], "retrieved_ms": None, "updated_ms": None, "status": "available", "reason": None,
-            "home_state": home_state, "credit": evac.CREDITS.get(sid, SOURCES[sid].get("publisher")), **fields}
+            "home_state": home_state, "credit": evac.CREDITS.get(sid, SOURCES[sid].get("publisher")),
+            "aggregator": ad.aggregator if ad else "Cal OES", **fields}
 
 
 def _caloes_inventory(ctx: AreaContext, caveats: list[str]) -> tuple[list[dict], str | None]:

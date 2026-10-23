@@ -217,7 +217,7 @@ describe('panel details and feed items', () => {
     expect(layerTime[0]).toMatchObject({ tMs: 2_000, timeNotGiven: false })
     const none = evacuationFeedItems({ ...withZones([b]), source_updated_ms: null, retrieved_ms: 9_000 }, null)
     expect(none[0]).toMatchObject({ tMs: 9_000, timeNotGiven: true, checkedMs: 9_000 })
-    expect(zoneTimes({ status_updated_ms: 0, aggregated_ms: 5 })).toEqual({ issuerMs: null, aggregatedMs: 5 })
+    expect(zoneTimes({ status_updated_ms: 0, aggregated_ms: 5 })).toEqual({ issuerMs: null, aggregatedMs: 5, listedMs: 5, basis: 'state_layer_edit' })
   })
 
   it('names the distance to the fire and says Cal OES does not name the fire outside its area (U-R1, G2)', () => {

@@ -1,6 +1,7 @@
 // Map attribution entries for the optional sources (owner: optional-sources). Plain text + an https link, rendered
 // by MapAttribution as React text (CONTRACT §4.4: never HTML from a source). Credits appear only while a layer is
 // shown with data, next to the basemap credits.
+import { zoneSourceId } from './evacuation'
 import { imageryAttribution } from './imagery'
 import type { CamerasResponse, EvacuationsResponse, ImageryProduct, ImageryResponse } from './types'
 
@@ -10,11 +11,19 @@ export interface ExtrasCredit {
   href?: string
 }
 
-/** "Evacuation zones: local officials via Cal OES" while official zones are listed (none for past dates / outages). */
+/** "Evacuation zones: local officials via Cal OES" (California) / "… via Oregon Department of Emergency Management"
+ *  (Oregon, CONTRACT §14.13) while official zones from that source are listed (none for past dates / outages). */
 export function evacuationCredits(data: EvacuationsResponse | null): ExtrasCredit[] {
   if (!data || data.status !== 'available' || data.zones.features.length === 0) return []
-  const src = data.sources.find((s) => s.id === 'caloes_evacuations')
-  return [{ id: 'extras-evacuations', text: 'Evacuation zones: local officials via Cal OES', href: src?.url }]
+  const listed = new Set(data.zones.features.map((f) => zoneSourceId(f.properties)))
+  const out: ExtrasCredit[] = []
+  for (const id of ['caloes_evacuations', 'or_oem_evacuations']) {
+    if (!listed.has(id)) continue
+    const src = data.sources.find((s) => s.id === id)
+    const credit = src?.credit ?? (id === 'caloes_evacuations' ? 'Cal OES' : 'Oregon Department of Emergency Management')
+    out.push({ id: id === 'caloes_evacuations' ? 'extras-evacuations' : `extras-evacuations-${id}`, text: `Evacuation zones: local officials via ${credit}`, href: src?.url })
+  }
+  return out
 }
 
 /** Camera locations (Cal OES) and the networks shown; the image credit itself sits next to each image. */

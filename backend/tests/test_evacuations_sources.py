@@ -180,7 +180,7 @@ def test_klamath_falls_checks_oregon_and_says_not_an_all_clear(router: Router, c
     assert [s["id"] for s in d["sources"]] == ["or_oem_evacuations"]
     src = d["sources"][0]
     assert src["status"] == "available" and src["home_state"] == "OR"
-    assert src["credit"] == "Oregon Department of Emergency Management"
+    assert src["credit"] == "Oregon Department of Emergency Management" and src["aggregator"] == "Oregon OEM"
     assert src["updated_ms"] == 1790707347957 and isinstance(src["retrieved_ms"], int)
     assert d["retrieved_ms"] == src["retrieved_ms"] and d["source_updated_ms"] == src["updated_ms"]  # one source
     assert d["states"] == [{"state": "OR", "name": "Oregon", "availability": "available", "checked": True,
@@ -310,7 +310,7 @@ def test_california_answers_keep_every_brief2_value(case: str, router: Router, c
     assert_superset(old, d)
     # only the §14.8.2 keys are new
     assert set(d) - set(B2_EXPECTED[case]) == {"states"}
-    added_src = {"retrieved_ms", "updated_ms", "status", "reason", "home_state", "credit"}
+    added_src = {"retrieved_ms", "updated_ms", "status", "reason", "home_state", "credit", "aggregator"}
     for s_old, s_new in zip(B2_EXPECTED[case]["sources"], d["sources"]):
         assert set(s_new) - set(s_old) == added_src
     added_zone = {"state", "source_id", "status_verbatim", "status_raw", "status_label", "status_label_source",

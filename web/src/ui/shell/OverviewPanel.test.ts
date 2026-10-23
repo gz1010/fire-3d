@@ -55,6 +55,30 @@ describe('overview list (§14.11)', () => {
     expect(has(html, 'Show the fires in this view')).toBe(true)
   })
 
+  it('W11: above 150 rows only the rows near the view render; every row keeps its place in the whole list', () => {
+    const many = Array.from({ length: 400 }, (_, i) =>
+      wfigsSummaryFixture({ id: `2026-many-${String(i).padStart(6, '0')}`, name: `Fire ${i}`, lon: -110 + (i % 40) * 0.2, lat: 40 + Math.floor(i / 40) * 0.2, mode: 'live', is_active: true, year: 2026, acres: 10_000 - i }),
+    )
+    setLists(many, [])
+    ssrState(useWorkspace, { overviewFilter: 'active', overviewShowAll: true })
+    const html = renderToStaticMarkup(createElement(OverviewList, { onPick: () => undefined }))
+    const rendered = html.match(/data-row=/g)?.length ?? 0
+    expect(rendered).toBeGreaterThan(10)
+    expect(rendered).toBeLessThan(40)
+    expect(html).toContain('class="ov-list is-windowed"')
+    expect(html).toContain('aria-setsize="400"')
+    expect(html).toContain('aria-posinset="1"')
+    expect(html).not.toContain('data-row="399"')
+    // the rows not rendered keep their room (the scroller's height is the whole list's)
+    expect(html).toMatch(/padding-bottom:\s*\d{4,}px/)
+    // 150 rows or fewer: every row, no window
+    setLists(many.slice(0, 150), [])
+    const all = renderToStaticMarkup(createElement(OverviewList, { onPick: () => undefined }))
+    expect(all.match(/data-row=/g)?.length).toBe(150)
+    expect(all).not.toContain('is-windowed')
+    expect(all).toContain('aria-setsize="150"')
+  })
+
   it('the list footer carries the list-absence line', () => {
     setLists()
     const html = renderToStaticMarkup(createElement(OverviewList, { onPick: () => undefined }))

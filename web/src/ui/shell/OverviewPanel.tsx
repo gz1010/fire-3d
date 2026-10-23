@@ -6,7 +6,7 @@
 // place with no marker is not an all-clear. Picking a row opens the fire card and flies the map there. The panel uses
 // the updates slot and its open flag (panels.updates): there are no incident updates without a fire.
 import { ChevronDown, ChevronRight, ChevronUp, Flame, RefreshCw, X } from 'lucide-react'
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { IncidentSummary } from '../../api/types'
 import { fmtAcresShort, fmtNumber } from '../../lib/format'
@@ -23,14 +23,11 @@ import {
   isActiveFire,
   LIST_ABSENCE,
   LIST_ABSENCE_SHORT,
-  LIST_WINDOW_MIN,
   listSourceNotices,
-  listWindow,
   newestRecordMs,
   OVERVIEW_FILTERS,
   overviewCounts,
   overviewFires,
-  scrollToRow,
   type OverviewFilter,
 } from '../../state/overview'
 import { useStore, type CatalogList } from '../../state/store'
@@ -38,6 +35,7 @@ import { useWorkspace } from '../../state/workspace'
 import { Segmented, Spinner } from '../controls'
 import { OfficialNow } from '../feed/OfficialNow'
 import { useNow } from '../hooks'
+import { useListWindow } from '../useListWindow'
 import { showFireCard } from './fireActions'
 import { NARROW_QUERY, useDrawerFocus, useMediaQuery } from './hooks'
 
@@ -96,63 +94,35 @@ function FireRow({ fire, index, size, cursor, current, onPick }: { fire: Inciden
   )
 }
 
-/** The list's own top padding (styles/overview.css .ov-list). */
+/** The list's own top and bottom padding (styles/overview.css .ov-list). */
 const LIST_PAD_PX = 4
-/** Row height before the first measure (one name line and one detail line). */
-const ROW_GUESS_PX = 50
-
-interface ListView {
-  /** Scroll position inside the list (px from its first row). */
-  scrollTop: number
-  /** Visible height of the scroller. */
-  viewH: number
-  rowH: number
-}
 
 /** The fire rows. Above LIST_WINDOW_MIN rows only the rows near the visible part of the scroller (.ov-body) are
- *  rendered, with the rest kept as padding, so 1,300 national rows stay fast (W11). Arrow keys, Home and End move a
- *  roving focus over the whole list, scrolling an unrendered row in first; every row carries its place in the whole
- *  list (aria-posinset / aria-setsize). */
+ *  rendered (ui/useListWindow.ts), so 1,300 national rows stay fast (W11). Arrow keys, Home and End move a roving
+ *  focus over the whole list, scrolling an unrendered row in first; every row carries its place in the whole list
+ *  (aria-posinset / aria-setsize). */
 function FireList({ rows, onPick }: { rows: IncidentSummary[]; onPick: (f: IncidentSummary) => void }) {
   const cardId = useWorkspace((s) => s.fireCardId)
   const [cursor, setCursor] = useState(0)
-  const [view, setView] = useState<ListView>({ scrollTop: 0, viewH: 640, rowH: ROW_GUESS_PX })
   const ref = useRef<HTMLUListElement | null>(null)
+  const scroller = useRef<HTMLElement | null>(null)
   /** A row to focus once it is rendered (a keyboard jump to a row outside the window). */
   const focusRow = useRef<number | null>(null)
   const n = rows.length
-  const windowed = n > LIST_WINDOW_MIN
   const c = Math.min(cursor, Math.max(0, n - 1))
-  const { start, end } = listWindow(n, view.scrollTop, view.viewH, view.rowH)
-
-  // windowed: follow the scroller's position and size, and the rendered row height
-  useEffect(() => {
+  // focus on a row that leaves the window moves to the list itself (the arrow keys still work from there)
+  const onWindow = useCallback((start: number, end: number) => {
     const ul = ref.current
-    const box = ul?.parentElement
-    if (!ul || !box || !windowed) return
-    const measure = () => {
-      const listTop = ul.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop + LIST_PAD_PX
-      const li = ul.querySelector<HTMLElement>(':scope > li')
-      const h = li ? li.getBoundingClientRect().height : 0
-      const next = { scrollTop: Math.max(0, box.scrollTop - listTop), viewH: box.clientHeight, rowH: h > 0 ? h : ROW_GUESS_PX }
-      // focus on a row that leaves the window moves to the list itself (the arrow keys still work from there)
-      const active = document.activeElement as HTMLElement | null
-      const i = active && ul.contains(active) ? Number(active.dataset.row) : NaN
-      if (Number.isInteger(i)) {
-        const w = listWindow(ul.childElementCount ? Number(ul.dataset.size) : 0, next.scrollTop, next.viewH, next.rowH)
-        if (i < w.start || i >= w.end) ul.focus({ preventScroll: true })
-      }
-      setView((v) => (Math.abs(v.scrollTop - next.scrollTop) < 0.5 && v.viewH === next.viewH && Math.abs(v.rowH - next.rowH) < 0.5 ? v : next))
-    }
-    const ro = new ResizeObserver(measure)
-    ro.observe(box)
-    ro.observe(ul)
-    box.addEventListener('scroll', measure, { passive: true })
-    return () => {
-      ro.disconnect()
-      box.removeEventListener('scroll', measure)
-    }
-  }, [windowed])
+    const active = document.activeElement as HTMLElement | null
+    const i = ul && active && ul.contains(active) ? Number(active.dataset.row) : NaN
+    if (ul && Number.isInteger(i) && (i < start || i >= end)) ul.focus({ preventScroll: true })
+  }, [])
+  const win = useListWindow(n, scroller, ref, { padPx: LIST_PAD_PX, rowSelector: ':scope > li', onWindow })
+
+  // the scroller is the list's parent (.ov-body)
+  useLayoutEffect(() => {
+    scroller.current = ref.current?.parentElement ?? null
+  }, [])
 
   // a row asked for by the keyboard is focused as soon as it is rendered
   useLayoutEffect(() => {
@@ -168,21 +138,11 @@ function FireList({ rows, onPick }: { rows: IncidentSummary[]; onPick: (f: Incid
   const move = (i: number) => {
     const next = Math.max(0, Math.min(n - 1, i))
     setCursor(next)
-    const el = ref.current?.querySelector<HTMLElement>(`[data-row="${next}"]`)
-    const box = ref.current?.parentElement
-    if (windowed && box) {
-      // scroll the row into view first (a rendered row near the edge, or one outside the window)
-      const top = scrollToRow(next, view.rowH, view.scrollTop, view.viewH)
-      if (top !== view.scrollTop) {
-        box.scrollTop += top - view.scrollTop
-        setView((v) => ({ ...v, scrollTop: top }))
-      }
-      if (!el) {
-        focusRow.current = next
-        return
-      }
+    if (!win.reveal(next)) {
+      focusRow.current = next
+      return
     }
-    el?.focus()
+    ref.current?.querySelector<HTMLElement>(`[data-row="${next}"]`)?.focus()
   }
   const onKey = (e: KeyboardEvent<HTMLUListElement>) => {
     if (e.key === 'ArrowDown') move(c + 1)
@@ -192,17 +152,16 @@ function FireList({ rows, onPick }: { rows: IncidentSummary[]; onPick: (f: Incid
     else return
     e.preventDefault()
   }
-  const shown = windowed ? rows.slice(start, end) : rows
-  const pad = windowed ? { paddingTop: LIST_PAD_PX + start * view.rowH, paddingBottom: LIST_PAD_PX + (n - end) * view.rowH } : undefined
+  const shown = win.windowed ? rows.slice(win.start, win.end) : rows
   return (
     <ul
-      className={`ov-list${windowed ? ' is-windowed' : ''}`}
+      className={`ov-list${win.windowed ? ' is-windowed' : ''}`}
       ref={ref}
       aria-label="Fires"
       data-size={n}
       // windowed: the list itself holds focus when the focused row scrolls out of the window
-      tabIndex={windowed ? -1 : undefined}
-      style={pad}
+      tabIndex={win.windowed ? -1 : undefined}
+      style={win.style}
       onKeyDown={onKey}
       onFocus={(e) => {
         const i = Number((e.target as HTMLElement).dataset.row)
@@ -210,7 +169,7 @@ function FireList({ rows, onPick }: { rows: IncidentSummary[]; onPick: (f: Incid
       }}
     >
       {shown.map((f, k) => {
-        const i = windowed ? start + k : k
+        const i = win.start + k
         return <FireRow key={f.id} fire={f} index={i} size={n} cursor={i === c} current={f.id === cardId} onPick={onPick} />
       })}
     </ul>

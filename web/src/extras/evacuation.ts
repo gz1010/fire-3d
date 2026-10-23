@@ -281,7 +281,7 @@ export function evacuationLegend(data: EvacuationsResponse | null): ExtrasLegend
 // ---- geometry --------------------------------------------------------------------------------------------------
 
 /**
- * Whether the response checked this point, and the official zones (any status) containing it. Cal OES is queried only
+ * Whether the response checked this point, and the official zones (any status) containing it. The sources are queried only
  * for the response's `bbox` (the fire's area plus a margin): outside it nothing was checked, so the answer is "not
  * checked here", never "none listed" (also when the status is not `available`).
  */
@@ -330,7 +330,7 @@ export interface ZoneNearFire {
   zone: EvacZoneFeature
   /** Distance from the zone to the fire (km, 0 = touching); null when the fire's position is not known. */
   distanceKm: number | null
-  /** The zone does not touch the fire's analysis area: Cal OES lists zones by place, not by fire. */
+  /** The zone does not touch the fire's analysis area: the state sources list zones by place, not by fire. */
   outsideAnalysisArea: boolean
 }
 
@@ -455,9 +455,10 @@ export interface EvacuationFeedOptions {
 
 /**
  * Feed items: one per (official status, issuer), kind 'official', not seekable (current status, never a point on the
- * replay timeline). The time is the issuer's latest edit, else Cal OES's copy time, else the layer's own update time;
+ * replay timeline). The time is the issuer's latest edit, else the state layer's time for the zone (Cal OES's copy time;
+ * when it was added to the Oregon state layer), else the layer's own update time;
  * never Fire-3d's fetch time (`timeNotGiven` when none exists). Each item names the issuer, its distance to the fire
- * and, for zones outside the fire's analysis area, that Cal OES does not say which fire it is for. Selecting it fits
+ * and, for zones outside the fire's analysis area, that the source (Cal OES, Oregon OEM) does not say which fire it is for. Selecting it fits
  * the zones and highlights them (`bounds`, `highlight`). Key only for orders / shelter-in-place touching the area.
  */
 export function evacuationFeedItems(data: EvacuationsResponse | null, manifest: Pick<IncidentManifest, 'grid'> | null, opts: EvacuationFeedOptions = {}): FeedItem[] {
@@ -496,7 +497,9 @@ export function evacuationFeedItems(data: EvacuationsResponse | null, manifest: 
     const notes: string[] = []
     const notFire = notFireSpecific(aggregator)
     if (outside) notes.push(notFire)
-    if (updatedMs == null) notes.push(listedMs != null ? `The issuer gives no time; ${zoneListedPhrase(p0)} ${fmtWhen(listedMs, undefined, tf)}.` : 'The issuer gives no time for this status.')
+    // brief-2 wording in California ("Cal OES listed it …"); Oregon: "it was added to the Oregon state layer …"
+    const listedNote = p0.time_basis === 'state_layer_added' || p0.time_basis === 'date_only' ? `it was ${zoneListedPhrase(p0)}` : `${aggregator} listed it`
+    if (updatedMs == null) notes.push(listedMs != null ? `The issuer gives no time; ${listedNote} ${fmtWhen(listedMs, undefined, tf)}.` : 'The issuer gives no time for this status.')
     for (const n of [statusLevelNote(p0), hazardNote(p0)]) if (n) notes.push(n.endsWith('.') ? n : `${n}.`)
     if (fire && distanceKm != null) notes.push(fireReferenceText(fire))
     const links: { label: string; url: string }[] = []

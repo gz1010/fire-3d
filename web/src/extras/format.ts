@@ -50,9 +50,11 @@ export interface StatusLine {
 }
 
 /** Headline for an envelope's explicit status (past dates and outages are never shown as "none"). */
-export function envelopeStatusLine(env: Pick<ExtrasEnvelope, 'status' | 'reason'> | null, what: string, error?: string | null): StatusLine {
+export function envelopeStatusLine(env: (Pick<ExtrasEnvelope, 'status' | 'reason'> & Partial<Pick<ExtrasEnvelope, 'reason_code'>>) | null, what: string, error?: string | null): StatusLine {
   if (error) return { tone: 'error', title: `${what}: could not load`, detail: error }
   if (!env) return { tone: 'muted', title: `${what}: loading…`, detail: null }
+  // brief 3 (CONTRACT §14.8): no source in this state; never "none" and never an outage
+  if (env.reason_code === 'state_not_available') return { tone: 'muted', title: `${what}: not available in this state`, detail: env.reason }
   if (env.status === 'not_available_for_past_dates') return { tone: 'muted', title: `${what}: not available for past dates`, detail: env.reason }
   if (env.status === 'unavailable') return { tone: 'warn', title: `${what}: unavailable`, detail: env.reason }
   return { tone: 'ok', title: what, detail: null }

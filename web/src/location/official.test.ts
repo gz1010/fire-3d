@@ -145,3 +145,44 @@ describe('helpers', () => {
     expect(calfireLine({ state: 'loading' }, 'us')).toBeNull()
   })
 })
+
+// ---- brief 3: Oregon OEM and "not available in this state" (CONTRACT §14.8.5, §14.14) ---------------------------
+describe('evacuation lines outside California (brief 3)', () => {
+  const oem = { id: 'or_oem_evacuations', aggregator: 'Oregon OEM', credit: 'Oregon Department of Emergency Management', url: 'https://www.arcgis.com/home/item.html?id=dd2bee51e3004dc4b1004df34fbd9e29', homeState: 'OR', answered: true, checkedMs: NOW - 120_000, updatedMs: NOW - 3_600_000, reason: null }
+  it('Oregon, none listed: "No evacuation order or warning listed here · Oregon OEM, checked … · not an all-clear", with the OEM link and no Cal OES', () => {
+    const b = officialBlock({ ...info({ checkedBy: 'Oregon OEM', sources: [oem], sourceUrl: oem.url }), calfire: { state: 'unavailable' } }, { ...CTX, incidentUrl: null })
+    expect(b.evacuation[0]).toMatchObject({ text: 'No evacuation order or warning listed here', sub: 'Oregon OEM, checked 2 min ago · not an all-clear', subCompact: 'Oregon OEM · not an all-clear', official: true })
+    expect(b.links).toEqual([{ label: 'Oregon OEM', url: oem.url }])
+    expect(JSON.stringify(b)).not.toMatch(/Cal OES/)
+  })
+  it('not available in this state: the short form with the state, no source link', () => {
+    const b = officialBlock({ ...info({ state: 'not-available', checkedMs: null, sourceUrl: null, reason: 'Not available in this state (Nevada)', notAvailableIn: ['Nevada'], sources: [] }), calfire: { state: 'unavailable' } }, { ...CTX, incidentUrl: null })
+    expect(b.evacuation).toEqual([
+      { key: 'evac-not-available', text: 'Evacuation zones: not available in this state', sub: 'Not available in this state (Nevada)', subCompact: null, official: false, tone: 'unknown', url: null },
+    ])
+    expect(b.links).toEqual([])
+    expect(b.follow).toBe('Follow local officials.')
+    expect(JSON.stringify(b)).not.toMatch(/Cal OES|none listed|safe/i)
+  })
+  it('an Oregon zone: OEM level definition, "Oregon OEM level", the state-layer time in Pacific time, the fire name as recorded', () => {
+    const z = zone({
+      id: 'or1',
+      status: 'Level 3: GO NOW – Leave Immediately!',
+      issuer: 'Jackson County',
+      listedMs: Date.UTC(2026, 7, 14, 0, 20),
+      aggregator: 'Oregon OEM',
+      listedPhrase: 'added to the Oregon state layer',
+      verbatim: false,
+      incidentNote: 'Fire name as recorded by Oregon OEM: Fielders Mountain; a name match is not proof it is this fire',
+      hazardNote: null,
+    })
+    const b = officialBlock(info({ state: 'listed', zones: [z], checkedBy: 'Oregon OEM', sources: [oem] }), { ...CTX, tf: timeFmt('America/Los_Angeles', '12h') })
+    expect(b.evacuation[0].text).toBe('Level 3: GO NOW – Leave Immediately!')
+    expect(b.evacuation[0].sub).toBe(
+      'Jackson County · Oregon OEM level; definition by Oregon OEM · issuer time not given; added to the Oregon state layer Aug 13, 5:20 PM PDT · Fire name as recorded by Oregon OEM: Fielders Mountain; a name match is not proof it is this fire',
+    )
+    expect(b.evacuation[0].subCompact).toBe('Jackson County · Oregon OEM level; definition by Oregon OEM · added to the Oregon state layer Aug 13, 5:20 PM PDT')
+    const far = officialBlock(info({ state: 'listed', zones: [{ ...z, outsideAnalysisArea: true, distanceKm: 12 }], sources: [oem] }), CTX)
+    expect(far.evacuation[0].sub).toContain('Oregon OEM does not say which fire this is for')
+  })
+})

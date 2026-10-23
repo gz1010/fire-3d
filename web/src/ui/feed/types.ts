@@ -92,7 +92,7 @@ export interface FeedItem {
   sections?: { label: string; text: string }[]
   /** An archived copy (Iowa Environmental Mesonet) of an official product, not the live source. */
   archived?: boolean
-  /** Short notes for the details, e.g. "Cal OES does not say which fire this is for." */
+  /** Short notes for the details, e.g. "Oregon OEM does not say which fire this is for." */
   notes?: string[]
   /** No issuer or source time exists: the time column says so (tMs only orders the list). */
   timeNotGiven?: boolean

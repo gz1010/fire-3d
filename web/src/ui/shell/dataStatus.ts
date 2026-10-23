@@ -5,8 +5,8 @@
 // archived times only (no "ago"). Live "Last observation" can be a confirmed satellite pass that saw no new fire
 // (time_range.now_ms, SPEC 8.3): when the newest detection or mapped perimeter is more than an hour older, the row says
 // so and the detection row keeps the time the burned area is known up to.
-// Brief 2 (U-R9): one freshness pattern. Official sources get their own rows (Cal OES evacuation zones, NWS fire
-// weather, CAL FIRE's record) with the issuer's update time and Fire-3d's check time; a past fire's CAL FIRE row always
+// Brief 2 (U-R9): one freshness pattern. Official sources get their own rows (evacuation zones from the state's
+// source, NWS fire weather, the fire's agency record) with the issuer's update time and Fire-3d's check time; a past fire's CAL FIRE row always
 // carries the year and says it is the record's last edit. Public gets one line (freshnessLine) with the same rows as
 // details.
 import type { DetectionsFile, ForecastManifest, IncidentManifest, IncidentSummary, PerimetersFile, WeatherFile } from '../../api/types'
@@ -135,7 +135,8 @@ export function buildDataStatus(inp: DataStatusInput, nowMs: number): StatusRow[
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
-/** Cal OES, NWS and CAL FIRE rows: the issuer's time where it gives one, Fire-3d's check time as the age. */
+/** Evacuation (state source), NWS and agency record rows: the issuer's time where it gives one, Fire-3d's check time
+ *  as the age. */
 export function officialRows(inp: Pick<DataStatusInput, 'summary' | 'official'>, nowMs: number, live: boolean): StatusRow[] {
   const o = inp.official ?? null
   const out: StatusRow[] = []

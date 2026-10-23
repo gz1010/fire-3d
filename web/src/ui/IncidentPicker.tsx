@@ -14,6 +14,10 @@ import { useWorkspace } from '../state/workspace'
 import { Popover, Segmented, Spinner, Switch } from './controls'
 import { useNow } from './hooks'
 import { showFireCard } from './shell/fireActions'
+import { useListWindow } from './useListWindow'
+
+/** The list's own top and bottom padding (styles/header.css .picker-list). */
+const LIST_PAD_PX = 4
 
 const STATUS_CLS = { active: 'chip-live', contained: 'chip-ok', out: 'chip-muted' } as const
 
@@ -115,9 +119,19 @@ function PickerBody({ initial, onPicked }: { initial: OverviewFilter; onPicked: 
     return list.filter((s) => pickerMatches(s, q))
   }, [catalog, tab, query])
 
-  useEffect(() => {
-    listRef.current?.querySelector<HTMLElement>(`[data-row="${cursor}"]`)?.scrollIntoView({ block: 'nearest' })
-  }, [cursor])
+  // long lists render only the rows near the view (W11: 1,300 national rows)
+  const win = useListWindow(rows.length, listRef, listRef, { padPx: LIST_PAD_PX, rowSelector: ':scope > [data-row]' })
+  /** Move the cursor by the keyboard and keep its row in view (an unrendered row is scrolled in first). */
+  const step = (d: number) => {
+    const next = Math.max(0, Math.min(rows.length - 1, cursor + d))
+    setCursor(next)
+    if (win.reveal(next)) listRef.current?.querySelector<HTMLElement>(`[data-row="${next}"]`)?.scrollIntoView({ block: 'nearest' })
+  }
+  /** A new tab or query starts at the top of its list. */
+  const restart = () => {
+    setCursor(0)
+    listRef.current?.scrollTo({ top: 0 })
+  }
 
   const pick = (s: IncidentSummary) => {
     onPicked()
@@ -129,10 +143,10 @@ function PickerBody({ initial, onPicked }: { initial: OverviewFilter; onPicked: 
 
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
-      setCursor((c) => Math.min(rows.length - 1, c + 1))
+      step(1)
       e.preventDefault()
     } else if (e.key === 'ArrowUp') {
-      setCursor((c) => Math.max(0, c - 1))
+      step(-1)
       e.preventDefault()
     } else if (e.key === 'Enter' && rows[cursor]) {
       pick(rows[cursor])
@@ -150,7 +164,7 @@ function PickerBody({ initial, onPicked }: { initial: OverviewFilter; onPicked: 
           value={tab}
           onChange={(v) => {
             setTab(v)
-            setCursor(0)
+            restart()
           }}
           ariaLabel="Incident list"
           options={OVERVIEW_FILTERS.map((o) => ({
@@ -172,7 +186,7 @@ function PickerBody({ initial, onPicked }: { initial: OverviewFilter; onPicked: 
             value={query}
             onChange={(e) => {
               setQuery(e.target.value)
-              setCursor(0)
+              restart()
             }}
             aria-label="Search incidents"
           />
@@ -192,7 +206,7 @@ function PickerBody({ initial, onPicked }: { initial: OverviewFilter; onPicked: 
         <span>Status</span>
         <span>Analysis</span>
       </div>
-      <div className="picker-list" ref={listRef} role="listbox" aria-label="Incidents">
+      <div className="picker-list" ref={listRef} role="listbox" aria-label="Incidents" data-size={rows.length}>
         {catalog.loading && rows.length === 0 && (
           <div className="picker-empty">
             <Spinner /> Loading the fire lists…
@@ -210,7 +224,7 @@ function PickerBody({ initial, onPicked }: { initial: OverviewFilter; onPicked: 
                   className="btn btn-sm btn-gold"
                   onClick={() => {
                     setTab('season')
-                    setCursor(0)
+                    restart()
                   }}
                 >
                   Browse {SEASON_YEAR} fires
@@ -223,7 +237,9 @@ function PickerBody({ initial, onPicked }: { initial: OverviewFilter; onPicked: 
             )}
           </div>
         )}
-        {rows.map((s, i) => {
+        {win.before > 0 && <div className="picker-spacer" aria-hidden="true" style={{ height: win.before }} />}
+        {(win.windowed ? rows.slice(win.start, win.end) : rows).map((s, k) => {
+          const i = win.start + k
           const st = statusChip(s)
           const b = bundleChip(s)
           return (
@@ -232,6 +248,8 @@ function PickerBody({ initial, onPicked }: { initial: OverviewFilter; onPicked: 
               type="button"
               role="option"
               aria-selected={s.id === currentId}
+              aria-setsize={rows.length}
+              aria-posinset={i + 1}
               data-row={i}
               className={`picker-row ${i === cursor ? 'is-cursor' : ''} ${s.id === currentId ? 'is-current' : ''}`}
               onMouseEnter={() => setCursor(i)}
@@ -259,6 +277,7 @@ function PickerBody({ initial, onPicked }: { initial: OverviewFilter; onPicked: 
             </button>
           )
         })}
+        {win.after > 0 && <div className="picker-spacer" aria-hidden="true" style={{ height: win.after }} />}
       </div>
       <div className="picker-foot">
         <span className="muted">

@@ -10,7 +10,7 @@ import type { CameraFrameResponse, CamerasResponse, EvacuationsResponse, Imagery
 
 /** Refresh cadence while the data is current (matched to the sources' update cadence and the backend caches). */
 export const REFRESH_MS: Record<ExtrasKind, number> = {
-  evacuations: 120_000, // Cal OES rebuilds every ~5 min; backend cache 2 min
+  evacuations: 120_000, // Cal OES rebuilds every ~5 min, Oregon OEM every 15 min; backend cache 2 min
   cameras: 300_000, // camera list; frames are fetched on request only
   imagery: 1_800_000, // new scenes appear a few times a day at most
 }
