@@ -70,6 +70,9 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
   AOI sizing used a California-only perimeter query) and rebuilt 7 fires; scoring in progress. Its log says Horse
   Gulch was rebuilt at 08:01 by "another session" (no role may build except validation: check in final
   verification) and that one `pkill -f multiprocessing.spawn` (~08:04) may have hit other agents' workers.
+- ~11:00 UTC: a second usage limit stopped validation and integration fix round 3 (reset 11:20 UTC); nothing woke
+  the session until 13:04 (about 1 h 45 min lost). Resumed both; an hourly safety check now resumes stopped work
+  (scheduled task, removed when the build is finished).
 - Lesson: never SendMessage a workflow agent (it starts a second copy); relay through files or Agent-tool agents.
 
 ## Carry-over items for later stages (integration unless a role owns the file)
