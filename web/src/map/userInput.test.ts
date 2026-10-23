@@ -178,6 +178,19 @@ describe('MapInput: a move that started as the user’s', () => {
     expect(input.moveEnd(false)).toBe(true)
   })
 
+  it('as measured in Chrome with swiftshader: movestart 51 ms after the notch, moveend 2.6 s after it: the user’s', () => {
+    const c = clock()
+    const input = new MapInput(c.now)
+    const hold = new FocusHold()
+    hold.flight('fire-card')
+    input.input()
+    c.advance(51)
+    moveStart(input)
+    c.advance(2572)
+    moveEnd(input, hold)
+    expect(hold.active).toBe(false)
+  })
+
   it('a wheel or key input waits INPUT_MOVE_START_MS for its move, and only for the first one', () => {
     const c = clock()
     const input = new MapInput(c.now)

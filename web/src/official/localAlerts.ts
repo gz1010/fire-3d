@@ -103,6 +103,9 @@ export interface LocalAlertsOfficial {
   /** Which answer `localAlertsAtPoint` filtered: the open fire's own answer (its other messages are in Updates) or the
    *  live `?bbox=` answer for the point's box (its messages are not in Updates, so the card lists them all). */
   pointSource?: 'fire' | 'box'
+  /** The time the answer is for (its `requested_at_ms`; null or absent: now). A message sent after it reads "sent N min
+   *  after this time" and is not counted as active (review round 3, N4). */
+  refMs?: number | null
 }
 
 const PHASE: Record<LocalAlert['phase'], FeedItemStatus> = { upcoming: 'upcoming', in_effect: 'active', ended: 'expired' }
@@ -304,6 +307,7 @@ export function localAlertsState(q: Pick<QueryState<LocalAlertsResponse>, 'data'
     checkedMs: live?.retrieved_ms ?? d.retrieved_ms ?? null,
     caveats,
     credits: archive ? [LIVE_CREDIT, ARCHIVE_CREDIT] : [LIVE_CREDIT],
+    refMs: d.requested_at_ms ?? null,
   }
   if (d.status === 'not_available_for_past_dates') return { ...base, alerts: [], state: 'not-checked', reason: d.reason }
   // outside the lower 48 nothing is checked (the backend answers state_not_available): "not checked", not an outage
@@ -352,8 +356,8 @@ export function localPhaseText(a: Pick<LocalAlertItem, 'phase' | 'sentMs'>, refM
   return 'not yet in effect'
 }
 
-/** The message was sent after `refMs` (the time the panel is for). */
-function sentAfter(a: Pick<LocalAlertItem, 'sentMs'>, refMs: number | null | undefined): boolean {
+/** The message was sent after `refMs` (the time the panel or the answer is for): it did not exist yet there. */
+export function sentAfter(a: Pick<LocalAlertItem, 'sentMs'>, refMs: number | null | undefined): boolean {
   return a.sentMs != null && refMs != null && Number.isFinite(refMs) && a.sentMs > refMs
 }
 

@@ -943,9 +943,9 @@ export class MapController {
     // moves that issueFit interrupts (or its own instant jump) are handled by issueFit itself
     if (this.issuing) return
     if (!byUser && this.framing.phase === 'flying' && user) this.framing.userGesture()
-    // MapLibre starts a wheel zoom without an originalEvent (only its moveend carries the wheel event): a move the user
-    // made ends an official area's or a fire card's focus hold, and on the overview it is the user's view (not a fly to
-    // a fire)
+    // MapLibre starts and ends a single wheel notch's zoom without an originalEvent (MapLibre 5.24: its scroll handler
+    // has no wheel event to pass for a lone notch): a move the user made ends an official area's or a fire card's focus
+    // hold, and on the overview it is the user's view (not a fly to a fire)
     if (user) {
       this.focusHold.release()
       if (useStore.getState().incidentId == null) this.overviewFireFly = false

@@ -59,7 +59,7 @@ export function PanelToggle({
   )
 }
 
-const BADGE_TEXT = { order: 'evacuation order', warning: 'evacuation warning', local: "local officials' alert", 'fire-weather': 'fire weather alert' } as const
+const BADGE_TEXT = { order: 'an evacuation order', warning: 'an evacuation warning', local: "a local officials' alert", 'fire-weather': 'a fire weather alert' } as const
 
 function DemoBadge() {
   return (
@@ -161,7 +161,7 @@ function UpdatesToggle() {
         <span aria-hidden="true">{count}</span>
         <span className="mw-sr-only">
           {' '}
-          ({count} official item{count === 1 ? '' : 's'} active, the most urgent a {BADGE_TEXT[level]})
+          ({count} official item{count === 1 ? '' : 's'} active, the most urgent {BADGE_TEXT[level]})
         </span>
       </span>
     ) : null

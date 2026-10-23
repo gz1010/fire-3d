@@ -2254,6 +2254,16 @@ From `us-pipeline.md` (§14.7, review round 1) and `us-official.md` (M5, review 
   FEMA." (no logo).
 - `OfficialBlock.fireWeather` keeps its name (it carries the NWS status line and the local alert lines); renaming it
   to `lines` is left for a later brief.
+- **Integration, review round 3 (N4): a message is never in effect before its own sent time.** An issuer can give an
+  onset or effective time earlier than the sent time (Horse Gulch, MT: MTHelenaPoliceDepartment's "Urgent! Evacuation
+  for Horse Gulch Fire …" sent 5:45 PM MDT, effective and onset 5:00 PM). `nws.local_phase` starts a message at
+  max(sent, onset else effective), so at 5:00 PM it is `upcoming`, from 5:45 PM `in_effect`; `onset_ms` /
+  `effective_ms` stay as the issuer gave them. The web says "sent 45 min after this time" whenever `sent_ms` is later
+  than the panel's time, whatever the phase (`localPhaseText`), reads an `in_effect` message sent after the answer's
+  `requested_at_ms` as not yet in effect (`toLocalAlertItem`, for an older backend), and the phone badge counts only
+  messages sent by the answer's time (`LocalAlertsOfficial.refMs`, `officialBadge`): at 5:00 PM Public's short line
+  quotes the 3:53 PM Cave Gulch message, the badge says 2, and the 5:45 PM message is listed last in Details with
+  "sent 45 min after this time".
 
 ### 14.8 Evacuations and cameras (`us-official`, both ends)
 
@@ -2591,6 +2601,16 @@ From `us-web.md` (M2, cut line b/c, review round 1).
   marker or label) is not a camera gesture (`consumeClick`), and a move that one of our own camera commands ends (the
   padding restart, an explicit flight, an instant flight with reduced motion) is ours (`ours`). The user's next drag,
   wheel zoom or zoom button still ends the hold.
+- **Part 1 review fixes, round 3 (the wheel):** one wheel notch did not end the hold. MapLibre 5.24 starts and ends a
+  lone notch's zoom without an originalEvent and ends it 400-450 ms after the wheel (2.6 s with swiftshader), at or
+  past `USER_INPUT_MS`. Now `MapInput` also judges a move by its start: the controller reports every movestart
+  (`moveStart(gesture)`) and moveend (`moveEnd(gesture)`); a move that starts outside our own commands while the
+  pointer is down, within `USER_INPUT_MS` of an input, or as the first move after a wheel or key input
+  (`INPUT_MOVE_START_MS` = 3 s, for slow renderers) is the user's at its moveend, however late that comes. Every camera
+  command of the controller runs in `ours` (fits, explicit flights, padding eases, the 2D/3D pitch, the compass,
+  tilt and zoom buttons, a group's zoom), so the app's own flight after a marker click still keeps the hold; the zoom
+  buttons end it themselves. Little Giant's card, then Lower Sugarloaf at the centre at zoom 8.42 and one real notch:
+  Lower Sugarloaf opens (before: the card stayed).
 
 ### 14.12 Pipeline interfaces (`us-pipeline` unless noted)
 
@@ -2872,6 +2892,14 @@ them into this section as "14.x as built" sub-headings.
   stayed: the next fire opened kept them until its own data arrived (one without a ready analysis kept them for
   good, so its official answers were for the closed fire's replay time), and `/api/live/status` stopped refreshing on
   the overview.
+
+**Integration part 1 review fixes, round 3 (2026-10-23; report key `part1_review_fixes_round3`).**
+- 14.7: a local officials' message is never in effect, quoted as current or counted by the phone badge before its own
+  sent time (see "14.7 as built", N4). This narrows the round-1 note above: the badge counts the messages in effect or
+  announced with a later onset, not those sent after the replay time; the short line may still quote one of those
+  (when nothing else is in effect) with "sent N min after this time". The badge's screen-reader words read "the most
+  urgent an evacuation order" (was "a evacuation order").
+- 14.11: one wheel notch ends a fire card's or an official area's focus hold (see "14.11 as built", round 3).
 
 **Folded (integration part 1, 2026-10-23):** `us-catalog.md`, `us-official.md`, `us-pipeline.md` and `us-web.md` are
 summarised in the "14.0 as built" to "14.14 as built" sub-headings above (what differs from the text, the deviations

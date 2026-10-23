@@ -282,5 +282,63 @@
    "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix2/check_r1.mjs"
   ],
   "screenshot_note": "swiftshader at 1440x900 (1440x1000 for the panel checks); Forensic was not opened."
+ },
+ "part1_review_fixes_round3": {
+  "role": "integration fixer (part 1, round 3), 2026-10-23; a first fixer stopped at the usage limit (~11:00 UTC) and its edits were checkpoint-committed in 232a3ba; this run (about 13:05-13:25 UTC) reviewed that diff, kept it, finished and verified it. API 8711 (FIRE3D_LIVE=0), Vite 5181 (both stopped).",
+  "commits": [
+   "232a3ba brief 3: checkpoint of integration fix round 3 in progress at the usage limit (orchestrator): nws.local_phase, localAlerts.ts localPhaseText / toLocalAlertItem, MapInput moveStart / moveEnd, every controller camera command in ours, and their tests",
+   "brief 3 integration: part 1 review fixes round 3 (this commit: the badge, comments, one more test, CONTRACT 14.7 / 14.11 / 14.15 notes, this report)"
+  ],
+  "checkpoint_review": "232a3ba kept as is: its backend phase rule (start = max(sent, onset else effective)) and web wording (sentAfter before the phase) are what N4 asks; its MapInput design (a move that STARTS as the user's is theirs at its moveend; a wheel or key input waits INPUT_MOVE_START_MS = 3 s for the move MapLibre starts for it; a movestart inside ours is ours and clears a waiting input) matches MapLibre 5.24's source (scroll_zoom.ts: a lone notch goes through _onTimeout, which never sets _lastWheelEvent, so neither movestart nor moveend carries an originalEvent; the moveend comes after the 200 ms ease plus the 200 ms _finishTimeout and a frame). Every camera call in mapController.ts is inside this.input.ours (checked by a source test). Added here: the phone badge rule (below), the badge's article, a corrected comment in onMoveEnd (it said the wheel's moveend carries the wheel event; for a lone notch it does not), and a unit test with the measured swiftshader timing.",
+  "issues": {
+   "N4": "confirmed and fixed. Verified first against the answer's own times (GET /api/official/local-alerts?incident=2024-horse-gulch-889237&at_ms=1720652400000, Jul 10, 2024 5:00 PM MDT): the old rule (onset, else effective, else sent) starts the MTHelenaPoliceDepartment 'Urgent! Evacuation for Horse Gulch Fire ...' message at its onset 1720652400000, the reference time itself, so it was in_effect although sent_ms is 1720655112000 (5:45 PM MDT); the round-2 report saw it quoted as current in the browser. Backend (backend/fire3d/sources/nws.py local_phase): start = max(sent, onset else effective); its onset_ms / effective_ms are returned unchanged. Now the answer at 5:00 PM: in_effect (sent 3:53 PM, effective 2:28 PM), in_effect (sent 2:45 PM), upcoming (sent 5:45 PM). Web (official/localAlerts.ts): localPhaseText says 'sent N min after this time' whenever sentMs > the panel's time, whatever the phase; toLocalAlertItem reads an in_effect message sent after the answer's requested_at_ms as upcoming (an older backend). Also found and fixed in the same check: the phone Updates badge counted that message, so its screen-reader words said '3 official items active' at 5:00 PM; LocalAlertsOfficial gains refMs (the answer's requested_at_ms) and officialBadge counts only messages sent by then: 2 at 5:00 PM ('2 official items active, the most urgent an evacuation order': the 3:53 PM Cave Gulch message is an Evacuation Immediate), none at 2:00 PM (the replay's next hour lists the 2:45 PM message, not yet sent), 3 at 6:00 PM. MapHeader's BADGE_TEXT carries its article ('an evacuation order', was 'a evacuation order'). Browser, Horse Gulch at t=1720652400000: Public's short Official-now line quotes the 3:53 PM Cave Gulch message ('... · sent Jul 10, 2024 3:53 PM MDT · FEMA archive · matched by county, not by an exact area · may be about another fire · +2 more in Details'), the full Details block lists the 5:45 PM evacuation last with 'Evacuation Immediate · sent Jul 10, 2024 5:45 PM MDT · FEMA archive · sent 45 min after this time'; Command's Incident updates block the same in 24-hour time ('sent Jul 10, 2024 17:45 MDT · FEMA archive · sent 45 min after this time'); phone badge 2. Tests: backend tests/test_local_alerts_nws.py test_local_message_is_never_in_effect_before_it_was_sent (the 5:00 PM, sent-1 ms, sent, expiry cases; effective only; sent only; an onset later than sent still decides; no time at all; place_local keeps the issuer's times); web official/localAlerts.test.ts (localPhaseText for active / upcoming / expired before the sent time, the state with an older and a fixed answer, feed item status, the location card line, the issuer's sent time), ui/shell/officialSummary.test.ts (the short line's exact text at 5:00 PM; the later message alone with 'sent 45 min after this time'; the badge at 5:00 PM, 2:00 PM, an older answer and the live answer).",
+   "wheel": "confirmed and fixed. Verified first with the pre-fix userInput.ts / mapController.ts (1a38fdd) swapped in for one run: a real click on Little Giant's marker (2026-little-giant-091081) kept its card at +3/+6/+10 s; with Lower Sugarloaf at the centre at zoom 8.42 (a page jumpTo, no input on the map) one real wheel notch (deltaY -100) zoomed to 8.57 with movestart 51 ms and moveend 2.6 s after the wheel (swiftshader), neither with an originalEvent, and the card stayed, Lower Sugarloaf not opened. After the fix, the same run: the hold is kept through the app's own flight (+3/+6/+10 s, fireCardId Little Giant, incidentId null) and before the notch; after the notch (moveend 2.6 s after it) the card closes and Lower Sugarloaf opens (source zoom), as in the control without a hold. Also with reduced motion (the app's instant flight keeps the hold; the notch ends it). Tests: map/userInput.test.ts, 11 in 'a move that started as the user's' (one notch at 40/450 ms, a slow renderer, the measured 51 ms / 2.6 s timing, the INPUT_MOVE_START_MS window and only the first move, drag and touch, a move started inside ours, a user's move ended by ours, a click handled as a request, the Little Giant sequence, the pre-fix behaviour, and a source check that every movestart / moveend is reported and every camera call of the controller is inside this.input.ours)."
+  },
+  "gates": {
+   "backend": "cd backend && uv run pytest -q: 975 passed, 0 failed (101 s, about 13:18 UTC; was 974 after round 2).",
+   "web": "npm run typecheck: exit 0; npm run lint: exit 0, 55 warnings, all in src/scene (0 elsewhere); npm test: 75 files, 1166 passed, 2 skipped (was 1152 after round 2); npm run build: OK.",
+   "time_checker": "node web/scripts/check-time-api.mjs web/src: 303 files, 0 deprecated uses, 0 America/Los_Angeles literals.",
+   "non_get_requests": "0 non-GET requests: the uvicorn access log of API 8711 (all GET) and every browser check's request counter (nonGet []). No build, no 'Prepare analysis'.",
+   "secrets": "count-only scans of the diff and the scratch folder for FIRMS_MAP_KEY (name and value): 0 and 0.",
+   "validation_files": "none touched; none of validation's files had uncommitted changes during the gates."
+  },
+  "files": [
+   "backend/fire3d/sources/nws.py (232a3ba)",
+   "backend/tests/test_local_alerts_nws.py (232a3ba)",
+   "web/src/official/localAlerts.ts (232a3ba; refMs, sentAfter exported)",
+   "web/src/official/localAlerts.test.ts (232a3ba)",
+   "web/src/official/model.ts (officialBadge)",
+   "web/src/ui/shell/MapHeader.tsx (badge words)",
+   "web/src/ui/shell/officialSummary.test.ts",
+   "web/src/map/userInput.ts (232a3ba)",
+   "web/src/map/userInput.test.ts",
+   "web/src/map/mapController.ts (232a3ba; a comment)",
+   "docs/redesign/CONTRACT.md (14.7 as built, 14.11 as built, 14.15 round 3)",
+   "docs/redesign/reports/brief3-integration.json"
+  ],
+  "screenshots": [
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix3/shots/n4-hg-public-1720652400000.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix3/shots/n4-hg-public-1720652400000-details.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix3/shots/n4-hg-command-1720652400000.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix3/shots/n4-hg-command-1720652400000-details.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix3/shots/n4-hg-phone-1720652400000.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix3/shots/n4-hg-phone-1720641600000.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix3/before/notch-one-notch-before.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix3/before/notch-one-notch-after.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix3/shots/notch-one-notch-after-click.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix3/shots/notch-one-notch-before.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix3/shots/notch-one-notch-after.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix3/shots/notch-one-notch-control-after.png",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix3/shots/notch-one-notch-reduced-after.png"
+  ],
+  "scripts": [
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix3/check_notch.mjs",
+   "/tmp/claude-0/-home-user-fire-3d/46b23942-68f3-578a-a513-ea699dabb6b6/scratchpad/int1-fix3/check_n4.mjs"
+  ],
+  "screenshot_note": "swiftshader, 1440x1000 for the panels, 1440x900 for the map checks, 390x844 for the phone; Forensic was not opened.",
+  "notes": [
+   "The browser console shows one 'Failed to load resource: 404' on each overview map run (check_notch.mjs), before and after the fix; it is not from the API (its access log has no 404) and was not investigated further. The Horse Gulch runs logged no response with status 400 or more.",
+   "INPUT_MOVE_START_MS (3 s) means a wheel that MapLibre ignores (at the zoom limit) makes the next non-ours move within 3 s the user's; the only such moves are MapLibre's own (a container resize), so at worst a hold ends early, never a move of ours counted as the user's."
+  ]
  }
 }

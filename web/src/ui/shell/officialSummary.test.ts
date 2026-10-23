@@ -134,13 +134,38 @@ describe("local officials' alerts in the Public summary and the phone badge (Hor
     const line = localAlertsLine(l5, MDT12, at5)!
     // the short line quotes a message in effect at 5:00 PM (sent earlier), never the later evacuation
     expect(line.text).not.toContain('Urgent! Evacuation for Horse Gulch')
-    expect(line.text).toMatch(/· sent Jul 10, 2024 [34]:\d\d PM MDT · FEMA archive ·/)
-    expect(line.text).not.toMatch(/after this time/)
-    expect(line.text).toContain('+2 more in Details')
+    expect(line.text).toBe(
+      'Archived alert from MTHelenaPoliceDepartment: “Urgent. A fire evacuation notice has been issued by the Sheriff for the Cave Gulch area.” · sent Jul 10, 2024 3:53 PM MDT · FEMA archive · matched by county, not by an exact area · may be about another fire · +2 more in Details',
+    )
     // the later message alone: quoted with when it was sent, relative to 5:00 PM
     const only = { ...l5, alerts: l5.alerts.filter((a) => a.sentMs! > at5) }
     expect(only.alerts).toHaveLength(1)
     expect(localAlertsLine(only, MDT12, at5)!.text).toContain('· sent Jul 10, 2024 5:45 PM MDT · FEMA archive · sent 45 min after this time ·')
+  })
+
+  it('the phone badge never counts a message sent after the answer’s time as active (review round 3, N4)', () => {
+    const at5 = 1720652400000 // Jul 10, 2024 5:00 PM MDT: the 5:45 PM evacuation was not sent yet
+    const upcomingAfter = (at: number) => ({
+      ...LOCAL_ARCHIVE_HORSE_GULCH,
+      requested_at_ms: at,
+      alerts: LOCAL_ARCHIVE_HORSE_GULCH.alerts.map((x) => (x.sent_ms! > at ? { ...x, phase: 'upcoming' as const } : x)),
+    })
+    const l5 = localAlertsState({ data: upcomingAfter(at5), loading: false, error: null })
+    expect(l5.refMs).toBe(at5)
+    // the two messages sent before 5:00 PM (the 3:53 PM one an Evacuation Immediate); never the 5:45 PM one
+    expect(officialBadge(notAvailable, fw({ state: 'none' }), l5)).toEqual({ count: 2, level: 'order' })
+    // an older backend's answer (the later message still "in effect"): the same count
+    const older = localAlertsState({ data: { ...LOCAL_ARCHIVE_HORSE_GULCH, requested_at_ms: at5 }, loading: false, error: null })
+    expect(officialBadge(notAvailable, fw({ state: 'none' }), older)).toEqual({ count: 2, level: 'order' })
+    // 2:00 PM: every message was sent later (the replay's next hour lists them): nothing counted, no level
+    const at2 = 1720641600000
+    const l2 = localAlertsState({ data: upcomingAfter(at2), loading: false, error: null })
+    expect(l2.alerts.every((a) => a.phase === 'upcoming')).toBe(true)
+    expect(officialBadge(notAvailable, fw({ state: 'none' }), l2)).toEqual({ count: 0, level: null })
+    // the live answer (no requested time): every listed message in effect counts
+    const live = localAlertsState({ data: { ...LOCAL_ARCHIVE_HORSE_GULCH, requested_at_ms: null }, loading: false, error: null })
+    expect(live.refMs).toBeNull()
+    expect(officialBadge(notAvailable, fw({ state: 'none' }), live)).toEqual({ count: 3, level: 'order' })
   })
 
   it('the phone badge counts the in-effect local messages; an Evacuation Immediate is the most urgent level', () => {
