@@ -6,7 +6,9 @@
    48, CAL FIRE the record in California, NIFC WFIGS elsewhere; brief 3) and the national FIRMS 7-day feeds
    (``firms.load_live_us(days=7)``);
 2. copy each record's current acres, containment, update time and status into every ready live bundle's manifest
-   summary (:func:`sync_live_summaries`: local writes only, no extra request for listed incidents);
+   summary, and the whole record identity when the listed row is now another agency's record (an id pinned to a
+   bundle built under the fire's NIFC WFIGS id; :func:`sync_live_summaries`: local writes only, no extra request for
+   listed incidents);
 3. for every ready live bundle of a still-active incident with detections newer than its ``now_ms`` (or a bundle
    older than :data:`STALE_REFRESH_H`), queue a ``refresh`` job: ``pipeline.refresh_live`` re-runs
    build_observed + build_weather, then a forecast job is queued when the newest forecast is older than 3 h or the
@@ -54,6 +56,11 @@ COUNTS_WAIT_S = 2.0
 SUMMARY_SYNC_FIELDS = ("acres", "percent_contained", "updated_ms", "contained_ms", "is_active", "county", "location",
                        "admin_unit", "url", "lat", "lon", "detections_24h", "active_sources", "other_records",
                        "complex_members", "irwin_id", "gacc", "accuracy_region")
+# Whose record the row is. Copied as well when the fresh row is another agency's record than the bundle summary's
+# (CONTRACT 14.2 "Id pinning": a bundle built under a fire's NIFC WFIGS id that CAL FIRE lists later keeps its id, and
+# its summary becomes CAL FIRE's record whole; never CAL FIRE's numbers and link under the WFIGS issuer). The id stays.
+RECORD_IDENTITY_FIELDS = ("name", "source_name", "record_source", "record_issuer", "uid", "calfire_uid", "agency",
+                          "agency_code", "unique_fire_id", "aliases", "complex_name", "state", "time_zone")
 KEEP_LIVE_FORECASTS = 4            # newest ready runs kept per live bundle by the live loop ...
 PRUNE_MIN_AGE_H = 6.0              # ... and every run issued in the last 6 h
 PRUNE_GRACE_S = 3600.0             # unlisted run directories are deleted only after this (open views keep working)
@@ -220,10 +227,24 @@ def _live_bundles() -> list[dict]:
     return [m for m in bundle.list_bundles() if m.get("mode") == "live" and m.get("status") == "ready"]
 
 
+def record_identity(summary: dict) -> tuple[str, str]:
+    """``(record_source, uid)`` of a summary dict, with the CONTRACT 14.1 defaults of old manifests (no
+    ``record_source``: "calfire"; no ``uid``: ``calfire_uid``); the uid upper case without braces."""
+    src = summary.get("record_source") or "calfire"
+    uid = summary.get("uid") if "uid" in summary else summary.get("calfire_uid")
+    return str(src), str(uid or "").strip().strip("{}").upper()
+
+
 def summary_changes(current: dict, fresh: IncidentSummary | dict) -> dict:
-    """The :data:`SUMMARY_SYNC_FIELDS` whose CAL FIRE value differs from the bundle summary's."""
+    """The :data:`SUMMARY_SYNC_FIELDS` whose fresh value (the record's: CAL FIRE or NIFC WFIGS) differs from the bundle
+    summary's. When the fresh row is another record than the summary's (:func:`record_identity` differs: an id pinned
+    to a bundle built under the fire's WFIGS id, CONTRACT 14.2), the :data:`RECORD_IDENTITY_FIELDS` are added, so the
+    numbers, the link and the issuer always come from one record."""
     f = fresh.model_dump(mode="json") if isinstance(fresh, IncidentSummary) else dict(fresh)
-    return {k: f.get(k) for k in SUMMARY_SYNC_FIELDS if k in f and f.get(k) != current.get(k)}
+    keys = SUMMARY_SYNC_FIELDS
+    if record_identity(f) != record_identity(current):
+        keys = SUMMARY_SYNC_FIELDS + RECORD_IDENTITY_FIELDS
+    return {k: f.get(k) for k in keys if k in f and f.get(k) != current.get(k)}
 
 
 def sync_live_summaries(summaries: list[IncidentSummary], lookup: Any = None) -> list[str]:

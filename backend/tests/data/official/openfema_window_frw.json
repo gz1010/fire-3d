@@ -3368,11 +3368,11 @@
       },
       {
        "name": "CMAMtext",
-       "value": "PUBLIC SAFETY ALERT: ROCKY BRANCH, UNION PARISH"
+       "value": "Text removed by hand: a Law Enforcement Warning kept only for its event code (scope-filter test)."
       },
       {
        "name": "CMAMlongtext",
-       "value": "Avoid Rocky Branch Road and the surrounding area. Jonathan Casio, a white male in his 30s, is armed and dangerous. Do not approach or attempt to confront him. If you see him, move to a safe location and call 911.\nStay clear of the area until an official all-clear is issued."
+       "value": "Text removed by hand: a Law Enforcement Warning kept only for its event code (scope-filter test)."
       },
       {
        "name": "BLOCKCHANNEL",

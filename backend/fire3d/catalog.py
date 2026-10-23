@@ -137,17 +137,24 @@ def parse_incident_id(incident_id: str) -> tuple[int, str, str] | None:
     return (int(m.group(1)), m.group(2), m.group(3)) if m else None
 
 
+_APOSTROPHES = "'\u2019"
+_CONTRACTION_TAILS = frozenset({"s", "t", "d", "ll", "re", "ve"})
+
+
 def display_name(raw: Any) -> str:
     """A WFIGS name for display: ALL CAPS names are title-cased word by word ("BIG CLIFF" -> "Big Cliff", "O'NEIL" ->
-    "O'Neil", "FD140011" -> "Fd140011", "2ND" -> "2nd"); any other name is kept as it is (spaces collapsed)."""
+    "O'Neil", "FD140011" -> "Fd140011", "2ND" -> "2nd"); a short run after an apostrophe stays lower case ("DEVIL'S
+    CANYON" -> "Devil's Canyon", "DON'T" -> "Don't"); any other name is kept as it is (spaces collapsed)."""
     s = " ".join(str(raw or "").split())
     letters = [c for c in s if c.isalpha()]
     if not letters or not all(c.isupper() for c in letters):
         return s
 
     def cap(m: re.Match) -> str:
-        w = m.group(0)
-        return w.capitalize() if m.start() == 0 or not s[m.start() - 1].isalnum() else w.lower()
+        w, i = m.group(0), m.start()
+        if i >= 2 and s[i - 1] in _APOSTROPHES and s[i - 2].isalpha() and w.lower() in _CONTRACTION_TAILS:
+            return w.lower()
+        return w.capitalize() if i == 0 or not s[i - 1].isalnum() else w.lower()
 
     return re.sub(r"[A-Za-z]+", cap, s)
 

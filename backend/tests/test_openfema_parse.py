@@ -35,6 +35,24 @@ def test_scope_filter_on_the_recorded_window() -> None:
         assert "sender" not in a and a["source_url"].startswith("https://www.fema.gov/api/open/v1/IpawsArchivedAlerts?")
 
 
+def test_law_enforcement_sample_keeps_only_its_event_code() -> None:
+    """The LEW record is in the sample for the scope filter only; its texts are a neutral placeholder (it named a
+    private person), and the recorder removes them the same way on a re-record."""
+    import record_test_samples_official as rec
+
+    lew = [inf for r in ROWS for inf in r.get("info") or []
+           if any(e.get("value") == "LEW" for e in inf.get("eventCode") or [])]
+    assert len(lew) == 1
+    texts = [p["value"] for p in lew[0]["parameter"] if p["name"] in rec.TEXT_PARAMS]
+    texts += [lew[0].get(k) for k in ("headline", "description", "instruction") if lew[0].get(k)]
+    assert texts and all(t == rec.TEXT_REMOVED for t in texts)
+    raw = {"info": [{"headline": "h", "description": "d", "instruction": "i", "eventCode": [{"value": "LEW"}],
+                     "parameter": [{"name": "CMAMtext", "value": "x"}, {"name": "WEAHandling", "value": "Imminent Threat"}]}]}
+    out = rec.remove_texts(raw)["info"][0]
+    assert out["headline"] == out["description"] == out["instruction"] == rec.TEXT_REMOVED
+    assert out["parameter"] == [{"name": "CMAMtext", "value": rec.TEXT_REMOVED}, {"name": "WEAHandling", "value": "Imminent Threat"}]
+
+
 def test_kern_update_references_times_and_link() -> None:
     parsed = {a["id"]: a for a in openfema.parse_records(ROWS)}
     upd = next(a for a in parsed.values() if a["message_type"] == "Update")

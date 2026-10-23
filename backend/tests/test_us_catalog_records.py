@@ -69,6 +69,26 @@ def test_calfire_rows(world, client) -> None:
     assert marshall["reason_code"] == "not_covered" and marshall["reason"] == "NIFC WFIGS has no record matched to this fire."
 
 
+def test_calfire_row_with_several_records(world, client, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Review R3: a CAL FIRE row matched to several WFIGS records, none with its name (``irwin_id`` null): the reason
+    names them, never "no record matched"; one record or none keeps the contract wording."""
+    from fire3d.contracts import OtherRecord
+
+    timber = next(r for r in catalog.get_catalog("live") if r.name == "Timber Fire")
+    o = timber.other_records[0]
+    two = [o, o.model_copy(update={"id": ID["9C9C9C9C"], "name": "BRADFORD BRANCH"})]
+    assert isinstance(o, OtherRecord) and o.name == "TIMBER"
+    row = timber.model_copy(update={"irwin_id": None, "unique_fire_id": None, "other_records": two})
+    monkeypatch.setattr(catalog, "resolve_listed", lambda i: row if i == timber.id else None)
+    d = _record(client, timber.id)
+    assert d["status"] == "unavailable" and d["reason_code"] == "not_covered" and d["current"] is None
+    assert d["reason"] == "NIFC WFIGS lists this fire under several records (TIMBER, BRADFORD BRANCH), so no single record is shown here."
+    assert d["irwin_id"] is None and d["incident_url"] is None and records.several_reason(["A", "B"]).count("A, B") == 1
+    row1 = row.model_copy(update={"other_records": []})
+    monkeypatch.setattr(catalog, "resolve_listed", lambda i: row1 if i == timber.id else None)
+    assert _record(client, timber.id)["reason"] == records.REASON_NO_MATCH
+
+
 def test_synthetic_unknown_and_down(world, client, tmp_data_dir: Path) -> None:
     d = tmp_data_dir / "incidents" / "fixture-east"
     d.mkdir(parents=True)

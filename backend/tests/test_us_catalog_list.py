@@ -219,6 +219,13 @@ def test_resolution(world, tmp_data_dir: Path) -> None:
 def test_display_names_and_tokens() -> None:
     assert [catalog.display_name(x) for x in ("BIG CLIFF", "O'NEIL", "FD140011", "2ND STREET", "LAC-282478", "Timber", "2-2")] == [
         "Big Cliff", "O'Neil", "Fd140011", "2nd Street", "Lac-282478", "Timber", "2-2"]
+    # possessives and contractions (review R2): a short run after an apostrophe stays lower case; "O'Neil" keeps its cap
+    names = ("DEVIL'S CANYON", "0501 PAT'S CABIN", "JOHNSON'S", "DON'T", "WE'LL", "THEY'RE", "WE'VE", "SHE'D",
+             "D'ANGELO", "O'DELL", "'S CANYON", "ROCK\u2019S")
+    assert [catalog.display_name(x) for x in names] == [
+        "Devil's Canyon", "0501 Pat's Cabin", "Johnson's", "Don't", "We'll", "They're", "We've", "She'd",
+        "D'Angelo", "O'Dell", "'S Canyon", "Rock\u2019s"]
+    assert catalog.make_incident_id(2026, catalog.display_name("DEVIL'S CANYON"), "23e897ab") == "2026-devil-s-canyon-23e897"
     assert catalog.name_tokens("Eaton Fire") == catalog.name_tokens("EATON") == frozenset({"eaton"})
     assert catalog.name_tokens("2-2") != catalog.name_tokens("2-7")
     assert catalog.norm_name("TCU SEPTEMBER LIGHTNING COMPLEX") == catalog.norm_name("TCU September Lightning Complex")
@@ -294,7 +301,7 @@ def test_id_pinning_keeps_the_bundle_id(world, tmp_data_dir: Path, monkeypatch: 
     wid = before.id
     d = tmp_data_dir / "incidents" / wid
     d.mkdir(parents=True)
-    (d / "manifest.json").write_text(json.dumps({"status": "ready", "built_ms": 7, "mode": "live",
+    (d / "manifest.json").write_text(json.dumps({"id": wid, "status": "ready", "built_ms": 7, "mode": "live",
                                                  "summary": before.model_dump(mode="json")}))
     mc = cal("McCovey Fire", "ee77ff88-0000-4000-8000-000000000009", 38.0011, -120.4909, "2026-10-10T19:30:00Z", active=True, acres=60)
     monkeypatch.setattr(__import__(__name__), "CAL_LIVE", CAL_LIVE + [mc])
@@ -310,6 +317,22 @@ def test_id_pinning_keeps_the_bundle_id(world, tmp_data_dir: Path, monkeypatch: 
         r = client.post(f"/api/incidents/{cal_id}/build")
         assert r.status_code == 409 and r.json()["detail"] == f"'{cal_id}' is listed as '{wid}'."
         assert client.get(f"/api/incidents/{cal_id}").json()["summary"]["id"] == wid
+    # the live loop's sync: the bundle summary becomes CAL FIRE's record whole (review R1: never CAL FIRE's acres, time
+    # and link under "C&L via NIFC WFIGS" with the IRWIN uid); the id stays
+    from fire3d import bundle
+    from fire3d.api import live
+
+    assert before.record_source == "wfigs" and before.record_issuer == "C&L via NIFC WFIGS" and before.uid == ID["C1C2C3D4"]
+    assert live.sync_live_summaries(list(after.values())) == [wid]
+    m = bundle.load_manifest(d)
+    ms = m["summary"]
+    assert ms["id"] == wid and ms["record_source"] == "calfire" and ms["record_issuer"] == "CAL FIRE"
+    assert ms["uid"] == row.uid == mc["UniqueId"] and ms["calfire_uid"] == row.calfire_uid == mc["UniqueId"]
+    assert ms["url"] == mc["Url"] and ms["acres"] == 60 and ms["name"] == "McCovey Fire" and ms["source_name"] == row.source_name
+    assert ms["agency"] == row.agency and ms["agency_code"] == row.agency_code and ms["aliases"] == [cal_id]
+    assert ms["irwin_id"] == ID["C1C2C3D4"] and ms["mode"] == "live" and m["built_ms"] == 7
+    assert not contract_problems(IncidentSummary, ms)
+    assert live.sync_live_summaries(list(after.values())) == []                 # one record now: nothing more to copy
     shutil_rm = __import__("shutil").rmtree
     shutil_rm(d)
     catalog.clear_cache()

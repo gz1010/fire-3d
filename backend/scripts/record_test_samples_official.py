@@ -287,6 +287,22 @@ NWEM_ID = "v2-3.13.8-1556392-1792113838542"        # LA County CEM, 2026-10-16 0
 OPENFEMA_WINDOW = ("2026-10-09T21:00:00Z", "2026-10-10T03:00:00Z")
 REDACTED_SENDER = "redacted@example.invalid"     # operators' sender addresses are never recorded
 OUT_OF_SCOPE_KEPT = ("FFW", "TOR", "LEW")         # one record each, to test the scope filter
+TEXT_REMOVED_CODES = ("LEW",)                     # law enforcement texts can name people: kept for the code only
+TEXT_REMOVED = "Text removed by hand: a Law Enforcement Warning kept only for its event code (scope-filter test)."
+TEXT_PARAMS = ("CMAMtext", "CMAMlongtext")
+
+
+def remove_texts(rec: dict) -> dict:
+    """Replace a kept out-of-scope record's free texts (headline, description, instruction, WEA texts) by
+    :data:`TEXT_REMOVED`; the scope-filter test needs only its event code."""
+    for inf in rec.get("info") or []:
+        for key in ("headline", "description", "instruction"):
+            if inf.get(key):
+                inf[key] = TEXT_REMOVED
+        for p in inf.get("parameter") or []:
+            if p.get("name") in TEXT_PARAMS and p.get("value"):
+                p["value"] = TEXT_REMOVED
+    return rec
 
 
 def build_national() -> tuple[dict, dict, dict]:
@@ -322,6 +338,8 @@ def build_national() -> tuple[dict, dict, dict]:
             for ar in inf.get("area") or []:
                 if isinstance(ar.get("polygon"), dict):
                     ar["polygon"] = simplify_geometry(ar["polygon"], 0.0, 4)
+        if not in_scope and extra in TEXT_REMOVED_CODES:
+            remove_texts(r)
         kept.append(r)
     meta = dict(raw.get("metadata") or {})
     meta["count"] = len(kept)
@@ -343,6 +361,10 @@ def check_national(national: dict, nwem: dict, fema: dict) -> None:
     need(any(x["references"] for x in parsed), "an update with references")
     need(nwem["properties"].get("sender") == REDACTED_SENDER, "the NWEM operator address is redacted")
     need(all(r.get("sender") in (None, REDACTED_SENDER) for r in fema["IpawsArchivedAlerts"]), "OpenFEMA senders redacted")
+    removed = [p.get("value") for r in fema["IpawsArchivedAlerts"] for inf in r.get("info") or []
+               if {e.get("value") for e in inf.get("eventCode") or []} & set(TEXT_REMOVED_CODES)
+               for p in inf.get("parameter") or [] if p.get("name") in TEXT_PARAMS]
+    need(all(v in ("", TEXT_REMOVED) for v in removed), "law enforcement texts removed")
 
 
 # ------------------------------------------------------------------------------------------------------------------
