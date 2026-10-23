@@ -92,6 +92,10 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
   longer fall back silently to California values beyond the GSI series; two-fire caveats now show each region's
   own scores; Northern Rockies has no 'typical' growth ratio (its fires erred both ways). No score changed.
   Integration part 2 started (API 8716 / Vite 5186), the only agent editing now.
+- ~15:30 UTC: integration part 2 done (f29c291..5c54c40; backend 990, web 1,186; 65 brief3-final screenshots;
+  503 on list outages, Lucas same-name records merged, accuracy labels from real results in words/score per
+  decision 7, 5 small bugs fixed). Final verification started: a two-reviewer read-only panel, then the
+  final-verification agent (live national loop, one prepared fire, README, report), then a clean re-check.
 - Lesson: never SendMessage a workflow agent (it starts a second copy); relay through files or Agent-tool agents.
 
 ## Carry-over items for later stages (integration unless a role owns the file)
