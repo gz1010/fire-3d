@@ -14,8 +14,9 @@
 //     restored or deep-linked view kept on a first load, done only when the fit completes, fits re-issued after
 //     non-user interruptions, ended by user gestures and explicit requests; fires are framed on their own extent
 //     (lib/fireBounds.ts, I4) and the "Incident" control toggles fire / modeled area;
-//   - with no incident open, the California overview: one marker per fire (map/overviewLayers.ts); a click on a
-//     marker, or inside a fire on the fire's own marker or label, opens its fire card (I3) instead of selecting a point;
+//   - with no incident open, the national overview (brief 3, §14.11): markers in three sources, active and other fires
+//     grouped apart and large active fires pinned (map/overviewLayers.ts); a click on a marker, or inside a fire on the
+//     fire's own marker or label, opens its fire card (I3) instead of selecting a point; a click on a group zooms in;
 //   - the effective basemap comes from the workspace store; when the USGS photos fail (4 errors and no tile, or no tile
 //     within 8 s) the map sets the store's basemapFallback to 'dark', which stops every imagery request;
 //   - muted 3D buildings in 3D only, an orbit group's camera actions, and the official layers (I6);
@@ -36,24 +37,26 @@ import {
   type StyleSpecification,
 } from 'maplibre-gl'
 import { bundleUrl, fetchJson } from '../api/client'
+import { recordIssuerLabel } from '../api/records'
 import type { ForecastLayerName, ForecastManifest, IncidentManifest, IncidentSummary } from '../api/types'
 import { HOUR_MS, loadRasterSet, type LoadedLayer, type RasterSet } from '../data/rasters'
 import { aoiBounds, fireBounds, type LonLatBox } from '../lib/fireBounds'
 import { area as areaText } from '../lib/plainLanguage'
 import { aoiCornersLonLat, localToLonLat, overlayMapping } from '../lib/reproject'
-import { fmtDateTimeTz } from '../lib/time'
+import { fmtAt, timeFmt, type TimeFmt } from '../lib/time'
 import { mountOfficialLayers, type OfficialLayersHandle } from '../official/mapLayer'
 import { useAnnotations } from '../state/annotations'
-import { findFire, fireFlyTo, fireStatus, overviewFires, type OverviewCatalog } from '../state/overview'
+import { findFire, fireFlyTo, fireStatus, fireWhere, overviewFires, PAST_YEAR, SEASON_YEAR, type OverviewCatalog } from '../state/overview'
 import { readUrlParams } from '../state/runtime'
 import { useStore } from '../state/store'
+import { getTimeFormat } from '../state/timeZone'
 import { useWorkspace, type Basemap, type MapFlyTo, type MapLayerKey, type Perspective, type SafeInsets } from '../state/workspace'
 import { buildFeedItems, selectFeedItem } from '../ui/feed/feedModel'
 import type { FeedItem } from '../ui/feed/types'
 import { BUILDINGS_3D_LAYER, HILLSHADE_SOURCE, IMAGERY_SOURCE, loadBasemap, TERRAIN_SOURCE, VECTOR_SOURCE, type DerivedStyle } from './basemapStyle'
 import { maskGeometry } from './contours'
 import { allFocusCandidates, CENTRAL_FRACTION, chipTargets, FocusHold, focusUnlessHeld, FOCUS_DEBOUNCE_MS, FOCUS_OUT_ZOOM, type FocusCurrent, type FocusView } from './focus'
-import { boundsCenter, CALIFORNIA_BOUNDS, Framing, goalFor, latestPerimeter, zoomForBounds, type CameraPose, type FrameGoal } from './framing'
+import { boundsCenter, Framing, goalFor, latestPerimeter, LOWER48_BOUNDS, LOWER48_START, zoomForBounds, type CameraPose, type FrameGoal } from './framing'
 import { drapedLayers, HATCH_IMAGE, hatchImage, LAYER_GROUPS, LYR, SRC, topLayers, type MapTheme } from './layers'
 import { fmtLatLon, SelectionPin } from './markers'
 import { EMPTY_OVERLAYS, motionMs, patchOverlays, setProvider, useMapRuntime, type MapActions } from './mapStore'
@@ -77,7 +80,30 @@ import {
   type MapEvent,
 } from './overlayModel'
 import { NearbyLoader, nearbyFires, nearbyPerimeterFeatures, NEARBY_MIN_ZOOM, shownPerimeterIndex, type NearbyFire } from './nearbyPerimeters'
-import { CHIP_IMAGE, chipImage, OVERVIEW_HIT_LAYERS, OVERVIEW_SRC, overviewFeatures, overviewFilters, overviewLayers, overviewPaint, OVR, pickFireHit, type FireHit } from './overviewLayers'
+import {
+  CHIP_IMAGE,
+  chipImage,
+  clusterClickZoom,
+  clusterHoverText,
+  OVERVIEW_CHIP_LAYERS,
+  OVERVIEW_CLUSTER_LAYERS,
+  OVERVIEW_FIRE_LAYERS,
+  OVERVIEW_GROUPS,
+  OVERVIEW_HIT_LAYERS,
+  OVERVIEW_LABEL_LAYERS,
+  OVERVIEW_SOURCES,
+  overviewData,
+  overviewFilters,
+  overviewLayers,
+  overviewPaint,
+  overviewSourceOptions,
+  OVR,
+  pickFireHit,
+  selectedFilter,
+  splitOverview,
+  type ClusterHit,
+  type FireHit,
+} from './overviewLayers'
 import { BASEMAP_STYLE, devProviderFailures, OPENFREEMAP_GLYPHS, UNREACHABLE } from './providers'
 import { RasterOverlay } from './rasterOverlay'
 import { bindExtrasLayers, EXTRAS_HOVER_LAYERS, type ExtrasLayers } from './extrasLayers'
@@ -86,7 +112,6 @@ import { EVAC_LAYERS, zoneDetail } from '../extras/evacuation'
 import { useExtrasRuntime } from '../extras/runtime'
 import { KIND_META } from '../ui/feed/feedMeta'
 
-const CALIFORNIA: [number, number] = [-119.4, 37.2]
 const MAX_PITCH_3D = 80
 const PITCH_3D = 58
 const MIN_INTERVAL_MS = 110
@@ -217,7 +242,12 @@ export class MapController {
   /** The overview set shown as markers (shell's overviewFires) and chips; the focus and the other fires' outlines use
    *  all three lists. */
   private overviewSet: IncidentSummary[] = []
-  private overviewHidden = ''
+  /** Bumped whenever overviewSet or the units change (part of the data key). */
+  private overviewVersion = 0
+  /** What the three sources were last filled from (set, units, hidden fires, open card): data is re-split only when it
+   *  changes, never per frame. */
+  private overviewDataKey = ''
+  private overviewChipKey = ''
   private overviewDim: boolean | null = null
   /** Unprepared fires zoomed in on: they show the "Spread not prepared yet" chip. */
   private chipIds: string[] = []
@@ -234,8 +264,8 @@ export class MapController {
     this.map = new MapLibreMap({
       container,
       style: initialStyle(),
-      center: v ? [v.centerLon, v.centerLat] : st.summary ? [st.summary.lon, st.summary.lat] : CALIFORNIA,
-      zoom: v ? v.zoom : st.summary ? 11 : 5,
+      center: v ? [v.centerLon, v.centerLat] : st.summary ? [st.summary.lon, st.summary.lat] : [LOWER48_START.lon, LOWER48_START.lat],
+      zoom: v ? v.zoom : st.summary ? 11 : LOWER48_START.zoom,
       bearing: v?.bearing ?? 0,
       pitch: is3d ? (v && v.pitch > 0 ? v.pitch : PITCH_3D) : 0,
       maxPitch: is3d ? MAX_PITCH_3D : 0,
@@ -283,7 +313,7 @@ export class MapController {
     this.official.remove()
     this.extras.destroy()
     this.map.remove()
-    useMapRuntime.setState({ map: null, camera: null, terrainOn: false, aoiInView: null, actions: null, framing: 'idle', framedKind: null, fireBounds: null })
+    useMapRuntime.setState({ map: null, camera: null, terrainOn: false, aoiInView: null, actions: null, framing: 'idle', framedKind: null, fireBounds: null, viewBox: null })
   }
 
   // ------------------------------------------------------------------------------------------------ subscriptions
@@ -411,8 +441,11 @@ export class MapController {
     const empty = (id: string) => {
       if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: EMPTY as never, tolerance: 0.2 })
     }
-    for (const id of [SRC.observedEdge, SRC.forecastLines, SRC.forecastHatch, SRC.perimeters, SRC.nearby, SRC.detections, SRC.detectionPoints, SRC.aoi, SRC.aoiLabels, SRC.events, SRC.incident, OVERVIEW_SRC])
+    for (const id of [SRC.observedEdge, SRC.forecastLines, SRC.forecastHatch, SRC.perimeters, SRC.nearby, SRC.detections, SRC.detectionPoints, SRC.aoi, SRC.aoiLabels, SRC.events, SRC.incident])
       empty(id)
+    // the overview's three sources: pinned (never grouped), active and other fires (grouped in MapLibre's worker)
+    const width = map.getContainer().clientWidth
+    for (const g of OVERVIEW_GROUPS) if (!map.getSource(OVERVIEW_SOURCES[g])) map.addSource(OVERVIEW_SOURCES[g], overviewSourceOptions(g, width) as never)
     for (const tone of ['dark', 'light'] as const) {
       if (map.hasImage(CHIP_IMAGE[tone])) continue
       const c = chipImage(tone)
@@ -437,7 +470,8 @@ export class MapController {
     // everything is re-pushed from the cached data
     this.keys = { obs: '', fc: '', det: '', perim: '', ev: '' }
     this.overviewRefs = null
-    this.overviewHidden = ''
+    this.overviewDataKey = ''
+    this.overviewChipKey = ''
     this.overviewDim = null
     this.nearbyKey = ''
     this.markDirty('observed', 'forecast', 'vectors', 'statics')
@@ -499,8 +533,8 @@ export class MapController {
   }
 
   // ------------------------------------------------------------------------------------------------ overview
-  /** Fire markers: the shell's overview set (filter, lists), at every zoom (decision 10); rebuilt only when a list, the
-   *  filter or the units change. */
+  /** Fire markers: the shell's overview set (filter, lists), at every zoom (decision 10); the set is rebuilt only when
+   *  a list, the filter or the units change. */
   private updateOverview(): void {
     const c = useStore.getState().catalog
     const ws = useWorkspace.getState()
@@ -508,10 +542,8 @@ export class MapController {
     const o = this.overviewRefs
     if (!(o && o.live === refs.live && o.season === refs.season && o.historical === refs.historical && o.filter === refs.filter && o.units === refs.units)) {
       this.overviewSet = overviewFires(catalogOf(), ws.overviewFilter)
-      if (this.styleReady) {
-        this.overviewRefs = refs
-        this.setData(OVERVIEW_SRC, overviewFeatures(this.overviewSet, ws.units))
-      }
+      this.overviewVersion++
+      if (this.styleReady) this.overviewRefs = refs
     }
     this.applyOverviewState()
   }
@@ -524,19 +556,28 @@ export class MapController {
     return mode === 'historical' ? s.timeMs : null
   }
 
-  /** Markers while a fire is open: lighter, without the open fire's own marker and, in a replay, without fires that had
-   *  not started by the timeline time. Filters change only when that set changes (never per frame). */
+  /** The three sources' data, the chips and the dimming. Fires hidden from the map (the open one; in a replay, those
+   *  not started yet) are removed from the data, and the fire whose card is open moves to the pinned source; both only
+   *  when that set changes (never per frame). Markers are lighter while a fire is open. */
   private applyOverviewState(): void {
     if (!this.styleReady) return
     const map = this.map
     const open = useStore.getState().incidentId
+    const ws = useWorkspace.getState()
     const t = this.replayTime()
     const hidden: string[] = open ? [open] : []
     if (t != null) for (const f of this.overviewSet) if (f.started_ms > t && f.id !== open) hidden.push(f.id)
-    const key = `${hidden.join(',')}|${this.chipIds.join(',')}`
-    if (key !== this.overviewHidden) {
-      this.overviewHidden = key
-      for (const [id, f] of Object.entries(overviewFilters(hidden, this.chipIds))) if (map.getLayer(id)) map.setFilter(id, f as FilterSpecification)
+    const cardId = ws.fireCardId
+    const dataKey = `${this.overviewVersion}|${ws.units}|${cardId ?? ''}|${hidden.join(',')}`
+    if (dataKey !== this.overviewDataKey) {
+      this.overviewDataKey = dataKey
+      const data = overviewData(splitOverview(this.overviewSet, { hidden, cardId }), ws.units)
+      for (const g of OVERVIEW_GROUPS) this.setData(OVERVIEW_SOURCES[g], data[g])
+    }
+    const chipKey = this.chipIds.join(',')
+    if (chipKey !== this.overviewChipKey) {
+      this.overviewChipKey = chipKey
+      for (const [id, f] of Object.entries(overviewFilters(this.chipIds))) if (map.getLayer(id)) map.setFilter(id, f as FilterSpecification)
     }
     const dim = open != null
     if (dim !== this.overviewDim) {
@@ -545,15 +586,17 @@ export class MapController {
     }
   }
 
+  /** The card's selection ring; the fire moves into the pinned source (never inside a group). */
   private updateFireCardRing(): void {
-    if (!this.styleReady || !this.map.getLayer(OVR.selected)) return
-    this.map.setFilter(OVR.selected, ['==', ['get', 'id'], useWorkspace.getState().fireCardId ?? ''])
+    if (!this.styleReady) return
+    this.applyOverviewState()
+    if (this.map.getLayer(OVR.selected)) this.map.setFilter(OVR.selected, selectedFilter(useWorkspace.getState().fireCardId) as FilterSpecification)
   }
 
   /** The fire a click on the overview means (nearest marker centre; a label when no marker is hit). */
   private fireAt(point: { x: number; y: number }): string | null {
     const map = this.map
-    const layers = OVERVIEW_HIT_LAYERS.filter((id) => map.getLayer(id))
+    const layers = OVERVIEW_FIRE_LAYERS.filter((id) => map.getLayer(id))
     if (!layers.length) return null
     const feats = map.queryRenderedFeatures([point.x, point.y], { layers })
     const hits: FireHit[] = []
@@ -562,7 +605,7 @@ export class MapController {
     for (const f of feats) {
       const id = f.properties?.id
       if (typeof id !== 'string') continue
-      if (f.layer.id === OVR.label) {
+      if (OVERVIEW_LABEL_LAYERS.includes(f.layer.id)) {
         labelId ??= id
         continue
       }
@@ -574,10 +617,47 @@ export class MapController {
     return pickFireHit(hits) ?? labelId
   }
 
+  /** The group bubble under the pointer (active groups above other ones), else null. */
+  private clusterAt(point: { x: number; y: number }): ClusterHit | null {
+    const map = this.map
+    const layers = OVERVIEW_CLUSTER_LAYERS.filter((id) => map.getLayer(id))
+    if (!layers.length) return null
+    const feats = map.queryRenderedFeatures([point.x, point.y], { layers })
+    const f = feats.find((x) => x.layer.id === OVR.activeCluster) ?? feats[0]
+    if (!f || f.geometry.type !== 'Point') return null
+    const p = f.properties ?? {}
+    const [lon, lat] = f.geometry.coordinates as [number, number]
+    return {
+      group: f.layer.id === OVR.activeCluster ? 'active' : 'other',
+      clusterId: Number(p.cluster_id),
+      lon,
+      lat,
+      count: Number(p.point_count) || 0,
+      maxAcres: Number(p.max_acres) || 0,
+      small: Number(p.small) || 0,
+    }
+  }
+
+  /** A click on a group: zoom in on it, to its expansion zoom but at most z8 (below the focus zoom, so it never opens
+   *  a prepared fire). An explicit request: it ends the opening framing, and the list shows the fires in view. */
+  private zoomToCluster(c: ClusterHit): void {
+    const src = this.map.getSource(OVERVIEW_SOURCES[c.group]) as GeoJSONSource | undefined
+    if (!src) return
+    useWorkspace.getState().setOverviewShowAll(false)
+    this.framing.explicit()
+    this.focusHold.release()
+    this.publishFraming()
+    const go = (z: number) => {
+      if (this.destroyed) return
+      this.map.easeTo({ center: [c.lon, c.lat], zoom: clusterClickZoom(z, this.map.getZoom()), duration: motionMs(700) })
+    }
+    void src.getClusterExpansionZoom(c.clusterId).then(go, () => go(Number.NaN))
+  }
+
   /** The fire of a "Spread not prepared yet" chip or another fire's perimeter outline under the pointer. */
   private cardTargetAt(point: { x: number; y: number }): string | null {
     const map = this.map
-    const layers = [OVR.chip, LYR.nearbyLine, LYR.nearbyLabel].filter((id) => map.getLayer(id))
+    const layers = [...OVERVIEW_CHIP_LAYERS, LYR.nearbyLine, LYR.nearbyLabel].filter((id) => map.getLayer(id))
     if (!layers.length) return null
     const id = map.queryRenderedFeatures([point.x, point.y], { layers })[0]?.properties?.id
     return typeof id === 'string' ? id : null
@@ -687,7 +767,7 @@ export class MapController {
           pose = { lon, lat, zoom: zoomForBounds(goal.bounds, el.clientWidth, el.clientHeight, margin, maxZoom), bearing, pitch }
         }
       } else {
-        const v = goal.view ?? { lon: CALIFORNIA[0], lat: CALIFORNIA[1], zoom: 5 }
+        const v = goal.view ?? LOWER48_START
         pose = { lon: v.lon, lat: v.lat, zoom: v.zoom, bearing, pitch }
       }
       // recorded before the move: an instant move ends inside the call below
@@ -775,9 +855,9 @@ export class MapController {
       } else this.pendingPadding = true
       return
     }
-    // a goal framed moments ago (the layout still settling), and the California overview as framed, follow the safe
-    // area while the user has not moved: fit them again
-    if (this.framing.phase === 'done' && g && (performance.now() - this.framedAt < SETTLE_MS || (g.kind === 'overview' && g.bounds === CALIFORNIA_BOUNDS))) {
+    // a goal framed moments ago (the layout still settling), and the lower-48 overview as framed, follow the safe area
+    // while the user has not moved: fit them again
+    if (this.framing.phase === 'done' && g && (performance.now() - this.framedAt < SETTLE_MS || (g.kind === 'overview' && g.bounds === LOWER48_BOUNDS))) {
       this.issueFit(g, animate, false)
       return
     }
@@ -854,7 +934,17 @@ export class MapController {
     }
     this.updateCamera()
     this.updateAoiInView()
+    this.updateViewBox()
     this.publishFraming()
+  }
+
+  /** The visible map area inside the safe area, for the overview list's "in this view" (§14.11); set when it changes. */
+  private updateViewBox(): void {
+    const v = this.focusView().view
+    const r = (x: number) => Math.round(x * 1e4) / 1e4
+    const box: LonLatBox = [r(v[0]), r(v[1]), r(v[2]), r(v[3])]
+    const prev = useMapRuntime.getState().viewBox
+    if (!prev || prev.some((x, i) => x !== box[i])) useMapRuntime.setState({ viewBox: box })
   }
 
   private updateAoiInView(): void {
@@ -997,7 +1087,7 @@ export class MapController {
     }
   }
 
-  /** The "Incident" / "California" controls: frame the fire, its modeled area or the overview, tracked like a fit. */
+  /** The "Incident" / "All states" controls: frame the fire, its modeled area or the overview, tracked like a fit. */
   private frameRequest(kind: FrameGoal['kind']): void {
     const g = this.requestGoal(kind)
     if (!g) return
@@ -1008,7 +1098,7 @@ export class MapController {
   }
 
   private requestGoal(kind: FrameGoal['kind']): FrameGoal | null {
-    if (kind === 'overview') return { key: 'overview:request', kind: 'overview', provisional: false, bounds: CALIFORNIA_BOUNDS }
+    if (kind === 'overview') return { key: 'overview:request', kind: 'overview', provisional: false, bounds: LOWER48_BOUNDS }
     const s = useStore.getState()
     const id = s.incidentId
     if (id == null) return null
@@ -1224,6 +1314,12 @@ export class MapController {
       this.openFireFromOverview(fireId)
       return
     }
+    // a group of fires: zoom in on it (brief 3, §14.11)
+    const group = this.clusterAt(e.point)
+    if (group) {
+      this.zoomToCluster(group)
+      return
+    }
     // inside a fire: its own marker or label opens its card
     if (incidentId != null) {
       const own = present([LYR.incidentHit, LYR.incidentCircle, LYR.incidentLabel])
@@ -1258,7 +1354,8 @@ export class MapController {
       const zones = EXTRAS_HOVER_LAYERS.zones
       const fires = OVERVIEW_HIT_LAYERS
       const own: readonly string[] = [LYR.incidentHit, LYR.incidentCircle, LYR.incidentLabel]
-      const cards: readonly string[] = [OVR.chip, LYR.nearbyLine, LYR.nearbyLabel]
+      const chips = OVERVIEW_CHIP_LAYERS
+      const cards: readonly string[] = [...chips, LYR.nearbyLine, LYR.nearbyLabel]
       const ids = [
         LYR.eventsCircle,
         ...cams,
@@ -1279,13 +1376,16 @@ export class MapController {
       // nothing else is under the pointer
       let f: MapGeoJSONFeature | undefined
       const fireId = this.fireAt(p)
-      if (fireId) f = feats.find((x) => fires.includes(x.layer.id) && x.properties?.id === fireId)
+      if (fireId) f = feats.find((x) => OVERVIEW_FIRE_LAYERS.includes(x.layer.id) && x.properties?.id === fireId)
+      // a group of fires (active groups above other ones) when no single fire is under the pointer
+      const group = feats.find((x) => x.layer.id === OVR.activeCluster) ?? feats.find((x) => x.layer.id === OVR.otherCluster)
       f =
         feats.find((x) => x.layer.id === LYR.eventsCircle) ??
         feats.find((x) => cams.includes(x.layer.id)) ??
-        feats.find((x) => x.layer.id === OVR.chip) ??
+        feats.find((x) => chips.includes(x.layer.id)) ??
         f ??
         feats.find((x) => own.includes(x.layer.id)) ??
+        group ??
         feats.find((x) => !zones.includes(x.layer.id) && !fires.includes(x.layer.id)) ??
         feats[0]
       if (!f) {
@@ -1316,13 +1416,18 @@ export class MapController {
       d.textContent = text
       el.append(d)
     }
-    /** CAL FIRE's official record of a fire, as text. */
-    const calfire = (s: IncidentSummary) => {
+    const clock = getTimeFormat().clock
+    /** A fire's own zone with the current clock (overview rows and hovers use each row's zone, §14.9.1). */
+    const tfOf = (s: Pick<IncidentSummary, 'time_zone'> | null | undefined): TimeFmt => timeFmt(s?.time_zone, clock)
+    /** The agency's official record of a fire, as text ("USFS via NIFC WFIGS (official): …"), in the fire's zone. */
+    const record = (s: IncidentSummary) => {
+      const where = fireWhere(s)
+      if (where) line(where)
       const parts = [s.acres != null ? areaText(s.acres, units).text : 'size not reported']
       if (s.percent_contained != null) parts.push(`${Math.round(s.percent_contained)} % contained`)
       parts.push(fireStatus(s).label)
-      line(`CAL FIRE (official): ${parts.join(' · ')}`)
-      if (s.updated_ms) line(`Updated ${fmtDateTimeTz(s.updated_ms)}`, 'fxm-tip-hint')
+      line(`${recordIssuerLabel(s)} (official): ${parts.join(' · ')}`)
+      if (s.updated_ms) line(`Updated ${fmtAt(s.updated_ms, tfOf(s), { zone: true })}`, 'fxm-tip-hint')
     }
     if (EXTRAS_HOVER_LAYERS.cameras.includes(f.layer.id)) {
       const cam = useExtrasRuntime.getState().cams.data?.cameras.features.find((c) => c.properties.id === p.id)
@@ -1343,7 +1448,20 @@ export class MapController {
       line('Official status from local officials via Cal OES. Fire-3d forecasts are not evacuation instructions.', 'fxm-tip-hint')
       return el
     }
-    if (f.layer.id === OVR.chip) {
+    if (OVERVIEW_CLUSTER_LAYERS.includes(f.layer.id)) {
+      const filter = useWorkspace.getState().overviewFilter
+      const group = f.layer.id === OVR.activeCluster ? 'active' : 'other'
+      line(group === 'active' ? 'Group of active fires' : filter === 'past' ? `Group of ${PAST_YEAR} fires` : `Group of other ${SEASON_YEAR} fires`, 'fxm-tip-title')
+      line(
+        clusterHoverText(
+          { group, count: Number(p.point_count) || 0, maxAcres: Number(p.max_acres) || 0, small: Number(p.small) || 0 },
+          units,
+          filter === 'past' ? `${PAST_YEAR} fires` : `other ${SEASON_YEAR} fires`,
+        ),
+      )
+      return el
+    }
+    if (OVERVIEW_CHIP_LAYERS.includes(f.layer.id)) {
       const s = findFire(String(p.id), useStore.getState().summary, catalogOf())
       line(s?.name ?? String(p.name ?? 'Fire'), 'fxm-tip-title')
       line(String(p.chip))
@@ -1352,15 +1470,16 @@ export class MapController {
     }
     if (f.layer.id === LYR.nearbyLine || f.layer.id === LYR.nearbyLabel) {
       line(String(p.name ?? 'Fire'), 'fxm-tip-title')
-      line(`Latest agency perimeter${Number.isFinite(Number(p.t)) ? `, ${fmtDateTimeTz(Number(p.t))}` : ''}`)
+      const other = findFire(String(p.id), useStore.getState().summary, catalogOf())
+      line(`Latest agency perimeter${Number.isFinite(Number(p.t)) ? `, ${fmtAt(Number(p.t), tfOf(other), { zone: true })}` : ''}`)
       line('Another prepared fire: zoom in on it to open its spread, or click for its card', 'fxm-tip-hint')
       return el
     }
-    if (OVERVIEW_HIT_LAYERS.includes(f.layer.id)) {
+    if (OVERVIEW_FIRE_LAYERS.includes(f.layer.id)) {
       const s = findFire(String(p.id), useStore.getState().summary, catalogOf())
       if (!s) return null
       line(s.name, 'fxm-tip-title')
-      calfire(s)
+      record(s)
       line('Click for the fire card', 'fxm-tip-hint')
       return el
     }
@@ -1368,7 +1487,7 @@ export class MapController {
       case LYR.eventsCircle: {
         const item = this.feed.get(String(p.eid))
         line(String(p.title ?? 'Event'), 'fxm-tip-title')
-        if (item) line(`${fmtDateTimeTz(item.tMs)} · ${KIND_META[item.kind].label.toLowerCase()} · ${item.source}`)
+        if (item) line(`${fmtAt(item.tMs, getTimeFormat(), { zone: true })} · ${KIND_META[item.kind].label.toLowerCase()} · ${item.source}`)
         line('Click to select this update', 'fxm-tip-hint')
         break
       }
@@ -1379,7 +1498,7 @@ export class MapController {
         line(String(p.name ?? s?.name ?? 'Incident'), 'fxm-tip-title')
         line('Reported incident location (not the exact ignition point)')
         line(fmtLatLon(Number(p.lat), Number(p.lon)), 'fxm-tip-mono')
-        line('Click for the fire card (CAL FIRE status and link)', 'fxm-tip-hint')
+        line(`Click for the fire card (${s ? recordIssuerLabel(s) : 'agency'} status and link)`, 'fxm-tip-hint')
         break
       }
       case LYR.detectionsFill:
@@ -1389,7 +1508,7 @@ export class MapController {
         const t = Number(p.t)
         const ageH = (tMs - t) / HOUR_MS
         line(`${String(p.inst)} heat detection (${String(p.sat)})`, 'fxm-tip-title')
-        line(`${fmtDateTimeTz(t)} · ${ageH < 1 ? `${Math.max(1, Math.round(ageH * 60))} min` : `${ageH.toFixed(ageH < 10 ? 1 : 0)} h`} before the timeline time`)
+        line(`${fmtAt(t, getTimeFormat(), { zone: true })} · ${ageH < 1 ? `${Math.max(1, Math.round(ageH * 60))} min` : `${ageH.toFixed(ageH < 10 ? 1 : 0)} h`} before the timeline time`)
         const fp = Number(p.fp) || footprintM({ footprint_m: 0, instrument: String(p.inst) as never })
         line(
           `Sensor pixel about ${units === 'us' ? `${Math.round((fp * 3.28084) / 10) * 10} ft` : `${Math.round(fp)} m`} across: heat was detected somewhere inside it. It is not an exact fire edge.`,

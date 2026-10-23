@@ -604,3 +604,43 @@
 .fxm-credits a[href='https://open-meteo.com/'] {
   white-space: nowrap;
 }
+/* brief 3 overview groups (map/overviewLayers.ts): a group bubble with its count, a small active dot */
+.fxm-sw-group-active,
+.fxm-sw-group-past {
+  width: 16px;
+  height: 16px;
+  margin: 0 1px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px rgba(6, 10, 16, 0.72);
+  position: relative;
+}
+.fxm-sw-group-active {
+  background: #ff5a1f;
+  border: 2px solid #ffffff;
+}
+.fxm-sw-group-past {
+  background: rgba(255, 190, 90, 0.3);
+  border: 1.6px solid #ffc46b;
+}
+.fxm-sw-group-active::after,
+.fxm-sw-group-past::after {
+  content: '3';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font: 700 8px/1 var(--font-sans, sans-serif);
+  color: #ffffff;
+}
+.fxm-sw-small-active {
+  width: 6px;
+  height: 6px;
+  margin: 0 6px;
+  border-radius: 50%;
+  background: #ff5a1f;
+  box-shadow: 0 0 0 1px rgba(6, 10, 16, 0.72);
+}
+.fxm-legend-absence {
+  color: var(--m-text-2);
+  font-size: 0.92em;
+}

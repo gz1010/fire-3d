@@ -1,6 +1,6 @@
 // Small map controls (owner: map-core; BRIEF §3, CONTRACT §4.1): 2D/3D perspective, a quick basemap switch, a compass
 // that shows the bearing and resets north, zoom out / in, and the framing button ("Incident" inside a fire: the fire,
-// then its modeled area; "California" on the overview). In 3D an orbit group sits under them (brief 2, O-R14): rotate
+// then its modeled area; "All states" on the overview: the lower 48). In 3D an orbit group sits under them (brief 2, O-R14): rotate
 // 15° either way, tilt ±10°, "Top-down" (pitch 0, terrain kept) and "North up", with a one-time gesture hint. All are
 // buttons (keyboard and screen-reader accessible); camera moves go through the controller (useMapRuntime.actions), so
 // the opening camera knows about them, and honour prefers-reduced-motion.
@@ -104,8 +104,8 @@ export function MapControls() {
   const photoLine = aerialPhotoLine(hasIncident ? startedMs : null)
   // inside a fire the button toggles: the fire, then (pressed again while still framed on it) the modeled area
   const nextArea = hasIncident && framedKind === 'fire'
-  const frameLabel = !hasIncident ? 'Show all of California' : nextArea ? 'Show the whole modeled area' : 'Frame the fire'
-  const frameTip = !hasIncident ? 'Show all of California' : nextArea ? 'Show the whole modeled area (press again for the fire)' : 'Frame the fire (press again for the whole modeled area)'
+  const frameLabel = !hasIncident ? 'Show all of the lower 48 states' : nextArea ? 'Show the whole modeled area' : 'Frame the fire'
+  const frameTip = !hasIncident ? 'Show all of the lower 48 states (Alaska and Hawaii are not supported yet)' : nextArea ? 'Show the whole modeled area (press again for the fire)' : 'Frame the fire (press again for the whole modeled area)'
   return (
     <div className="mw-ctl fxm-ctl" role="toolbar" aria-label="Map controls">
       <div className="fxm-ctl-row">
@@ -161,7 +161,7 @@ export function MapControls() {
           onClick={() => (!hasIncident ? actions?.frameOverview() : nextArea ? actions?.frameArea() : actions?.frameFire())}
         >
           {hasIncident ? <Crosshair size={14} aria-hidden="true" /> : <MapIcon size={14} aria-hidden="true" />}
-          <span>{hasIncident ? 'Incident' : 'California'}</span>
+          <span>{hasIncident ? 'Incident' : 'All states'}</span>
         </button>
       </div>
       {perspective === '3d' && <OrbitGroup pitch={pitch} />}

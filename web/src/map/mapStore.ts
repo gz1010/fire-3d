@@ -65,7 +65,7 @@ export interface MapActions {
   frameFire(): void
   /** Frame the open fire's modeled area (AOI). */
   frameArea(): void
-  /** Frame California (the overview). */
+  /** Frame the lower 48 (the overview). */
   frameOverview(): void
   /** Rotate by `deg` (clockwise), tilt by `deg` (3D), straight down (3D, terrain kept), north up. */
   rotateBy(deg: number): void
@@ -96,6 +96,9 @@ export interface MapRuntimeState {
   framedKind: FrameGoal['kind'] | null
   /** The open fire's bounds (I4), once its data is in. */
   fireBounds: LonLatBox | null
+  /** Brief 3 (§14.11): the visible map area inside the safe-area padding [w, s, e, n], updated when the camera settles
+   *  (the overview list's "in this view"); null before the map has settled once. */
+  viewBox: LonLatBox | null
 }
 
 export const useMapRuntime = create<MapRuntimeState>()((set) => ({
@@ -111,6 +114,7 @@ export const useMapRuntime = create<MapRuntimeState>()((set) => ({
   framing: 'idle',
   framedKind: null,
   fireBounds: null,
+  viewBox: null,
 }))
 
 /** Set one provider's status (no-op when unchanged). */

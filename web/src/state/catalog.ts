@@ -1,14 +1,15 @@
-// Incident lists of the main store (brief 2, I1/I2; CONTRACT §13 shell): CAL FIRE's active fires, the 2026 season and
-// the 2025 list, each loaded on its own so the overview shows the first list that arrives. Pure state transitions
-// (catalog.test.ts); store.ts does the fetching.
-import type { IncidentListResponse, IncidentSummary, Mode } from '../api/types'
+// Incident lists of the main store (brief 2, I1/I2; CONTRACT §13 shell; brief 3 §14.1): the active fires of the lower
+// 48 (CAL FIRE in California, NIFC WFIGS elsewhere), the 2026 season and the 2025 list, each loaded on its own so the
+// overview shows the first list that arrives, with each answer's `sources[]` (which agency list was available). Pure
+// state transitions (catalog.test.ts); store.ts does the fetching.
+import type { IncidentListResponse, IncidentSummary, ListSource, Mode } from '../api/types'
 import { SEASON_YEAR } from './overview'
 
 export type CatalogList = 'live' | 'season' | 'historical'
 export const CATALOG_LISTS: readonly CatalogList[] = ['live', 'season', 'historical']
 
 export interface CatalogState {
-  /** CAL FIRE active fires (`GET /api/incidents?mode=live`). */
+  /** Active fires of the lower 48 (`GET /api/incidents?mode=live`). */
   live: IncidentSummary[]
   /** The 2026 season: fires of >= 300 ac whatever their status (`?mode=historical&year=2026`). */
   season: IncidentSummary[]
@@ -24,6 +25,8 @@ export interface CatalogState {
   updatedMs: Record<CatalogList, number | null>
   listLoading: Record<CatalogList, boolean>
   listErrors: Record<CatalogList, string | null>
+  /** Brief 3 (§14.1): the agency lists behind each answer and whether each was available (null: not reported). */
+  sources: Record<CatalogList, ListSource[] | null>
 }
 
 export const EMPTY_CATALOG: CatalogState = {
@@ -36,6 +39,7 @@ export const EMPTY_CATALOG: CatalogState = {
   updatedMs: { live: null, season: null, historical: null },
   listLoading: { live: false, season: false, historical: false },
   listErrors: { live: null, season: null, historical: null },
+  sources: { live: null, season: null, historical: null },
 }
 
 /** The lists the old `modes` option meant: live -> active fires; historical -> the 2025 list (as before brief 2). */
@@ -59,12 +63,13 @@ export function catalogPending(c: CatalogState, lists: readonly CatalogList[], m
 }
 
 /** Apply one list's answer. Season rows from another year are dropped (a server that ignores `year=` answers 2025). */
-export function catalogApply(c: CatalogState, list: CatalogList, res: Pick<IncidentListResponse, 'incidents' | 'updated_ms'>): CatalogState {
+export function catalogApply(c: CatalogState, list: CatalogList, res: Pick<IncidentListResponse, 'incidents' | 'updated_ms' | 'sources'>): CatalogState {
   const rows = list === 'season' ? res.incidents.filter((s) => s.year === SEASON_YEAR) : res.incidents
   return aggregate({
     ...c,
     [list]: rows,
     updatedMs: { ...c.updatedMs, [list]: res.updated_ms },
+    sources: { ...(c.sources ?? EMPTY_CATALOG.sources), [list]: res.sources ?? null },
     listLoading: { ...c.listLoading, [list]: false },
     listErrors: { ...c.listErrors, [list]: null },
   })

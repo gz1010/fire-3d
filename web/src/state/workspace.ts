@@ -126,6 +126,8 @@ export interface WorkspaceState {
   fireCardId: string | null
   /** The overview's list filter (brief 2, O-R3): Active / 2026 season / 2025. */
   overviewFilter: OverviewFilter
+  /** Brief 3 (§14.11): the overview list shows every fire of the filter ("Show all") instead of those in the map view. */
+  overviewShowAll: boolean
 
   setWorkspace: (w: Workspace) => void
   /** Switch preset; the effective basemap follows the new preset's default unless the user picked one. */
@@ -156,6 +158,7 @@ export interface WorkspaceState {
   /** Open (id) or close (null) the fire card; never moves the camera. */
   setFireCard: (id: string | null) => void
   setOverviewFilter: (f: OverviewFilter) => void
+  setOverviewShowAll: (all: boolean) => void
 }
 
 /** Basemap of a preset when the user has not picked one (decision 5: Public opens on aerial with labels). */
@@ -273,6 +276,7 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
   safeInsets: { top: 0, right: 0, bottom: 0, left: 0 },
   fireCardId: null,
   overviewFilter: 'season',
+  overviewShowAll: false,
 
   setWorkspace: (workspace) => set({ workspace }),
   setPreset: (preset) => set((s) => ({ preset, basemap: effectiveBasemap({ ...s, preset }) })),
@@ -315,6 +319,7 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
     }),
   setFireCard: (fireCardId) => set((s) => (s.fireCardId === fireCardId ? {} : { fireCardId })),
   setOverviewFilter: (overviewFilter) => set({ overviewFilter }),
+  setOverviewShowAll: (overviewShowAll) => set({ overviewShowAll }),
 }))
 
 // Switching incidents (also overview -> fire and fire -> overview): the view belongs to the previous incident or the

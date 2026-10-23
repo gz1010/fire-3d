@@ -26,6 +26,19 @@ describe('catalog lists', () => {
     expect(c.season.map((s) => s.id)).toEqual(['2026-a'])
   })
 
+  it("keeps each answer's sources[] per list (brief 3, §14.1); a missing field reads null", () => {
+    const wfigsDown = [
+      { id: 'calfire' as const, name: 'CAL FIRE', status: 'available' as const, retrieved_ms: 5, reason: null },
+      { id: 'wfigs' as const, name: 'NIFC WFIGS (IRWIN)', status: 'unavailable' as const, retrieved_ms: null, reason: 'NIFC did not answer' },
+    ]
+    let c = catalogApply(EMPTY_CATALOG, 'live', { incidents: [], updated_ms: 1, sources: wfigsDown })
+    expect(c.sources.live).toEqual(wfigsDown)
+    expect(c.sources.season).toBeNull()
+    c = catalogApply(c, 'season', { incidents: [], updated_ms: 1 })
+    expect(c.sources.season).toBeNull()
+    expect(c.sources.live).toEqual(wfigsDown)
+  })
+
   it('keeps the last rows on failure and joins the errors', () => {
     let c = catalogApply(EMPTY_CATALOG, 'historical', { incidents: [row('2025-a', 2025)], updated_ms: 1 })
     c = catalogPending(c, ['historical', 'live'], 100)

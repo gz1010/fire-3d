@@ -371,6 +371,35 @@
   color: var(--m-text-2);
   flex: none;
 }
+.ov-foot p {
+  margin: 0;
+}
+.ov-foot p + p {
+  margin-top: 4px;
+}
+/* brief 3 (§14.11, §14.14): "312 fires in this view · Show all 1,334" and the list-absence line */
+.ov-viewline {
+  margin: 0;
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--m-border);
+  font-size: var(--m-fs-sm);
+  color: var(--m-text-2);
+  flex: none;
+}
+.ov-absence {
+  margin: 0;
+  color: var(--m-text-2);
+  font-size: var(--m-fs-sm);
+  line-height: 1.4;
+}
+.ov-state.is-empty {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.ov-state.is-empty p {
+  margin: 0;
+}
 
 /* phones, sheet closed: one line above the coordinates */
 .ov-peek {
@@ -394,12 +423,23 @@
   color: var(--m-fire-observed);
   flex: none;
 }
-.ov-peek-text {
+.ov-peek-lines {
+  display: flex;
+  flex-direction: column;
   flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 0;
+}
+.ov-peek-text,
+.ov-peek-absence {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.ov-peek-absence {
+  font-size: 11px;
+  color: var(--m-text-2);
 }
 
 /* ------------------------------------------------------------------------------------------------ notices */

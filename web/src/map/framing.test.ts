@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { aoiBounds } from '../lib/fireBounds'
 import { localToLonLat } from '../lib/reproject'
-import { boundsCenter, CALIFORNIA_BOUNDS, Framing, goalFor, latestPerimeter, MAX_REISSUES, poseMatches, zoomForBounds, type CameraPose, type FrameGoal, type GoalInput } from './framing'
+import { boundsCenter, LOWER48_BOUNDS, Framing, goalFor, latestPerimeter, MAX_REISSUES, poseMatches, zoomForBounds, type CameraPose, type FrameGoal, type GoalInput } from './framing'
 
 const GRID = { utm_zone: 11, center_e: 401418.0, center_n: 3784849.0, extent_m: 12000, bbox_lonlat: [-118.2, 34.1, -118.07, 34.24] as [number, number, number, number] }
 const [PLON, PLAT] = localToLonLat(500, -300, GRID)
@@ -70,17 +70,19 @@ describe('camera helpers', () => {
     expect(poseMatches(a, { ...a, pitch: 58 })).toBe(false)
   })
 
-  it('zoomForBounds fits a box like MapLibre (California about z5.2 at 1440 x 900, z4.5 on a phone)', () => {
-    // the whole 1440 x 900 map below the header; the safe area (overview panel, timeline) lowers it to about 5.2
-    const desk = zoomForBounds(CALIFORNIA_BOUNDS, 1440, 900 - 44, 12)
-    expect(desk).toBeGreaterThan(5.4)
-    expect(desk).toBeLessThan(5.7)
-    const safe = zoomForBounds(CALIFORNIA_BOUNDS, 1440 - 340, 900 - 44 - 190, 12)
-    expect(safe).toBeGreaterThan(5.0)
-    expect(safe).toBeLessThan(5.4)
-    const phone = zoomForBounds(CALIFORNIA_BOUNDS, 390, 844 - 200, 8)
-    expect(phone).toBeGreaterThan(4.0)
-    expect(phone).toBeLessThan(4.9)
+  it('zoomForBounds fits a box like MapLibre (the lower 48 about z3.7 at 1440 x 900 with the panel, z2.2 on a phone)', () => {
+    // the whole 1440 x 900 map below the header; the safe area (overview panel, timeline) lowers it to about 3.7
+    const desk = zoomForBounds(LOWER48_BOUNDS, 1440, 900 - 44, 12)
+    expect(desk).toBeGreaterThan(4.0)
+    expect(desk).toBeLessThan(4.2)
+    const safe = zoomForBounds(LOWER48_BOUNDS, 1440 - 340, 900 - 44 - 190, 12)
+    expect(safe).toBeGreaterThan(3.6)
+    expect(safe).toBeLessThan(3.8)
+    // phones are limited by the width (round 2 default: they open on the whole lower 48)
+    const phone = zoomForBounds(LOWER48_BOUNDS, 390, 844 - 200, 8)
+    expect(phone).toBeGreaterThan(2.0)
+    expect(phone).toBeLessThan(2.4)
+    expect(LOWER48_BOUNDS).toEqual([-124.85, 24.4, -66.89, 49.38])
     expect(zoomForBounds([-118.1, 34.1, -118.1, 34.1], 100, 100, 0, 15)).toBe(15)
     const [lon, lat] = boundsCenter([-120, 30, -110, 40])
     expect(lon).toBe(-115)
@@ -94,8 +96,8 @@ describe('camera helpers', () => {
 })
 
 describe('goalFor', () => {
-  it('overview: California, or the overview view the user left', () => {
-    expect(goalFor(input({ target: null }))).toEqual({ key: 'overview', kind: 'overview', provisional: false, bounds: CALIFORNIA_BOUNDS })
+  it('overview: the lower 48, or the overview view the user left', () => {
+    expect(goalFor(input({ target: null }))).toEqual({ key: 'overview', kind: 'overview', provisional: false, bounds: LOWER48_BOUNDS })
     const g = goalFor(input({ target: null, overviewView: { lon: -118, lat: 34, zoom: 7.5 } }))!
     expect(g.view).toEqual({ lon: -118, lat: 34, zoom: 7.5 })
     expect(g.bounds).toBeUndefined()
@@ -172,10 +174,10 @@ describe('Framing state machine', () => {
     expect(g.phase).toBe('waiting')
   })
 
-  it('without a restored view, the overview frames California, then a fire opened from it is flown to', () => {
+  it('without a restored view, the overview frames the lower 48, then a fire opened from it is flown to', () => {
     const d = new Driver(new Framing({ incidentId: null, restoredView: false, urlIncident: null }))
     d.offer(goalFor(input({ target: null })))
-    expect(d.fits[0].bounds).toEqual(CALIFORNIA_BOUNDS)
+    expect(d.fits[0].bounds).toEqual(LOWER48_BOUNDS)
     d.end()
     d.f.setTarget('fire-a')
     expect(d.f.phase).toBe('waiting')

@@ -1,5 +1,5 @@
 // Compact Public/Command header (owner: shell, CONTRACT §3; BRIEF §2, §6; brief 2 O-R3, C-R8, U-R4): brand, then
-// "California · all fires" on the overview or "← All fires" + the incident picker inside a fire, the single
+// "United States · all fires" on the overview (brief 3: the lower 48) or "← All fires" + the incident picker inside a fire, the single
 // "Public · Command · Forensic" switch, the demo badge and the toggles for the secondary panels (Analysis drawer, only
 // inside a fire; Layers & settings). Command adds the incident identifier from 1280 px (narrower, the name keeps the
 // room and the coordinate strip shows the identifier). Below 1024 px the switch moves into a menu; below 761 px the
@@ -9,6 +9,7 @@ import { ArrowLeft, BarChart3, Check, Copy, Layers, ListChecks, Maximize2, Menu 
 import { useRef, useState, type ReactNode } from 'react'
 import { ImageryChip } from '../../extras/ImageryChip'
 import { useOfficialBadge } from '../../official/hooks'
+import { agencyIdLine } from '../../lib/recordText'
 import { useStore } from '../../state/store'
 import { isDemoBundle, useWorkspace, type PanelKey } from '../../state/workspace'
 import { Popover } from '../controls'
@@ -17,6 +18,9 @@ import { IncidentPicker } from '../IncidentPicker'
 import { goToOverview } from './fireActions'
 import { useMediaQuery, WIDE_QUERY } from './hooks'
 import { ViewSwitch } from './WorkspaceSwitch'
+
+/** The overview header's tooltip (§14.11). */
+export const LOWER48_TIP = 'Lower 48 states; Alaska and Hawaii are not supported yet'
 
 /** Header button that opens / closes a workspace panel; `data-panel-toggle` lets drawers hand focus back to it. */
 export function PanelToggle({
@@ -68,10 +72,10 @@ function DemoBadge() {
   )
 }
 
-/** Command: the incident identifier (Fire-3d id; CAL FIRE UID in the tooltip) with a copy button. */
+/** Command: the incident identifier (Fire-3d id; the agency's incident ID in the tooltip, §14.5) with a copy button. */
 function IncidentIdChip() {
   const id = useStore((s) => s.incidentId)
-  const uid = useStore((s) => s.summary?.calfire_uid ?? null)
+  const agencyId = useStore((s) => (s.summary && s.summary.id === s.incidentId ? agencyIdLine(s.summary) : null))
   const [copied, setCopied] = useState(false)
   if (!id) return null
   const copy = () =>
@@ -83,7 +87,7 @@ function IncidentIdChip() {
       })
       .catch(() => undefined)
   return (
-    <span className="mw-id-chip" data-tip={uid ? `CAL FIRE incident UID ${uid}` : 'Fire-3d incident identifier'}>
+    <span className="mw-id-chip" data-tip={agencyId ?? 'Fire-3d incident identifier'}>
       <span className="mw-id-label">ID</span>
       <span className="mw-mono mw-id-value">{id}</span>
       <button type="button" className="mw-icon-btn is-sm" aria-label={copied ? 'Incident ID copied' : 'Copy incident ID'} onClick={copy}>
@@ -136,7 +140,7 @@ function HeaderMenu() {
           </div>
           <div className="mw-menu-group">
             <span className="mw-menu-label">Panels</span>
-            {item('updates', <ListChecks size={15} />, overview ? 'California fires' : 'Incident updates')}
+            {item('updates', <ListChecks size={15} />, overview ? 'Fires (lower 48)' : 'Incident updates')}
             {item('layers', <Layers size={15} />, 'Layers, basemap & settings')}
             {!overview && item('analysis', <BarChart3 size={15} />, 'Analysis charts')}
           </div>
@@ -181,12 +185,12 @@ export function MapHeader() {
         </span>
         <span className="mw-hdr-sep" aria-hidden="true" />
         {overview ? (
-          <h1 className="mw-hdr-title">
-            California <span className="mw-hdr-title-sub">· all fires</span>
+          <h1 className="mw-hdr-title" data-tip={LOWER48_TIP}>
+            United States <span className="mw-hdr-title-sub">· all fires</span>
           </h1>
         ) : (
           <>
-            <button type="button" className="mw-btn mw-allfires" onClick={goToOverview} data-tip="Back to the California overview of all fires">
+            <button type="button" className="mw-btn mw-allfires" onClick={goToOverview} data-tip="Back to the overview of all fires (lower 48 states)">
               <ArrowLeft size={14} />
               <span className="mw-btn-label">All fires</span>
             </button>

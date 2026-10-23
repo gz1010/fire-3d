@@ -124,3 +124,100 @@ describe('fireFlyTo', () => {
     expect(fireFlyTo(row('a', { lat: Number.NaN }))).toBeNull()
   })
 })
+
+// ------------------------------------------------------------------------------------------------- brief 3 (§14.11, §14.14)
+import {
+  CALFIRE_LIST_DOWN,
+  countyWords,
+  EMPTY_VIEW,
+  emptyListText,
+  firesInView,
+  fireWhere,
+  inBox,
+  inViewLabel,
+  LIST_ABSENCE,
+  LIST_ABSENCE_SHORT,
+  listSourceNotices,
+  NIFC_LIST_DOWN,
+  overviewCounts,
+  pickerMatches,
+  pickerWhere,
+} from './overview'
+
+describe('state on rows, cards, hovers and the picker', () => {
+  it('"Garfield Co., CO": the same county name in two states reads apart', () => {
+    expect(fireWhere({ county: 'Garfield', location: null, admin_unit: null, state: 'CO' })).toBe('Garfield Co., CO')
+    expect(fireWhere({ county: 'Garfield', location: null, admin_unit: null, state: 'MT' })).toBe('Garfield Co., MT')
+    expect(fireWhere({ county: 'Los Angeles', location: 'Altadena', admin_unit: null, state: 'CA' })).toBe('Los Angeles Co., CA')
+  })
+  it('Louisiana parishes, names that already say what they are, no county, no state', () => {
+    expect(countyWords('Calcasieu', 'LA')).toBe('Calcasieu Parish')
+    expect(countyWords('Calcasieu Parish', 'LA')).toBe('Calcasieu Parish')
+    expect(countyWords('Carson City', 'NV')).toBe('Carson City')
+    expect(fireWhere({ county: null, location: 'Big Sur', admin_unit: null, state: 'CA' })).toBe('Big Sur, CA')
+    expect(fireWhere({ county: null, location: null, admin_unit: 'IDBOD', state: 'ID' })).toBe('IDBOD, ID')
+    expect(fireWhere({ county: null, location: null, admin_unit: null, state: 'TX' })).toBe('TX')
+    expect(fireWhere({ county: 'Mendocino', location: null, admin_unit: null })).toBe('Mendocino Co.')
+    expect(fireWhere({ county: null, location: 'Near Bend, OR', admin_unit: null, state: 'OR' })).toBe('Near Bend, OR')
+    expect(fireWhere({ county: null, location: null, admin_unit: null })).toBe('')
+  })
+})
+
+describe('the list in this view (§14.11)', () => {
+  const rows = [row('a', { lon: -105, lat: 40 }), row('b', { lon: -80, lat: 35 }), row('c', { lon: -122, lat: 47 }), row('bad', { lon: Number.NaN, lat: 1 })]
+  it('inBox and firesInView', () => {
+    expect(inBox(rows[0], [-110, 35, -100, 45])).toBe(true)
+    expect(inBox(rows[1], [-110, 35, -100, 45])).toBe(false)
+    expect(inBox(rows[3], [-180, -90, 180, 90])).toBe(false)
+    expect(inBox({ lon: 179, lat: 0 }, [170, -10, -170, 10])).toBe(true) // across the antimeridian
+    expect(firesInView(rows, [-125, 30, -100, 50]).map((r) => r.id)).toEqual(['a', 'c'])
+    expect(firesInView(rows, null).map((r) => r.id)).toEqual(['a', 'b', 'c', 'bad'])
+  })
+  it('the counts line', () => {
+    expect(inViewLabel(312, 1334)).toEqual({ inView: '312 fires in this view', all: 'Show all 1,334' })
+    expect(inViewLabel(1, 2).inView).toBe('1 fire in this view')
+  })
+  it('counts per filter', () => {
+    const live = [row('l', { mode: 'live', is_active: true })]
+    const season = [row('l'), row('s')]
+    expect(overviewCounts({ live, season, historical: [row('h')] })).toEqual({ active: 1, season: 2, past: 1 })
+  })
+})
+
+describe('never an all-clear (§14.14)', () => {
+  it('fixed wording', () => {
+    expect(LIST_ABSENCE).toBe('Only fires reported to CAL FIRE or NIFC are listed; a place with no marker is not an all-clear. Follow local officials.')
+    expect(LIST_ABSENCE_SHORT).toBe('Only reported fires are listed · not an all-clear')
+    expect(EMPTY_VIEW).toBe('No listed fires in this view.')
+    expect(NIFC_LIST_DOWN).toBe('The national fire list (NIFC) is unavailable right now; only California fires (CAL FIRE) are listed.')
+    expect(CALFIRE_LIST_DOWN).toBe("CAL FIRE's list is unavailable right now; California fires are listed from NIFC WFIGS.")
+  })
+  it('empty filters never say "no fires" without who lists them', () => {
+    for (const f of ['active', 'season', 'past'] as const) {
+      const t = emptyListText(f, 300)
+      expect(t).toMatch(/list|listed/)
+      expect(t).not.toMatch(/\bsafe\b|low risk/i)
+    }
+  })
+  it('source notices from sources[] (deduplicated over the lists)', () => {
+    const ok = { id: 'calfire' as const, name: 'CAL FIRE', status: 'available' as const, retrieved_ms: 1, reason: null }
+    const nifcDown = { id: 'wfigs' as const, name: 'NIFC WFIGS (IRWIN)', status: 'unavailable' as const, retrieved_ms: null, reason: 'timeout' }
+    const calDown = { ...ok, status: 'unavailable' as const }
+    expect(listSourceNotices([[ok], null, undefined])).toEqual([])
+    expect(listSourceNotices([[ok, nifcDown], [nifcDown]])).toEqual([NIFC_LIST_DOWN])
+    expect(listSourceNotices([[calDown], [nifcDown]])).toEqual([NIFC_LIST_DOWN, CALFIRE_LIST_DOWN])
+  })
+})
+
+describe('picker rows and search (W5)', () => {
+  it('place line and state-aware search', () => {
+    const r = row('2026-pine-gulch-1', { name: 'Pine Gulch', county: 'Garfield', location: 'Near Rifle', state: 'CO' })
+    expect(pickerWhere(r)).toBe('Garfield Co., CO · Near Rifle')
+    expect(pickerWhere(row('x', { county: null, location: null, admin_unit: null }))).toBe('—')
+    expect(pickerMatches(r, 'colorado')).toBe(true)
+    expect(pickerMatches(r, 'co')).toBe(true)
+    expect(pickerMatches(r, 'garfield co., co')).toBe(true)
+    expect(pickerMatches(r, 'montana')).toBe(false)
+    expect(pickerMatches(row('y', { name: 'Big Dry', source_name: 'BIG DRY', state: 'MT' }), 'montana')).toBe(true)
+  })
+})
