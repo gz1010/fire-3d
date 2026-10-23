@@ -113,11 +113,6 @@ def pass_time(ms: int, tz: str | None = None) -> str:
     return fmt_local_short(int(ms), tz)
 
 
-def la_time(ms: int, tz: str | None = None) -> str:
-    """Deprecated alias of :func:`pass_time` (brief 3)."""
-    return pass_time(ms, tz)
-
-
 def iso_to_ms(value: object) -> int | None:
     """CMR ISO 8601 time (``2026-10-17T21:24:00.000Z``) -> epoch ms; None when missing or malformed."""
     if not isinstance(value, str) or not value:

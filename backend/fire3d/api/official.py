@@ -240,11 +240,6 @@ def fill_from_catalog(ref: IncidentRef) -> None:
     ref.uid = ref.uid or calfire_history.valid_uid(s.get("calfire_uid"))
 
 
-def fill_from_calfire(ref: IncidentRef) -> None:
-    """Deprecated alias of :func:`fill_from_catalog` (brief 3)."""
-    fill_from_catalog(ref)
-
-
 # ----------------------------------------------------------------------------------------------------------------
 # CAL FIRE
 # ----------------------------------------------------------------------------------------------------------------
