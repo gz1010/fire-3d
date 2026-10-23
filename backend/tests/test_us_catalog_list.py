@@ -331,6 +331,7 @@ def test_id_pinning_keeps_the_bundle_id(world, tmp_data_dir: Path, monkeypatch: 
     assert ms["url"] == mc["Url"] and ms["acres"] == 60 and ms["name"] == "McCovey Fire" and ms["source_name"] == row.source_name
     assert ms["agency"] == row.agency and ms["agency_code"] == row.agency_code and ms["aliases"] == [cal_id]
     assert ms["irwin_id"] == ID["C1C2C3D4"] and ms["mode"] == "live" and m["built_ms"] == 7
+    assert ms["started_ms"] == row.started_ms != before.started_ms and ms["year"] == row.year     # CAL FIRE's start
     assert not contract_problems(IncidentSummary, ms)
     assert live.sync_live_summaries(list(after.values())) == []                 # one record now: nothing more to copy
     shutil_rm = __import__("shutil").rmtree

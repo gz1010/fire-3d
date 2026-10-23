@@ -361,7 +361,7 @@ and README.
 | GET | `/api/extras/{evacuations,cameras,cameras/latest,imagery,sources}` | Optional official and public sources (CONTRACT §12.1): Cal OES evacuation zones, public cameras, recent satellite imagery; `?incident=<id>` or `?bbox=w,s,e,n`. Upstream failures answer 200 with an honest status, never invented data. Brief 3 (CONTRACT §14.8): evacuations come from a state registry (Cal OES in California, Oregon OEM in Oregon); every other state answers `unavailable` + `reason_code: "state_not_available"` without an upstream request ("Official evacuation zones are not available in this state ({State}). Follow local officials."); the answer adds `states[]` and per-source fields. Cameras outside California answer `state_not_available`. |
 | GET | `/api/official/calfire?incident={id}` | BRIEF-2. `CalFireOfficial`: CAL FIRE's current record of the incident (its own numbers and `Updated` time), every change of acres, containment, active or final status Fire-3d has recorded since it first checked (append-only `data/official/calfire/<UniqueId>.jsonl`, outside the bundles), and caveats. Each call is a check and records the current record. Past fires have only CAL FIRE's final record. Brief 3 (§14.5): a fire whose `record_source` is "wfigs" answers `unavailable` + `not_covered` ("CAL FIRE does not list this fire; its official record is published by NIFC WFIGS."); any listed id resolves (no 404 for a listed fire without a bundle). |
 | GET | `/api/official/fire-weather?incident={id}&at_ms=&margin_km=15` | BRIEF-2. `FireWeather`: NWS Red Flag Warnings and Fire Weather Watches whose zones meet the incident's analysis area + `margin_km`, verbatim, with `covers_reported_location` and `nearest_km`. The present (no `at_ms`, or within 6 h of now, or later): the live NWS list (one statewide request, cached 2 min; zone polygons cached 30 days). An older `at_ms`, or any `at_ms` of a historical incident: the Iowa Environmental Mesonet archive (`archived: true`); a historical incident without `at_ms`, or an archive failure, is `not_available_for_past_dates`, never "no alerts". Without `incident`: every current California alert.  Brief 3 (§14.6): one cached national request (`area=` the 48 states + DC); per fire, alerts are kept only when a UGC's state is in the fire's states before any zone loads. Adds `states_checked` (the states this answer covers; absent = ["CA"]), `alert_states`, and each alert's `time_zone`. |
-| GET | `/api/official/incident-record?incident={id}` | Brief 3 (CONTRACT §14.5). `IncidentRecord`: the fire's NIFC WFIGS (IRWIN) record (WFIGS rows and California rows matched to one WFIGS record) with the protecting agency, its own times and a link. A California row without a match, a CAL FIRE complex row and a synthetic or local bundle answer `unavailable` + `not_covered` with their reasons; an unknown id is 404; WFIGS down is `upstream_error`. |
+| GET | `/api/official/incident-record?incident={id}` | Brief 3 (CONTRACT §14.5). `IncidentRecord`: the fire's NIFC WFIGS (IRWIN) record (WFIGS rows and California rows matched to one WFIGS record) with the protecting agency, its own times and a link. A California row without a match, one matched to several records none of which has its name (the reason names them), a CAL FIRE complex row and a synthetic or local bundle answer `unavailable` + `not_covered` with their reasons; an unknown id is 404; WFIGS down is `upstream_error`. |
 | GET | `/api/official/local-alerts?incident={id}&at_ms=&margin_km=15` or `?bbox=w,s,e,n` | Brief 3 (CONTRACT §14.7). `LocalAlerts`: local officials' messages relayed by the NWS (live and the last 7 days) and FEMA's IPAWS archive via OpenFEMA (older days, labelled archived), verbatim, each with a `source_url`. `incident` xor `bbox` (else 400); unknown incident 404. |
 
 ```ts
@@ -802,8 +802,9 @@ lower-48 box with a 0.5° margin). Then:
   listed row is another agency's record than the summary's (`record_source` or `uid` differs: an id pinned to a bundle
   built under the fire's NIFC WFIGS id, §4.4 / CONTRACT 14.2), the record's identity is copied too (`name`,
   `source_name`, `record_source`, `record_issuer`, `uid`, `calfire_uid`, `agency`, `agency_code`, `unique_fire_id`,
-  `aliases`, `complex_name`, `state`, `time_zone`; the id stays), so the numbers, the link and the issuer always come
-  from one record. An incident that left the live list is looked up in its year list;
+  `aliases`, `complex_name`, `state`, `time_zone`, `started_ms`, `year`; the id and `time_origin_ms` stay), so the
+  numbers, the link and the issuer always come from one record. An incident that left the live list is looked up in
+  its year list;
 - for each built live bundle with detections newer than `now_ms` (or built > 3 h ago, which picks up quiet
   satellite passes):
   - re-run `build_observed` and `build_weather`;
@@ -817,7 +818,7 @@ lower-48 box with a 0.5° margin). Then:
   it with "Weather not refreshed: Open-Meteo daily request limit reached." (the hourly and per-minute limits name
   themselves the same way; removed by the next successful refresh). A refresh without supplied detections loads
   `firms.load_live_us(days=2)`. After a successful build, the OpenFEMA archive window of the fire is prefetched once
-  at the end of the build (`pipeline.archive_prefetch` → `openfema.prefetch`; best effort, never fails the build).
+  (`pipeline.archive_prefetch` → `openfema.prefetch`; best effort, never fails the build).
 
 Max 1 forecast job at a time.
 

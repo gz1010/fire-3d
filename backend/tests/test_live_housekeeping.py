@@ -62,11 +62,13 @@ def test_summary_changes_copy_the_record_identity_only_when_the_record_changes()
     assert live.summary_changes(old, fresh) == {"acres": 4000.0}            # same record: identity fields stay
     wf = dict(fresh.model_dump(mode="json"), record_source="wfigs", record_issuer="USFS via NIFC WFIGS", calfire_uid="",
               uid="51374D2C-D96B-40F7-940B-6CB8E0A483A2", agency=None, agency_code="USFS", name="Alpha",
-              source_name="ALPHA", unique_fire_id="2026-CASQF-000123")
+              source_name="ALPHA", unique_fire_id="2026-CASQF-000123", started_ms=5)
     upd = live.summary_changes(wf, fresh)                                     # pinned: a WFIGS bundle, CAL FIRE's row now
     assert upd["record_source"] == "calfire" and upd["record_issuer"] == "CAL FIRE" and upd["uid"] == "abc"
     assert upd["calfire_uid"] == "abc" and upd["agency"] == "CAL FIRE" and upd["agency_code"] is None
     assert upd["name"] == "Spread Test Fire" and upd["unique_fire_id"] is None and "id" not in upd and "mode" not in upd
+    assert upd["started_ms"] == 1 and "year" not in upd and "bundle_built_ms" not in upd   # the record's start; same year
+    assert "started_ms" not in live.summary_changes(dict(old, started_ms=5), fresh)          # same record: kept
     back = live.summary_changes(fresh.model_dump(mode="json"), IncidentSummary.model_validate(wf))   # and the way back
     assert back["record_source"] == "wfigs" and back["uid"] == wf["uid"] and back["record_issuer"] == "USFS via NIFC WFIGS"
     braces = dict(wf, uid="{51374d2c-d96b-40f7-940b-6cb8e0a483a2}")

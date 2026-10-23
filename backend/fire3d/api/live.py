@@ -58,9 +58,11 @@ SUMMARY_SYNC_FIELDS = ("acres", "percent_contained", "updated_ms", "contained_ms
                        "complex_members", "irwin_id", "gacc", "accuracy_region")
 # Whose record the row is. Copied as well when the fresh row is another agency's record than the bundle summary's
 # (CONTRACT 14.2 "Id pinning": a bundle built under a fire's NIFC WFIGS id that CAL FIRE lists later keeps its id, and
-# its summary becomes CAL FIRE's record whole; never CAL FIRE's numbers and link under the WFIGS issuer). The id stays.
+# its summary becomes CAL FIRE's record whole; never CAL FIRE's numbers and link under the WFIGS issuer). The id stays;
+# the start time and year are the record's too (what the next refresh writes; the bundle keeps its time_origin_ms).
 RECORD_IDENTITY_FIELDS = ("name", "source_name", "record_source", "record_issuer", "uid", "calfire_uid", "agency",
-                          "agency_code", "unique_fire_id", "aliases", "complex_name", "state", "time_zone")
+                          "agency_code", "unique_fire_id", "aliases", "complex_name", "state", "time_zone",
+                          "started_ms", "year")
 KEEP_LIVE_FORECASTS = 4            # newest ready runs kept per live bundle by the live loop ...
 PRUNE_MIN_AGE_H = 6.0              # ... and every run issued in the last 6 h
 PRUNE_GRACE_S = 3600.0             # unlisted run directories are deleted only after this (open views keep working)
