@@ -56,6 +56,18 @@ Hindcast log: scratchpad validation/logs/hq.log (runner hq2.sh, jobs from mkjobs
 - 06:53 CA step 1 (pre-GSI worktree 29f0e2d) = section 5.1 exactly; 07:14 step 2 (post-GSI) = step 1 (max |d| 0.0).
 - 07:16-07:25 label p50 / det / ablation / ignition / live for Black Cove, Emigrant, Lower Sugarloaf, Island Creek.
 
+## Rebuilds after the AOI fix (queue q5, all after an ok or hf+archive-ok probe)
+| fire | end (UTC) | duration | result |
+|---|---|---|---|
+| Windy Deuce | 08:07:36 | 145 s | ready, AOI 60 km, 149,031 ac (ratio 1.04), checks ok |
+| Emigrant | 08:16:39 | 539 s | ready, AOI 37 km, checks ok |
+| Table Rock | skipped by mistake (its build started 07:57:52, before the fix; built_ms after the cutoff) -> q6 |
+| Lower Sugarloaf | 08:22:48 | 364 s | ready, checks ok |
+| Cottonwood Peak | 08:29:59 | 427 s | ready, checks ok |
+| Trout | 08:33:33 | 196 s | ready, checks ok |
+| Greer | 08:34:52 | 74 s | ready, checks ok |
+Then chain.sh: Table Rock (q6) and the Horse Gulch swap build.
+
 ## Bug fix after the first non-California scores (protocol: before/after for every fire)
 - 07:57 Windy Deuce failed checks (area ratio 0.78, fire at the AOI edge; AOI 36 km). Cause: catalog._estimate called
   perimeters.fetch_perimeters without the WFIGS identity -> California-only query -> no perimeter outside CA -> AOI
