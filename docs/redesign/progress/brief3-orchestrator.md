@@ -88,6 +88,10 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
   minute while the feed splits on the exact time (use one time for both; vitest at 5:45:12 and 5:45:30 PM MDT);
   (2) afterSpan rounds seconds while sentText cuts to the minute ('sent 2:45 PM · sent 46 min after this time' at
   2:00 PM): work from the minute-cut time, 'less than a minute' under 60 s.
+- ~14:45 UTC: validation review pass after fixes (5654c7f; plus checkpoints 7e3f7e8, 2b393b6): behaviour charts no
+  longer fall back silently to California values beyond the GSI series; two-fire caveats now show each region's
+  own scores; Northern Rockies has no 'typical' growth ratio (its fires erred both ways). No score changed.
+  Integration part 2 started (API 8716 / Vite 5186), the only agent editing now.
 - Lesson: never SendMessage a workflow agent (it starts a second copy); relay through files or Agent-tool agents.
 
 ## Carry-over items for later stages (integration unless a role owns the file)
