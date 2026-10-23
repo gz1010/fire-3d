@@ -154,7 +154,7 @@ export function likelyMissingWestSign(p: { lat: number; lon: number }): boolean 
 /** CONTRACT §14.10 / §14.14 search messages. */
 export const NOT_SUPPORTED_NOTE = 'Fire-3d does not support Alaska, Hawaii or US territories yet.'
 export const OUTSIDE_LOWER48_WARNING = 'This point is outside the area Fire-3d covers (the lower 48 states).'
-export const SEARCH_EXAMPLES = 'e.g. 600 E Mariposa St, Altadena; Boise, ID; 83702'
+export const SEARCH_EXAMPLES = 'e.g. 150 N Capitol Blvd, Boise, ID; Springfield, IL; 83702'
 export const noPlaceMessage = (q: string) => `No US city, town, county or ZIP code matches “${q}”.`
 
 // ------------------------------------------------------------------------------------------------- incidents

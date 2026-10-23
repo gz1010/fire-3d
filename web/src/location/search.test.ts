@@ -316,6 +316,14 @@ describe('national search (brief 3, §14.10, W6)', () => {
     inc('2026-sandy-cccccc', 'Sandy', { year: 2026, county: 'Ada', state: 'ID', lat: 43.6, lon: -116.2 }),
   ]
   const plan = (t: string) => planSearch(t, NATIONAL)
+  it('the national examples in the placeholder and hints parse as what they show (address; town; ZIP)', async () => {
+    const { SEARCH_EXAMPLES } = await import('./search')
+    const [addr, town, zip] = SEARCH_EXAMPLES.replace(/^e\.g\. /, '').split('; ')
+    expect(lookupPlan(addr)).toMatchObject({ expect: 'address' })
+    expect(plan(town)).toMatchObject({ kind: 'lookup', expect: 'local' })
+    expect(looksLikeZip(zip)).toBeTruthy()
+    expect(SEARCH_EXAMPLES).not.toMatch(/Altadena/)
+  })
   it('"Town, ST" and "Town ST" go to the local (national Gazetteer) lookup as typed', () => {
     for (const t of ['Springfield, IL', 'Springfield IL', 'Boise, ID', 'Raleigh, North Carolina']) expect(plan(t)).toMatchObject({ kind: 'lookup', expect: 'local', query: t })
     expect(queryState('Springfield, IL')).toBe('IL')

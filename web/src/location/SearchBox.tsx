@@ -340,7 +340,7 @@ export function SearchBox() {
             maxLength={200}
             aria-describedby={statusId}
             aria-controls={lists ? listId : undefined}
-            placeholder="e.g. 600 E Mariposa St, Altadena"
+            placeholder="e.g. 150 N Capitol Blvd, Boise, ID"
             value={text}
             onFocus={() => {
               setFocused(true)
@@ -383,8 +383,8 @@ export function SearchBox() {
       <div ref={belowRef} id={statusId} className="loc-search-below" aria-live="polite">
         {p.kind === 'hint' && (
           <p className="mw-panel loc-search-hint">
-            Enter a street address with a house number (<span className="mw-mono">600 E Mariposa St, Altadena</span>), a US town or ZIP code (
-            <span className="mw-mono">Boise, ID</span>; <span className="mw-mono">83702</span>), coordinates or a fire’s name, then press Enter. Or click the map.
+            Enter a street address with a house number (<span className="mw-mono">150 N Capitol Blvd, Boise, ID</span>), a US town or ZIP code (
+            <span className="mw-mono">Springfield, IL</span>; <span className="mw-mono">83702</span>), coordinates or a fire’s name, then press Enter. Or click the map.
           </p>
         )}
         {(p.kind === 'busy' || p.kind === 'message') && !lists && (

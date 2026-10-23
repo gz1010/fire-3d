@@ -197,7 +197,7 @@ As §14.9.4: `clockFor`, `useClock`, `useTimeFormat`, `useTimeFormatFor`, `useZo
   records)", the place's county and state, "Fire lists: CAL FIRE and NIFC WFIGS, checked …", the zone line "Times:
   Mountain Time (MDT), local time at this place".
 
-## Cut line (M6): done (a), (c), (d), (e), (f); not done (b)
+## Cut line (M6): all six items done
 
 - (a) Accuracy line in the Analysis drawer and the Forensic Analysis tab: `ui/RegionAccuracy.tsx` (`RegionAccuracy`)
   shows the Command line, the fuel caveat and "Outside the modeled area is unknown, not low." for the open fire, from
@@ -224,8 +224,18 @@ As §14.9.4: `clockFor`, `useClock`, `useTimeFormat`, `useTimeFormatFor`, `useZo
     follow the safe area, so the camera and the list's "N fires in this view" keep what the user saw; closing the
     sheet frames again. On phones the frame button ("All states" / "Incident") first closes an open bottom sheet
     (updates, layers, analysis), so the framed map shows.
-- (b) W11 list windowing above 150 rows: NOT done (integration). The list renders every row of the filter in view
-  (1,393 rows with "Show all" on the 2026 season); keyboard Home/End and `aria-setsize`/`aria-posinset` are not added.
+- (b) W11 list windowing above 150 rows: `state/overview.ts` `LIST_WINDOW_MIN = 150`, `LIST_OVERSCAN = 10`,
+  `listWindow(n, scrollTop, viewH, rowH)` and `scrollToRow(i, rowH, scrollTop, viewH)`; `ui/useListWindow.ts`
+  (`useListWindow(n, scroller, list, { padPx, rowSelector, onWindow })`) follows the scroller's position and size and
+  the rendered row pitch (layout offsets averaged over the rendered rows; the view height never above the window's).
+  The overview list (`ui/shell/OverviewPanel.tsx` `FireList`) keeps the unrendered rows as padding on the `<ul>`;
+  every `<li>` carries `aria-posinset` / `aria-setsize`; ArrowUp/Down, Home and End move the roving focus over the
+  whole list (an unrendered row is scrolled in, then focused); a focused row scrolled out of the window by the wheel
+  hands focus to the list itself (`tabIndex=-1`), from where the arrows continue. The incident picker
+  (`ui/IncidentPicker.tsx`) uses spacer elements instead of padding (its scroller is the list, a flex item that cannot
+  shrink below its own padding), `aria-posinset` / `aria-setsize` on each option, and a new tab or query scrolls the
+  list back to the top. Checked in Chrome: 1,393 rows render 14-32 at a time; End lands on row 1,393 and Home on
+  row 1, both visible.
 
 ## Late changes (after M5)
 
@@ -245,3 +255,6 @@ As §14.9.4: `clockFor`, `useClock`, `useTimeFormat`, `useTimeFormatFor`, `useZo
 - Fire card: a member fire outside California shows "Part of the {complex_name}" with the name verbatim
   (`lib/recordText.ts` `partOfComplex`; "Complex" is added only when the name lacks it).
 - Search: a ZIP match is titled "ZIP 83702, ID" from the match's own `zip` and `state`.
+- Search examples are national: the placeholder "e.g. 150 N Capitol Blvd, Boise, ID", the hint and the invalid-input
+  message "e.g. 150 N Capitol Blvd, Boise, ID; Springfield, IL; 83702" (`location/search.ts` `SEARCH_EXAMPLES`; a test
+  checks each example parses as the kind it shows).

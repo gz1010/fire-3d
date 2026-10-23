@@ -35,7 +35,7 @@ export function plainSearchError(e: unknown): string {
         const d = detailOf(e)
         if (d) return d.replace(/\s*\(HTTP \d{3}\)/g, '')
         return e.status === 400
-          ? 'This search could not be read. Enter a street address with a house number, a US town or a ZIP code (e.g. 600 E Mariposa St, Altadena; Boise, ID; 83702).'
+          ? 'This search could not be read. Enter a street address with a house number, a US town or a ZIP code (e.g. 150 N Capitol Blvd, Boise, ID; Springfield, IL; 83702).'
           : 'Town and ZIP search is not available right now. Enter a street address, or click the map.'
       }
       default:

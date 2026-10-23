@@ -54,9 +54,10 @@ export function useListWindow(n: number, scroller: RefObject<HTMLElement | null>
     const measure = () => {
       const listTop = (el === box ? 0 : el.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop) + padPx
       const rows = el.querySelectorAll<HTMLElement>(rowSelector)
-      // layout offsets, not screen boxes: a transform (a sheet sliding in) does not change the pitch
+      // layout offsets, not screen boxes (a transform such as a sheet sliding in does not change the pitch), averaged
+      // over the rendered rows (offsets are whole pixels; a 47.8 px row read as 47 would drift 1,000 px over the list)
       let pitch = 0
-      if (rows.length >= 2) pitch = rows[1].offsetTop - rows[0].offsetTop
+      if (rows.length >= 2) pitch = (rows[rows.length - 1].offsetTop - rows[0].offsetTop) / (rows.length - 1)
       else if (rows.length === 1) pitch = rows[0].offsetHeight
       // never more than the window's height: a scroller still growing to its content (a popover being placed) would
       // otherwise ask for every row
