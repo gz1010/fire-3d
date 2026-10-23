@@ -80,6 +80,14 @@ Ports API 8716, Vite 5186. Scratch: session scratchpad `integration2/`. Only age
 - Wording scan: 58 hits, all negations / safe area / quote(safe=) / comments; 0 FireTrace.
 - check_bundle.py: 0 problems on Horse Gulch, Windy Deuce, Rush, Table Rock, Black Cove, Greer; dNBR vs perimeter
   quicklooks aligned (Table Rock lake carve-out, Windy Deuce outline).
+- f955173 found in the browser: "Hulsey Bench · 0 ac" map label (small fires keep one decimal).
+- Batch C (23 shots): Prepare-analysis cards (WA, TX, CO untested, AZ MST, FL phone, MI untested, CA Timber, MT phone),
+  search (Greer fire + towns, ZIP 29601, Bend OR phone, Flagstaff AZ, Charlotte NC address, Windy Deuce = not listed:
+  2024 fires open by link only), location cards (Bend OR: Oregon OEM none listed; Amarillo TX and Asheville NC: not
+  available in this state; NWS and local alerts everywhere), Horse Gulch location at 5:50 PM MDT (local messages in
+  effect), Greer retakes (long sender wraps), Black Cove Public retake, overview phone. 0 console/page errors in A-C.
+- Final gates (before batch D): backend 990 passed; web typecheck 0, lint 55 (scene), 75 files 1,185 passed 2 skipped,
+  build OK. API log so far: 793 GET, 0 non-GET. Key scan: 0 (scratch, tracked files, part-2 diffs).
 
 ## Next
 - Docs: CONTRACT §14.4/§14.12.10 fold of contract3/validation.md + wording amendment, §14.2 503/same-name, §14.7 feed
