@@ -63,6 +63,19 @@ describe('fire card record (§14.5)', () => {
     expect(r.official).toContain('record last edited May 14, 2026 4:56 PM MST')
   })
 
+  it('a NIFC WFIGS end date is labelled with its own meaning; a fire-out date is never "contained" (final fixes R1)', () => {
+    // Table Rock (SC, 2025): its record gives only a fire-out time (Mar 19, 2026)
+    const base = { id: '2025-table-rock-20616f', name: 'Table Rock', year: 2025, state: 'SC', time_zone: 'America/New_York', agency_code: 'FC', agency: 'Forestry Commission', record_issuer: 'FC via NIFC WFIGS', started_ms: Date.UTC(2025, 2, 1, 18), updated_ms: Date.UTC(2026, 2, 20, 14), contained_ms: Date.UTC(2026, 2, 19, 16), is_active: false }
+    const out = render(wfigsSummaryFixture({ ...base, contained_kind: 'out' }))
+    expect(out.official).toContain('declared out Mar 19, 2026')
+    expect(out.official).not.toMatch(/contained Mar/)
+    expect(render(wfigsSummaryFixture({ ...base, contained_kind: 'controlled' })).official).toContain('controlled Mar 19, 2026')
+    // an older summary that does not say which time it is: no date rather than a wrong label
+    const unknown = render(wfigsSummaryFixture({ ...base, contained_kind: null }))
+    expect(unknown.official).not.toContain('Mar 19, 2026')
+    expect(render(wfigsSummaryFixture({ ...base, contained_kind: 'contained' })).official).toContain('contained Mar 19, 2026')
+  })
+
   it('agencies that disagree: each record with its own issuer, status and time (the Timber Fire)', () => {
     const timber = summaryFixture({
       id: '2026-timber-fire-51374d',

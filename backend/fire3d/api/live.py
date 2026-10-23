@@ -53,7 +53,7 @@ COUNTS_TTL_S = 10 * 60.0
 COUNTS_WAIT_S = 2.0
 # Record fields copied into live bundle summaries each cycle (identity, mode and bundle fields stay); brief 3 adds
 # the other agencies' records and the active sources (a California fire's records can disagree, round 3 item 2)
-SUMMARY_SYNC_FIELDS = ("acres", "percent_contained", "updated_ms", "contained_ms", "is_active", "county", "location",
+SUMMARY_SYNC_FIELDS = ("acres", "percent_contained", "updated_ms", "contained_ms", "contained_kind", "is_active", "county", "location",
                        "admin_unit", "url", "lat", "lon", "detections_24h", "active_sources", "other_records",
                        "complex_members", "irwin_id", "gacc", "accuracy_region")
 # Whose record the row is. Copied as well when the fresh row is another agency's record than the bundle summary's

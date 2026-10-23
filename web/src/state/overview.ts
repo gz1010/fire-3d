@@ -95,7 +95,7 @@ export function preparedFires(catalog: OverviewCatalog): IncidentSummary[] {
   return out
 }
 
-/** Number of active fires (the phone peek line "N active fires · records updated 5 min ago"). */
+/** Number of active fires (the phone peek line "N active fires · newest record 5 min old"). */
 export function activeCount(catalog: Pick<OverviewCatalog, 'live'>): number {
   return catalog.live.length
 }
@@ -229,6 +229,8 @@ export interface ListHealth {
   stale: Map<ListSource['id'], number | null>
   /** When Fire-3d fetched the lists shown: the oldest `retrieved_ms` of the available sources (null: not reported). */
   fetchedMs: number | null
+  /** The newest of those `retrieved_ms` (several lists may have been fetched at different times). */
+  fetchedNewestMs: number | null
 }
 
 export function listHealth(sources: readonly (readonly ListSource[] | null | undefined)[]): ListHealth {
@@ -237,6 +239,7 @@ export function listHealth(sources: readonly (readonly ListSource[] | null | und
   let reported = 0
   let allDown = true
   let fetchedMs: number | null = null
+  let fetchedNewestMs: number | null = null
   for (const list of sources) {
     if (!list?.length) continue
     reported += 1
@@ -246,7 +249,10 @@ export function listHealth(sources: readonly (readonly ListSource[] | null | und
         continue
       }
       allDown = false
-      if (src.retrieved_ms != null) fetchedMs = fetchedMs == null ? src.retrieved_ms : Math.min(fetchedMs, src.retrieved_ms)
+      if (src.retrieved_ms != null) {
+        fetchedMs = fetchedMs == null ? src.retrieved_ms : Math.min(fetchedMs, src.retrieved_ms)
+        fetchedNewestMs = fetchedNewestMs == null ? src.retrieved_ms : Math.max(fetchedNewestMs, src.retrieved_ms)
+      }
       if (src.stale) {
         const prev = stale.get(src.id)
         const t = src.retrieved_ms ?? null
@@ -254,7 +260,25 @@ export function listHealth(sources: readonly (readonly ListSource[] | null | und
       }
     }
   }
-  return { allDown: reported > 0 && allDown, down, stale, fetchedMs }
+  return { allDown: reported > 0 && allDown, down, stale, fetchedMs, fetchedNewestMs }
+}
+
+/** "newest record 10 min old" (final fixes R7): the newest agency time inside the list, said as an age, so it never
+ *  reads as an update newer than Fire-3d's last check ("updated 10 min ago · checked 30 min ago" did). */
+export function newestRecordText(newestMs: number, nowMs: number): string {
+  const r = fmtRelative(newestMs, nowMs)
+  return `newest record ${r.endsWith(' ago') ? `${r.slice(0, -4)} old` : 'under a minute old'}`
+}
+
+/** When Fire-3d fetched the list(s) shown (final fixes R7): "list checked 30 min ago"; several lists fetched at
+ *  different times "lists checked in the last 30 min" (the oldest fetch bounds them all); a copy that could not be
+ *  refreshed "copy fetched 47 min ago" (panel F2). */
+export function listCheckedText(oldestMs: number, newestMs: number | null, nowMs: number, opts: { lists: number; stale: boolean }): string {
+  const r = fmtRelative(oldestMs, nowMs)
+  if (opts.stale) return `copy fetched ${r}`
+  if (opts.lists <= 1) return `list checked ${r}`
+  if (newestMs == null || newestMs - oldestMs < 60_000 || !r.endsWith(' ago')) return `lists checked ${r}`
+  return `lists checked in the last ${r.slice(0, -4)}`
 }
 
 /** The notices for the lists shown: both sources down (one notice, ALL_LISTS_DOWN); else the §14.14 notice per source

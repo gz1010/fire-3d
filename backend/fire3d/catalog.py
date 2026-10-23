@@ -307,6 +307,15 @@ def wfigs_active(rec: dict, current_irwins: set[str]) -> bool:
     return rec.get("irwin_id") in current_irwins
 
 
+def contained_kind(rec: dict) -> str | None:
+    """Which WFIGS time a row's ``contained_ms`` is (CONTRACT 14.17): ContainmentDateTime ("contained"), else
+    ControlDateTime ("controlled"), else FireOutDateTime ("out"); None when the record gives none of them."""
+    for key, kind in (("contained_ms", "contained"), ("controlled_ms", "controlled"), ("out_ms", "out")):
+        if rec.get(key):
+            return kind
+    return None
+
+
 def active_irwin_ids(current_rows: list[dict]) -> set[str]:
     """IRWIN ids of the Current rows that count as active (wildfires, ``PercentContained`` null or < 100)."""
     return {r["irwin_id"] for r in current_rows
@@ -385,6 +394,7 @@ def summary_from_wfigs(rec: dict, mode: Mode, current_irwins: set[str], state: s
         started_ms=int(rec["started_ms"]),
         updated_ms=rec.get("updated_ms"),
         contained_ms=rec.get("contained_ms") or rec.get("controlled_ms") or rec.get("out_ms"),
+        contained_kind=contained_kind(rec),
         acres=rec.get("acres"),
         percent_contained=rec.get("percent_contained"),
         is_active=active,

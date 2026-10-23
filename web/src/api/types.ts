@@ -70,7 +70,13 @@ export interface IncidentSummary {
   complex_name?: string | null // a member fire outside California: "Part of the X Complex"
   complex_members?: string[] // a CAL FIRE complex row: its WFIGS member names, verbatim; [] otherwise
   aliases?: string[] // other ids that resolve to this row (14.2 "Id pinning"); [] otherwise
+  /** Which agency time `contained_ms` is (14.17): a NIFC WFIGS row's ContainmentDateTime ('contained'), else its
+   *  ControlDateTime ('controlled'), else its FireOutDateTime ('out'); CAL FIRE rows 'contained'. Null or absent: no
+   *  time, or an older NIFC WFIGS manifest (no containment date is shown then). Use `containedLabel`. */
+  contained_kind?: ContainedKind | null
 }
+
+export type ContainedKind = 'contained' | 'controlled' | 'out'
 
 export type LayerGrid = 'render' | 'fire' | 'image' | 'points'
 export type LayerDtype = 'float32' | 'uint8' | 'uint16' | 'int16' | 'jpeg'

@@ -4,6 +4,7 @@ import type { IncidentSummary } from '../api/types'
 import { overviewFires } from '../state/overview'
 import {
   CHIP_IMAGE,
+  CHIP_NEXT_ANCHORS,
   CHIP_TEXT,
   chipImage,
   chipText,
@@ -268,8 +269,40 @@ describe('layers', () => {
     expect(Object.keys(f).sort()).toEqual([...OVERVIEW_CHIP_LAYERS].sort())
     expect(f[OVR.pinnedChip]).toEqual(['all', ['!=', ['get', 'chip'], ''], ['in', ['get', 'id'], ['literal', ['near']]]])
     expect(f[OVR.activeChip]).toEqual(['all', ['!', ['has', 'point_count']], ['all', ['!=', ['get', 'chip'], ''], ['in', ['get', 'id'], ['literal', ['near']]]]])
+    expect(f[OVR.pinnedChipNext]).toEqual(['all', ['!=', ['get', 'chip'], ''], ['in', ['get', 'id'], ['literal', []]]])
     expect(selectedFilter('a')).toEqual(['==', ['get', 'id'], 'a'])
     expect(selectedFilter(null)).toEqual(['==', ['get', 'id'], ''])
+  })
+
+  it('two nearby chips never overlap, and the chip of the fire nearest the view centre always shows (final fixes R8)', () => {
+    // chipTargets lists the nearest fire first: its chip is in the "first" layers, the next fire's in the "next" ones
+    const f = overviewFilters(['near', 'next'])
+    const ids = (filter: unknown) => JSON.stringify(filter).match(/"literal",(\[[^\]]*\])/)?.[1]
+    for (const id of [OVR.pinnedChip, OVR.activeChip, OVR.otherChip]) expect(ids(f[id])).toBe('["near"]')
+    for (const id of [OVR.pinnedChipNext, OVR.activeChipNext, OVR.otherChipNext]) expect(ids(f[id])).toBe('["next"]')
+    const layers = overviewLayers('dark')
+    const layout = (id: string) => (layers.find((l) => l.id === id) as unknown as { layout: Record<string, unknown> }).layout
+    // the first chip is always drawn (and still claims its place); the next ones give way and may move around their marker
+    for (const id of [OVR.pinnedChip, OVR.activeChip, OVR.otherChip]) {
+      expect(layout(id)['text-allow-overlap']).toBe(true)
+      expect(layout(id)['text-ignore-placement']).toBeUndefined()
+      expect(layout(id)['text-anchor']).toBe('top')
+    }
+    for (const id of [OVR.pinnedChipNext, OVR.activeChipNext, OVR.otherChipNext]) {
+      expect(layout(id)['text-allow-overlap']).toBe(false)
+      expect(layout(id)['icon-allow-overlap']).toBe(false)
+      expect(layout(id)['text-variable-anchor-offset']).toEqual(CHIP_NEXT_ANCHORS)
+      expect(layout(id)['icon-image']).toBe(CHIP_IMAGE.dark)
+    }
+    // MapLibre places the top symbol layers first: every "first" chip layer sits above every "next" one
+    const order = layers.map((l) => l.id)
+    const lowestFirst = Math.min(...[OVR.pinnedChip, OVR.activeChip, OVR.otherChip].map((id) => order.indexOf(id)))
+    const highestNext = Math.max(...[OVR.pinnedChipNext, OVR.activeChipNext, OVR.otherChipNext].map((id) => order.indexOf(id)))
+    expect(lowestFirst).toBeGreaterThan(highestNext)
+    // and both sit above the labels, which give way to them
+    expect(highestNext).toBeGreaterThan(order.indexOf(OVR.pinnedLabel))
+    // a valid style (the variable anchors with their offsets included)
+    expect(validateStyleMin(style(layers.map((l) => (l.id in f ? { ...l, filter: f[l.id] } : l))) as never)).toEqual([])
   })
 
   it('markers are lighter while a fire is open', () => {

@@ -216,7 +216,7 @@ describe('never an all-clear (§14.14)', () => {
 })
 
 // ------------------------------------------------------------------------------------------------- final verification (§14.16)
-import { activeCountText, ALL_LISTS_DOWN, listErrorLines, listHealth, noLiveText, staleListText } from './overview'
+import { activeCountText, ALL_LISTS_DOWN, listCheckedText, listErrorLines, listHealth, newestRecordText, noLiveText, staleListText } from './overview'
 
 describe('outages of the source lists (§14.16)', () => {
   const NOW = Date.UTC(2026, 9, 23, 16, 0)
@@ -312,5 +312,27 @@ describe('list windowing (W11)', () => {
     expect(scrollToRow(3, 50, 400, 600)).toBe(150)
     expect(scrollToRow(1333, 50, 0, 600)).toBe(1334 * 50 - 600)
     expect(scrollToRow(0, 50, 9000, 600)).toBe(0)
+  })
+})
+
+describe('freshness wording (final fixes R7)', () => {
+  const NOW = Date.UTC(2026, 9, 23, 17, 35)
+  it('the newest record is said as an age, never as "updated" next to an older check', () => {
+    expect(newestRecordText(NOW - 10 * 60_000, NOW)).toBe('newest record 10 min old')
+    expect(newestRecordText(NOW - 3 * 3_600_000, NOW)).toBe('newest record 3 h old')
+    expect(newestRecordText(NOW - 10_000, NOW)).toBe('newest record under a minute old')
+    expect(newestRecordText(NOW + 60_000, NOW)).toBe('newest record under a minute old') // a record clock slightly ahead
+  })
+  it('one list, several lists fetched at different times, and a copy that could not be refreshed', () => {
+    expect(listCheckedText(NOW - 30 * 60_000, NOW - 30 * 60_000, NOW, { lists: 1, stale: false })).toBe('list checked 30 min ago')
+    expect(listCheckedText(NOW - 30 * 60_000, NOW - 2 * 60_000, NOW, { lists: 2, stale: false })).toBe('lists checked in the last 30 min')
+    expect(listCheckedText(NOW - 30 * 60_000, NOW - 30 * 60_000 + 5_000, NOW, { lists: 2, stale: false })).toBe('lists checked 30 min ago')
+    expect(listCheckedText(NOW - 20_000, NOW, NOW, { lists: 2, stale: false })).toBe('lists checked just now')
+    expect(listCheckedText(NOW - 47 * 60_000, NOW, NOW, { lists: 2, stale: true })).toBe('copy fetched 47 min ago')
+  })
+  it('listHealth keeps the newest fetch time beside the oldest', () => {
+    const src = (t: number) => ({ id: 'wfigs' as const, name: 'NIFC WFIGS (IRWIN)', status: 'available' as const, retrieved_ms: t, reason: null, stale: false })
+    const h = listHealth([[src(NOW - 2 * 60_000)], [src(NOW - 30 * 60_000)]])
+    expect([h.fetchedMs, h.fetchedNewestMs]).toEqual([NOW - 30 * 60_000, NOW - 2 * 60_000])
   })
 })

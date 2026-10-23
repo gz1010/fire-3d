@@ -52,6 +52,10 @@ export interface RecordStatus extends CalFireStatus {
   protectingUnit?: string | null
   /** The record's own discovery time (WFIGS). */
   discoveredMs?: number
+  /** A NIFC WFIGS record's own control and fire-out times, each shown with its own label (§14.17); `containedMs` is
+   *  then its ContainmentDateTime only, never one of these. */
+  controlledMs?: number
+  outMs?: number
 }
 
 export const SYNTHETIC_RECORD_REASON = 'Not available: synthetic or local data.'
@@ -102,7 +106,10 @@ function wfigsStatus(q: Q<IncidentRecordResponse>, summary: IncidentSummary | nu
       agencies: d.agency ? `${d.agency_code ? `${d.agency_code} (${d.agency})` : d.agency}` : (d.agency_code ?? undefined),
       checkedMs: num(d.retrieved_ms),
       recordingSinceMs: null,
-      containedMs: num(c.contained_ms) ?? num(c.controlled_ms) ?? num(c.out_ms),
+      // each time with its own meaning: a fire-out date is never shown as the containment date (§14.17)
+      containedMs: num(c.contained_ms),
+      controlledMs: num(c.controlled_ms),
+      outMs: num(c.out_ms),
       discoveredMs: num(c.discovered_ms),
       protectingUnit: d.protecting_unit,
       caveats: d.caveats ?? [],
@@ -167,6 +174,19 @@ export function recordStatus(i: RecordInput): RecordStatus {
   return base
 }
 
+export type EndLabel = 'contained' | 'controlled' | 'declared out'
+
+/** A record's containment, control and fire-out times, each with its own label, in that order; absent times are left
+ *  out (§14.17: a fire-out date is never shown as the containment date). */
+export function recordEndTimes(t: { contained?: number | null; controlled?: number | null; out?: number | null }): { label: EndLabel; ms: number }[] {
+  const all: [EndLabel, number | undefined][] = [
+    ['contained', num(t.contained)],
+    ['controlled', num(t.controlled)],
+    ['declared out', num(t.out)],
+  ]
+  return all.filter((e): e is [EndLabel, number] => e[1] != null).map(([label, ms]) => ({ label, ms }))
+}
+
 /** "Active (USFS via NIFC WFIGS, updated Oct 22, 9:05 AM PDT)" / "Not listed as active (CAL FIRE, updated …)". */
 export function recordBlockText(b: RecordBlockStatus, tf: TimeFmt): string {
   const when = b.updatedMs != null ? `, updated ${fmtAt(b.updatedMs, tf, { zone: true, year: 'auto' })}` : ''
@@ -219,6 +239,7 @@ export function wfigsRecordFeedItems(d: IncidentRecordResponse | null, ctx: Reco
         { label: `Area (${issuer})`, text: acres, scientific: null },
         { label: 'Containment', text: pct, scientific: null },
         ...(c.discovered_ms != null ? [{ label: 'Discovered', text: fmtWhen(c.discovered_ms, ctx.mode === 'live' ? d.now_ms : undefined, ctx.tf), scientific: null }] : []),
+        ...recordEndTimes({ contained: c.contained_ms, controlled: c.controlled_ms, out: c.out_ms }).map((e) => ({ label: e.label[0].toUpperCase() + e.label.slice(1), text: fmtWhen(e.ms, ctx.mode === 'live' ? d.now_ms : undefined, ctx.tf), scientific: null })),
       ],
       url: httpsUrl(d.incident_url),
       issuer,

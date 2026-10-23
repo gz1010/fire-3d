@@ -1710,17 +1710,30 @@ def perimeter_events(steps: Sequence[PerimeterStep], start_ms: int, end_ms: int)
     return out
 
 
+CONTAINMENT_ATTR_SOURCE = "NIFC WFIGS ContainmentDateTime"
+
+
 def containment_time(perims: Sequence[dict], summary: Any, *, issuer: str | None = None) -> tuple[int | None, str]:
     """Containment time: WFIGS ``attr_ContainmentDateTime`` (latest record), else CAL FIRE at 100 %."""
     cands = [int(p["containment_ms"]) for p in perims if p.get("containment_ms")]
     started = int(summary.started_ms)
     cands = [c for c in cands if started < c <= started + PERIM_HORIZON_MS]
     if cands:
-        return max(cands), "NIFC WFIGS ContainmentDateTime"
+        return max(cands), CONTAINMENT_ATTR_SOURCE
     pc = getattr(summary, "percent_contained", None)
     if pc is not None and float(pc) >= 100.0 and getattr(summary, "contained_ms", None):
         return int(summary.contained_ms), f"{issuer or record_issuer_of(summary)} (100% contained)"
     return None, ""
+
+
+def containment_event_ok(source: str, summary: Any) -> bool:
+    """Whether a :func:`containment_time` answer may be shown as a "Containment" event: a WFIGS perimeter's
+    ContainmentDateTime always; the summary's ``contained_ms`` only when it is a containment time (a NIFC WFIGS row's
+    may be its control or fire-out time, ``contained_kind``, CONTRACT 14.17)."""
+    if source == CONTAINMENT_ATTR_SOURCE:
+        return True
+    return not (getattr(summary, "record_source", None) == "wfigs"
+                and getattr(summary, "contained_kind", None) in ("controlled", "out"))
 
 
 def limit_events(events: list[dict], max_n: int = MAX_EVENTS) -> list[dict]:
@@ -2145,7 +2158,7 @@ def build_observed_stats(ctx: BuildContext) -> dict[str, Any]:
     events += perimeter_events(steps, origin, end_ms)
     if mode != "live":
         t_cont, cont_src = containment_time(perims, s, issuer=issuer)
-        if t_cont is not None and origin <= t_cont <= end_ms:
+        if t_cont is not None and origin <= t_cont <= end_ms and containment_event_ok(cont_src, s):
             events.append(_event("containment", t_cont, "Containment", f"100% contained ({cont_src}).", "observed", cont_src))
     events = [e for e in events if origin <= e["t_ms"] <= end_ms]
     events = limit_events(events)

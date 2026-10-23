@@ -2,7 +2,7 @@
 // flag, never from the merged listing (which is active when either agency says so).
 import { describe, expect, it } from 'vitest'
 import { otherRecordFixture, summaryFixture, wfigsSummaryFixture } from '../api/fixtures.testutil'
-import { agencyNameShown, recordStatus } from './recordText'
+import { agencyNameShown, containedLabel, recordStatus } from './recordText'
 
 const live = { mode: 'live' as const, year: 2026, is_active: true }
 
@@ -51,5 +51,16 @@ describe('agencyNameShown (§14.13 credit)', () => {
     const named = otherRecordFixture({ agency: 'USDA Forest Service', is_active: true })
     expect(agencyNameShown(summaryFixture({ ...live, active_sources: ['wfigs'], other_records: [named] }))).toBe(true)
     expect(agencyNameShown(summaryFixture({ ...live, active_sources: ['calfire', 'wfigs'], other_records: [named] }))).toBe(false)
+  })
+})
+
+describe('containedLabel (final fixes R1, §14.17)', () => {
+  it('names the time a summary gives: containment, control or fire out; nothing when an older NIFC row does not say', () => {
+    expect(containedLabel(summaryFixture({ contained_ms: 5 }))).toBe('contained') // CAL FIRE's own containment date
+    expect(containedLabel(wfigsSummaryFixture({ contained_ms: 5, contained_kind: 'contained' }))).toBe('contained')
+    expect(containedLabel(wfigsSummaryFixture({ contained_ms: 5, contained_kind: 'controlled' }))).toBe('controlled')
+    expect(containedLabel(wfigsSummaryFixture({ contained_ms: 5, contained_kind: 'out' }))).toBe('declared out')
+    expect(containedLabel(wfigsSummaryFixture({ contained_ms: 5, contained_kind: null }))).toBeNull()
+    expect(containedLabel(wfigsSummaryFixture({ contained_ms: null, contained_kind: 'out' }))).toBeNull()
   })
 })

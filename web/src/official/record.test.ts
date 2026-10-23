@@ -8,7 +8,7 @@ import { buildDataStatus } from '../ui/shell/dataStatus'
 import { calfireLine as summaryRecordLine } from '../ui/shell/officialSummary'
 import { calfireStatus } from './calfire'
 import { calfireUrl, incidentRecordUrl, recordUrl, secondaryRecordUrl } from './client'
-import { partOfComplex, recordBlockText, recordStatus, wfigsRecordFeedItems, RECORD_NOT_CHECKED_REASON, SYNTHETIC_RECORD_REASON } from './record'
+import { partOfComplex, recordBlockText, recordEndTimes, recordStatus, wfigsRecordFeedItems, RECORD_NOT_CHECKED_REASON, SYNTHETIC_RECORD_REASON } from './record'
 import type { IncidentRecordResponse } from './types'
 
 const ok = <T,>(data: T | null, extra: { loading?: boolean; error?: string | null } = {}) => ({ data, loading: false, error: null, ...extra })
@@ -160,5 +160,28 @@ describe('California fires: disagreement and complexes (round 3 items 2 and 3)',
     expect(st).toMatchObject({ issuer: 'CAL FIRE', acres: 1500, percentContained: 20 })
     expect(JSON.stringify(st)).not.toMatch(/99999|88888/)
     expect(st.blocks).toBeUndefined()
+  })
+})
+
+describe('a NIFC WFIGS record says which end time it gives (final fixes R1, §14.17)', () => {
+  // Table Rock (SC, 2025): the record gives only a fire-out time; it is never shown as the containment date
+  const outOnly: IncidentRecordResponse = { ...HORSE_GULCH_RECORD, current: { ...HORSE_GULCH_RECORD.current!, contained_ms: null, controlled_ms: null, out_ms: Date.UTC(2026, 2, 19, 16, 0) } }
+  const s = wfigsSummaryFixture()
+  it('keeps the containment, control and fire-out times apart', () => {
+    const st = recordStatus({ calfire: null, record: ok(outOnly), summary: s, demo: false, hasIncident: true })
+    expect(st.containedMs).toBeUndefined()
+    expect(st.controlledMs).toBeUndefined()
+    expect(st.outMs).toBe(Date.UTC(2026, 2, 19, 16, 0))
+    const both = recordStatus({ calfire: null, record: ok({ ...outOnly, current: { ...outOnly.current!, contained_ms: Date.UTC(2026, 2, 1), controlled_ms: Date.UTC(2026, 2, 10) } }), summary: s, demo: false, hasIncident: true })
+    expect([both.containedMs, both.controlledMs, both.outMs]).toEqual([Date.UTC(2026, 2, 1), Date.UTC(2026, 2, 10), Date.UTC(2026, 2, 19, 16, 0)])
+  })
+  it('labels each time with its own meaning, and leaves out the ones not given', () => {
+    expect(recordEndTimes({ contained: null, controlled: null, out: 5 })).toEqual([{ label: 'declared out', ms: 5 }])
+    expect(recordEndTimes({ contained: 1, controlled: 2, out: 3 }).map((e) => e.label)).toEqual(['contained', 'controlled', 'declared out'])
+    expect(recordEndTimes({})).toEqual([])
+    const feed = wfigsRecordFeedItems(outOnly, { mode: 'historical', manifest: null, summary: s, tf: timeFmt('America/New_York', '24h') })
+    const labels = (feed[0].facts ?? []).map((f) => f.label)
+    expect(labels).toContain('Declared out')
+    expect(labels).not.toContain('Contained')
   })
 })

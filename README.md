@@ -57,7 +57,9 @@ forecast and your selected point.
   each agency's record with its own issuer, status and time when they differ. A California complex is one marker with
   its member fires named on the card; in other states the member fires of a complex are listed on their own, with
   "part of the X Complex". Outside California every record is the protecting agency's (for example "USFS (USDA Forest
-  Service) via NIFC WFIGS"), with the agency's plain name and a link to the record.
+  Service) via NIFC WFIGS"), with a link to the record and the agency's plain name where NWCG's unit-identifier
+  standard names its code; the few codes it does not name (for example "TRIBE", "SHP" or "DFFM") are shown as NIFC
+  sends them.
 - **Zoom in to see the spread.** Zooming in on a fire whose analysis is prepared (from about zoom 8.5) shows it without
   a click and without moving the camera: the burned area colored by when it burned, perimeters, satellite detections
   and the selected forecast appear, and the timeline, the updates panel and the location card switch to that fire.
@@ -273,8 +275,8 @@ fire, outside the incident bundles). CAL FIRE's lists keep only the latest recor
 Fire-3d recorded it whenever it checked CAL FIRE (since Oct 18, 2026). Keep it when you clean up `data/`; the bundles in
 `data/incidents/` and the download cache in `data/cache/` can be rebuilt.
 
-**Town and ZIP search index.** `backend/fire3d/data/gazetteer_us.json` (3.8 MB: about 35,600 towns and places,
-every county and about 33,800 ZIP areas of every state) is built from the U.S. Census Bureau 2026 Gazetteer Files. To
+**Town and ZIP search index.** `backend/fire3d/data/gazetteer_us.json` (3.8 MB: about 32,400 towns and places,
+every county (3,222) and about 33,800 ZIP areas of every state) is built from the U.S. Census Bureau 2026 Gazetteer Files. To
 rebuild it: `cd backend && uv run python scripts/build_gazetteer.py [--year 2026]` (downloads three files once), or
 `--source DIR` to use files already downloaded. Without it, street addresses still work, but town and ZIP searches fail
 (the API answers 503).
@@ -297,9 +299,10 @@ time.
   incident picker start the build directly; otherwise its card offers **Prepare analysis (1-3 min)** too.
 - **A first build takes about 1–3 minutes per fire**, mostly downloads. Measured during development: Eaton 69 s,
   Palisades 75 s, Madre 87 s and Camino 192 s; the live Henderson and Norte fires 57 s and 47 s, and the live Cyrus
-  Fire (543 acres, Oct 18, 2026) 159 s, each including its first forecast. The 12 test fires outside California took
-  30 s (Black Cove, North Carolina, warm cache) to about 7 minutes (Cottonwood Peak, Nevada, 134,000 acres), and up to
-  22 minutes while the weather service answered only now and then. The 4,000-pixel aerial photo alone takes
+  Fire (543 acres, Oct 18, 2026) 159 s, each including its first forecast. The final builds of the 12 test fires
+  outside California took 30 s (Black Cove, North Carolina, warm cache) to 539 s, about 9 minutes (Emigrant, Oregon),
+  when every weather host answered; Island Creek (Idaho) took 18 minutes and France Canyon (Utah) 22 minutes while one
+  weather host did not answer (docs/validation.md, section 10.3). The 4,000-pixel aerial photo alone takes
   about 30 s on a cold cache, and the satellite detections of a long fire can take 1–2 minutes. Rebuilds with a warm
   cache are much faster.
 - **A forecast takes about 2–30 seconds** (31–51 model runs over 72 h, measured on a 12-core laptop).
@@ -308,8 +311,10 @@ time.
 
   ```bash
   (cd backend && uv run python scripts/make_fixture.py)
-  # then open http://localhost:5173/?incident=fixture-demo   (or ?incident=fixture-live, or ?incident=fixture-east,
-  # a small synthetic fire in North Carolina for checking Eastern time and the "not available in this state" lines)
+  # then open http://localhost:5173/?incident=fixture-demo   (or ?incident=fixture-live)
+  (cd backend && uv run python scripts/make_fixture.py --only east)   # optional third one: fixture-east
+  # http://localhost:5173/?incident=fixture-east is a small synthetic fire in North Carolina, for checking Eastern
+  # time and the "not available in this state" lines
   ```
 
   The app labels them "Demo · simulated data".
@@ -401,7 +406,7 @@ Helper scripts, also from `backend/`:
 
 | Script | Purpose |
 |---|---|
-| `uv run python scripts/make_fixture.py [--only demo\|live]` | write the two synthetic demo bundles |
+| `uv run python scripts/make_fixture.py [--only demo\|live\|east]` | write the two synthetic demo bundles (fixture-demo, fixture-live); `--only east` writes fixture-east (North Carolina), which the default run leaves out |
 | `uv run python scripts/serve_fixture.py --port 8710` | serve bundles from disk without the full backend |
 | `uv run python scripts/check_bundle.py <id> [--quicklook DIR]` | check a bundle against the data contract; optional quick-look images |
 | `uv run python -m fire3d.spread.validate hindcast …` or `… live-start …` | batch hindcasts for calibration, or the check of the live start on past fires (see [docs/validation.md](docs/validation.md), section 9) |
@@ -693,8 +698,10 @@ seconds. To reproduce the numbers, see [docs/validation.md, section 9](docs/vali
 - **Fixed analysis area.** Each fire's model area is set when it is built. Panning beyond it shows "Outside modeled
   area", which means unknown, not low.
 - **Coarse observations.** Satellite detections are 375 m (VIIRS), 1 km (MODIS) or 2–3 km (GOES) across, with a few
-  polar-orbiting passes a day. The replay is interpolated between them. 27 of the 78 past fires of 300 acres or
-  more have no agency perimeter, so they rely on detections alone, and perimeter times are best estimates.
+  polar-orbiting passes a day. The replay is interpolated between them. Many fires have no agency perimeter: of the
+  1,178 wildfires of 300 acres or more in the lower 48 in 2026 (counted on Oct 22, 2026), 356 (about 30 %) had no
+  NIFC perimeter, and in the Southeast only about 30 % had one. Those fires rely on detections alone, and perimeter
+  times are best estimates.
 - **"No fire seen" has limits.** A satellite pass only rules out fire above its detection limit: thick cloud, smoke or
   smoldering can hide a burning fire. Passes are looked up at the fire's center, so a very large fire can lie partly
   outside a pass. A live forecast's start moves forward only when its bundle refreshes (new detections, or every
@@ -735,8 +742,10 @@ seconds. To reproduce the numbers, see [docs/validation.md, section 9](docs/vali
 - **Free public map services** (OpenFreeMap, Mapterhorn, USGS) have no service-level guarantee.
 - **Weather quota.** Open-Meteo's free API allows fewer than 10,000 calls a day, 5,000 an hour and 600 a minute per
   internet address. On a shared address (a cloud machine, an office network) other users count too: "Prepare
-  analysis" then fails with "Open-Meteo daily request limit reached; retry after the reset (00:00 UTC)", and Fire-3d
-  stops asking until the reset. This happened during the final check of brief 3, on Oct 23, 2026.
+  analysis" then fails with "Open-Meteo daily request limit reached; retry after the reset (00:00 UTC)". Fire-3d then
+  sends that weather host no more requests, except one small check at most once an hour; when the host answers the
+  check, Fire-3d carries on (at the latest after the reset at 00:00 UTC). This happened during the final check of
+  brief 3, on Oct 23, 2026.
 - **When a fire list cannot be reached.** If NIFC's or CAL FIRE's list does not answer, the overview says which one,
   and a list that could not be refreshed is shown with the time of the copy ("could not be refreshed right now;
   showing the copy fetched 47 min ago"). If both are down, only fires already prepared on your machine are listed,
@@ -759,7 +768,7 @@ seconds. To reproduce the numbers, see [docs/validation.md, section 9](docs/vali
 | Zooming in on a fire shows only its marker | Its analysis is not prepared yet: the chip under the marker says "Spread not prepared yet · Prepare analysis (1-3 min)". Click it and press the button on the fire's card. With `./dev.sh`, the live loop prepares up to 4 active live fires after startup. |
 | A row of "Official now" says "Unavailable right now" | That official source (Cal OES, Oregon OEM, CAL FIRE, NIFC, the NWS, the Iowa Environmental Mesonet or FEMA's archive) did not answer; Fire-3d never fills in a quiet state for it. "Not available for past dates" means the source publishes current status only (Cal OES, Oregon OEM). "Not available in this state" means Fire-3d has no official evacuation source for that state. |
 | The overview says a fire list "could not be reached" or "could not be refreshed" | NIFC's or CAL FIRE's list did not answer. Fire-3d tries that list again a minute later; the reload button next to the source line reloads the overview. |
-| "Prepare analysis" fails with "Open-Meteo daily request limit reached" | The free weather quota of your internet address is used up (see Limitations). Try again after 00:00 UTC; `uv run python -m fire3d.cli weather-probe` (from `backend/`) says when the weather service answers again. |
+| "Prepare analysis" fails with "Open-Meteo daily request limit reached" | The free weather quota of your internet address is used up (see Limitations). Fire-3d checks the host again once an hour and carries on when it answers; the quota resets at 00:00 UTC at the latest. `uv run python -m fire3d.cli weather-probe` (from `backend/`) says whether the weather service answers now. |
 | Town or ZIP code searches fail | The local index `backend/fire3d/data/gazetteer_us.json` is missing: rebuild it with `uv run python scripts/build_gazetteer.py` (see Run). |
 | An optional source says "unavailable" | The official source did not answer; the panel gives the reason. Fire-3d never fills in invented data. |
 | A build ends with an error | A required step failed, for example the fire lists, USGS elevation, LANDFIRE fuels or Open-Meteo weather. The message says which; retry later from the app or with `build <id> --force`. If the lists cannot be reached at all, a build is refused with "The fire lists could not be reached right now; try again later." Optional parts (aerial photo, burn severity, trees) only add a warning. |

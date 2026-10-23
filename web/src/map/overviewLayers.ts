@@ -60,6 +60,11 @@ export const OVR = {
   otherChip: 'fx-overview-other-chip',
   activeChip: 'fx-overview-active-chip',
   pinnedChip: 'fx-overview-pinned-chip',
+  // the chips of the other fires near the view centre (chipTargets after the first): placed after the first fire's
+  // chip, never over it (final fixes R8)
+  otherChipNext: 'fx-overview-other-chip-next',
+  activeChipNext: 'fx-overview-active-chip-next',
+  pinnedChipNext: 'fx-overview-pinned-chip-next',
 } as const
 
 /** Layers whose features are single fires (a click or hover means that fire). */
@@ -79,8 +84,8 @@ export const OVERVIEW_FIRE_LAYERS: readonly string[] = [
 export const OVERVIEW_LABEL_LAYERS: readonly string[] = [OVR.pinnedLabel, OVR.activeLabel, OVR.otherLabel]
 /** Group bubbles (a click zooms in). */
 export const OVERVIEW_CLUSTER_LAYERS: readonly string[] = [OVR.activeCluster, OVR.otherCluster]
-/** The "Spread not prepared yet" chips. */
-export const OVERVIEW_CHIP_LAYERS: readonly string[] = [OVR.pinnedChip, OVR.activeChip, OVR.otherChip]
+/** The "Spread not prepared yet" chips: the first target's (the fire nearest the view centre) and the others'. */
+export const OVERVIEW_CHIP_LAYERS: readonly string[] = [OVR.pinnedChip, OVR.activeChip, OVR.otherChip, OVR.pinnedChipNext, OVR.activeChipNext, OVR.otherChipNext]
 /** Layers a click or hover may hit (markers, labels, groups). */
 export const OVERVIEW_HIT_LAYERS: readonly string[] = [...OVERVIEW_FIRE_LAYERS, ...OVERVIEW_CLUSTER_LAYERS]
 
@@ -403,15 +408,26 @@ type Filter = unknown[]
 const CLUSTERED: Filter = ['has', 'point_count']
 const SINGLE: Filter = ['!', ['has', 'point_count']]
 
-/** The chip layers' filters: only `chips` (map/focus.ts chipTargets: unprepared fires zoomed in on). */
+/** The chip layers' filters: only `chips` (map/focus.ts chipTargets: unprepared fires zoomed in on, nearest the view
+ *  centre first). The first chip (the fire the user is looking at) is always drawn; the others' layers are placed
+ *  after it and give way (final fixes R8: two nearby chips overlapped and one read "…nalysis (1-3 min)"). */
 export function overviewFilters(chips: readonly string[] = []): Record<string, Filter> {
-  const only = ['all', ['!=', ['get', 'chip'], ''], ['in', ['get', 'id'], ['literal', [...chips]]]]
+  const only = (ids: readonly string[]) => ['all', ['!=', ['get', 'chip'], ''], ['in', ['get', 'id'], ['literal', [...ids]]]]
+  const first = only(chips.slice(0, 1))
+  const next = only(chips.slice(1))
   return {
-    [OVR.pinnedChip]: only,
-    [OVR.activeChip]: ['all', SINGLE, only],
-    [OVR.otherChip]: ['all', SINGLE, only],
+    [OVR.pinnedChip]: first,
+    [OVR.activeChip]: ['all', SINGLE, first],
+    [OVR.otherChip]: ['all', SINGLE, first],
+    [OVR.pinnedChipNext]: next,
+    [OVR.activeChipNext]: ['all', SINGLE, next],
+    [OVR.otherChipNext]: ['all', SINGLE, next],
   }
 }
+
+/** Where a chip of a fire after the first may go, in order: below its marker (as the first chip), above, right, left;
+ *  `text-variable-anchor-offset` in ems (the chip is two lines of about 13 ems). */
+export const CHIP_NEXT_ANCHORS: unknown[] = ['top', [0, 1.9], 'bottom', [0, -1.9], 'left', [1.4, 0], 'right', [-1.4, 0]]
 
 /** The selection ring's filter: the fire whose card is open (always in the pinned source). */
 export function selectedFilter(cardId: string | null): Filter {
@@ -559,10 +575,11 @@ export function overviewLayers(theme: MapTheme, o: { narrow?: boolean } = {}): L
       },
       paint: { 'text-color': p.ink, 'text-halo-color': p.halo, 'text-halo-width': 1.6, 'text-halo-blur': 0.3 },
     }) as unknown as LayerSpecification
-  const chip = (id: string, source: string, filter: Filter): LayerSpecification =>
+  const chip = (id: string, source: string, filter: Filter, next = false): LayerSpecification =>
     ({
       // zoomed in near an unprepared fire: the prompt (on top: the labels avoid it); the controller limits it to the
-      // fires near the view centre (chipTargets), none until then
+      // fires near the view centre (chipTargets), none until then. The first fire's chip is always drawn and still
+      // claims its place; a later fire's chip moves around its marker to a free place, else waits (final fixes R8)
       id,
       type: 'symbol',
       source,
@@ -575,13 +592,12 @@ export function overviewLayers(theme: MapTheme, o: { narrow?: boolean } = {}): L
         'text-field': ['get', 'chip'],
         'text-font': FONT,
         'text-size': 11.5,
-        'text-anchor': 'top',
-        'text-offset': [0, 1.9],
+        ...(next ? { 'text-variable-anchor-offset': CHIP_NEXT_ANCHORS, 'text-padding': 4 } : { 'text-anchor': 'top', 'text-offset': [0, 1.9] }),
         // two short lines rather than one wide pill (it must fit beside a phone's edge)
         'text-max-width': 13,
         'text-line-height': 1.25,
-        'icon-allow-overlap': true,
-        'text-allow-overlap': true,
+        'icon-allow-overlap': !next,
+        'text-allow-overlap': !next,
       },
       paint: { 'text-color': tone === 'light' ? '#16202b' : '#f3f6f9' },
     }) as unknown as LayerSpecification
@@ -622,6 +638,11 @@ export function overviewLayers(theme: MapTheme, o: { narrow?: boolean } = {}): L
     label(OVR.otherLabel, S.other, SINGLE),
     label(OVR.activeLabel, S.active, SINGLE),
     label(OVR.pinnedLabel, S.pinned, null),
+    // the chips of the fires after the first, then the first fire's on top: the top layers are placed first, so the
+    // first chip claims its place and the others give way to it
+    chip(OVR.otherChipNext, S.other, chips[OVR.otherChipNext], true),
+    chip(OVR.activeChipNext, S.active, chips[OVR.activeChipNext], true),
+    chip(OVR.pinnedChipNext, S.pinned, chips[OVR.pinnedChipNext], true),
     chip(OVR.otherChip, S.other, chips[OVR.otherChip]),
     chip(OVR.activeChip, S.active, chips[OVR.activeChip]),
     chip(OVR.pinnedChip, S.pinned, chips[OVR.pinnedChip]),

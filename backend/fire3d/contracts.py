@@ -61,6 +61,7 @@ class ContractModel(BaseModel):
 # ----------------------------------------------------------------------------------------------------------------
 # Brief 3 (CONTRACT 14.1): whose record a list row is, and the ten accuracy regions (14.4).
 RecordSource = Literal["calfire", "wfigs"]
+ContainedKind = Literal["contained", "controlled", "out"]
 AccuracyRegionId = Literal["NWCC", "NRCC", "GBCC", "SWCC", "SACC-SP", "SACC-SE", "RMCC", "EACC", "ONCC", "OSCC"]
 
 
@@ -107,6 +108,8 @@ def _fill_summary_defaults(s: IncidentSummary) -> None:
         put("source_name", s.name)
     if "active_sources" not in given and cal:
         put("active_sources", ["calfire"] if s.is_active else [])
+    if "contained_kind" not in given and cal and s.contained_ms is not None:
+        put("contained_kind", "contained")    # CAL FIRE's own containment date (ExtinguishedDate)
     if "state" not in given or "time_zone" not in given:
         _fill_place(s, given, put)
 
@@ -169,6 +172,10 @@ class IncidentSummary(ContractModel):
     complex_name: str | None = None                     # a member fire outside California: "Part of the X Complex"
     complex_members: list[str] = Field(default_factory=list)          # a CAL FIRE complex row: WFIGS member names
     aliases: list[str] = Field(default_factory=list)    # other ids that resolve to this row (14.2 "Id pinning")
+    # Which agency time `contained_ms` is (14.17): WFIGS rows take ContainmentDateTime ("contained"), else
+    # ControlDateTime ("controlled"), else FireOutDateTime ("out"); CAL FIRE rows "contained". Null with no time, or on
+    # an older WFIGS manifest (the web then shows no containment date rather than a wrongly labelled one).
+    contained_kind: ContainedKind | None = None
 
     @model_validator(mode="after")
     def _brief3_defaults(self) -> IncidentSummary:

@@ -233,6 +233,9 @@ interface IncidentSummary {
   complex_name?: string | null;                        // a member fire outside California ("Part of the X Complex")
   complex_members?: string[];                          // a CAL FIRE complex row: its NIFC WFIGS member names, verbatim
   aliases?: string[];                                  // other ids that resolve to this row (id pinning)
+  contained_kind?: "contained" | "controlled" | "out" | null; // which agency time contained_ms is (CONTRACT §14.17):
+                                                       // NIFC WFIGS Containment, else Control, else FireOut; CAL FIRE
+                                                       // "contained"; null: no time, or an older NIFC WFIGS manifest
 }
 
 interface OtherRecord {                                // brief 3: another agency's record of the same fire

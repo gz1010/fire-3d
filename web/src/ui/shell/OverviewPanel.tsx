@@ -1,5 +1,5 @@
 // National overview list (owner: us-web; brief 2 O-R3, CONTRACT §13 shell; brief 3 §14.11): the right column on
-// desktop and a peek sheet on phones ("244 active fires · records updated 5 min ago"). Filters: Active / 2026 season /
+// desktop and a peek sheet on phones ("244 active fires · newest record 5 min old"). Filters: Active / 2026 season /
 // 2025 (state/overview.ts overviewFires, the same set the map's overview markers draw). The list shows the fires in the
 // map view ("312 fires in this view · Show all 1,334"; round 2 default), with each row's county and state. Every value is
 // an agency's official record (CAL FIRE in California, NIFC WFIGS elsewhere); the list-absence line of §14.14 says a
@@ -24,10 +24,12 @@ import {
   isActiveFire,
   LIST_ABSENCE,
   LIST_ABSENCE_SHORT,
+  listCheckedText,
   listErrorLines,
   listHealth,
   listSourceNotices,
   newestRecordMs,
+  newestRecordText,
   OVERVIEW_FILTERS,
   overviewCounts,
   overviewFires,
@@ -62,7 +64,8 @@ function useOverviewData() {
   const errorLines = listErrorLines(lists, catalog.listErrors, catalog.updatedMs, nowMs)
   // "checked": when Fire-3d fetched the lists (sources[].retrieved_ms), never the time of the answer (panel F2)
   const checkedMs = health.fetchedMs ?? (checked.length ? Math.min(...checked) : null)
-  return { catalog, filter, rows, loading, notices, health, errorLines, nowMs, error: errors.length ? [...new Set(errors)].join('; ') : null, checkedMs }
+  const checkedNewestMs = health.fetchedMs != null ? health.fetchedNewestMs : checked.length ? Math.max(...checked) : null
+  return { catalog, filter, rows, loading, notices, health, errorLines, nowMs, error: errors.length ? [...new Set(errors)].join('; ') : null, checkedMs, checkedNewestMs, listCount: lists.length }
 }
 
 /** The fires of the list in the map view (the whole list with "Show all", or when no map is shown). Memoised on the
@@ -190,7 +193,25 @@ function FireList({ rows, onPick }: { rows: IncidentSummary[]; onPick: (f: Incid
 /** One line under the filter: where the list comes from and how fresh it is (relative: the rows span many zones). When
  *  both lists are down the rows are prepared fires' saved records, not the agencies' lists (§14.16). A list served from
  *  an older copy is "fetched" at that copy's time, never "checked just now" (panel F2). */
-function SourceLine({ rows, checkedMs, loading, nowMs, past, health }: { rows: IncidentSummary[]; checkedMs: number | null; loading: boolean; nowMs: number; past: boolean; health: ListHealth }) {
+function SourceLine({
+  rows,
+  checkedMs,
+  checkedNewestMs,
+  listCount,
+  loading,
+  nowMs,
+  past,
+  health,
+}: {
+  rows: IncidentSummary[]
+  checkedMs: number | null
+  checkedNewestMs: number | null
+  listCount: number
+  loading: boolean
+  nowMs: number
+  past: boolean
+  health: ListHealth
+}) {
   const newest = newestRecordMs(rows)
   return (
     <p className="ov-source">
@@ -201,13 +222,9 @@ function SourceLine({ rows, checkedMs, loading, nowMs, past, health }: { rows: I
         ) : (
           <>
             {past ? 'Final records' : 'Records'}: CAL FIRE (California), NIFC WFIGS
-            {newest != null && <> · updated {fmtRelative(newest, nowMs)}</>}
-            {checkedMs != null && (
-              <>
-                {' '}
-                · {health.stale.size ? 'fetched' : 'checked'} {fmtRelative(checkedMs, nowMs)}
-              </>
-            )}
+            {/* the newest agency time inside the list as an age, then when Fire-3d fetched the lists (final fixes R7) */}
+            {newest != null && <> · {newestRecordText(newest, nowMs)}</>}
+            {checkedMs != null && <> · {listCheckedText(checkedMs, checkedNewestMs, nowMs, { lists: listCount, stale: health.stale.size > 0 })}</>}
           </>
         )}
       </span>
@@ -289,7 +306,7 @@ export function PeekBar() {
     text = (
       <>
         {count}
-        {newest != null ? ` · records updated ${fmtRelative(newest, nowMs)}` : ''}
+        {newest != null ? ` · ${newestRecordText(newest, nowMs)}` : ''}
       </>
     )
   return (
@@ -310,7 +327,7 @@ export function PeekBar() {
 /** Filter, source line, list and its loading / error / empty states (the overview panel and Forensic's "Open a fire
  *  first" screen). */
 export function OverviewList({ onPick }: { onPick: (f: IncidentSummary) => void }) {
-  const { catalog, filter, rows, loading, error, checkedMs, notices, health, errorLines, nowMs } = useOverviewData()
+  const { catalog, filter, rows, loading, error, checkedMs, checkedNewestMs, listCount, notices, health, errorLines, nowMs } = useOverviewData()
   const { shown, inViewCount, hasView, showAll } = useInView(rows)
   // the 2025 list is large: load it on demand when it failed or was never loaded
   useEffect(() => {
@@ -340,7 +357,16 @@ export function OverviewList({ onPick }: { onPick: (f: IncidentSummary) => void 
           }))}
         />
       </div>
-      <SourceLine rows={rows} checkedMs={checkedMs} loading={loading} nowMs={nowMs} past={filter === 'past' && !rows.some((r) => isActiveFire(r))} health={health} />
+      <SourceLine
+        rows={rows}
+        checkedMs={checkedMs}
+        checkedNewestMs={checkedNewestMs}
+        listCount={listCount}
+        loading={loading}
+        nowMs={nowMs}
+        past={filter === 'past' && !rows.some((r) => isActiveFire(r))}
+        health={health}
+      />
       {notices.map((n) => (
         <p key={n} className="ov-warn" role="status">
           {n}

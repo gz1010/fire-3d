@@ -758,7 +758,7 @@ export function officialBadge(
 // ---- CAL FIRE ---------------------------------------------------------------------------------------------------
 /** The I5 `calfire` shape: the fire's agency record (brief 3: CAL FIRE's or NIFC WFIGS's, a RecordStatus; a brief-2
  *  CalFireStatus with only state, acres?, percentContained?, isActive?, updatedMs?, url? still fits). */
-export type CalFireOfficial = CalFireStatus & Partial<Pick<RecordStatus, 'source' | 'issuer' | 'linkLabel' | 'blocks' | 'members' | 'complexName' | 'synthetic' | 'notChecked' | 'protectingUnit' | 'discoveredMs'>>
+export type CalFireOfficial = CalFireStatus & Partial<Pick<RecordStatus, 'source' | 'issuer' | 'linkLabel' | 'blocks' | 'members' | 'complexName' | 'synthetic' | 'notChecked' | 'protectingUnit' | 'discoveredMs' | 'controlledMs' | 'outMs'>>
 
 /** End of the hazard for display, used by the card line ("until …"). */
 export const officialAlertEnd = (a: Pick<OfficialAlert, 'endsMs' | 'expiresMs'>): number | null => a.endsMs ?? a.expiresMs ?? null

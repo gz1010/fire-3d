@@ -16,7 +16,7 @@ import { distanceText } from '../../official/geo'
 import { useOfficialNow, type CalFireOfficial, type EvacuationOfficial, type FireWeatherOfficial } from '../../official/hooks'
 import { forIncident } from '../../official/guard'
 import { evacuationWho, groupZones, officialNowScope, statewideCountText } from '../../official/model'
-import { partOfComplex, recordBlockText, recordLinkLabel } from '../../official/record'
+import { partOfComplex, recordBlockText, recordEndTimes, recordLinkLabel } from '../../official/record'
 import {
   answeredChannelsText,
   ARCHIVE_CAVEAT,
@@ -285,7 +285,10 @@ function RecordRow({ c, nowMs, wallMs, live }: { c: CalFireOfficial; nowMs: numb
   const cf = c.source !== 'wfigs'
   // years on the update and containment times when either differs from the fire's year, the replay's or today's, so
   // "contained Dec 16" never sits beside "Sep 6, 2026" as that year (review UX-m1)
-  const yearMode = recordYearMode([c.updatedMs, live ? null : c.containedMs], tf.tz, [fireYear, localYear(nowMs, tf.tz), localYear(wallMs, tf.tz)])
+  // the record's end times, each with its own label: a NIFC WFIGS record's control or fire-out time is never shown as
+  // its containment time (§14.17)
+  const ends = live ? [] : recordEndTimes({ contained: c.containedMs, controlled: c.controlledMs, out: c.outMs })
+  const yearMode = recordYearMode([c.updatedMs, ...ends.map((e) => e.ms)], tf.tz, [fireYear, localYear(nowMs, tf.tz), localYear(wallMs, tf.tz)])
   const status = c.final ? 'final record' : c.isActive === false ? 'not active' : c.isActive ? 'active' : null
   const note = cf ? calfireHistoryNote(c, mode, tf) : 'NIFC WFIGS publishes the current record only; Fire-3d does not record changes to it yet.'
   const lagged = laggedEditNote(c)
@@ -336,7 +339,7 @@ function RecordRow({ c, nowMs, wallMs, live }: { c: CalFireOfficial; nowMs: numb
       <p className="on-meta">
         {join([
           c.updatedMs != null ? `Updated by ${issuer} ${fmtAt(c.updatedMs, tf, { zone: true, year: yearMode })}` : `${issuer} gives no update time`,
-          !live && c.containedMs != null ? `contained ${fmtAt(c.containedMs, tf, { zone: true, year: yearMode })}` : null,
+          ...ends.map((e) => `${e.label} ${fmtAt(e.ms, tf, { zone: true, year: yearMode })}`),
           checked(c.checkedMs, wallMs),
         ])}
       </p>

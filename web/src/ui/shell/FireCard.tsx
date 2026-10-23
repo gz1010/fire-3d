@@ -15,7 +15,7 @@ import type { IncidentSummary } from '../../api/types'
 import { NWCG_AGENCY_CREDIT } from '../../lib/dataCredits'
 import { fmtAcres, fmtNumber } from '../../lib/format'
 import { accuracyLabel, type AccuracyLabel } from '../../lib/plainLanguage'
-import { agencyIdLine, agencyNameShown, complexMembers, isHttps as https, partOfComplex, recordBlockText, recordStatus } from '../../lib/recordText'
+import { agencyIdLine, agencyNameShown, complexMembers, containedLabel, isHttps as https, partOfComplex, recordBlockText, recordStatus } from '../../lib/recordText'
 import { fmtAt, fmtDayDate, fmtRelative, localYear, recordYearMode, type TimeFmt } from '../../lib/time'
 import { findRegion, useAccuracyRegions } from '../../state/accuracy'
 import { analysisReadyText, analysisState, findFire, fireWhere, isActiveFire, type AnalysisState } from '../../state/overview'
@@ -66,8 +66,10 @@ export function OfficialRecord({ fire, nowMs, tf }: { fire: IncidentSummary; now
   const blocks = recordBlocks(fire)
   const disagree = blocks.length > 1
   const updated = fire.updated_ms
+  // the containment date with its own meaning: a NIFC WFIGS record's date may be its control or fire-out time (§14.17)
+  const endLabel = containedLabel(fire)
   // years on every record time when any differs from the fire's year or today's (review UX-m1)
-  const yearMode = recordYearMode([updated, fire.contained_ms], tf.tz, [fire.year, localYear(nowMs, tf.tz)])
+  const yearMode = recordYearMode([updated, endLabel ? fire.contained_ms : null], tf.tz, [fire.year, localYear(nowMs, tf.tz)])
   const members = complexMembers(fire)
   const idLine = agencyIdLine(fire)
   const wfigs = (fire.record_source ?? 'calfire') === 'wfigs'
@@ -100,10 +102,10 @@ export function OfficialRecord({ fire, nowMs, tf }: { fire: IncidentSummary; now
           ) : (
             <>
               {issuer} record last edited <span className="mw-mono">{fmtAt(updated, tf, { zone: true, year: yearMode })}</span>
-              {fire.contained_ms != null && (
+              {endLabel != null && fire.contained_ms != null && (
                 <>
                   {' '}
-                  · contained <span className="mw-mono">{fmtDayDate(fire.contained_ms, tf.tz, { year: 'always' })}</span>
+                  · {endLabel} <span className="mw-mono">{fmtDayDate(fire.contained_ms, tf.tz, { year: 'always' })}</span>
                 </>
               )}
             </>

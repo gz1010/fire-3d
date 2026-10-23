@@ -5,7 +5,7 @@ import { useShallow } from 'zustand/react/shallow'
 import type { IncidentManifest, IncidentSummary, JobStatus } from '../api/types'
 import { fmtAcres, fmtLatLon } from '../lib/format'
 import { recordIssuerLabel } from '../api/records'
-import { agencyIdLine } from '../lib/recordText'
+import { agencyIdLine, containedLabel } from '../lib/recordText'
 import { fmtAt, fmtDuration, zoneAbbr } from '../lib/time'
 import { useStore } from '../state/store'
 import { useTimeFormat } from '../state/timeZone'
@@ -64,7 +64,10 @@ export function IncidentOverview() {
   const { summary, manifest, job } = useStore(useShallow((s) => ({ summary: s.summary, manifest: s.manifest, job: s.job })))
   if (!summary) return null
   const start = manifest?.ignition?.t_ms ?? summary.started_ms
-  const contained = summary.contained_ms
+  // the end date with its own meaning (§14.17): a NIFC WFIGS record's may be its control or fire-out time; none is
+  // shown when an older summary does not say which
+  const endLabel = containedLabel(summary)
+  const contained = endLabel ? summary.contained_ms : null
   const live = summary.mode === 'live'
   const loc = [summary.location, summary.county ? `${summary.county} County` : null, summary.state ?? null].filter(Boolean).join(', ')
   const wfigs = (summary.record_source ?? 'calfire') === 'wfigs'
@@ -102,7 +105,7 @@ export function IncidentOverview() {
         <dd className="mono">
           {fmtAt(start, tf, { year: 'always' })} <span className="muted">{zoneAbbr(start, tf.tz)}</span>
         </dd>
-        <dt>{live ? 'Containment' : 'Contained'}</dt>
+        <dt>{live ? 'Containment' : endLabel ? endLabel[0].toUpperCase() + endLabel.slice(1) : 'Contained'}</dt>
         <dd className="mono">
           {live ? (
             <ContainmentBar pct={summary.percent_contained} />
@@ -110,6 +113,8 @@ export function IncidentOverview() {
             <>
               {fmtAt(contained, tf, { year: 'always' })} <span className="muted">· {fmtDuration(contained - start)}</span>
             </>
+          ) : summary.contained_ms != null ? (
+            <span className="muted">see the agency record</span>
           ) : (
             <span className="muted">not reported</span>
           )}

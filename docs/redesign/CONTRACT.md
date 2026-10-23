@@ -2484,7 +2484,7 @@ From `us-official.md` (M2, M3, review round 1).
 - Clock: `'12h'` in the map workspace's Public preset ("3:40 PM MDT"); `'24h'` in Command and Forensic ("15:40 MDT").
 - Zone: a fire's own times (timeline, feed, charts, cards, its official items, scene labels, notes) use the fire's
   `summary.time_zone`. Overview rows and hovers use each row's `time_zone`. Times about many fires are relative
-  ("records updated 5 min ago"). A point without a fire uses `/api/geo/lookup`'s `time_zone`. Fallback: the viewer's
+  ("newest record 5 min old", 14.17). A point without a fire uses `/api/geo/lookup`'s `time_zone`. Fallback: the viewer's
   zone with its abbreviation, labelled; **never** Pacific.
 - Panel line: "Times: Mountain Time (MDT), the fire's local time" / "…, local time at this place" / "Times: your
   device's time (CDT)". A source time without a zone is shown as given with "time zone not stated".
@@ -2656,7 +2656,7 @@ From `us-catalog.md` (M5) and `us-web.md` (M5, late changes).
   or size not reported)", "Fires (CAL FIRE in California, NIFC WFIGS elsewhere; official records)", followed by the
   list-absence line of 14.14.
 - Panel list: "{312} fires in this view · Show all {1,334}" (round 2 default); rows "Garfield Co., CO"; counts
-  memoised; the phone peek "{244} active fires · records updated {5 min} ago". The list's footer carries the 14.14
+  memoised; the phone peek "{244} active fires · newest record {5 min} old" (14.17). The list's footer carries the 14.14
   list-absence line and the phone peek its short form; a view with no listed fire says "No listed fires in this
   view." followed by the same line (never "no fires"). Windowing the list (W11) is P1 (cut line). The "Include 2025
   fires of 100-300 acres" switch stays in every state.
@@ -3114,3 +3114,40 @@ The final check's fixes, from an independent review panel's findings (report
 - **Live summary sync**: `live.sync_live_summaries` skips synthetic and local bundles (an id that is not a listed
   fire's, such as `fixture-live`): they have no agency record to follow.
 
+### 14.17 Final fixes (as built 2026-10-23)
+
+The clean re-check after 14.16 found nine minor problems (R1-R9, report `docs/redesign/reports/final-verification-3.json`
+`final_fixes`). Shapes are additive; texts are exact.
+
+- **Which time `contained_ms` is** (R1). `IncidentSummary.contained_kind?: "contained" | "controlled" | "out" | null`
+  (Python `ContainedKind | None = None`): a NIFC WFIGS row's `contained_ms` is ContainmentDateTime ("contained"), else
+  ControlDateTime ("controlled"), else FireOutDateTime ("out") (`catalog.contained_kind`); CAL FIRE rows "contained"
+  (filled on read for old CAL FIRE manifests); null without a time, and on an older NIFC WFIGS manifest (never
+  assumed). It is synced into live bundle summaries like `contained_ms`. The web labels each time with its own
+  meaning: `recordText.containedLabel(summary)` "contained" / "controlled" / "declared out", or null (no date shown;
+  the overview card says "see the agency record"); the fire card "… record last edited … · declared out Mar 19, 2026";
+  the incident overview's row title "Contained" / "Controlled" / "Declared out". The NIFC WFIGS record endpoint's
+  three times stay apart: `RecordStatus.containedMs` is ContainmentDateTime only, `controlledMs` and `outMs` the others;
+  Official now and the record's feed facts list each one present (`record.recordEndTimes`: "contained …",
+  "controlled …", "declared out …"). A build's "Containment" event is added only at a containment time
+  (`observed.containment_event_ok`): never at a NIFC WFIGS control or fire-out time (the replay may still end there).
+- **Agency names** (R4). `backend/fire3d/data/nwcg_agency_codes.json` now names every PMS 931 Tier 2 code (71 codes,
+  checked against the PMS 931 PDF, Sep 2022, public domain, credited "Agency names: NWCG unit identifiers"), including
+  the ones NIFC WFIGS sends that were missing: FWS, DNRF, FFP, NNSA, OES, DOC. Codes PMS 931 does not name or names
+  twice stay verbatim (`meta.not_named`: ARNG, DEC, DFFM, INTER, SHP, SP, TRIBE, USMC).
+- **Freshness wording** (R7). The overview's source line and the phone peek say the newest record's age, never
+  "updated" beside an older check: "newest record 10 min old" (`overview.newestRecordText`), then when Fire-3d
+  fetched the lists: "list checked 2 min ago"; several lists fetched at different times "lists checked in the last 30
+  min"; a copy that could not be refreshed "copy fetched 47 min ago" (`overview.listCheckedText`;
+  `ListHealth.fetchedNewestMs` added beside `fetchedMs`). The peek: "<N> active fires · newest record 5 min old".
+- **Chips of nearby fires** (R8). The "Spread not prepared yet" chip layers are split in two: `OVR.pinnedChip` /
+  `activeChip` / `otherChip` hold the first `chipTargets` fire (nearest the view centre; always drawn, allow-overlap
+  true, still claims its place) and sit above `OVR.*ChipNext`, which hold the others (allow-overlap false,
+  `text-variable-anchor-offset` `CHIP_NEXT_ANCHORS`: below, above, right, left of the marker). MapLibre places the top
+  layers first, so a nearby fire's chip moves to a free side or waits; it never covers the first one.
+  `OVERVIEW_CHIP_LAYERS` lists all six. Screenshots `docs/screenshots/final3-fix-chips-before.png`, `-after.png`,
+  `-after-nd.png`.
+- **README** (R2, R3, R5, R6, R9): `make_fixture.py --only east` for fixture-east; the perimeter-coverage figure for
+  the lower 48 (2026: 356 of 1,178 fires of 300 acres or more without a NIFC perimeter); the hourly re-check of a
+  daily weather block; the 12 test fires' real build times (30-539 s, 18 and 22 min while a weather host did not
+  answer); about 32,400 towns and places besides the 3,222 counties.

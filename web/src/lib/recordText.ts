@@ -45,6 +45,15 @@ export function recordStatus(s: IncidentSummary): { key: FireStatusKey; label: s
   return { ...fireStatus(s), ownActive }
 }
 
+/** What a summary's `contained_ms` is ("contained", "controlled", "declared out"; §14.17), or null when no date may be
+ *  shown: none given, or an older NIFC WFIGS summary without `contained_kind`, whose date may be its control or
+ *  fire-out time (a fire-out date is never shown as the containment date). CAL FIRE's date is its containment date. */
+export function containedLabel(s: Pick<IncidentSummary, 'contained_ms' | 'contained_kind' | 'record_source'>): 'contained' | 'controlled' | 'declared out' | null {
+  if (s.contained_ms == null || !Number.isFinite(s.contained_ms)) return null
+  const kind = s.contained_kind ?? ((s.record_source ?? 'calfire') === 'calfire' ? 'contained' : null)
+  return kind === 'contained' ? 'contained' : kind === 'controlled' ? 'controlled' : kind === 'out' ? 'declared out' : null
+}
+
 /** Whether the fire's record section shows a plain agency name that Fire-3d added after an agency code
  *  ("USFS (USDA Forest Service) via NIFC WFIGS"), from the NWCG unit identifiers (credited next to it, §14.13): in the
  *  fire's own issuer label, or in another agency's record shown because it disagrees (the `recordBlocks` rule). */
