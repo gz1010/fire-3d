@@ -6,7 +6,7 @@ import { Camera, ExternalLink, RefreshCw, X } from 'lucide-react'
 import { useState } from 'react'
 import { useTimeFormat } from '../state/timeZone'
 import { useNow } from '../ui/hooks'
-import { cameraServiceText, cameraViewText, compassWord, frameTimeText, sortCameras } from './cameras'
+import { cameraServiceText, cameraSourcesShown, cameraViewText, compassWord, frameTimeText, sortCameras } from './cameras'
 import { apiPath } from './client'
 import { CameraGlyph, ExtrasNotice, SourceFooter } from './ExtrasCommon'
 import { envelopeStatusLine, freshnessText } from './format'
@@ -122,7 +122,7 @@ export function CameraPanel({ state, frame, selectedId, onSelect, centre = null,
       {data && Object.keys(data.excluded).length > 0 && (
         <p className="xs-caveat">Not shown: {Object.entries(data.excluded).map(([k, v]) => `${k} (${v})`).join(', ')}: terms not verified by Fire-3d.</p>
       )}
-      <SourceFooter sources={data?.sources ?? []} />
+      <SourceFooter sources={cameraSourcesShown(data)} />
     </section>
   )
 }

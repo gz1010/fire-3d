@@ -653,7 +653,8 @@ def evacuations_payload(ctx: AreaContext) -> dict[str, Any]:
         per_source.append((ad, zones))
         zone_caveats.extend(ad.standing_caveats)
         if not zones:
-            zone_caveats.append(ad.none_caveat)
+            # several states in the area: say whose "none" it is (a California-only answer keeps brief 2's sentence)
+            zone_caveats.append(ad.none_caveat_named if len(adapters) > 1 or uncovered else ad.none_caveat)
     checked = {ad.home_state: ad.id in answered for ad in adapters}
     out["states"] = evac.states_entries(states, checked)
     if not answered:
@@ -807,8 +808,9 @@ def cameras_payload(ctx: AreaContext) -> dict[str, Any]:
     out = _base("cameras", ctx, ("caloes_webcams", "alertcalifornia", "caltrans_cctv"))
     out.update({"cameras": {"type": "FeatureCollection", "features": []}, "counts": {}, "excluded": {}})
     if "CA" not in regions.states_in_bbox(ctx.bbox):
-        # CONTRACT §14.8.6 / §14.14: the camera sources are California's; no upstream request elsewhere
-        out.update(status="unavailable", reason_code="state_not_available", reason=CAMERAS_NOT_AVAILABLE)
+        # CONTRACT §14.8.6 / §14.14: the camera sources are California's; no upstream request elsewhere, and no
+        # California source listed for an answer that used none (as evacuations do; the sentence names the networks)
+        out.update(status="unavailable", reason_code="state_not_available", reason=CAMERAS_NOT_AVAILABLE, sources=[])
         return out
     if ctx.is_past:
         out.update(status="not_available_for_past_dates", reason_code="past_date",

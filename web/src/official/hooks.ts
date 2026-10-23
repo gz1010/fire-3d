@@ -19,7 +19,7 @@ import { recordStatus, type RecordStatus } from './record'
 import { useOfficialContext, type OfficialContext } from './context'
 import { fireWeatherStatewideUrl, localAlertsBboxUrl, OFFICIAL_REFRESH_MS } from './client'
 import { bboxContains } from './geo'
-import { localAlertsState, type LocalAlertsOfficial } from './localAlerts'
+import { localAlertsAtPoint, localAlertsState, type LocalAlertsOfficial } from './localAlerts'
 import {
   evacuationAtPointState,
   evacuationNow,
@@ -52,6 +52,8 @@ export interface OfficialPlace {
   /** IANA zone of the point (null outside the lower 48). */
   timeZone: string | null
   coverage: Coverage | null
+  /** 5-digit county FIPS of the point (local alerts matched by county), when known. */
+  countyFips?: string | null
 }
 
 /** The three official answers (I5), plus (brief 3, optional) the point's place. `calfire` is the fire's agency record
@@ -79,7 +81,7 @@ function usePlace(lon: number | null, lat: number | null): OfficialPlace | null 
     if (g.status === 'loading') return { status: 'loading', state: null, stateName: null, timeZone: null, coverage: null }
     if (g.status === 'error') return { status: 'error', state: null, stateName: null, timeZone: null, coverage: null }
     const d = g.data
-    return { status: 'ok', state: d.supported ? d.state : null, stateName: d.supported ? d.state_name : null, timeZone: d.time_zone, coverage: d.coverage }
+    return { status: 'ok', state: d.supported ? d.state : null, stateName: d.supported ? d.state_name : null, timeZone: d.time_zone, coverage: d.coverage, countyFips: d.county?.fips ?? null }
   }, [g, valid])
 }
 
@@ -141,7 +143,8 @@ export function useOfficialAtPoint(lon: number | null, lat: number | null): Offi
   const calfire = useRecord(ctx)
   const tf = useTimeFormat()
   // local officials' messages: live at the point's small box; at a past time the fire's own (archive) answer when the
-  // point lies in its area, else not checked
+  // point lies in its area, else not checked. Either way measured from the point, keeping the messages whose area
+  // reaches it, most relevant first (localAlertsAtPoint; review round 1, R1)
   const localLive = !ctx.past && !ctx.demo && lon != null && lat != null && Number.isFinite(lon) && Number.isFinite(lat)
   const lq = useJsonQuery<LocalAlertsResponse>(localLive ? localAlertsBboxUrl(pointQueryBbox(lon as number, lat as number)) : null, {
     refreshMs: OFFICIAL_REFRESH_MS.local,
@@ -149,14 +152,15 @@ export function useOfficialAtPoint(lon: number | null, lat: number | null): Offi
     isCurrent: () => true,
   })
   const incidentLocal = useIncidentLocal(ctx.incidentId)
+  const countyFips = place?.countyFips ?? null
   const local = useMemo(() => {
     if (ctx.demo) return localAlertsState(null, { demo: true })
     if (lon == null || lat == null) return localAlertsState(null)
-    if (localLive) return localAlertsState({ data: lq.data, loading: lq.loading, error: lq.error })
+    if (localLive) return localAlertsAtPoint(localAlertsState({ data: lq.data, loading: lq.loading, error: lq.error }), lon, lat, { countyFips })
     const area = incidentLocal.data?.area_bbox ?? ctx.evacBbox
-    if (ctx.hasIncident && bboxContains(area, lon, lat)) return localAlertsState(incidentLocal)
+    if (ctx.hasIncident && bboxContains(area, lon, lat)) return localAlertsAtPoint(localAlertsState(incidentLocal), lon, lat, { countyFips })
     return { ...localAlertsState(null), reason: "Past local alerts are checked for the selected fire's area only." }
-  }, [ctx, lon, lat, localLive, lq.data, lq.loading, lq.error, incidentLocal])
+  }, [ctx, lon, lat, localLive, lq.data, lq.loading, lq.error, incidentLocal, countyFips])
   const evacuation = useMemo(
     () =>
       evacuationAtPointState({

@@ -10,7 +10,7 @@ import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import { calfireFeedItems } from '../official/calfire'
 import { wfigsRecordFeedItems } from '../official/record'
-import { localAlertFeedItems, localAlertsState } from '../official/localAlerts'
+import { localAlertCredits, localAlertFeedItems, localAlertsState } from '../official/localAlerts'
 import { useTimeFormat } from '../state/timeZone'
 import { forIncident } from '../official/guard'
 import { useOfficialContext } from '../official/context'
@@ -102,14 +102,24 @@ export function useExtrasLegend(nowMs: number): ExtrasLegendEntry[] {
   )
 }
 
-/** Credits of the visible optional layers and of drawn NWS outlines, as text (CONTRACT §4.4, §12.5). */
+/** Credits of the visible optional layers, of drawn NWS outlines and of the open fire's local officials' alerts
+ *  (NWS; FEMA's archive with the OpenFEMA notice), as text (CONTRACT §4.4, §12.5, §14.7). */
 export function useExtrasCredits(): ExtrasCredit[] {
   const v = useVisibleExtras()
   const fw = useFireWeatherData()
-  const fwRef = useOfficialContext().refMs
+  const ctx = useOfficialContext()
+  const fwRef = ctx.refMs
+  const localData = useOfficialRuntime((s) => forIncident(s.local.data, ctx.incidentId))
+  const demo = ctx.demo
   return useMemo(
-    () => [...evacuationCredits(v.evac), ...fireWeatherCredits(fw, fwRef), ...cameraCredits(v.cams), ...imageryCredits(v.product, v.imgs)],
-    [v.evac, v.cams, v.imgs, v.product, fw, fwRef],
+    () => [
+      ...evacuationCredits(v.evac),
+      ...fireWeatherCredits(fw, fwRef),
+      ...(demo ? [] : localAlertCredits(localAlertsState({ data: localData, loading: false, error: null }))),
+      ...cameraCredits(v.cams),
+      ...imageryCredits(v.product, v.imgs),
+    ],
+    [v.evac, v.cams, v.imgs, v.product, fw, fwRef, localData, demo],
   )
 }
 
@@ -147,7 +157,7 @@ export function useExtrasFeedItems(): FeedItem[] {
       ...(ctx.demo || (summary?.record_source ?? 'calfire') !== 'wfigs' ? [] : wfigsRecordFeedItems(record, { mode, manifest, summary, tf })),
       ...(ctx.demo ? [] : fireWeatherFeedItems(fw, { mode, refMs: ctx.refMs, manifest, metric, tf })),
       // local officials' messages relayed by NWS / archived by FEMA (CONTRACT §14.7)
-      ...(ctx.demo ? [] : localAlertFeedItems(localAlertsState({ data: localData, loading: false, error: null }), { manifest, tf })),
+      ...(ctx.demo ? [] : localAlertFeedItems(localAlertsState({ data: localData, loading: false, error: null }), { manifest, tf, metric })),
       ...cameraFeedItems(v.cams, tf),
       ...imageryFeedItems(v.imgs, range, startedMs),
     ]

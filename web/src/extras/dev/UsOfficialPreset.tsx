@@ -3,14 +3,18 @@
 // - "Official now" on the overview with a national NWS answer (`states_checked` = the 49 codes; Red Flag Warnings in
 //   Montana and Wyoming, each with its own times in its own zone);
 // - the Official now "Local officials' alerts" row for a fire: a live message relayed by NWS (NWEM), an archived
-//   message from FEMA's OpenFEMA archive with the required notice, and an archive channel still `pending`;
+//   message from FEMA's OpenFEMA archive with the required notice, an archived message in another zone (Sheridan
+//   County, Wyoming: Mountain time next to the Pacific ones, matched by county), and an archive channel still
+//   `pending`. Each line says where the message's area lies (review round 1, R1). The national NWS answer is the only
+//   one recorded and all three of its alerts are in Mountain time; a Pacific alert from another day is not merged
+//   into it (that answer never existed), so "each alert in its own zone" shows across the panels (review R3);
 // - the location card's official block at a point in Jackson County, Oregon (near Medford), with Oregon OEM's zones:
 //   levels with OEM's definitions and "added to the Oregon state layer" in Pacific time (12-hour, Public).
 // The stores the real components read are seeded before the first render (usOfficialSeed.ts); window.__usOfficialDev
 // exposes the inputs to screenshot scripts.
 import { useEffect, useMemo } from 'react'
 import { OR_EVAC_MEDFORD } from '../__fixtures__/samplesUs'
-import { LOCAL_ARCHIVE_KERN_FRW, LOCAL_ARCHIVE_PENDING_BLACK_COVE, LOCAL_LIVE_LA_CEM, LOCAL_LIVE_NONE_RENO } from '../../official/__fixtures__/localAlerts'
+import { LOCAL_ARCHIVE_KERN_FRW, LOCAL_ARCHIVE_PENDING_BLACK_COVE, LOCAL_ARCHIVE_SHERIDAN_WY, LOCAL_LIVE_LA_CEM, LOCAL_LIVE_NONE_RENO } from '../../official/__fixtures__/localAlerts'
 import { FW_NATIONAL_MT_WY } from '../../official/__fixtures__/national'
 import { localAlertsState } from '../../official/localAlerts'
 import { evacuationAtPointState, fireWeatherAtPointState } from '../../official/model'
@@ -41,6 +45,7 @@ export function UsOfficialPreset() {
     () => [
       { title: 'Live: a message relayed by the National Weather Service (NWEM)', l: localAlertsState(ok(LOCAL_LIVE_LA_CEM)) },
       { title: "Past day: an archived message from FEMA's OpenFEMA archive", l: localAlertsState(ok(LOCAL_ARCHIVE_KERN_FRW)) },
+      { title: 'Past day: an archived message in another zone (Wyoming, Mountain time), matched by county', l: localAlertsState(ok(LOCAL_ARCHIVE_SHERIDAN_WY)) },
       { title: "Past day: FEMA's archive still being fetched (pending)", l: localAlertsState(ok(LOCAL_ARCHIVE_PENDING_BLACK_COVE)) },
     ],
     [],

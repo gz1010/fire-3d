@@ -70,7 +70,7 @@ fetching, envelope).
   `credit` ("Cal OES" / "Oregon Department of Emergency Management"); `issuing_authority` joins the adapters' texts.
 - **Cameras** (§14.8.6): a bbox that does not touch California → `unavailable` + `state_not_available`, reason "Public
   cameras: California only (ALERTCalifornia, Caltrans). Not available in this state." (`extras.CAMERAS_NOT_AVAILABLE`),
-  no upstream request. A bbox touching California (Brookings OR/CA) still lists California cameras.
+  `sources: []` (review R5), no upstream request. A bbox touching California (Brookings OR/CA) still lists California cameras.
 - **Sample**: `backend/scripts/record_test_samples_evacuations.py` recorded the 2026-08-15 12:00Z snapshot of OEM's
   history layer (11 named zones + 1 `Fire_Name` null zone; levels 1/2/3; hazard "Other") and the live layer's
   description into `backend/tests/data/evacuations/` with `PROVENANCE.md`. Terms re-read 2026-10-23: item
@@ -231,6 +231,49 @@ fetching, envelope).
   record issuer keeps the Official now header and the data-status label short ("NIFC WFIGS" / "Agency record") and
   names the issuer in full in the row text.
 
+## Review fixes, round 1 (`docs/redesign/reports/review3-us-official.json`)
+
+- **R1, local officials' alerts: where each applies, most relevant first.** `LocalAlertItem` keeps `nearestKm` and
+  adds `where` ({from: 'fire' | 'point', covers, km}), `polygon` and `sameCodes` (additive). `localAlertOrder`: in
+  effect, then upcoming, then ended; within a phase the area covering the location, then the nearest area (county
+  matches after those with a distance), then the newest. `localAlertsState` sorts with it (the backend's order is
+  phase, then send time). `localAlertPlace(a, {metric, fireOpen?})` is said on every line, in Official now
+  (`LocalAlertsRow`), the feed (`detail`) and the card (`sub` and `subCompact`, so phones keep it): "area covers the
+  fire's reported location"; "area 1.7 mi from the fire's reported location · may be about another fire" (units from
+  the viewer's setting); "matched by county, not by an exact area · may be about another fire". The location card
+  measures from its point: `localAlertsAtPoint(l, lon, lat, {countyFips})` keeps the messages whose area reaches the
+  point (polygon covering it or within `POINT_NEAR_KM` = 1 km, about the live card's `?bbox=` box; a county match in
+  the point's county, or while the county is unknown), orders them the same way, counts the rest in
+  `LocalAlertsOfficial.elsewhere` ("27 of the fire's local alerts are for other places in its area (see Updates).");
+  none left: "Local officials' alerts relayed by NWS: none here · not an all-clear". At the point the phrase is "area
+  covers this point" / "area 0.1 mi from this point" (+ "may be about another fire" while a fire is open).
+  `OfficialPlace.countyFips` (optional) comes from `/api/geo/lookup`'s `county.fips`. `LocalAlertsRow` adds "34
+  messages for this fire's area; in effect first, then the nearest to its reported location:" above the 3 shown and
+  `LOCAL_PLACE_NOTE` under "More". Wording: the reviewer proposed "the message does not say which fire it is about";
+  that is false for messages that name their fire ("Kern County Sheriff: Cyrus Fire updated to an Evacuation
+  Order"), and Fire-3d never reads the text, so the lines say "may be about another fire" and the note explains
+  "Fire-3d ties a message to this fire only by where its area lies; it does not read which fire the message is about".
+  The distance is from the fire's reported location (what `nearest_km` measures), not from the fire's edge.
+  Screenshots: `docs/screenshots/brief3-us-official-eaton-local-alerts-command-desktop.png`,
+  `docs/screenshots/brief3-us-official-eaton-local-card-command-desktop.png`.
+- **R2:** `notCheckedAt` (`official/model.ts`) waits for the point's state (geo lookup, cached) even when the answer
+  covers all 49 codes: "Checking NWS fire weather alerts…" until it answers, then "checked" or "not checked here".
+- **R3:** the dev preset adds an archived Sheridan County, Wyoming message (Mountain time) next to the Pacific ones.
+  The national NWS answer stays the one recorded sample (3 Red Flag Warnings, all Mountain time): merging a Pacific
+  alert from another day would make an answer that never existed (deviation 8).
+- **R4:** `localAlertCredits(local)` (`official/localAlerts.ts`) in `useExtrasCredits`: "Local officials' alerts:
+  National Weather Service (relayed local officials' messages)" when NWS answered or a relayed message is listed;
+  "Local officials' alerts: FEMA IPAWS archive via OpenFEMA. This product uses the Federal Emergency Management
+  Agency's OpenFEMA API, but is not endorsed by FEMA." (link: the OpenFEMA terms) when the archive answered or an
+  archived message is listed; nothing while not checked, pending or for demo data.
+- **R5:** cameras outside California answer `sources: []` (`cameras_payload`); the panel also hides the source lines
+  for `state_not_available` (`cameraSourcesShown`, for an older backend).
+- **R6:** in an answer covering several states (two sources, or a state without a feed), Cal OES's "none" names its
+  source: "Cal OES lists no evacuation zone here right now. That is not an all-clear: follow local officials."
+  (`EvacAdapter.none_caveat_named`); a California-only answer keeps brief 2's sentence.
+- **R7:** comments of `ui/shell/dataStatus.ts` (the fire's zone, the preset's clock) and `official/runtime.ts`
+  `fireWeatherFor` (the national answer per `states_checked`) updated.
+
 ## Deviations from §14 (also in the report)
 
 1. `sources[]` entries of `/api/extras/evacuations` carry one more additive field, `aggregator` ("Cal OES" / "Oregon
@@ -246,6 +289,12 @@ fetching, envelope).
    location card's record link label comes from `linkLabel`.
 7. Quoted local-alert text prefers the WEA text, then the headline, then the description (us-pipeline's note said
    headline first), and is cut at 220 characters with "…" (the full texts are behind "More").
+8. §14.8.7 asks the dev preset's national NWS answer for "alerts in two zones"; the only recorded national answer has
+   Mountain-time alerts only, so the preset shows the second zone through local alerts (Pacific and Mountain) instead
+   (review R3).
+9. Local-alert lines carry a location phrase and the web orders them by relevance (review R1); the card filters the
+   fire's (past) answer to the point (`localAlertsAtPoint`). §14.7 does not describe either; the integration should
+   fold them in.
 
 ## Files (us-official, brief 3)
 

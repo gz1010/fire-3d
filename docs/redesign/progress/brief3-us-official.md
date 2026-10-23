@@ -41,3 +41,13 @@ Started 2026-10-23 ~01:45 UTC (late start; us-catalog finished, us-web past M5, 
 - Negation statuses map to 'other' and are dropped as placeholders; null Cal OES status stays 'unknown' (CA unchanged).
 
 ## Open problems
+
+## Review fixes, round 1 (2026-10-23)
+- Review docs/redesign/reports/review3-us-official.json: R1 major, R2-R7 minor, all in role. No partial work of the
+  interrupted earlier fixer was found (clean paths, nothing committed).
+- R1 fixed (relevance order and a location phrase on every local-alert line; the card measures from its point and
+  keeps the messages that reach it), R2 fixed (NWS waits for the point's state), R3 partly fixed (Wyoming MDT row in
+  the preset; national answer stays Mountain-only, deviation recorded), R4 fixed (local-alert credits), R5 fixed
+  (cameras sources [] outside California), R6 fixed (Cal OES "none" names its source in multi-state answers), R7 fixed.
+- Gates: pytest 880; web typecheck 0, lint 55 (scene), 72 files / 1107 tests (clean worktree 67 / 1085), build OK;
+  check-time-api 0/0; 0 non-GET; key scan 0. Screenshots viewed; servers stopped.

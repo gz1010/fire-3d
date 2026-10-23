@@ -1,6 +1,7 @@
 // Command preset "Data status" rows (owner: shell; BRIEF §2 Command, §8): the newest timestamp of every source in the
 // selected incident's bundle, so operators see how current each input is. Pure (tested in dataStatus.test.ts).
-// Times are absolute (America/Los_Angeles with zone, plus the year when it is not the current one); live incidents add
+// Times are absolute (in the fire's own zone with its abbreviation, on the preset's clock: Public 12-hour, Command
+// 24-hour, through fmtStatusTimeAt; plus the year when it is not the current one); live incidents add
 // the age against the wall clock and flag observations older than the timeline's stale threshold. Replays show
 // archived times only (no "ago"). Live "Last observation" can be a confirmed satellite pass that saw no new fire
 // (time_range.now_ms, SPEC 8.3): when the newest detection or mapped perimeter is more than an hour older, the row says

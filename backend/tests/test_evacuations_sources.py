@@ -285,6 +285,30 @@ def test_mixed_with_a_state_without_a_feed(router: Router, client: TestClient) -
     assert {s["state"]: (s["availability"], s["checked"]) for s in d["states"]} == {"CA": ("available", True), "NV": ("not_available", False)}
     assert "Nevada: official evacuation zones are not available in this state" in d["caveats"]
     assert router.count(OR_QUERY) == 0
+    # review R6: next to Nevada's line, California's "none" names its source
+    assert CAL_OES_NONE_NAMED in d["caveats"] and CAL_OES_NONE_BRIEF2 not in d["caveats"]
+
+
+CAL_OES_NONE_BRIEF2 = "No orders or warnings are listed here right now. That is not an all-clear: follow local officials."
+CAL_OES_NONE_NAMED = "Cal OES lists no evacuation zone here right now. That is not an all-clear: follow local officials."
+OR_OEM_NONE = "Oregon OEM lists no evacuation zone here right now. That is not an all-clear: follow local officials."
+
+
+def test_brookings_none_listed_names_each_source(router: Router, client: TestClient) -> None:
+    """Review R6: with both states answering and no zone listed, each "none" says whose it is."""
+    evac_routes(router, zones=[], inventory=[{"type": "Feature", "id": 8, "geometry": None, "properties": {"CountyName": "Del Norte", "Source": "County", "Reference_App": None, "DataInUse": "Yes", "DataAcqStatus": "Acquired"}}])
+    or_routes(router, features=[])
+    d = client.get("/api/extras/evacuations", params={"bbox": BROOKINGS}).json()
+    assert d["status"] == "available" and d["zones"]["features"] == []
+    assert CAL_OES_NONE_NAMED in d["caveats"] and OR_OEM_NONE in d["caveats"]
+    assert CAL_OES_NONE_BRIEF2 not in d["caveats"]             # never a "none" without its source next to another state's
+    assert OEM_NONE_SENTENCE not in json.dumps(d)
+
+
+def test_california_only_none_keeps_the_brief2_sentence(router: Router, client: TestClient) -> None:
+    evac_routes(router, zones=[], inventory=INVENTORY_LA)
+    d = client.get("/api/extras/evacuations", params={"bbox": LA_BBOX}).json()
+    assert CAL_OES_NONE_BRIEF2 in d["caveats"] and CAL_OES_NONE_NAMED not in d["caveats"]
 
 
 # ------------------------------------------------------------------------------------------------------------------
@@ -358,6 +382,9 @@ def test_cameras_outside_california(bbox: str, router: Router, client: TestClien
     assert d["status"] == "unavailable" and d["reason_code"] == "state_not_available"
     assert d["reason"] == "Public cameras: California only (ALERTCalifornia, Caltrans). Not available in this state."
     assert d["cameras"]["features"] == [] and router.calls == []
+    # review R5: no California source is listed for an answer that used none (the sentence names the networks)
+    assert d["sources"] == []
+    assert "Cal OES" not in json.dumps(d)
 
 
 def test_cameras_still_listed_at_the_california_border(router: Router, client: TestClient) -> None:

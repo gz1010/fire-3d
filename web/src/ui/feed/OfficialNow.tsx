@@ -17,7 +17,7 @@ import { useOfficialNow, type CalFireOfficial, type EvacuationOfficial, type Fir
 import { forIncident } from '../../official/guard'
 import { evacuationWho, groupZones, officialNowScope } from '../../official/model'
 import { partOfComplex, recordBlockText, recordLinkLabel } from '../../official/record'
-import { ARCHIVE_CAVEAT, ARCHIVE_CREDIT, LOCAL_STANDING_CAVEAT, OPENFEMA_NOTICE, OPENFEMA_TERMS_URL, sentText, type LocalAlertsOfficial } from '../../official/localAlerts'
+import { ARCHIVE_CAVEAT, ARCHIVE_CREDIT, LOCAL_PLACE_NOTE, LOCAL_STANDING_CAVEAT, localAlertPlace, OPENFEMA_NOTICE, OPENFEMA_TERMS_URL, sentText, type LocalAlertsOfficial } from '../../official/localAlerts'
 import { alertTimeFmt } from '../../official/fireWeather'
 import { useOfficialRuntime } from '../../official/runtime'
 import { showOfficialArea } from '../../official/select'
@@ -427,10 +427,13 @@ function FireWeatherRow({ f, nowMs, wallMs, metric, statewide = false }: { f: Fi
 }
 
 /** Local officials' messages relayed by NWS, or archived by FEMA for a past time (CONTRACT §14.7): each with its
- *  issuer, own time, verbatim text and link; the archive with its notice and credit; pending and not-checked states
- *  said as such; the standing caveat behind "More". */
+ *  issuer, own time, verbatim text, link and where its area lies ("area covers the fire's reported location", "area
+ *  1.7 mi from the fire's reported location · may be about another fire"; review round 1, R1), the most relevant
+ *  first (localAlertOrder); the archive with its notice and credit; pending and not-checked states said as such; the
+ *  standing caveat behind "More". */
 export function LocalAlertsRow({ l, wallMs }: { l: LocalAlertsOfficial; wallMs: number }) {
   const tf = useTimeFormat()
+  const metric = useWorkspace((s) => s.units === 'metric')
   const label = "Local officials' alerts"
   const source = l.archive ? 'NWS, FEMA archive' : 'relayed by NWS'
   const icon = <Megaphone size={13} />
@@ -444,6 +447,7 @@ export function LocalAlertsRow({ l, wallMs }: { l: LocalAlertsOfficial; wallMs: 
   const standing = (
     <>
       <p className="on-meta">{LOCAL_STANDING_CAVEAT}</p>
+      {l.state === 'listed' && l.alerts.some((a) => !a.where.covers) && <p className="on-meta">{LOCAL_PLACE_NOTE}</p>}
       {notice}
       {l.channels
         .filter((c) => c.status === 'not_checked' && c.reason)
@@ -483,6 +487,9 @@ export function LocalAlertsRow({ l, wallMs }: { l: LocalAlertsOfficial; wallMs: 
   const shown = l.alerts.slice(0, 3)
   return (
     <Row icon={icon} label={label} source={source} tone="alert" more={standing}>
+      {l.alerts.length > shown.length && (
+        <p className="on-meta">{`${l.alerts.length} messages for this fire's area; in effect first, then the nearest to its reported location:`}</p>
+      )}
       {shown.map((a) => (
         <div key={a.id} className="on-alert">
           <p className="on-line">
@@ -492,6 +499,7 @@ export function LocalAlertsRow({ l, wallMs }: { l: LocalAlertsOfficial; wallMs: 
             {join([a.event, sentText(a, tf), a.archived ? 'FEMA archive' : 'relayed by the National Weather Service', a.phase === 'expired' ? 'ended' : a.phase === 'upcoming' ? 'upcoming' : null])}{' '}
             <SourceLink href={a.link.url}>{a.link.label}</SourceLink>
           </p>
+          <p className="on-meta">{localAlertPlace(a, { metric })}</p>
           {a.archived && <p className="on-meta">{`${ARCHIVE_CREDIT}: ${OPENFEMA_NOTICE}.`}</p>}
         </div>
       ))}

@@ -643,10 +643,9 @@ export function needsStatewideFireWeather(i: Pick<FireWeatherAtPointInput, 'lon'
  *  `states_checked` only), or loading while the point's state is not known yet; null when it is covered. */
 function notCheckedAt(d: FireWeatherResponse, pointState: string | null | undefined): FireWeatherOfficial | null {
   const covered = statesChecked(d)
-  if (pointState === undefined) {
-    // the point's state is still being looked up; an answer that covers every state needs no lookup
-    return coversLower48(d) ? null : { state: 'loading', alerts: [], ...fwBase(d), caveat: FW_CAVEAT }
-  }
+  // the point's state is still being looked up (cached and fast): wait for it, even with all 49 codes checked, so a
+  // point in Alaska, Canada or Mexico never reads "checked, none in effect here" for a moment (review round 1, R2)
+  if (pointState === undefined) return { state: 'loading', alerts: [], ...fwBase(d), caveat: FW_CAVEAT }
   if (pointState && covered.includes(pointState)) return null
   const where = pointState ? (stateName(pointState) ?? pointState) : null
   return {

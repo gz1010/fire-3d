@@ -9,6 +9,7 @@ import {
   cameraLayerGroup,
   cameraLegend,
   cameraServiceText,
+  cameraSourcesShown,
   cameraViewText,
   compassWord,
   distanceBearing,
@@ -82,6 +83,17 @@ describe('camera list, legend and feed', () => {
     const [noTime] = cameraFeedItems({ ...CAMERAS_SAMPLE, source_updated_ms: null })
     expect(noTime.timeNotGiven).toBe(true)
     expect(noTime.detail).not.toContain('list updated')
+  })
+})
+
+describe('camera sources under the panel (review R5)', () => {
+  it('lists the California sources only for an answer that used them', () => {
+    expect(cameraSourcesShown(CAMERAS_SAMPLE).map((s) => s.id)).toEqual(CAMERAS_SAMPLE.sources.map((s) => s.id))
+    expect(CAMERAS_SAMPLE.sources.length).toBeGreaterThan(0)
+    // outside California (an older backend still listed them): no Cal OES line under a Montana fire
+    const montana: CamerasResponse = { ...CAMERAS_SAMPLE, status: 'unavailable', reason_code: 'state_not_available', reason: 'Public cameras: California only (ALERTCalifornia, Caltrans). Not available in this state.' }
+    expect(cameraSourcesShown(montana)).toEqual([])
+    expect(cameraSourcesShown(null)).toEqual([])
   })
 })
 

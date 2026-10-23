@@ -12,7 +12,7 @@ import { area, distance } from '../lib/plainLanguage'
 import { fmtAt, fmtRelative, type TimeFmt } from '../lib/time'
 import { getTimeFormat } from '../state/timeZone'
 import type { Units } from '../state/workspace'
-import { ARCHIVE_CREDIT, LOCAL_STANDING_CAVEAT, OPENFEMA_NOTICE, sentText, type LocalAlertsOfficial } from '../official/localAlerts'
+import { ARCHIVE_CREDIT, LOCAL_STANDING_CAVEAT, localAlertPlace, OPENFEMA_NOTICE, sentText, type LocalAlertsOfficial } from '../official/localAlerts'
 
 export type OfficialTone = 'order' | 'warning' | 'other' | 'quiet' | 'unknown' | 'loading'
 
@@ -211,12 +211,17 @@ export function fireWeatherLines(fw: FireWeatherOfficial): OfficialLine[] {
 /**
  * Local officials' messages at the point (CONTRACT §14.7): "Alert from <issuer>: "<verbatim text>" · sent <time> ·
  * relayed by the National Weather Service", archived "Archived alert from <issuer> … (FEMA archive)" with the OpenFEMA
- * notice; every line links (the issuer's own link, else the record it was read from). None: "Local officials' alerts
- * relayed by NWS: none here · not an all-clear" with the standing caveat; endpoint missing or failed: "Local
- * officials' alerts: not checked", never "none".
+ * notice; every line links (the issuer's own link, else the record it was read from) and says where the message's
+ * area lies, on phones too ("area covers this point", "area 0.2 mi from this point · may be about another fire";
+ * review round 1, R1: useOfficialAtPoint measures from the point and keeps the messages whose area reaches it). None:
+ * "Local officials' alerts relayed by NWS: none here · not an all-clear" with the standing caveat (and how many of the
+ * fire's messages are for other places); endpoint missing or failed: "Local officials' alerts: not checked", never
+ * "none".
  */
-export function localAlertLines(l: LocalAlertsOfficial | undefined, tf: TimeFmt, max = 3): OfficialLine[] {
+export function localAlertLines(l: LocalAlertsOfficial | undefined, tf: TimeFmt, max = 3, opts: { units?: Units; fireOpen?: boolean } = {}): OfficialLine[] {
   if (!l) return []
+  const metric = opts.units === 'metric'
+  const elsewhere = l.elsewhere ? `${l.elsewhere} of the fire's local alert${l.elsewhere === 1 ? ' is' : 's are'} for other places in its area (see Updates).` : null
   const status = (key: string, text: string, sub: string | null, tone: OfficialTone, official = false): OfficialLine => ({ key, text, sub, subCompact: sub, official, tone, url: null })
   switch (l.state) {
     case 'loading':
@@ -228,16 +233,17 @@ export function localAlertLines(l: LocalAlertsOfficial | undefined, tf: TimeFmt,
     case 'none':
       return [
         {
-          ...status('local-none', "Local officials' alerts relayed by NWS: none here · not an all-clear", withoutFollow(LOCAL_STANDING_CAVEAT), 'quiet', true),
-          subCompact: 'Most local alerts are not relayed by NWS',
+          ...status('local-none', "Local officials' alerts relayed by NWS: none here · not an all-clear", [elsewhere, withoutFollow(LOCAL_STANDING_CAVEAT)].filter(Boolean).join(' '), 'quiet', true),
+          subCompact: elsewhere ? `${elsewhere} Most local alerts are not relayed by NWS` : 'Most local alerts are not relayed by NWS',
         },
         ...(l.archivePending ? [status('local-pending', "FEMA's archive of local alerts: still being checked", 'Ask again in a minute.', 'loading')] : []),
       ]
     case 'listed': {
       const out = l.alerts.slice(0, max).map((a): OfficialLine => {
         const when = sentText(a, tf)
-        const sub = [a.event, when, a.archived ? 'FEMA archive' : 'relayed by the National Weather Service', a.archived ? `${ARCHIVE_CREDIT}: ${OPENFEMA_NOTICE}` : null].filter(Boolean).join(' · ')
-        const subCompact = [when, a.archived ? 'FEMA archive' : 'relayed by NWS'].filter(Boolean).join(' · ')
+        const place = localAlertPlace(a, { metric, fireOpen: opts.fireOpen })
+        const sub = [a.event, when, a.archived ? 'FEMA archive' : 'relayed by the National Weather Service', place, a.archived ? `${ARCHIVE_CREDIT}: ${OPENFEMA_NOTICE}` : null].filter(Boolean).join(' · ')
+        const subCompact = [when, a.archived ? 'FEMA archive' : 'relayed by NWS', place].filter(Boolean).join(' · ')
         return {
           key: `local-${a.id}`,
           text: `${a.lead}: "${a.text}"`,
@@ -250,6 +256,7 @@ export function localAlertLines(l: LocalAlertsOfficial | undefined, tf: TimeFmt,
         }
       })
       if (l.alerts.length > max) out.push(status('local-more', `+${l.alerts.length - max} more local alerts (see Updates)`, null, 'other'))
+      if (elsewhere) out.push(status('local-elsewhere', elsewhere, null, 'other'))
       if (l.archivePending) out.push(status('local-pending', "FEMA's archive of local alerts: still being checked", 'Ask again in a minute.', 'loading'))
       return out
     }
@@ -263,7 +270,7 @@ function calfireUrl(cf: CalFireOfficial, fallback: string | null): string | null
 export function officialBlock(info: OfficialInfo, ctx: OfficialContext): OfficialBlock {
   const c = { ...ctx, tf: ctx.tf ?? getTimeFormat() }
   const evacuation = evacuationLines(info.evacuation, c)
-  const fireWeather = [...fireWeatherLines(info.fireWeather), ...localAlertLines(info.local, c.tf)]
+  const fireWeather = [...fireWeatherLines(info.fireWeather), ...localAlertLines(info.local, c.tf, 3, { units: c.units, fireOpen: c.fireName != null })]
   const links: OfficialLink[] = []
   const cf = calfireUrl(info.calfire, c.incidentUrl)
   // the fire's agency record, labelled from its publisher ("CAL FIRE", "NIFC WFIGS"; CONTRACT §14.5)

@@ -177,7 +177,8 @@ export function fireWeatherDataNow(): FireWeatherResponse | null {
 }
 
 /** The open fire's answer (never another fire's), with the alerts remembered for it this session; on the overview
- *  (no fire open) California's current alerts. */
+ *  (no fire open) the national answer's current alerts, for the states its `states_checked` lists (all 49 lower-48
+ *  codes with today's backend; an older backend: California only; CONTRACT §14.6). */
 export function fireWeatherFor(
   current: string | null,
   data: FireWeatherResponse | null,

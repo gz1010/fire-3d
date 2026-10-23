@@ -25,6 +25,7 @@ import {
 import { FW_COOLEY_LIVE_QUIET, FW_EATON_ARCHIVE, NWS_LIVE_LOX_RFW } from './__fixtures__/samples'
 import type { FireWeatherResponse } from './types'
 import { timeFmt } from '../lib/time'
+import { fireWeatherLines } from '../location/official'
 
 const LA24 = timeFmt('America/Los_Angeles', '24h')
 
@@ -286,7 +287,6 @@ describe('NWS "checked" follows states_checked only (CONTRACT §14.6)', () => {
   })
   it('a 49-code answer: Reno is checked, none in effect here', () => {
     expect(fireWeatherAtPointState({ ...base, lon: -119.81, lat: 39.53, statewide: ok(national), pointState: 'NV' }).state).toBe('none')
-    expect(fireWeatherAtPointState({ ...base, lon: -119.81, lat: 39.53, statewide: ok(national), pointState: undefined }).state).toBe('none') // no lookup needed
     expect(fireWeatherAtPointState({ ...base, lon: -149.9, lat: 61.2, statewide: ok(national), pointState: null }).reasonCode).toBe('not_checked') // Alaska
     expect(coversLower48(national)).toBe(true)
     expect(checkedScope(national)).toBe('the lower 48 states')
@@ -296,5 +296,19 @@ describe('NWS "checked" follows states_checked only (CONTRACT §14.6)', () => {
     expect(officialNowScope(fireWeatherNow(ok(national), LIVE_AT, { demo: false, hasIncident: false, statewide: true, tf: LA24 }))).toBe('lower 48 states')
     expect(officialNowScope(fireWeatherNow(ok(caOnly), LIVE_AT, { demo: false, hasIncident: false, statewide: true, tf: LA24 }))).toBe('California')
     expect(officialNowScope(fireWeatherNow(ok({ ...caOnly, states_checked: ['CA', 'OR'] }), LIVE_AT, { demo: false, hasIncident: false, statewide: true, tf: LA24 }))).toBe('California, Oregon')
+  })
+  it('review R2: while the point\'s state is being looked up, even a 49-code answer waits (never "checked" for Anchorage or Tijuana)', () => {
+    const points = { Reno: [-119.81, 39.53], Anchorage: [-149.9, 61.2], Tijuana: [-117.02, 32.51] }
+    for (const [lon, lat] of Object.values(points)) {
+      const st = fireWeatherAtPointState({ ...base, lon, lat, statewide: ok(national), pointState: undefined })
+      expect(st.state).toBe('loading')
+      expect(fireWeatherLines(st).map((l) => l.text)).toEqual(['Checking NWS fire weather alerts…'])
+    }
+    // once the lookup answers: Anchorage and Tijuana (outside the lower 48: null) are not checked; Reno is checked
+    for (const [lon, lat] of [points.Anchorage, points.Tijuana]) {
+      const st = fireWeatherAtPointState({ ...base, lon, lat, statewide: ok(national), pointState: null })
+      expect(fireWeatherLines(st)[0].text).toBe('Fire weather alerts (NWS): not checked here')
+    }
+    expect(fireWeatherAtPointState({ ...base, lon: -119.81, lat: 39.53, statewide: ok(national), pointState: 'NV' }).state).toBe('none')
   })
 })

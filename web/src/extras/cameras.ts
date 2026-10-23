@@ -207,6 +207,12 @@ export function mountCameraLayer(map: MapLibreMap, opts: LayerHandleOptions & { 
   }
 }
 
+/** The source lines under the cameras panel: none for an area outside California (no camera source was used there;
+ *  an older backend still listed the California sources: review R5). */
+export function cameraSourcesShown(data: Pick<CamerasResponse, 'reason_code' | 'sources'> | null): CamerasResponse['sources'] {
+  return data && data.reason_code !== 'state_not_available' ? data.sources : []
+}
+
 export function cameraLegend(data: CamerasResponse | null): ExtrasLegendEntry[] {
   if (!data || data.status !== 'available') return []
   const out: ExtrasLegendEntry[] = []

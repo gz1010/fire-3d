@@ -216,15 +216,20 @@ describe('NWS status and local officials\' alerts in the card (brief 3, CONTRACT
     const live = officialBlock({ ...na, local: localAlertsState(ok(LOCAL_LIVE_LA_CEM)) }, { ...CTX, tf: LA12 })
     const l = live.fireWeather.find((x) => x.key.startsWith('local-'))!
     expect(l).toMatchObject({ text: 'Alert, issuer not named: "Alert from AlertLACounty"', official: true, tone: 'warning', url: 'https://api.weather.gov/alerts/v2-3.13.8-1556392-1792113838542', urlLabel: 'source record (NWS)' })
-    expect(l.sub).toBe('Civil Emergency Message · sent Oct 15, 6:23 PM PDT · relayed by the National Weather Service')
+    // review R1: where the message's area lies (this one was matched by county)
+    expect(l.sub).toBe('Civil Emergency Message · sent Oct 15, 6:23 PM PDT · relayed by the National Weather Service · matched by county, not by an exact area · may be about another fire')
     const arch = officialBlock({ ...na, local: localAlertsState(ok(LOCAL_ARCHIVE_KERN_FRW)) }, { ...CTX, tf: LA12 })
     const a = arch.fireWeather.find((x) => x.key.startsWith('local-'))!
     expect(a.text).toBe('Archived alert from Kern County OES: "Kern County Sheriff: Cyrus Fire updated to an Evacuation Order. Leave NOW."')
-    expect(a.sub).toMatch(/· FEMA archive · FEMA IPAWS archive via OpenFEMA: This product uses the Federal Emergency Management Agency's OpenFEMA API, but is not endorsed by FEMA$/)
+    expect(a.sub).toMatch(/· FEMA archive · (area [^·]+|area covers [^·]+)( · may be about another fire)? · FEMA IPAWS archive via OpenFEMA: This product uses the Federal Emergency Management Agency's OpenFEMA API, but is not endorsed by FEMA$/)
     expect(a.urlLabel).toBe('source record (FEMA archive)')
     for (const b of [live, arch, officialBlock({ ...na, local: localAlertsState(ok(LOCAL_ARCHIVE_SHERIDAN_WY)) }, CTX)])
-      for (const line of b.fireWeather.filter((x) => x.key.startsWith('local-') && !['local-none', 'local-unchecked', 'local-unavailable', 'local-loading', 'local-pending', 'local-more'].includes(x.key)))
+      for (const line of b.fireWeather.filter((x) => x.key.startsWith('local-') && !['local-none', 'local-unchecked', 'local-unavailable', 'local-loading', 'local-pending', 'local-more'].includes(x.key))) {
         expect(line.url).toMatch(/^https:\/\//)
+        // review R1: every message line says where its area lies, on phones too
+        expect(line.sub).toMatch(/area covers|area [\d.]+ (mi|km) from|matched by county/)
+        expect(line.subCompact).toMatch(/area covers|area [\d.]+ (mi|km) from|matched by county/)
+      }
   })
   it('none here: one status line with the standing caveat; HTTP 404: "not checked", never "none"', () => {
     const none = officialBlock({ ...na, local: localAlertsState(ok(LOCAL_LIVE_NONE_RENO)) }, CTX)

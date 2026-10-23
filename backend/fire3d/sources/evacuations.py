@@ -383,6 +383,12 @@ class EvacAdapter:
         "no records means no evacuations" sentence (Oregon's item says that; it is not repeated)."""
         if self.id == "caloes_evacuations":
             return "No orders or warnings are listed here right now. That is not an all-clear: follow local officials."
+        return self.none_caveat_named
+
+    @property
+    def none_caveat_named(self) -> str:
+        """The same line naming its source ("Cal OES lists no evacuation zone here right now. …"), for an answer that
+        covers several states, so each "none" says whose it is (review round 1, R6)."""
         return (f"{self.aggregator} lists no evacuation zone here right now. That is not an all-clear: follow local "
                 "officials.")
 
