@@ -666,7 +666,7 @@ export class MapController {
     this.publishFraming()
     const go = (z: number) => {
       if (this.destroyed) return
-      this.map.easeTo({ center: [c.lon, c.lat], zoom: clusterClickZoom(z, this.map.getZoom()), duration: motionMs(700) })
+      this.input.ours(() => this.map.easeTo({ center: [c.lon, c.lat], zoom: clusterClickZoom(z, this.map.getZoom()), duration: motionMs(700) }))
     }
     void src.getClusterExpansionZoom(c.clusterId).then(go, () => go(Number.NaN))
   }
@@ -775,32 +775,36 @@ export class MapController {
     const pitch = map.getPitch()
     this.issuing = true
     try {
-      if (!paddingEquals(map.getPadding(), padding)) map.setPadding(padding)
-      let pose: CameraPose
-      let fallback = false
-      if (goal.bounds) {
-        const overview = goal.kind === 'overview'
-        const margin = overview ? OVERVIEW_MARGIN_PX : FIT_MARGIN_PX
-        const maxZoom = overview ? 8 : FIT_MAX_ZOOM
-        const cam = map.cameraForBounds(goal.bounds, { padding: margin, bearing, maxZoom })
-        if (cam?.center && Number.isFinite(cam.zoom)) {
-          const c = LngLat.convert(cam.center)
-          pose = { lon: c.lng, lat: c.lat, zoom: cam.zoom as number, bearing, pitch }
+      // our own camera command: the move it starts is never the user's, whatever input came just before (review
+      // round 3); a move it stops is handled here (issuing)
+      this.input.ours(() => {
+        if (!paddingEquals(map.getPadding(), padding)) map.setPadding(padding)
+        let pose: CameraPose
+        let fallback = false
+        if (goal.bounds) {
+          const overview = goal.kind === 'overview'
+          const margin = overview ? OVERVIEW_MARGIN_PX : FIT_MARGIN_PX
+          const maxZoom = overview ? 8 : FIT_MAX_ZOOM
+          const cam = map.cameraForBounds(goal.bounds, { padding: margin, bearing, maxZoom })
+          if (cam?.center && Number.isFinite(cam.zoom)) {
+            const c = LngLat.convert(cam.center)
+            pose = { lon: c.lng, lat: c.lat, zoom: cam.zoom as number, bearing, pitch }
+          } else {
+            fallback = true
+            const [lon, lat] = boundsCenter(goal.bounds)
+            const el = map.getContainer()
+            pose = { lon, lat, zoom: zoomForBounds(goal.bounds, el.clientWidth, el.clientHeight, margin, maxZoom), bearing, pitch }
+          }
         } else {
-          fallback = true
-          const [lon, lat] = boundsCenter(goal.bounds)
-          const el = map.getContainer()
-          pose = { lon, lat, zoom: zoomForBounds(goal.bounds, el.clientWidth, el.clientHeight, margin, maxZoom), bearing, pitch }
+          const v = goal.view ?? LOWER48_START
+          pose = { lon: v.lon, lat: v.lat, zoom: v.zoom, bearing, pitch }
         }
-      } else {
-        const v = goal.view ?? LOWER48_START
-        pose = { lon: v.lon, lat: v.lat, zoom: v.zoom, bearing, pitch }
-      }
-      // recorded before the move: an instant move ends inside the call below
-      this.framing.started(goal, pose, reissue)
-      if (import.meta.env.DEV) mapStats.fits++
-      if (fallback) map.easeTo({ center: [pose.lon, pose.lat], zoom: pose.zoom, bearing, pitch, padding, duration })
-      else map.flyTo({ center: [pose.lon, pose.lat], zoom: pose.zoom, bearing, pitch, duration })
+        // recorded before the move: an instant move ends inside the call below
+        this.framing.started(goal, pose, reissue)
+        if (import.meta.env.DEV) mapStats.fits++
+        if (fallback) map.easeTo({ center: [pose.lon, pose.lat], zoom: pose.zoom, bearing, pitch, padding, duration })
+        else map.flyTo({ center: [pose.lon, pose.lat], zoom: pose.zoom, bearing, pitch, duration })
+      })
     } finally {
       this.issuing = false
     }
@@ -901,9 +905,9 @@ export class MapController {
     if (p === '3d') {
       map.setMaxPitch(MAX_PITCH_3D)
       this.enableTerrain()
-      map.easeTo({ pitch: Math.max(map.getPitch(), PITCH_3D), duration })
+      this.input.ours(() => map.easeTo({ pitch: Math.max(map.getPitch(), PITCH_3D), duration }))
     } else {
-      map.easeTo({ pitch: 0, bearing: 0, duration })
+      this.input.ours(() => map.easeTo({ pitch: 0, bearing: 0, duration }))
       const done = () => {
         if (useWorkspace.getState().perspective !== '2d' || this.destroyed) return
         map.setTerrain(null)
@@ -931,11 +935,13 @@ export class MapController {
   }
 
   private onMoveEnd(byUser: boolean): void {
+    // a gesture that stopped the opening flight shows up as an input on the map just before this moveend, and a move
+    // that started as the user's (a wheel zoom, whose moveend comes 400+ ms after the wheel) is theirs (review round 3);
+    // never a move one of our own camera commands ended (restarting a flight with the new padding stops it first).
+    // Every moveend closes its move, also the ones issueFit handles.
+    const user = this.input.moveEnd(byUser)
     // moves that issueFit interrupts (or its own instant jump) are handled by issueFit itself
     if (this.issuing) return
-    // a gesture that stopped the opening flight shows up as an input on the map just before this moveend
-    // (never a move one of our own camera commands ended: restarting a flight with the new padding stops it first)
-    const user = this.input.endedByUser(byUser)
     if (!byUser && this.framing.phase === 'flying' && user) this.framing.userGesture()
     // MapLibre starts a wheel zoom without an originalEvent (only its moveend carries the wheel event): a move the user
     // made ends an official area's or a fire card's focus hold, and on the overview it is the user's view (not a fly to
@@ -1091,7 +1097,9 @@ export class MapController {
 
   // ------------------------------------------------------------------------------------------------ controls
   private actions(): MapActions {
-    const ease = (o: { bearing?: number; pitch?: number }, ms: number) => this.map.easeTo({ ...o, duration: motionMs(ms) })
+    // the chrome's camera buttons are our own camera commands (review round 3): the zoom buttons end a focus hold
+    // themselves
+    const ease = (o: { bearing?: number; pitch?: number }, ms: number) => this.input.ours(() => this.map.easeTo({ ...o, duration: motionMs(ms) }))
     return {
       frameFire: () => this.frameRequest('fire'),
       frameArea: () => this.frameRequest('area'),
@@ -1110,9 +1118,9 @@ export class MapController {
         if (this.framing.phase === 'flying' && p) {
           // zooming during the opening flight: relative to where the flight ends, not where it happens to be
           this.framing.explicit()
-          this.map.flyTo({ center: [p.lon, p.lat], zoom: Math.max(0, Math.min(this.map.getMaxZoom(), p.zoom + delta)), duration: motionMs(FIT_MS) })
+          this.input.ours(() => this.map.flyTo({ center: [p.lon, p.lat], zoom: Math.max(0, Math.min(this.map.getMaxZoom(), p.zoom + delta)), duration: motionMs(FIT_MS) }))
           this.publishFraming()
-        } else this.map.easeTo({ zoom: this.map.getZoom() + delta, duration: motionMs(250) })
+        } else this.input.ours(() => this.map.easeTo({ zoom: this.map.getZoom() + delta, duration: motionMs(250) }))
       },
       retryAerial: () => {
         setProvider('imagery', 'idle')
@@ -1188,6 +1196,9 @@ export class MapController {
       })
     })
     map.on('movestart', (e: { originalEvent?: unknown }) => {
+      // a move that starts as the user's (a wheel zoom MapLibre starts without an originalEvent) stays theirs until
+      // its moveend, however late that comes (review round 3); one that starts inside our own command is ours
+      this.input.moveStart(e.originalEvent != null)
       // the camera moves again: no focus change until it settles
       window.clearTimeout(this.focusTimer)
       this.focusTimer = 0

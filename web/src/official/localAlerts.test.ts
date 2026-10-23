@@ -342,6 +342,35 @@ describe('phase words and the channels that answered (integration review)', () =
     expect(localPhaseText(a, a.sentMs! + 1)).toBeNull()
   })
 
+  // review round 3, N4: the Helena police's evacuation was sent at 5:45 PM MDT, its onset and effective times 5:00 PM
+  it('a message is never quoted as current before its own sent time, whatever its phase (Horse Gulch at 5:00 PM MDT)', () => {
+    const at5 = 1720652400000 // Jul 10, 2024 5:00 PM MDT
+    expect(a.sentMs).toBe(1720655112000)
+    // an answer that still has it in effect (an older backend): the words say when it was sent
+    expect(localPhaseText({ ...a, phase: 'active' }, at5)).toBe('sent 45 min after this time')
+    expect(localPhaseText({ ...a, phase: 'upcoming' }, at5)).toBe('sent 45 min after this time')
+    expect(localPhaseText({ ...a, phase: 'expired' }, at5)).toBe('sent 45 min after this time')
+    // from its sent time on: in effect (no words), ended stays "ended"
+    expect(localPhaseText({ ...a, phase: 'active' }, a.sentMs)).toBeNull()
+    expect(localPhaseText({ ...a, phase: 'expired' }, a.sentMs! + 60_000)).toBe('ended')
+    // the answer for 5:00 PM: the item is not in effect there, the older ones (sent before 5:00 PM) are
+    const older = { ...LOCAL_ARCHIVE_HORSE_GULCH, requested_at_ms: at5 } // phases as an older backend gave them
+    const fixed = { ...older, alerts: older.alerts.map((x) => (x.sent_ms! > at5 ? { ...x, phase: 'upcoming' as const } : x)) }
+    for (const data of [older, fixed]) {
+      const l = localAlertsState({ data, loading: false, error: null })
+      expect(l.alerts.find((x) => x.id === a.id)!.phase).toBe('upcoming')
+      expect(l.alerts.map((x) => x.phase)).toEqual(['active', 'active', 'upcoming']) // in effect first
+      expect(localAlertFeedItems(l, { manifest: null, tf: MDT12 }).find((f) => f.id === `local-alert:${a.id}`)).toMatchObject({ key: false, status: 'upcoming' })
+      // the location card's lines say it too
+      const lines = localAlertLines(l, MDT12, 3, { refMs: at5 })
+      expect(lines.find((x) => x.text.includes('Urgent! Evacuation for Horse Gulch'))?.sub).toContain('sent 45 min after this time')
+    }
+    // the issuer's own times are kept (sent 5:45 PM MDT, in the message's own zone)
+    expect(sentText(a, MDT12)).toBe('sent Jul 10, 2024 5:45 PM MDT')
+    // at 6:00 PM (the fixture's own time) it is in effect
+    expect(hg.alerts.find((x) => x.id === a.id)!.phase).toBe('active')
+  })
+
   it('the location card and the panel never say "upcoming" for a message sent after this time', () => {
     const later = { ...hg, alerts: [{ ...a, phase: 'upcoming' as const }] }
     const [line] = localAlertLines(later, MDT12, 3, { refMs: a.sentMs! - 32 * 60_000 })

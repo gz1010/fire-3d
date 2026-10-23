@@ -273,6 +273,35 @@ def test_place_local_by_polygon_and_by_county() -> None:
     assert nws.local_phase({**sheridan, "message_type": "Cancel"}, sheridan["sent_ms"]) == "ended"
 
 
+def test_local_message_is_never_in_effect_before_it_was_sent() -> None:
+    """Integration review round 3, N4 (Horse Gulch, MT): the Helena police's evacuation was sent at 5:45 PM MDT with
+    its onset and effective times at 5:00 PM. A replay at 5:00 PM has it upcoming (sent 45 min later), never in
+    effect; from its sent time on it is in effect. The issuer's own onset / effective times are kept as given."""
+    parsed = {a["id"]: a for a in openfema.parse_records(FEMA["IpawsArchivedAlerts"])}
+    sheridan = next(a for a in parsed.values() if a["same_codes"] == ["056033"])
+    sent, onset = 1720655112000, 1720652400000          # 2024-07-10 5:45:12 PM / 5:00 PM MDT
+    horse = {**sheridan, "sent_ms": sent, "effective_ms": onset, "onset_ms": onset, "expires_ms": sent + 2 * HOUR_MS}
+    assert nws.local_phase(horse, onset) == "upcoming"
+    assert nws.local_phase(horse, sent - 1) == "upcoming"
+    assert nws.local_phase(horse, sent) == "in_effect"
+    assert nws.local_phase(horse, sent + 2 * HOUR_MS) == "ended"
+    # only an effective time, or no onset / effective at all: the same rule
+    assert nws.local_phase({**horse, "onset_ms": None}, onset) == "upcoming"
+    assert nws.local_phase({**horse, "onset_ms": None, "effective_ms": None}, onset) == "upcoming"
+    assert nws.local_phase({**horse, "onset_ms": None, "effective_ms": None}, sent) == "in_effect"
+    # an onset later than the sent time still decides (a message announced ahead of time)
+    later = {**horse, "onset_ms": sent + HOUR_MS, "effective_ms": sent}
+    assert nws.local_phase(later, sent + 30 * 60_000) == "upcoming"
+    assert nws.local_phase(later, sent + HOUR_MS) == "in_effect"
+    # no time at all: in effect (as before)
+    assert nws.local_phase({**horse, "onset_ms": None, "effective_ms": None, "sent_ms": None}, onset) == "in_effect"
+    # placed at 5:00 PM: upcoming, its own times unchanged
+    sh_area = (-107.2, 44.6, -106.8, 44.9)
+    out = nws.place_local([horse], sh_area, None, ["56033"], onset)
+    assert len(out) == 1 and out[0]["phase"] == "upcoming"
+    assert (out[0]["sent_ms"], out[0]["effective_ms"], out[0]["onset_ms"]) == (sent, onset, onset)
+
+
 def test_merge_keeps_one_alert_per_cap_id_and_the_nws_copy() -> None:
     a = nws.normalize_local_nws(NWEM)
     arch = {**a, "channel": "openfema_archive", "archived": True, "source_url": openfema.record_url(a["id"])}

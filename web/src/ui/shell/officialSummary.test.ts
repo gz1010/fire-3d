@@ -127,6 +127,22 @@ describe("local officials' alerts in the Public summary and the phone badge (Hor
     expect(l!.text).not.toMatch(/upcoming/i)
   })
 
+  it('at 5:00 PM MDT the 5:45 PM evacuation is not quoted as current: in effect first, "sent 45 min after this time" (review round 3, N4)', () => {
+    const at5 = 1720652400000
+    const data = { ...LOCAL_ARCHIVE_HORSE_GULCH, requested_at_ms: at5 } // even with the phases of an older backend
+    const l5 = localAlertsState({ data, loading: false, error: null })
+    const line = localAlertsLine(l5, MDT12, at5)!
+    // the short line quotes a message in effect at 5:00 PM (sent earlier), never the later evacuation
+    expect(line.text).not.toContain('Urgent! Evacuation for Horse Gulch')
+    expect(line.text).toMatch(/· sent Jul 10, 2024 [34]:\d\d PM MDT · FEMA archive ·/)
+    expect(line.text).not.toMatch(/after this time/)
+    expect(line.text).toContain('+2 more in Details')
+    // the later message alone: quoted with when it was sent, relative to 5:00 PM
+    const only = { ...l5, alerts: l5.alerts.filter((a) => a.sentMs! > at5) }
+    expect(only.alerts).toHaveLength(1)
+    expect(localAlertsLine(only, MDT12, at5)!.text).toContain('· sent Jul 10, 2024 5:45 PM MDT · FEMA archive · sent 45 min after this time ·')
+  })
+
   it('the phone badge counts the in-effect local messages; an Evacuation Immediate is the most urgent level', () => {
     expect(officialBadge(notAvailable, fw({ state: 'none' }), local)).toEqual({ count: 3, level: 'order' })
     // a Fire Warning alone: a local officials' alert, more urgent than a fire weather alert

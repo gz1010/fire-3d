@@ -128,7 +128,9 @@ export function localAlertLink(a: Pick<LocalAlert, 'web' | 'source_url' | 'archi
   return { url: src, label: a.archived || a.channel === 'openfema_archive' ? 'source record (FEMA archive)' : 'source record (NWS)' }
 }
 
-export function toLocalAlertItem(a: LocalAlert): LocalAlertItem | null {
+/** One message for the panels. `refMs` is the time the answer is for (`requested_at_ms`): a message the answer has
+ *  in effect but sent after that time (an older backend; review round 3, N4) is not yet in effect there. */
+export function toLocalAlertItem(a: LocalAlert, refMs?: number | null): LocalAlertItem | null {
   const link = localAlertLink(a)
   if (!link) return null // never shown without a link (the backend drops these too)
   const issuer = a.sender_is_platform ? null : a.sender_name?.trim() || null
@@ -151,7 +153,7 @@ export function toLocalAlertItem(a: LocalAlert): LocalAlertItem | null {
     sentMs: a.sent_ms,
     expiresMs: a.expires_ms,
     timeZone: a.time_zone,
-    phase: PHASE[a.phase] ?? 'active',
+    phase: a.phase === 'in_effect' && sentAfter({ sentMs: a.sent_ms }, refMs) ? 'upcoming' : (PHASE[a.phase] ?? 'active'),
     link,
     match: a.match,
     coversReportedLocation: a.covers_reported_location,
@@ -308,7 +310,7 @@ export function localAlertsState(q: Pick<QueryState<LocalAlertsResponse>, 'data'
   if (d.status === 'unavailable' && d.reason_code === 'state_not_available') return { ...base, alerts: [], state: 'not-checked', reason: d.reason }
   if (d.status === 'unavailable') return { ...base, alerts: [], state: 'unavailable', reason: d.reason }
   const alerts = d.alerts
-    .map(toLocalAlertItem)
+    .map((a) => toLocalAlertItem(a, d.requested_at_ms))
     .filter((a): a is LocalAlertItem => a != null)
     .sort(localAlertOrder)
   const answered = channels.some((c) => c.status === 'available')
@@ -339,13 +341,20 @@ function afterSpan(ms: number): string {
 /**
  * A message's phase in the words of its line (integration review UX-m2): null while in effect; "ended"; a message sent
  * after the reference time (a replay's +1 h window, §14.7) "sent 32 min after this time", never "upcoming" (a "leave
- * now" order is not a scheduled one); another message not yet in effect (its onset later) "not yet in effect".
+ * now" order is not a scheduled one); another message not yet in effect (its onset later) "not yet in effect". A
+ * message sent after the reference time says so whatever its phase (review round 3, N4): an issuer can give an onset
+ * or effective time earlier than its sent time, and the line must never quote it as current before it was sent.
  */
 export function localPhaseText(a: Pick<LocalAlertItem, 'phase' | 'sentMs'>, refMs?: number | null): string | null {
+  if (sentAfter(a, refMs)) return `sent ${afterSpan(a.sentMs! - refMs!)} after this time`
   if (a.phase === 'expired' || a.phase === 'cancelled') return 'ended'
   if (a.phase !== 'upcoming') return null
-  if (a.sentMs != null && refMs != null && Number.isFinite(refMs) && a.sentMs > refMs) return `sent ${afterSpan(a.sentMs - refMs)} after this time`
   return 'not yet in effect'
+}
+
+/** The message was sent after `refMs` (the time the panel is for). */
+function sentAfter(a: Pick<LocalAlertItem, 'sentMs'>, refMs: number | null | undefined): boolean {
+  return a.sentMs != null && refMs != null && Number.isFinite(refMs) && a.sentMs > refMs
 }
 
 /** Which channels answered, for a line that says none were found (integration review UX-m3): "relayed by NWS" (the
