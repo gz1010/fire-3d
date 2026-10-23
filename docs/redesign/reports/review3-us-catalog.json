@@ -1,0 +1,70 @@
+{
+  "role": "review3-us-catalog",
+  "reviewed_role": "us-catalog",
+  "reviewed_commits": [
+    "3059999 M1 contracts",
+    "947d333 M2 regions, geo lookup, UTM, fixture-east",
+    "0acc032 M3 national list",
+    "44a4ef5 M3 samples",
+    "2d5b978 M4 incident records and accuracy regions",
+    "fb72e3f M5 national search",
+    "8239100 cut-line items",
+    "011061d report and progress"
+  ],
+  "worktree": "clean worktree of HEAD 7b7cd81 (moved to 1c14914 once us-official committed its fix of web/src/extras/evacuation.test.ts); a second clean worktree at the M1 commit 3059999; both removed at the end",
+  "verdict": "fix-needed",
+  "issues": [
+    {
+      "id": "R1",
+      "severity": "major",
+      "file": "backend/fire3d/api/live.py",
+      "problem": "Id pinning plus the live loop mixes two agencies' records in a bundle's summary. When a California fire is built under its NIFC WFIGS id and CAL FIRE lists it later, the merged row keeps the WFIGS id but becomes CAL FIRE's record. The live loop's sync (SUMMARY_SYNC_FIELDS) then copies CAL FIRE's acres, update time and URL into the bundle's manifest summary. That summary keeps record_source 'wfigs', record_issuer '<CODE> via NIFC WFIGS' and the IRWIN uid. So the official numbers and the link are shown under the wrong issuer.",
+      "evidence": "live.summary_changes(bundle summary of a WFIGS row, pinned CAL FIRE row of the same id) syncs ['acres', 'active_sources', 'updated_ms', 'url'] only. The bundle summary afterwards reads record_source 'wfigs', record_issuer 'CAL FIRE via NIFC WFIGS', uid = IRWIN, url = https://www.fire.ca.gov/incidents/..., acres 60 (CAL FIRE's). web/src/ui/EvidenceTab.tsx:198-200 labels manifest.summary.url with recordIssuerLabel(manifest.summary). pipeline.refresh_live (pipeline.py:796) also reads m['summary'] when it writes the issuer text.",
+      "fix": "In sync_live_summaries / summary_changes, when the fresh row's record_source or uid differs from the bundle summary's (a pinned row), also copy the record-identity fields: record_source, record_issuer, uid, calfire_uid, agency, agency_code, unique_fire_id, source_name, aliases and name. The id stays. Add a regression test on the id-pinning before/after pair in tests/test_us_catalog_list.py: after one sync, the issuer, uid and url all come from CAL FIRE.",
+      "in_role_globs": true
+    },
+    {
+      "id": "R2",
+      "severity": "minor",
+      "file": "backend/fire3d/catalog.py",
+      "problem": "display_name title-cases the letters after an apostrophe, so ALL-CAPS WFIGS names with a possessive read wrongly in the list, the cards and the headings.",
+      "evidence": "display_name(\"DEVIL'S CANYON\") -> \"Devil'S Canyon\"; \"0501 PAT'S CABIN\" -> \"0501 Pat'S Cabin\"; \"JOHNSON'S\" -> \"Johnson'S\". Both 2026 names are in the live 2026 list (ids 2026-devil-s-canyon-23e897, 2026-0501-pat-s-cabin-6c4551).",
+      "fix": "Lower-case a short run after an apostrophe ('s', 't', 'd', 'll', 're', 've') and keep \"O'Neil\" for longer runs. Add those cases to test_display_names_and_tokens. Ids do not change, because the slug is lower case.",
+      "in_role_globs": true
+    },
+    {
+      "id": "R3",
+      "severity": "minor",
+      "file": "backend/fire3d/api/records.py",
+      "problem": "Take a CAL FIRE row (not a complex) that is matched to two or more WFIGS records, none with the same name. Its irwin_id is null, so the incident record answers not_covered 'NIFC WFIGS has no record matched to this fire.', although other_records lists the matched NIFC WFIGS records. The words are true for the contract's case (no match) but misleading for this one.",
+      "evidence": "incident_record_payload: `irwin = s.irwin_id or ...; if not irwin: return _not_covered(body, REASON_NO_MATCH)`. enrich_calfire sets irwin_id None when there are several matched records and no single same-name one (documented deviation for Dale-like cases).",
+      "fix": "When s.other_records is non-empty and irwin_id is null, give a reason that says NIFC WFIGS lists the fire under several records, each linked from the fire's records. Record the wording as a contract deviation, or ask the integration to add it to §14.5.",
+      "in_role_globs": true
+    },
+    {
+      "id": "R4",
+      "severity": "major",
+      "file": "web/src/ui/feed/OfficialNow.tsx",
+      "problem": "This file is outside us-catalog (us-official, integration checklist item 2). On the national overview, the Official now block is still headed 'California' and says 'in California'. It shows the issue time of NWS alerts for Montana, South Dakota and Wyoming in Pacific time ('issued Oct 22, 18:38 PDT'). The backend sends time_zone 'America/Denver' for those alerts, and the browser ran in UTC. This breaks the never-Pacific rule and the rule that official times keep their own zone.",
+      "evidence": "docs/screenshots/review3-us-catalog-overview-live.png (taken at 1c14914). /api/official/fire-weather on 8711: alert_states ['MT', 'SD', 'WY'], every alert time_zone 'America/Denver'. At HEAD 4dcb81b, OfficialNow.tsx still has `<span className=\"on-head-sub\">California</span>`, 'in California' and `issued ${fmtWhen(a.sentMs, nowMs)}` without tf.",
+      "fix": "us-official / integration: pass tf (the alert's time_zone, or the viewer's zone labelled) to every fmtWhen in FireWeatherRow. Replace the overview's 'California' wording with lower-48 wording.",
+      "in_role_globs": false
+    },
+    {
+      "id": "R5",
+      "severity": "major",
+      "file": "web/src/ui/feed/OfficialNow.tsx",
+      "problem": "This file is outside us-catalog (us-official). In the screenshot taken at 1c14914, the Official now block of a NIFC WFIGS fire in Florida reads 'CAL FIRE · No record for this fire' instead of showing the fire's NIFC WFIGS record (§14.5 recordUrl -> /api/official/incident-record). The backend endpoint answers 'available' for this id. us-official's M4 commit 4dcb81b (recordUrl, useRecord, RecordRow), which landed after the screenshot, probably fixes it.",
+      "evidence": "docs/screenshots/review3-us-catalog-wfigs-fire-card.png (2026-bee-haven-2-24-06-de4697, FL). GET /api/official/incident-record?incident=2026-bee-haven-2-24-06-de4697 -> available, publisher 'NIFC WFIGS (IRWIN)', agency_code 'DVF', agency 'Division of Forestry'.",
+      "fix": "us-official's reviewer: recheck at 4dcb81b or later that a WFIGS fire shows its NIFC WFIGS record block and never 'CAL FIRE'.",
+      "in_role_globs": false
+    }
+  ],
+  "acceptance": "PASS pytest: 870 passed, 0 skipped (clean worktree with bundles copied in, plus my own fixture-east). The first run without bundles gave 831 passed, 32 skipped. The role's own test files: 318 passed. Every named test exists and passes: the 15 §14.3 points; the 2025 merge set (TCU one row, irwin_id null, 5 members, 5 named other_records, OSCC; Alpaugh and Big Cliff added; Log, Gianelli, Dale); Timber (one row, active_sources ['wfigs'], other_records[0].source 'wfigs'); McCovey and Marshall separate; RX and CX never listed; Hay Creek member listed with complex_name; POOState mismatches kept (Paradise, Zamora Bend, Sharpe); WFIGS ids; get_summary without bundle; resolve_listed('fixture-demo') None; old-manifest defaults; gzip; UTM 10-19; keyless Montana from firms_us_2024; feed box (TX, FL, ME and border rows kept; HI and AK dropped); load_year_us with filters= and no firms_ca_* file; fetch_cycle_data and the 24 h count on load_live_us; auto_build_candidates (at most 4; the 99 ac and >48 h fires left out); region 2 fires / 12 leads limited; incident-record cases; geocode Boise, Springfield, Anchorage, 83702; parity of 9 shapes; id pinning. KD-tree (c) is not done: the national case took 0.52 s (11,796 detections x 230 fires, API log).\nPASS defaulted additions: worktree at M1 3059999, tests/test_official_nws.py + test_official_real_bundles.py + test_extras.py -> 64 passed (real bundles present).\nPASS web: src/api 16 tests pass. The web gates pass at 1c14914 (see gates).\nPASS live list (API 8711, FIRE3D_LIVE=0): 230 rows, 23 distinct states, 0 outside the 48+DC, 0 rows missing time_zone, record_source, record_issuer or uid, ids unique. CAL FIRE rows: Norte, Timber, Cooley, Lost, Soda, Rocky. CAL FIRE's own active fires (Norte, Cooley, Soda) are all present as calfire. sources: both available.\nPASS historical: year=2026 -> 1,193 rows, unique ids (the default year is also 2026); year=2025 -> 856; year=2026&state=OR -> 85 rows, all OR; state=CAL -> 422.\nPASS gzip: 178,403 / 1,323,035 B = 13.5 %, content-encoding: gzip, vary: Accept-Encoding.\nPASS detail: /api/incidents/2026-bee-haven-2-24-06-de4697 (WFIGS, FL) -> 200, manifest null, America/New_York, 'DVF via NIFC WFIGS', SACC-SE. 2025-eaton-fire-dbfa57 -> CA, America/Los_Angeles, id unchanged. POST fixture-demo/build?force=true -> 409 \"'fixture-demo' is a local or synthetic bundle; it cannot be rebuilt.\" (fixture-east the same; an unknown id -> 404).\nPASS live status: detections_24h 10,819 >= detections_24h_ca 199; active_incidents 230 = list length.\nPASS geo lookup: (-116.2, 43.615) -> ID, America/Denver, Ada County, supported, Cache-Control public max-age=86400. Anchorage -> alaska, supported false, the §14.14 note. Tijuana -> outside_us. Honolulu -> hawaii; San Juan -> territory; bad numbers -> 400. About 60 extra edge points also checked: islands, Great Lakes, split-zone states, Navajo/Hopi, border towns.\nPASS accuracy regions: 10 regions in fixed order; OSCC tested, in_sample, seed, 3 fires, 32 leads, 0.433, [0.395, 0.467]; the other 9 untested; Cache-Control no-cache.\nPASS incident record: WFIGS id -> available, publisher 'NIFC WFIGS (IRWIN)', agency_code DVF, current.updated_ms set, https incident_url, no-store. Eaton (matched) -> available. 2025-6-5-fire-85af75 (CA without IRWIN) -> not_covered 'NIFC WFIGS has no record matched to this fire.'. 2025-orleans-complex-c1c210 -> not_covered with the complex reason. fixture-east and fixture-demo -> not_covered with the synthetic reason. Unknown id -> 404; invalid id -> 400.\nPASS fixture-east: make_fixture.py --only east in the worktree (38 s, written only to the worktree's data/) -> NC, America/New_York, irwin_id null, utm_zone 17, EPSG:32617; the summary equals the main checkout's except bundle_built_ms. check_bundle: 1 pre-existing synthetic problem (same as fixture-demo). Eaton, Palisades and Horse Gulch: 0 problems.\nPASS ownership: 58 files in 8 commits, 0 outside the owns globs (glob-regex check). No other commit touched the role's files.\nPASS report lists cut-line item (c) as not done, with its fallback and timing.\nPASS California regression: Eaton and Palisades keep their ids, CA, America/Los_Angeles, CAL FIRE issuer, OSCC, UTM 11. Screenshot review3-us-catalog-eaton-california.png shows CAL FIRE's record in PST/PDT.\nPASS key: count-only scan (grep -c -F of the 32-character value, never printed) -> 0 in the role's commit diffs, its files, its samples, its scratch logs and my logs.\nPASS wording: 5 hits in the lines the role added (non-test sources, SPEC, web/src/api), all justified: 'traversal-safe' and 'thread-safe' docstrings, quote(..., safe=\"\"), and two all-clear negations ('its absence is never an all-clear'; the §14.5 caveat 'No record or no change is not an all-clear: follow local officials.'). No 'low risk', no reference-demo name.\nPASS terms: NWCG PMS 931 (Sep 2022) checked on nwcg.gov and in its PDF. The public-domain notice is quoted verbatim in nwcg_agency_codes.json meta, and the names of the 28 codes match the PDF's Tier 2 list. TIGERweb, NTAD and Gazetteer meta carry their licence, credit and retrieval date; SPEC §2 has the §14.13 rows.\nScreenshots (swiftshader, each viewed): docs/screenshots/review3-us-catalog-overview-live.png (national overview: 230 active, 1,390 in the 2026 season, 856 in 2025, the list-absence line), review3-us-catalog-wfigs-fire-card.png (a Florida WFIGS fire; issuer 'DVF (Division of Forestry) via NIFC WFIGS'; 'Prepare analysis' was not pressed), review3-us-catalog-eaton-california.png. Non-GET requests in the uvicorn access log during the 3 browser runs: 0. In the whole log: 3, all from my curl build-gate checks (409, 409, 404); nothing was built.",
+  "gates": "Clean worktree of HEAD 7b7cd81: backend `uv run pytest -q` -> 870 passed (with bundles; 831 passed + 32 skipped without them). Web at 7b7cd81: typecheck FAILED with 5 errors, build FAILED and `npm test` had 2 failures, all in web/src/extras/evacuation.test.ts (us-official's file, captured half-edited by the orchestrator checkpoint 7b7cd81). Lint 55 warnings, all in src/scene. Per §14.0 I reran after us-official's next commit (1c14914, which fixed that test). Web at 1c14914: typecheck 0 errors; lint 55 warnings, 0 outside src/scene; npm test 65 files, 1054 passed, 2 skipped; build OK. Backend at 1c14914: 870 passed. M1 worktree (3059999): the three defaulted-addition test files -> 64 passed. Processes started (uvicorn 8711, vite 5181) were stopped; both worktrees were removed.",
+  "notes": [
+    "The verdict is fix-needed because of in-role issue R1 (major). R2 and R3 are minor, in role. R4 and R5 belong to us-official and the integration (in_role_globs false).",
+    "Observed, not counted as issues: WFIGS keeps near-duplicate records under different names or sizes (e.g. 'Carroll - The Big Hungry Fire' and 'Carroll Co State Assist' at 0 km; 'Vansycle Canyon' 2,026 ac vs 1,900 ac). They follow §14.2's duplicate rule (same name tokens, sizes within 1 %), so both are listed. Census names stay as they are ('Boise, ID' -> 'Boise City, ID'; documented deviation).",
+    "fixture-live's check_bundle problem 'timeseries final area 6,695 != stats 6,874' exists with the pre-brief-3 check_bundle too (not this role's)."
+  ]
+}
