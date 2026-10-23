@@ -154,7 +154,11 @@ def test_incident_list_falls_back_to_bundles(client, fixtures_dir, monkeypatch):
     assert "fixture-demo" in [s["id"] for s in hist] and all(s["mode"] == "historical" for s in hist)
     live_rows = client.get("/api/incidents", params={"mode": "live"}).json()["incidents"]
     assert "fixture-live" in [s["id"] for s in live_rows]
-    assert all(s["bundle_status"] == "ready" for s in hist + live_rows)
+    # each row keeps its bundle's own status (data/incidents may also hold a bundle being built or a failed one)
+    for s in hist + live_rows:
+        m = bundle.load_manifest(bundle.bundle_dir(s["id"]))
+        assert m is not None and s["bundle_status"] == m["summary"]["bundle_status"], s["id"]
+    assert all(s["bundle_status"] == "ready" for s in hist + live_rows if s["id"].startswith("fixture-"))
 
 
 def test_incident_detail(client, fake):
@@ -240,10 +244,32 @@ def test_build_failure_is_masked(client, fake, monkeypatch):
 
 
 def test_build_unknown_and_non_catalog(client, fixtures_dir):
-    assert client.post("/api/incidents/2025-unknown-000000/build").status_code == 404
-    assert client.post("/api/incidents/fixture-demo/build", params={"force": "true"}).status_code == 409
+    """The 14.2 build gate at the API, with its exact texts (brief-3 hand-off from us-catalog to us-pipeline, done by
+    the integration; the CLI and the Alaska 422 are in test_us_pipeline_build.py)."""
+    r = client.post("/api/incidents/2025-unknown-000000/build")
+    assert r.status_code == 404 and r.json()["detail"] == "unknown incident '2025-unknown-000000'"
+    for local in ("fixture-demo", "fixture-east"):
+        if not (FIXTURE_ROOT / local / "manifest.json").is_file():
+            continue
+        r = client.post(f"/api/incidents/{local}/build", params={"force": "true"})
+        assert r.status_code == 409 and r.json()["detail"] == f"'{local}' is a local or synthetic bundle; it cannot be rebuilt."
+        assert "CAL FIRE" not in r.json()["detail"]
     st = wait_job(client, client.post("/api/incidents/fixture-demo/build").json()["id"])
     assert st["status"] == "done" and st["result"]["status"] == "ready"   # ready fixture returned untouched
+
+
+def test_build_gate_alias_and_unsupported_state(client, fixtures_dir, monkeypatch):
+    """An id the lists know under another id is an alias (409 'is listed as'); a listed fire in Alaska, Hawaii or a
+    territory is 422 with the 14.14 sentence; no job is started for either."""
+    listed = make_summary("2024-horse-gulch-889237", "historical").model_copy(update={"state": "MT", "record_source": "wfigs"})
+    monkeypatch.setattr(catalog, "resolve_listed", lambda iid: listed)
+    r = client.post("/api/incidents/fixture-demo/build", params={"force": "true"})
+    assert r.status_code == 409 and r.json()["detail"] == "'fixture-demo' is listed as '2024-horse-gulch-889237'."
+    ak = listed.model_copy(update={"id": "fixture-demo", "state": "AK"})
+    monkeypatch.setattr(catalog, "resolve_listed", lambda iid: ak)
+    r = client.post("/api/incidents/fixture-demo/build", params={"force": "true"})
+    assert r.status_code == 422 and r.json()["detail"] == "Fire-3d does not support Alaska, Hawaii or US territories yet."
+    assert app_mod._jobs().active_for("fixture-demo", "build") is None
 
 
 # ------------------------------------------------------------------------------------------------ forecast jobs

@@ -66,7 +66,7 @@ function fire(over: Partial<IncidentSummary>): IncidentSummary {
     uid: 'u',
     record_source: 'calfire',
     record_issuer: 'CAL FIRE',
-    state: 'CA',
+    state: null,
     time_zone: 'America/Los_Angeles',
     ...over,
   }

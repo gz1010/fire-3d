@@ -30,7 +30,7 @@ import {
   EXTRAS_COLORS,
   type EvacStyleGroup,
 } from './style'
-import type { EvacStatusKey, EvacuationsResponse, EvacZoneFeature, EvacZoneProps, ExtrasSource } from './types'
+import type { EvacSource, EvacStatusKey, EvacuationsResponse, EvacZoneFeature, EvacZoneProps } from './types'
 
 export const EVAC_SOURCE = 'fx-extras-evac'
 export const EVAC_LAYERS = {
@@ -61,7 +61,7 @@ const HOME_STATE_BY_ID: Readonly<Record<string, string>> = { caloes_evacuations:
 const ZONE_LAYERS = new Set(['caloes_evacuations', 'or_oem_evacuations'])
 
 /** The source that listed a zone (brief-2 answers: Cal OES). */
-export function zoneSourceId(p: Pick<EvacZoneProps, 'source_id'>): string {
+export function zoneSourceId(p: Partial<Pick<EvacZoneProps, 'source_id'>>): string {
   return p.source_id || 'caloes_evacuations'
 }
 
@@ -79,7 +79,7 @@ export function sourceHomeState(data: Pick<EvacuationsResponse, 'sources'> | nul
 
 /** The zone layers that answered for this area (the inventory is not a zone layer). An older backend without
  *  per-source status: every listed zone layer of an available answer. */
-export function answeredSources(data: Pick<EvacuationsResponse, 'sources' | 'status'> | null): ExtrasSource[] {
+export function answeredSources(data: Pick<EvacuationsResponse, 'sources' | 'status'> | null): EvacSource[] {
   if (!data) return []
   return data.sources.filter((s) => ZONE_LAYERS.has(s.id) && (s.status ?? (data.status === 'available' ? 'available' : 'unavailable')) === 'available')
 }
@@ -318,7 +318,7 @@ export function zoneTimes(p: Pick<EvacZoneProps, 'status_updated_ms' | 'aggregat
 }
 
 /** What the state layer's time of a zone means: "listed by Cal OES", "added to the Oregon state layer", "added". */
-export function zoneListedPhrase(p: Pick<EvacZoneProps, 'source_id'> & Partial<Pick<EvacZoneProps, 'time_basis' | 'state'>>): string {
+export function zoneListedPhrase(p: Partial<Pick<EvacZoneProps, 'source_id' | 'time_basis' | 'state'>>): string {
   const id = zoneSourceId(p)
   if (p.time_basis === 'state_layer_added') return `added to the ${stateName(HOME_STATE_BY_ID[id] ?? p.state ?? null) ?? 'state'} state layer`
   if (p.time_basis === 'date_only') return 'added'

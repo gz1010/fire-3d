@@ -26,7 +26,7 @@ const row = (id: string, over: Partial<IncidentSummary> = {}): IncidentSummary =
   uid: id,
   record_source: 'calfire',
   record_issuer: 'CAL FIRE',
-  state: 'CA',
+  state: null,
   time_zone: 'America/Los_Angeles',
   ...over,
 })

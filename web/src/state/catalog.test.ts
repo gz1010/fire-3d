@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { IncidentSummary } from '../api/types'
+import type { IncidentListResponse, IncidentSummary } from '../api/types'
 import { catalogApply, catalogFail, catalogPatch, catalogPending, EMPTY_CATALOG, listsForModes } from './catalog'
 
 const row = (id: string, year: number, over: Partial<IncidentSummary> = {}): IncidentSummary =>
@@ -34,7 +34,8 @@ describe('catalog lists', () => {
     let c = catalogApply(EMPTY_CATALOG, 'live', { incidents: [], updated_ms: 1, sources: wfigsDown })
     expect(c.sources.live).toEqual(wfigsDown)
     expect(c.sources.season).toBeNull()
-    c = catalogApply(c, 'season', { incidents: [], updated_ms: 1, sources: [] })
+    // an older backend's answer without sources[] (the field is required since the integration) reads null
+    c = catalogApply(c, 'season', { incidents: [], updated_ms: 1 } as unknown as IncidentListResponse)
     expect(c.sources.season).toBeNull()
     expect(c.sources.live).toEqual(wfigsDown)
   })
