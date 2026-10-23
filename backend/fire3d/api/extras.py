@@ -48,8 +48,9 @@ import orjson
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 
-from .. import bundle, config
+from .. import bundle, config, regions
 from .. import http as fhttp
+from ..sources import evacuations as evac
 from ..timeutil import DAY_MS, HOUR_MS, now_ms
 
 log = logging.getLogger(__name__)
@@ -66,9 +67,9 @@ DEFAULT_MARGIN_KM = 15.0              # incident area = AOI bbox + this margin
 UPSTREAM_TIMEOUT_S = 20.0
 UPSTREAM_RETRIES = 1                  # interactive endpoints: one retry with backoff (fire3d.http)
 
-ARCGIS_ROOT = "https://services.arcgis.com/BLN4oKB0N1YSgvY8/arcgis/rest/services"
-EVAC_LAYER_URL = f"{ARCGIS_ROOT}/CA_EVACUATIONS_CalOESHosted_view/FeatureServer/0"
-EVAC_INVENTORY_URL = f"{ARCGIS_ROOT}/County_Evacuation_Inventory_Public/FeatureServer/0"
+ARCGIS_ROOT = evac.CALOES_ROOT
+EVAC_LAYER_URL = evac.CALOES_LAYER_URL
+EVAC_INVENTORY_URL = evac.CALOES_INVENTORY_URL
 WEBCAMS_LAYER_URL = f"{ARCGIS_ROOT}/CalOES_California_Webcams/FeatureServer/0"
 CWWP2_DISTRICT_URL = "https://cwwp2.dot.ca.gov/data/d{d}/cctv/cctvStatusD{d:02d}.json"
 ALERTCA_FRAME_URL = "https://cameras.alertcalifornia.org/public-camera-data/{slug}/latest-frame.jpg"
@@ -80,7 +81,7 @@ S2_ASSET_HOST = "sentinel-cogs.s3.us-west-2.amazonaws.com"
 CMR_GRANULES_URL = "https://cmr.earthdata.nasa.gov/search/granules.json"
 GIBS_ROOT = "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best"
 
-EVAC_TTL_S = 120.0                    # Cal OES rebuilds every ~5 min
+EVAC_TTL_S = evac.EVAC_TTL_S          # Cal OES rebuilds every ~5 min; Oregon OEM recalculates every 15 min
 INVENTORY_TTL_S = 24 * 3600.0
 CAMERAS_TTL_S = 120.0                 # fire-camera directions update every minute
 CWWP2_TTL_S = 6 * 3600.0              # district status files change "as necessary"
@@ -107,34 +108,10 @@ RENDER_VERSION = "1"
 
 GIBS_ACK = ("We acknowledge the use of imagery provided by services from NASA's Global Imagery Browse Services (GIBS), "
             "part of NASA's Earth Science Data and Information System (ESDIS).")
-CALOES_DISCLAIMER = ("This information is constantly changing, and Cal OES does not verify or certify the information "
-                     "contained herein.")
+CALOES_DISCLAIMER = evac.CALOES_DISCLAIMER
 
 SOURCES: dict[str, dict[str, Any]] = {
-    "caloes_evacuations": {
-        "id": "caloes_evacuations",
-        "name": "California Evacuation Aggregation Layer",
-        "publisher": "California Governor's Office of Emergency Services (Cal OES)",
-        "url": "https://gis.data.ca.gov/datasets/CalEMA::california-evacuation-aggregation-layer",
-        "service_url": EVAC_LAYER_URL,
-        "license": "Public use (data.ca.gov: \"No restrictions on public use\")",
-        "terms_url": "https://data.ca.gov/dataset/california-evacuation-aggregation-layer",
-        "attribution": "Evacuation zones: local officials via county GIS and Genasys Protect, aggregated by Cal OES",
-        "disclaimer": CALOES_DISCLAIMER,
-        "cadence": "Rebuilt by Cal OES about every 5 minutes; current status only",
-    },
-    "caloes_evacuation_inventory": {
-        "id": "caloes_evacuation_inventory",
-        "name": "County Evacuation Inventory",
-        "publisher": "Cal OES",
-        "url": "https://www.arcgis.com/home/item.html?id=c685585b99da416fa6ab70027597ad47",
-        "service_url": EVAC_INVENTORY_URL,
-        "license": "Public use",
-        "terms_url": "https://www.arcgis.com/home/item.html?id=c685585b99da416fa6ab70027597ad47",
-        "attribution": "County coverage: Cal OES County Evacuation Inventory",
-        "disclaimer": None,
-        "cadence": "Updated by Cal OES as counties join",
-    },
+    **evac.SOURCES,          # caloes_evacuations, caloes_evacuation_inventory, or_oem_evacuations
     "caloes_webcams": {
         "id": "caloes_webcams",
         "name": "CalOES California Webcams",
@@ -268,7 +245,7 @@ class _Upstream:
     limiter: fhttp.RateLimiter
 
 
-UP_ARCGIS = _Upstream("Cal OES ArcGIS services", fhttp.RateLimiter(60, 60.0, "extras: Cal OES ArcGIS"))
+UP_ARCGIS = _Upstream("Cal OES ArcGIS services", evac.ARCGIS_LIMITER)    # services.arcgis.com (Cal OES, Oregon OEM)
 UP_CWWP2 = _Upstream("Caltrans CWWP2", fhttp.RateLimiter(20, 60.0, "extras: Caltrans CWWP2"))
 UP_FRAMES = _Upstream("camera image servers", fhttp.RateLimiter(30, 60.0, "extras: camera frames"))
 UP_EARTH_SEARCH = _Upstream("Element 84 Earth Search", fhttp.RateLimiter(30, 60.0, "extras: Earth Search"))
@@ -280,7 +257,7 @@ _mem = _TtlCache(512)
 _frames_latest = _TtlCache(256)               # camera id -> frame metadata dict (short TTL)
 _frame_store: OrderedDict[str, tuple[float, bytes, str]] = OrderedDict()   # token -> (stored monotonic, bytes, ctype)
 _frame_lock = threading.Lock()
-_last_evac_counts: dict[str, int] = {}
+_last_evac_counts: dict[tuple[str, str], int] = {}
 _render_slots = threading.Semaphore(1)
 _render_key_locks: dict[str, threading.Lock] = {}
 _render_key_guard = threading.Lock()
@@ -486,14 +463,15 @@ def _arcgis_check(data: Any, what: str) -> dict:
     return data
 
 
-def _arcgis_features(url: str, params: dict[str, Any], *, ttl_s: float, what: str, max_pages: int = 5) -> tuple[list[dict], int]:
+def _arcgis_features(url: str, params: dict[str, Any], *, ttl_s: float, what: str, max_pages: int = 5,
+                     up: _Upstream | None = None) -> tuple[list[dict], int]:
     """All GeoJSON features of an ArcGIS query (paged by resultOffset), plus the oldest fetch time."""
     feats: list[dict] = []
     fetched = None
     offset = 0
     for _ in range(max_pages):
         p = {**params, "f": "geojson", "resultOffset": offset, "orderByFields": "OBJECTID"}
-        data, ms = _fetch(UP_ARCGIS, "GET", f"{url}/query", params=p, ttl_s=ttl_s)
+        data, ms = _fetch(up or UP_ARCGIS, "GET", f"{url}/query", params=p, ttl_s=ttl_s)
         data = _arcgis_check(data, what)
         fetched = ms if fetched is None else min(fetched, ms)
         page = data.get("features") or []
@@ -505,9 +483,9 @@ def _arcgis_features(url: str, params: dict[str, Any], *, ttl_s: float, what: st
     return feats, int(fetched or now_ms())
 
 
-def _layer_updated_ms(url: str, what: str, ttl_s: float) -> int | None:
+def _layer_updated_ms(url: str, what: str, ttl_s: float, up: _Upstream | None = None) -> int | None:
     try:
-        info, _ = _fetch(UP_ARCGIS, "GET", url, params={"f": "json"}, ttl_s=ttl_s)
+        info, _ = _fetch(up or UP_ARCGIS, "GET", url, params={"f": "json"}, ttl_s=ttl_s)
         ei = _arcgis_check(info, what).get("editingInfo") or {}
     except SourceError as e:
         log.info("extras: %s", e)
@@ -516,70 +494,17 @@ def _layer_updated_ms(url: str, what: str, ttl_s: float) -> int | None:
 
 
 # ----------------------------------------------------------------------------------------------------------------
-# Evacuations
+# Evacuations (CONTRACT §14.8: the state registry, adapters and mappings live in fire3d.sources.evacuations)
 # ----------------------------------------------------------------------------------------------------------------
-STATUS_RANK = {"order": 0, "shelter": 1, "warning": 2, "advisory": 3, "lifted": 4, "other": 5, "training": 6,
-               "normal": 7, "unknown": 8}
-
-
-def evac_status_key(status: str | None) -> str:
-    """Styling class for an official status string (the string itself is always shown verbatim)."""
-    s = " ".join(str(status or "").lower().replace("_", " ").replace("-", " ").split())
-    if not s:
-        return "unknown"
-    if "lift" in s or "repopulat" in s:
-        return "lifted"
-    if "shelter" in s:
-        return "shelter"
-    if "order" in s or "level 3" in s or "go now" in s:
-        return "order"
-    if "warning" in s or "level 2" in s or "be set" in s:
-        return "warning"
-    if "advisory" in s or "level 1" in s or "be ready" in s:
-        return "advisory"
-    if "training" in s:
-        return "training"
-    if s == "normal":
-        return "normal"
-    return "other"
+STATUS_RANK = evac.STATUS_RANK
+evac_status_key = evac.evac_status_key
+normalize_zone = evac.normalize_caloes          # brief-2 name of the Cal OES mapping
 
 
 def _title(s: str | None) -> str | None:
     if not s:
         return None
     return " ".join(w[:1].upper() + w[1:].lower() for w in s.split())
-
-
-def normalize_zone(f: dict) -> dict | None:
-    """One Cal OES zone -> a small GeoJSON feature (official wording verbatim)."""
-    geom = f.get("geometry")
-    if not isinstance(geom, dict) or geom.get("type") not in ("Polygon", "MultiPolygon"):
-        return None
-    p = f.get("properties") or {}
-    status = _clean(p.get("STATUS"))
-    zone_id = _clean(p.get("ZONE_ID")) or f"objectid-{p.get('OBJECTID')}"
-    county = _clean(p.get("COUNTY"))
-    county_t = _title(county)
-    return {
-        "type": "Feature",
-        "id": zone_id,
-        "geometry": geom,
-        "properties": {
-            "zone_id": zone_id,
-            "zone_name": _clean(p.get("ZONE_NAME")),
-            "status": status,
-            "status_key": evac_status_key(status),
-            "county": county,
-            "jurisdiction": f"{county_t} County" if county_t and "county" not in county_t.lower() else county_t,
-            "city_code": _clean(p.get("CITY")),
-            "event_type": _clean(p.get("EVENT_TYPE")),
-            "notes": _clean(p.get("NOTES")),
-            "critical_info": _clean(p.get("CRITICAL_INFO")),
-            "public_info": _clean(p.get("PUBLIC_INFO")),
-            "status_updated_ms": _int_ms(p.get("EDIT_DATE")),
-            "aggregated_ms": _int_ms(p.get("EditDate")),
-        },
-    }
 
 
 def normalize_inventory(rows: list[dict]) -> list[dict]:
@@ -601,59 +526,144 @@ def normalize_inventory(rows: list[dict]) -> list[dict]:
     return sorted(out, key=lambda c: c["county"])
 
 
-def _evac_zone_features(b: BBox) -> tuple[list[dict], int]:
-    """Raw zone features for a bbox, cached here for EVAC_TTL_S (the upstream query bypasses the disk cache)."""
+def _adapter_upstream(ad: evac.EvacAdapter) -> _Upstream:
+    """The adapter's host limit (``UP_ARCGIS.limiter``, shared by every services.arcgis.com layer) under its own name."""
+    return _Upstream(ad.upstream_name, UP_ARCGIS.limiter)
+
+
+def _evac_zone_features(b: BBox, ad: evac.EvacAdapter | None = None) -> tuple[list[dict], int]:
+    """Raw zone features of one adapter's layer for a bbox, cached here for its TTL (the upstream query bypasses the
+    disk cache). Only the adapter's whitelisted fields are requested (EV-R4)."""
+    ad = ad or evac.ADAPTERS["caloes_evacuations"]
     key = bbox_key(b)
-    hit = _mem.get(("evac", key))
+    hit = _mem.get(("evac", ad.id, key))
     if hit is not None:
         return hit
-    params = {**_envelope(b), "where": "1=1", "outFields": "*", "outSR": "4326", "geometryPrecision": "6",
-              "returnGeometry": "true"}
-    feats, fetched = _arcgis_features(EVAC_LAYER_URL, params, ttl_s=0, what="Cal OES evacuation layer")
-    prev = _last_evac_counts.get(key)
-    if prev is not None and len(feats) < prev:
+    params = {**_envelope(b), "where": ad.where, "outFields": ",".join(ad.out_fields), "outSR": "4326",
+              "geometryPrecision": "6", "returnGeometry": "true"}
+    up = _adapter_upstream(ad)
+    feats, fetched = _arcgis_features(ad.query_url, params, ttl_s=0, what=ad.layer_what, up=up)
+    prev = _last_evac_counts.get((ad.id, key))
+    if ad.confirm_drop and prev is not None and len(feats) < prev:
         # The layer is rebuilt every ~5 min and briefly shows only part of the zones: confirm a drop once.
         time.sleep(2.0)
-        feats, fetched = _arcgis_features(EVAC_LAYER_URL, params, ttl_s=0, what="Cal OES evacuation layer")
-    _last_evac_counts[key] = len(feats)
-    _mem.set(("evac", key), (feats, fetched), EVAC_TTL_S)
+        feats, fetched = _arcgis_features(ad.query_url, params, ttl_s=0, what=ad.layer_what, up=up)
+    _last_evac_counts[(ad.id, key)] = len(feats)
+    _mem.set(("evac", ad.id, key), (feats, fetched), ad.ttl_s)
     return feats, fetched
 
 
-def evacuations_payload(ctx: AreaContext) -> dict[str, Any]:
-    out = _base("evacuations", ctx, ("caloes_evacuations", "caloes_evacuation_inventory"))
-    out.update({"issuing_authority": "Local emergency officials (county sheriff or emergency services, cities); each zone "
-                                     "names its county. Cal OES aggregates and does not verify.",
-                "zones": {"type": "FeatureCollection", "features": []}, "counts": {}, "coverage": []})
-    if ctx.is_past:
-        out.update(status="not_available_for_past_dates", reason_code="past_date",
-                   reason="Official evacuation status is published as current status only. Past orders and warnings are "
-                          "not available from this source, so none are shown for the selected time.")
-        return out
+def _source_entry(sid: str, home_state: str, **fields: Any) -> dict[str, Any]:
+    """A ``sources[]`` entry with the §14.8.2 per-source fields (a copy: SOURCES stays unchanged)."""
+    return {**SOURCES[sid], "retrieved_ms": None, "updated_ms": None, "status": "available", "reason": None,
+            "home_state": home_state, "credit": evac.CREDITS.get(sid, SOURCES[sid].get("publisher")), **fields}
+
+
+def _caloes_inventory(ctx: AreaContext, caveats: list[str]) -> tuple[list[dict], str | None]:
+    """Cal OES county coverage for the bbox: (coverage rows, not-covered reason or None)."""
+    coverage: list[dict] = []
     try:
         rows, _ = _arcgis_features(EVAC_INVENTORY_URL, {**_envelope(ctx.bbox), "where": "1=1", "returnGeometry": "false",
                                                         "outFields": "CountyName,Source,Reference_App,DataInUse,DataAcqStatus"},
                                    ttl_s=INVENTORY_TTL_S, what="Cal OES county inventory")
-        out["coverage"] = normalize_inventory(rows)
-    except SourceError as e:
-        out["caveats"].append(f"County coverage could not be checked: {e}.")
-    covered = [c for c in out["coverage"] if c["in_statewide_layer"]]
-    missing = [c["county"] for c in out["coverage"] if not c["in_statewide_layer"]]
-    if out["coverage"] and not covered:
-        out.update(status="unavailable", reason_code="not_covered",
-                   reason=f"The statewide layer has no evacuation zones from {', '.join(missing)} County. "
-                          "Check the county's official channels.")
-        return out
-    if missing:
-        out["caveats"].append(f"Not in the statewide layer: {', '.join(missing)} County. Zones there are not shown.")
-    try:
-        feats, fetched = _evac_zone_features(ctx.bbox)
+        coverage = normalize_inventory(rows)
     except SourceBusy:
         raise
     except SourceError as e:
-        out.update(status="unavailable", reason_code="upstream_error", reason=f"{e}. No evacuation zones are shown.")
+        caveats.append(f"County coverage could not be checked: {e}.")
+    covered = [c for c in coverage if c["in_statewide_layer"]]
+    missing = [c["county"] for c in coverage if not c["in_statewide_layer"]]
+    if coverage and not covered:
+        return coverage, (f"The statewide layer has no evacuation zones from {', '.join(missing)} County. "
+                          "Check the county's official channels.")
+    if missing:
+        caveats.append(f"Not in the statewide layer: {', '.join(missing)} County. Zones there are not shown.")
+    return coverage, None
+
+
+def evacuations_payload(ctx: AreaContext) -> dict[str, Any]:
+    """Official evacuation zones for the area from every state source it touches (CONTRACT §14.8.3).
+
+    A California-only area answers exactly as in brief 2, plus the §14.8.2 keys. An area in no state with a source
+    answers ``state_not_available`` without any upstream request."""
+    states = regions.states_in_bbox(ctx.bbox)
+    avail = [st for st in states if evac.STATE_AVAILABILITY[st]["availability"] == "available"]
+    uncovered = [st for st in states if st not in avail]
+    adapters = [evac.ADAPTERS[a] for st in avail for a in evac.STATE_AVAILABILITY[st]["adapter_ids"]]
+    source_ids: list[str] = []
+    for ad in adapters:
+        source_ids.append(ad.id)
+        if ad.id == "caloes_evacuations":
+            source_ids.append("caloes_evacuation_inventory")
+    out = _base("evacuations", ctx, ())
+    out["sources"] = [_source_entry(sid, "CA" if sid.startswith("caloes") else "OR") for sid in source_ids]
+    issuing = [ad.issuing_authority for ad in adapters]
+    out.update({"issuing_authority": " ".join(issuing) if issuing else
+                "Local emergency officials. Fire-3d has no official evacuation zone source for this area.",
+                "zones": {"type": "FeatureCollection", "features": []}, "counts": {}, "coverage": [],
+                "states": evac.states_entries(states, {})})
+    if not adapters:
+        if states:
+            reason = evac.not_available_reason(uncovered)
+        else:
+            reason = evac.outside_reason((ctx.bbox[0] + ctx.bbox[2]) / 2, (ctx.bbox[1] + ctx.bbox[3]) / 2)
+        out.update(status="unavailable", reason_code="state_not_available", reason=reason)
         return out
-    zones = [z for z in (normalize_zone(f) for f in feats) if z is not None]
+    if ctx.is_past:
+        out.update(status="not_available_for_past_dates", reason_code="past_date",
+                   reason="Official evacuation status is published as current status only. Past orders and warnings are "
+                          "not available from this source, so none are shown for the selected time.")
+        for sid in out["sources"]:
+            sid["status"] = "unavailable"
+            sid["reason"] = "Current status only: not available for past dates."
+        return out
+    src_by_id = {s["id"]: s for s in out["sources"]}
+    per_source: list[tuple[evac.EvacAdapter, list[dict]]] = []
+    answered: set[str] = set()
+    failures: list[tuple[evac.EvacAdapter, str, str]] = []     # (adapter, reason_code, reason)
+    zone_caveats: list[str] = []
+    for ad in adapters:
+        entry = src_by_id[ad.id]
+        if ad.id == "caloes_evacuations":
+            coverage, not_covered = _caloes_inventory(ctx, out["caveats"])
+            out["coverage"] = coverage
+            inv = src_by_id.get("caloes_evacuation_inventory")
+            if inv is not None and any(c.startswith("County coverage could not be checked") for c in out["caveats"]):
+                inv.update(status="unavailable", reason="County coverage could not be checked.")
+            if not_covered:
+                entry.update(status="unavailable", reason=not_covered)
+                failures.append((ad, "not_covered", not_covered))
+                continue
+        try:
+            feats, fetched = _evac_zone_features(ctx.bbox, ad)
+        except SourceBusy:
+            raise
+        except SourceError as e:
+            reason = f"{e}. No evacuation zones are shown."
+            entry.update(status="unavailable", reason=reason)
+            failures.append((ad, "upstream_error", reason))
+            continue
+        zones = [z for z in (ad.normalize(f) for f in feats) if z is not None]
+        updated = _layer_updated_ms(ad.query_url, ad.layer_what, ad.ttl_s, up=_adapter_upstream(ad))
+        entry.update(retrieved_ms=fetched, updated_ms=updated)
+        answered.add(ad.id)
+        per_source.append((ad, zones))
+        zone_caveats.extend(ad.standing_caveats)
+        if not zones:
+            zone_caveats.append(ad.none_caveat)
+    checked = {ad.home_state: ad.id in answered for ad in adapters}
+    out["states"] = evac.states_entries(states, checked)
+    if not answered:
+        # every source in the area failed: never "none"
+        if len(failures) == 1:
+            _, code, reason = failures[0]
+        else:
+            code, reason = "upstream_error", " ".join(r for _, _, r in failures)
+        out.update(status="unavailable", reason_code=code, reason=reason)
+        return out
+    for ad, _code, reason in failures:
+        out["caveats"].append(f"{evac.state_name(ad.home_state)}: {ad.aggregator} could not be checked ({reason})")
+    zones = evac.dedup_border_zones(per_source, answered)
     zones.sort(key=lambda z: (STATUS_RANK.get(z["properties"]["status_key"], 9), z["properties"]["zone_id"]))
     counts: dict[str, int] = {}
     for z in zones:
@@ -661,12 +671,12 @@ def evacuations_payload(ctx: AreaContext) -> dict[str, Any]:
         counts[k] = counts.get(k, 0) + 1
     out["zones"]["features"] = zones
     out["counts"] = counts
-    out["retrieved_ms"] = fetched
-    out["source_updated_ms"] = _layer_updated_ms(EVAC_LAYER_URL, "Cal OES evacuation layer", EVAC_TTL_S)
-    out["caveats"].append("Shown as current status. During Cal OES's 5-minute rebuild the layer can briefly miss zones.")
-    if not zones:
-        out["caveats"].append("No orders or warnings are listed here right now. That is not an all-clear: follow local "
-                              "officials.")
+    answered_entries = [src_by_id[a] for a in src_by_id if a in answered]
+    if len(answered_entries) == 1:
+        out["retrieved_ms"] = answered_entries[0]["retrieved_ms"]
+        out["source_updated_ms"] = answered_entries[0]["updated_ms"]
+    out["caveats"].extend(zone_caveats)
+    out["caveats"].extend(evac.uncovered_state_caveat(st) for st in uncovered)
     return out
 
 
@@ -787,9 +797,16 @@ def _caltrans_index(d: int) -> dict[str, dict]:
     return idx
 
 
+CAMERAS_NOT_AVAILABLE = "Public cameras: California only (ALERTCalifornia, Caltrans). Not available in this state."
+
+
 def cameras_payload(ctx: AreaContext) -> dict[str, Any]:
     out = _base("cameras", ctx, ("caloes_webcams", "alertcalifornia", "caltrans_cctv"))
     out.update({"cameras": {"type": "FeatureCollection", "features": []}, "counts": {}, "excluded": {}})
+    if "CA" not in regions.states_in_bbox(ctx.bbox):
+        # CONTRACT §14.8.6 / §14.14: the camera sources are California's; no upstream request elsewhere
+        out.update(status="unavailable", reason_code="state_not_available", reason=CAMERAS_NOT_AVAILABLE)
+        return out
     if ctx.is_past:
         out.update(status="not_available_for_past_dates", reason_code="past_date",
                    reason="Public cameras show live images only. Past frames are not archived publicly, so cameras are "

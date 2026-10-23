@@ -6,9 +6,15 @@ Started 2026-10-23 ~01:45 UTC (late start; us-catalog finished, us-web past M5, 
 ## Done
 - Read BRIEF-3, plan3-roles us-official entry, CONTRACT §14.0, 14.5-14.9, 14.13-14.15, us-web as-built note.
 
+- M1 committed (8ac1154): shims + 'not-available'. Web gates: tc 0, lint 55 (scene), 65 files / 1024 tests.
+- M2: sources/evacuations.py (registry, CA/OR adapters, status fix, dedup), extras.py route + cameras, Oregon sample
+  recorded (12 zones), CA brief-2 expected answers, tests/test_evacuations_sources.py. pytest 870 passed.
+
 ## Next
-- M1 shims (§14.9.6) and EvacuationOfficial.state 'not-available'.
+- M3 evacuations web (model.ts without insideCalifornia, not-available state, sources[] wording, Oregon levels, time_basis).
 
 ## Decisions
+- State check before the past-date check (a Nevada replay says not available, not 'past dates').
+- Negation statuses map to 'other' and are dropped as placeholders; null Cal OES status stays 'unknown' (CA unchanged).
 
 ## Open problems

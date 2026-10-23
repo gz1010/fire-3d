@@ -1,0 +1,22 @@
+{
+ "name": "Fire_Evacuation_Areas",
+ "objectIdField": "OBJECTID",
+ "maxRecordCount": 1000,
+ "editingInfo": {
+  "lastEditDate": 1790707347957,
+  "schemaLastEditDate": 1787776796545,
+  "dataLastEditDate": 1790707347957
+ },
+ "field_count": 19,
+ "whitelisted_fields_present": [
+  "OBJECTID",
+  "GlobalID",
+  "Fire_Name",
+  "Fire_Evacuation_Level",
+  "County",
+  "Evac_Area_Name",
+  "HazardType",
+  "created_date",
+  "last_edited_date"
+ ]
+}
