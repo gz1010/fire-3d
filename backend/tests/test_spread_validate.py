@@ -138,6 +138,9 @@ def test_live_start_check_on_a_synthetic_fire(tmp_data_dir, monkeypatch) -> None
     q = s["quiet"]
     assert q["latest_pass_decay"]["forecast_growth_acres_mean"] <= q["last_detection"]["forecast_growth_acres_mean"]
     assert s["all"]["old"]["n"] == s["all"]["new"]["n"]
+    short = validate.live_start_check([bdir], every_h=6.0, first_h=4.0, latency_h=1.0, leads=(6.0, 12.0), workers=1,
+                                      passes_fn=passes, until_h=16.0)        # issues stop 16 h after ignition
+    assert sorted({r["issue_ms"] for r in short}) == [i for i in issues if i <= ORIGIN + 18 * H]
 
 
 def test_batch_hindcast_absolute_starts_match_offsets(tmp_data_dir, monkeypatch) -> None:

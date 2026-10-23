@@ -10,8 +10,7 @@ Commands (from ``backend/``)::
 
     uv run python scripts/validate_us_fires.py starts            # the pre-registered start table (markdown)
     uv run python scripts/validate_us_fires.py checks [ids...]   # protocol step 2 bundle checks (JSON)
-    uv run python scripts/validate_us_fires.py hindcast <id> --what main|ignition|ablation [--ensemble perturbed]
-    uv run python scripts/validate_us_fires.py california         # the California baseline (31-member p50)
+    uv run python scripts/validate_us_fires.py hindcast <id> --what main|main_det|ignition|ablation_det --out-dir <dir>
 """
 
 from __future__ import annotations
@@ -161,16 +160,322 @@ def starts_markdown() -> str:
     return "\n".join(lines)
 
 
+# ----------------------------------------------------------------------------------------------------------------
+# Protocol step 2: bundle checks (docs/validation.md 10.1), recorded per fire before any score
+# ----------------------------------------------------------------------------------------------------------------
+FAMILY_WORDS = (("GR", 101, 109, ("grass",)), ("GS", 121, 124, ("grass", "shrub")), ("SH", 141, 149, ("shrub",)),
+                ("TU", 161, 165, ("timber",)), ("TL", 181, 189, ("timber",)), ("SB", 201, 204, ("timber",)))
+FUEL_GROUP_MIN_SHARE = 0.20      # a fuel family counts as tested when >= 20 % of the fire's burnable burned area
+
+
+def fuel_families(fuel_model, burned) -> dict[str, float]:
+    """Share of each FBFM40 family (GR, GS, SH, TU, TL, SB) in the burnable burned cells."""
+    import numpy as np
+
+    f = np.asarray(fuel_model)[np.asarray(burned, dtype=bool)]
+    out: dict[str, float] = {}
+    burnable = [(fam, int(((f >= lo) & (f <= hi)).sum())) for fam, lo, hi, _ in FAMILY_WORDS]
+    total = sum(n for _, n in burnable)
+    for fam, n in burnable:
+        if total and n:
+            out[fam] = round(n / total, 3)
+    return out
+
+
+def fuel_groups(families: dict[str, float], min_share: float = FUEL_GROUP_MIN_SHARE) -> list[str]:
+    """Plain fuel words (grass, shrub, timber) of the families with at least ``min_share`` of the burned area."""
+    words: set[str] = set()
+    for fam, _, _, w in FAMILY_WORDS:
+        if families.get(fam, 0.0) >= min_share:
+            words.update(w)
+    return sorted(words)
+
+
+def bundle_checks(fid: str, fire: TestFire | None = None) -> dict:
+    """Protocol step 2 for one built bundle: status, observed/WFIGS area ratio (0.8-1.25), perimeters (all, in the
+    growth window), fire inside the AOI, fuels edition and UTM zone as listed, weather source and ERA5 / GFS-fill
+    hours (with the fill hours that fall inside a scored window), no observed pixel > 2 km outside the final WFIGS
+    perimeter, the GSI series, fuel families of the burned area."""
+    import numpy as np
+    from shapely.geometry import Point, Polygon
+    from shapely.ops import unary_union
+
+    from fire3d import bundle as fb
+    from fire3d import config
+    from fire3d.build import weather_bundle as WB
+    from fire3d.cli import weather_hours
+    from fire3d.grid import grids_from_manifest
+
+    b = config.INCIDENTS_DIR / fid
+    man = fb.load_manifest(b) or {}
+    out: dict = {"id": fid, "status": man.get("status"), "problems": []}
+    if man.get("status") != "ready":
+        out["problems"].append(f"bundle status {man.get('status')!r}")
+        return out
+    summ = man.get("summary") or {}
+    origin = int(man["time_origin_ms"])
+    obs = fb.read_layer(b, "observed_arrival", man)
+    burned = obs < config.NEVER * 0.999
+    final_ac = float((man.get("stats") or {}).get("final_acres_observed") or 0.0)
+    wfigs_ac = float(summ.get("acres") or 0.0)
+    ratio = final_ac / wfigs_ac if wfigs_ac else None
+    out.update(final_acres_observed=final_ac, wfigs_acres=wfigs_ac, area_ratio=None if ratio is None else round(ratio, 3))
+    if ratio is None or not (0.8 <= ratio <= 1.25):
+        out["problems"].append(f"area ratio {ratio} outside 0.8-1.25")
+    # growth window: discovery .. the time the observed area first reaches 95 % of its final area
+    t_h = np.sort(obs[burned].ravel())
+    t95 = origin + float(t_h[int(0.95 * (len(t_h) - 1))]) * 3600e3 if len(t_h) else None
+    perims = (fb.read_json(b / "perimeters.json") or {}).get("perimeters") or []
+    times = sorted(int(p["t_ms"]) for p in perims if p.get("t_ms"))
+    start = int(summ.get("started_ms") or origin)
+    out.update(perimeters=len(perims), perimeters_in_growth=sum(1 for t in times if t95 is not None and start <= t <= t95),
+               growth_end_95_utc=None if t95 is None else _iso(t95))
+    # inside the AOI: no burned cell within 3 cells of the grid edge
+    edge = np.zeros_like(burned)
+    edge[:3, :] = edge[-3:, :] = edge[:, :3] = edge[:, -3:] = True
+    out["burned_cells_at_aoi_edge"] = int((burned & edge).sum())
+    if out["burned_cells_at_aoi_edge"]:
+        out["problems"].append("fire reaches the AOI edge")
+    # fuels and UTM
+    out["fuels_edition"] = man.get("fuels_edition")
+    fallback = [w for w in man.get("warnings") or [] if str(w).startswith("LANDFIRE") and " used" in str(w)]
+    out["fuels_fallback_notes"] = fallback
+    out["utm_zone"] = (man.get("grid") or {}).get("utm_zone")
+    if fire is not None:
+        if out["fuels_edition"] != fire.fuels_edition or fallback:
+            out["problems"].append(f"fuels {out['fuels_edition']} (expected {fire.fuels_edition}) {fallback}")
+        if out["utm_zone"] != fire.utm_zone:
+            out["problems"].append(f"UTM zone {out['utm_zone']} (expected {fire.utm_zone})")
+    # weather
+    wh = weather_hours(b) or {}
+    out.update(weather_source=wh.get("source"), weather_hours=wh.get("hours"), hrrr_hours=wh.get("hrrr_hours"),
+               gfs_fill_hours=wh.get("gfs_fill_hours"), era5_hours=(wh.get("hours") if wh.get("era5") else 0))
+    if wh.get("source") != "open-meteo:historical-forecast:gfs_hrrr":
+        out["problems"].append(f"weather source {wh.get('source')}")
+    if wh.get("era5"):
+        out["problems"].append("ERA5 hours present")
+    if fire is not None and wh.get("gfs_fill_hours"):
+        gw = WB.load_grid_weather(b)
+        fill = [int(t) for t, h in zip(gw.t_ms, gw.hrrr) if not h]
+        windows = [(to_ms(s0), to_ms(s0) + 72 * 3600_000) for s0 in fire.main_starts_utc + fire.ignition_starts_utc()]
+        inside = [t for t in fill if any(a <= t <= z for a, z in windows)]
+        out["gfs_fill_hours_in_scored_windows"] = len(inside)
+        out["gfs_fill_span_utc"] = [_iso(min(fill)), _iso(max(fill))]
+    # observed pixels outside the final WFIGS perimeter (local metres)
+    final = max(perims, key=lambda p: (float(p.get("acres") or 0.0), int(p.get("t_ms") or 0))) if perims else None
+    if final is not None and burned.any():
+        polys = [Polygon(r) for r in final.get("rings") or [] if len(r) >= 3]
+        shape = unary_union([p.buffer(0) for p in polys])
+        _, fire_grid = grids_from_manifest(man)
+        r, c = np.nonzero(burned)
+        x, z = fire_grid.pixel_center_local(r, c)
+        zone = shape.buffer(2000.0)
+        outside = sum(1 for xi, zi in zip(np.asarray(x), np.asarray(z)) if not zone.contains(Point(float(xi), float(zi))))
+        out["observed_cells_over_2km_outside_final_perimeter"] = int(outside)
+        out["final_perimeter_source"] = final.get("source")
+        if outside:
+            out["problems"].append(f"{outside} observed cells > 2 km outside the final WFIGS perimeter")
+    else:
+        out["observed_cells_over_2km_outside_final_perimeter"] = None
+        out["problems"].append("no WFIGS perimeter in the bundle")
+    # GSI series and the moisture at the starts
+    doc = WB.load_lfm_gsi(b)
+    out["lfm_gsi"] = None if doc is None else {"source": doc.get("source"), "from": doc.get("from"), "to": doc.get("to"),
+                                                "days": len(doc.get("days") or [])}
+    if fire is not None:
+        lm = []
+        for s0 in fire.main_starts_utc + fire.ignition_starts_utc():
+            d = WB.live_moisture_detail(b, man, to_ms(s0), fetch=False)
+            lm.append({"start": s0, "method": d["method"], "gsi": d["gsi"], "herb": round(d["herb"], 3),
+                       "woody": round(d["woody"], 3)})
+        out["live_fuel_moisture"] = lm
+        if summ.get("state") != "CA" and any(x["method"] != "gsi_nfdrs2016" for x in lm):
+            out["problems"].append("GSI unavailable at a start")
+    # fuel families of the burned area
+    st = np.load(b / "sim" / "static.npz")
+    fam = fuel_families(st["fuel_model"], burned)
+    out["fuel_families"] = fam
+    out["fuel_groups"] = fuel_groups(fam)
+    out["ok"] = not out["problems"]
+    return out
+
+
+def _iso(ms: float) -> str:
+    return datetime.fromtimestamp(float(ms) / 1000.0, tz=UTC).strftime("%Y-%m-%dT%H:%MZ")
+
+
+# ----------------------------------------------------------------------------------------------------------------
+# Protocol steps 4-7: hindcasts (rows written to --out-dir as <id>.<what>.json)
+# ----------------------------------------------------------------------------------------------------------------
+WHATS = ("main", "main_det", "ignition", "ablation_det", "main_det_gsi")
+
+
+def run_hindcast(fid: str, what: str, out_dir: Path, workers: int | None = None) -> list[dict]:
+    """``main``: 31-member perturbed p50 at the pre-registered label starts; ``main_det``: the deterministic member at
+    the same starts; ``ignition``: p50 at WFIGS discovery + 6/12/24 h; ``ablation_det``: the deterministic member at
+    the label starts with California's moisture rule forced (config.LFM_FORCE_CALIFORNIA). Operational settings,
+    multiplier 0.5. California ids run their docs/validation.md offsets (``main``) instead."""
+    from fire3d import bundle as fb
+    from fire3d import config
+    from fire3d.spread import validate as V
+    from fire3d.spread.ensemble import forecast_settings
+
+    b = config.INCIDENTS_DIR / fid
+    ca = dict(CALIFORNIA)
+    ens = "perturbed" if what in ("main", "ignition") else "none"
+    kw = dict(ensemble=ens, members=None, horizon_h=72, workers=workers, settings=forecast_settings())
+    if what == "ablation_det":
+        config.LFM_FORCE_CALIFORNIA = True
+    try:
+        if fid in ca:
+            offs = ca[fid] if what in ("main", "main_det") else (6.0, 12.0, 24.0)
+            rows = V.batch_hindcast([b], offs, (0.5,), **kw)
+        else:
+            f = fire_by_id(fid)
+            starts = f.ignition_starts_utc() if what == "ignition" else f.main_starts_utc
+            rows = V.batch_hindcast([b], (), (0.5,), start_times_ms=[to_ms(x) for x in starts], **kw)
+    finally:
+        config.LFM_FORCE_CALIFORNIA = False
+    for r in rows:
+        if r.get("start_ms"):
+            r["start_utc"] = _iso(r["start_ms"])
+    out_dir.mkdir(parents=True, exist_ok=True)
+    fb.write_json(out_dir / f"{fid}.{what}.json", {"id": fid, "what": what, "rows": rows}, indent=True)
+    return rows
+
+
+# ----------------------------------------------------------------------------------------------------------------
+# Collection: fires.json for ``fire3d.spread.validate regional`` and the markdown tables of docs/validation.md 10
+# ----------------------------------------------------------------------------------------------------------------
+REGION_CAVEATS: dict[str, list[str]] = {
+    "NWCC": ["Lower Sugarloaf's run has no perimeter between Sep 17 and Sep 21: its truth is timed by VIIRS only."],
+    "SACC-SP": ["Windy Deuce scores only the second day (65 % of its final area burned by the first perimeter).",
+                "Rush's first perimeter already held 46 % of the final area; its first leads are timed by VIIRS."],
+}
+COMMON_CAVEAT = "Two fires: a rough value (about ±0.05)."
+
+
+def _load_rows(run_dir: Path, fid: str, what: str) -> list[dict] | None:
+    p = run_dir / f"{fid}.{what}.json"
+    if not p.is_file():
+        return None
+    return [r for r in json.loads(p.read_text()).get("rows") or [] if r.get("spread_adjustment", 0.5) == 0.5]
+
+
+def _mean(rows: list[dict] | None, key: str = "sorensen_growth") -> float | None:
+    sc = [float(r[key]) for r in rows or [] if "lead_h" in r and r.get(key) is not None]
+    return sum(sc) / len(sc) if sc else None
+
+
+def collect(run_dir: Path, checks: list[dict], california_meta: dict) -> dict:
+    """fires.json for ``validate regional``: every fire with label rows (``main``), ignition rows and its checks."""
+    by_check = {c["id"]: c for c in checks}
+    fires = []
+    for f in FIRES:
+        rows = _load_rows(run_dir, f.id, "main")
+        c = by_check.get(f.id) or {}
+        if rows is None or not c.get("ok"):
+            continue
+        methods = sorted({x["method"] for x in c.get("live_fuel_moisture") or [] if x["start"] in f.main_starts_utc})
+        fires.append({"id": f.id, "name": f.name, "state": f.state, "region": f.region, "year": f.discovery.year,
+                      "rows": rows, "ignition_rows": _load_rows(run_dir, f.id, "ignition") or [],
+                      "fuels_edition": c.get("fuels_edition"), "lfm_method": "+".join(methods) or None,
+                      "era5_hours": c.get("era5_hours") or 0, "gfs_fill_hours": c.get("gfs_fill_hours") or 0,
+                      "weather_source": c.get("weather_source"), "replaced": None,
+                      "fuel_groups": c.get("fuel_groups") or [], "caveats": []})
+    for fid, _ in CALIFORNIA:
+        rows = _load_rows(run_dir, fid, "main")
+        meta = california_meta.get(fid) or {}
+        if rows is None:
+            continue
+        ign = _load_rows(run_dir, fid, "ignition") or []
+        fires.append({"id": fid, "name": meta.get("name") or fid, "state": "CA", "region": "OSCC",
+                      "year": int(fid[:4]), "rows": rows, "ignition_rows": ign,
+                      "fuels_edition": meta.get("fuels_edition"), "lfm_method": meta.get("lfm_method"),
+                      "era5_hours": meta.get("era5_hours", 0), "gfs_fill_hours": meta.get("gfs_fill_hours", 0),
+                      "weather_source": meta.get("weather_source"), "replaced": None,
+                      "fuel_groups": meta.get("fuel_groups") or [], "caveats": []})
+    caveats = {rid: [COMMON_CAVEAT] + REGION_CAVEATS.get(rid, []) for rid in {f["region"] for f in fires} if rid != "OSCC"}
+    caveats["OSCC"] = ["The model's settings (multiplier 0.5, 12 h decay, held perimeter) were fitted on these three "
+                       "fires: in-sample, a best case."]
+    return {"fires": fires, "region_caveats": caveats, "in_sample_regions": ["OSCC"],
+            "starts": "pre-registered (docs/validation.md section 10.1), during main growth; California: ignition + "
+                      "6/12/24 h (Madre + 24/48 h)",
+            "secondary": "WFIGS discovery + 6/12/24 h (California: bundle ignition + 6/12/24 h)"}
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("starts")
     sub.add_parser("list")
+    c = sub.add_parser("checks")
+    c.add_argument("ids", nargs="*")
+    c.add_argument("--out", help="write the checks as JSON here")
+    h = sub.add_parser("hindcast")
+    h.add_argument("id")
+    h.add_argument("--what", choices=WHATS, default="main")
+    h.add_argument("--out-dir", required=True)
+    h.add_argument("--workers", type=int, default=None)
+    co = sub.add_parser("collect")
+    co.add_argument("--runs", required=True, help="directory of hindcast rows (<id>.<what>.json)")
+    co.add_argument("--checks", required=True, help="checks JSON of the 12 fires")
+    co.add_argument("--out", required=True, help="fires.json for fire3d.spread.validate regional")
     a = p.parse_args(argv)
+    if a.cmd == "collect":
+        from fire3d import bundle as fb
+        from fire3d import config
+        from fire3d.build import weather_bundle as WB
+
+        checks = json.loads(Path(a.checks).read_text())
+        meta = {}
+        for fid, offs in CALIFORNIA:
+            b = config.INCIDENTS_DIR / fid
+            if not (b / "manifest.json").is_file():
+                continue
+            c = bundle_checks(fid, None)
+            man = fb.load_manifest(b)
+            t_ign = (man.get("ignition") or {}).get("t_ms") or man["summary"]["started_ms"]
+            methods = sorted({WB.live_moisture_detail(b, man, int(t_ign + o * 3600_000), fetch=False)["method"] for o in offs})
+            meta[fid] = {"name": man.get("name"), "fuels_edition": c.get("fuels_edition"), "lfm_method": "+".join(methods),
+                         "era5_hours": c.get("era5_hours") or 0, "gfs_fill_hours": c.get("gfs_fill_hours") or 0,
+                         "weather_source": c.get("weather_source"), "fuel_groups": c.get("fuel_groups") or [],
+                         "checks": c}
+        spec = collect(Path(a.runs), checks, meta)
+        spec["california_checks"] = {k: v["checks"] for k, v in meta.items()}
+        Path(a.out).write_text(json.dumps(spec, indent=1), encoding="utf-8")
+        print(f"{len(spec['fires'])} fires -> {a.out}")
+        return 0
     if a.cmd == "starts":
         print(starts_markdown())
     elif a.cmd == "list":
         print(json.dumps([f.__dict__ for f in FIRES], indent=1, default=str))
+    elif a.cmd == "checks":
+        ids = a.ids or [f.id for f in FIRES]
+        res = []
+        for fid in ids:
+            try:
+                fire = fire_by_id(fid)
+            except KeyError:
+                fire = None
+            r = bundle_checks(fid, fire)
+            res.append(r)
+            print(f"{fid}: ok={r.get('ok')} ratio={r.get('area_ratio')} perims={r.get('perimeters')}/"
+                  f"{r.get('perimeters_in_growth')} fuels={r.get('fuels_edition')} utm={r.get('utm_zone')} "
+                  f"weather={r.get('weather_source')} gfs_fill={r.get('gfs_fill_hours')} era5={r.get('era5_hours')} "
+                  f"outside2km={r.get('observed_cells_over_2km_outside_final_perimeter')} groups={r.get('fuel_groups')} "
+                  f"problems={r.get('problems')}")
+        if a.out:
+            Path(a.out).write_text(json.dumps(res, indent=1), encoding="utf-8")
+    elif a.cmd == "hindcast":
+        import logging
+
+        logging.basicConfig(level=logging.WARNING)
+        rows = run_hindcast(a.id, a.what, Path(a.out_dir), a.workers)
+        sc = [r for r in rows if "lead_h" in r]
+        err = [r for r in rows if "error" in r]
+        mean = sum(r["sorensen_growth"] for r in sc) / len(sc) if sc else None
+        print(f"{a.id} {a.what}: {len(sc)} leads, mean growth Sørensen {mean}, errors {len(err)} {err[:2]}")
     return 0
 
 

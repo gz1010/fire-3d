@@ -468,8 +468,10 @@ def live_start_check(
     workers: int | None = None,
     progress: ProgressFn | None = None,
     passes_fn: Callable[..., Any] | None = None,
+    until_h: float | None = None,
 ) -> list[dict]:
     """Re-issue forecasts on historical bundles as if they were live, to test the live start rule.
+    ``until_h`` (optional) stops the issue times that many hours after ignition (long-lived fires).
 
     Issue times run every ``every_h`` from ignition + ``first_h`` to the bundle's ``end_ms`` (detections are
     complete up to there). At issue time tau the system knows the polar detections and the satellite passes (NASA
@@ -525,7 +527,8 @@ def live_start_check(
             continue
         pass_t = np.asarray(sorted(int(q.t_ms) for q in found), dtype=np.int64)
         tau = t_ign + int(first_h * config.MS_PER_H)
-        while tau <= end:
+        last_issue = end if until_h is None else min(end, t_ign + int(float(until_h) * config.MS_PER_H))
+        while tau <= last_issue:
             known_t = det_xzt[:, 2][det_xzt[:, 2] <= tau - lat_ms]
             if not len(known_t):
                 tau += int(every_h * config.MS_PER_H)
@@ -731,6 +734,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     lv.add_argument("--latency", type=float, default=1.0, help="hours before data are known (FIRMS / CMR latency)")
     lv.add_argument("--leads", nargs="+", type=float, default=[12.0, 24.0, 48.0], help="valid times after the issue (h)")
     lv.add_argument("--workers", type=int, default=None)
+    lv.add_argument("--until", type=float, default=None, help="last issue time, hours after ignition (default: end_ms)")
     lv.add_argument("--edge-m", type=float, default=None, help="ignore activity deeper than this inside the burned area (0 = off)")
     lv.add_argument("--radius-m", type=float, default=None, help="perimeter within this distance of activity stays active (default 1000)")
     lv.add_argument("--growth-only", action=argparse.BooleanOptionalAction, default=None,
@@ -763,7 +767,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.radius_m is not None:
             config.FORECAST_ACTIVE_RADIUS_M = float(args.radius_m)
         rows = live_start_check([_bundle_path(b) for b in args.bundles], every_h=args.every, first_h=args.first,
-                                latency_h=args.latency, leads=args.leads, workers=args.workers, progress=_print_progress)
+                                latency_h=args.latency, leads=args.leads, workers=args.workers, progress=_print_progress,
+                                until_h=args.until)
         summary = summarize_live_check(rows)
         import json
 
