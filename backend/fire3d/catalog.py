@@ -1133,8 +1133,13 @@ def _estimate(summary: IncidentSummary, lat: float, lon: float) -> tuple[float, 
     t0, t1, perim_end = _fire_window(summary)
     live = summary.mode == "live" or summary.is_active
     geom = None
+    # A NIFC WFIGS record is matched by its IRWIN id (else name + its own state), as build/observed.py does
+    # (CONTRACT 14.12.8); without this the California-only default found no perimeter outside California and the AOI
+    # was sized from the VIIRS cluster alone (brief 3 validation: Windy Deuce's AOI 36 km clipped the fire).
+    ident = ({"record_source": "wfigs", "state": getattr(summary, "state", None), "irwin_id": getattr(summary, "irwin_id", None)}
+             if getattr(summary, "record_source", None) == "wfigs" else {})
     perims = perimeters.fetch_perimeters(summary.name, lat, lon, int(summary.started_ms), perim_end,
-                                         acres=summary.acres, contained_ms=summary.contained_ms)
+                                         acres=summary.acres, contained_ms=summary.contained_ms, **ident)
     for w in perims.warnings:
         log.info("estimate_fire_bbox(%s): %s", summary.id, w)
     if perims:
