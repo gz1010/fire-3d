@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { CalFireOfficial, EvacuationOfficial, FireWeatherOfficial, OfficialAlert, OfficialZone } from '../../official/model'
 import { calfireLine, evacuationLine, fireWeatherLine, officialSummary } from './officialSummary'
+import { setCaliforniaCommandClock } from '../../extras/__fixtures__/clock.testutil'
+
+setCaliforniaCommandClock()
 
 const evac = (over: Partial<EvacuationOfficial>): EvacuationOfficial =>
   ({ state: 'none-listed', zones: [], checkedMs: null, sourceUpdatedMs: null, sourceUrl: null, caveat: '', ...over }) as EvacuationOfficial

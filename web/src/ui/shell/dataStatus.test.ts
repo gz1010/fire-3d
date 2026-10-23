@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { Detection, Perimeter } from '../../api/types'
 import { timeFmt } from '../../lib/time'
 import { buildDataStatus, fmtAge, fmtStatusTime, fmtStatusTimeAt, freshnessLine, weatherSourceLabel, type DataStatusInput } from './dataStatus'
+import { setCaliforniaCommandClock } from '../../extras/__fixtures__/clock.testutil'
+
+setCaliforniaCommandClock()
 
 const H = 3_600_000
 const T0 = Date.UTC(2025, 0, 8, 12, 0) // Jan 8 2025 04:00 PST
@@ -179,5 +182,18 @@ describe('evacuation row outside California (brief 3)', () => {
     const na = byKey(buildDataStatus({ ...input('live'), official: { evacuation: { state: 'not-available', reason: 'Not available in this state (Montana)', sources: [] } } }, T0))
     expect(na.evacuation).toMatchObject({ value: 'Not available in this state', detail: 'Not available in this state (Montana); follow local officials' })
     expect(JSON.stringify(na.evacuation)).not.toMatch(/Cal OES/)
+  })
+})
+
+describe('fire-local times (brief 3, CONTRACT §14.9)', () => {
+  it("a Montana fire's rows read Mountain time, never PDT; Public uses the 12-hour clock", () => {
+    const den24 = timeFmt('America/Denver', '24h')
+    const rows = buildDataStatus({ ...input('historical'), tf: den24 }, Date.UTC(2026, 9, 17, 20))
+    const bundle = rows.find((x) => x.key === 'bundle')!
+    expect(bundle.value).toBe('Jan 8, 2025 07:00 MST')
+    expect(JSON.stringify(rows)).not.toMatch(/P[DS]T/)
+    const den12 = byKey(buildDataStatus({ ...input('live'), tf: timeFmt('America/Denver', '12h') }, T0 + H))
+    expect(den12.observations.value).toMatch(/ (AM|PM) MST$/)
+    expect(freshnessLine(rows, false, Date.UTC(2026, 9, 17, 20), null, den24).text).toMatch(/^Archived replay to /)
   })
 })

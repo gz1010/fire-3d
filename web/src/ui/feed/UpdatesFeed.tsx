@@ -19,12 +19,13 @@ import { useShallow } from 'zustand/react/shallow'
 import { agoText, fmtWhen } from '../../extras/format'
 import { fmtLatLon } from '../../lib/format'
 import { lonLatToLocal } from '../../lib/reproject'
-import { fmtDateTime, fmtDay, fmtRelative, fmtTime, tzLabel } from '../../lib/time'
+import { fmtAt, fmtClock, fmtDayDate, fmtRelative, startOfLocalDay } from '../../lib/time'
 import { fitOfficialBounds } from '../../official/select'
 import { useOfficialRuntime } from '../../official/runtime'
 import { useAnnotations, useIncidentAnnotations } from '../../state/annotations'
 import { lastIndexAtOrBefore } from '../../state/selectors'
 import { useStore } from '../../state/store'
+import { useTimeFormat } from '../../state/timeZone'
 import { useWorkspace } from '../../state/workspace'
 import { prefersReducedMotion, useNow } from '../hooks'
 import {
@@ -110,6 +111,7 @@ export function UpdatesFeed({ extraItems = NO_EXTRA }: UpdatesFeedProps = {}) {
   const units = useWorkspace((s) => s.units)
   const preset = useWorkspace((s) => s.preset)
   const command = preset === 'command'
+  const feedTf = useTimeFormat()
   const notes = useIncidentAnnotations(d.incidentId)
   // default: everything for live fires (what changed recently), key events for replays (the story); a choice sticks
   const [userFilter, setFilter] = useState<FeedFilter | null>(null)
@@ -139,9 +141,10 @@ export function UpdatesFeed({ extraItems = NO_EXTRA }: UpdatesFeedProps = {}) {
             preset,
             groupPasses: live,
             wallMs,
+            tf: feedTf,
           })
         : [],
-    [d.manifest, d.events, notes, d.timeseries, d.weather, d.perimeters, d.detections, d.forecast, units, extraItems, preset, live, wallMs],
+    [d.manifest, d.events, notes, d.timeseries, d.weather, d.perimeters, d.detections, d.forecast, units, extraItems, preset, live, wallMs, feedTf],
   )
   const shown = useMemo(() => filterFeed(items, filter), [items, filter])
   // re-render on the timeline only when it crosses an item's time (not every playback frame)
@@ -298,10 +301,12 @@ const FeedRow = memo(function FeedRow({ item, selected, later, current, isNew, l
     .filter(Boolean)
     .join(' ')
   const t = item.tMs
+  // the fire's own zone and the preset's clock (CONTRACT §14.9): "3:40 PM MDT" (Public) / "15:40 MDT" (Command)
+  const tf = useTimeFormat()
   // Clock time with the time zone over how long ago (live, today), the day (older live items) or the date (replay).
-  const recent = live && fmtDay(t) === fmtDay(nowMs)
-  const line1 = item.timeNotGiven ? 'Time not given' : `${fmtTime(t)} ${tzLabel(t)}`
-  const line2 = item.timeNotGiven ? (item.checkedMs != null ? `checked ${agoText(item.checkedMs, nowMs)}` : null) : live ? (recent ? fmtRelative(t, nowMs) : fmtDay(t)) : fmtDay(t)
+  const recent = live && startOfLocalDay(t, tf.tz) === startOfLocalDay(nowMs, tf.tz)
+  const line1 = item.timeNotGiven ? 'Time not given' : fmtClock(t, tf, { zone: true })
+  const line2 = item.timeNotGiven ? (item.checkedMs != null ? `checked ${agoText(item.checkedMs, nowMs)}` : null) : live ? (recent ? fmtRelative(t, nowMs) : fmtDayDate(t, tf.tz)) : fmtDayDate(t, tf.tz)
   const status = item.status ? STATUS_LABEL[item.status] : undefined
   return (
     <li className={cls} data-feed-id={selectionId(item)}>
@@ -345,7 +350,7 @@ const FeedRow = memo(function FeedRow({ item, selected, later, current, isNew, l
           )}
         </span>
         <span className="uf-time">
-          <time dateTime={new Date(t).toISOString()} data-tip={item.timeNotGiven ? 'The source gives no time for this update' : `${fmtDateTime(t)} ${tzLabel(t)}`}>
+          <time dateTime={new Date(t).toISOString()} data-tip={item.timeNotGiven ? 'The source gives no time for this update' : fmtAt(t, tf, { zone: true })}>
             {line1}
           </time>
           {line2 && <span className="uf-rel">{line2}</span>}
@@ -377,6 +382,7 @@ function ExtLink({ href, children }: { href: string; children: string }) {
 
 /** Issuer, the issuer's own times, Fire-3d's check time, notes and links of an official item. */
 function OfficialDetails({ item, nowMs }: { item: FeedItem; nowMs: number }) {
+  const tf = useTimeFormat()
   const times: { label: string; ms: number }[] = []
   if (item.issuedMs != null) times.push({ label: 'Issued', ms: item.issuedMs })
   if (item.updatedMs != null) times.push({ label: (item.topic === 'record' || item.topic === 'calfire') && item.issuer ? `Updated by ${item.issuer}` : 'Updated by the issuer', ms: item.updatedMs })
@@ -393,7 +399,7 @@ function OfficialDetails({ item, nowMs }: { item: FeedItem; nowMs: number }) {
           {times.map((t) => (
             <div key={t.label}>
               <dt>{t.label}</dt>
-              <dd>{fmtWhen(t.ms, nowMs)}</dd>
+              <dd>{fmtWhen(t.ms, nowMs, tf)}</dd>
             </div>
           ))}
         </dl>
@@ -429,6 +435,7 @@ function OfficialDetails({ item, nowMs }: { item: FeedItem; nowMs: number }) {
 }
 
 function FeedDetails({ item, incidentId, command, nowMs }: { item: FeedItem; incidentId: string | null; command: boolean; nowMs: number }) {
+  const tf = useTimeFormat()
   const [copied, setCopied] = useState(false)
   const highlighted = useOfficialRuntime((s) => s.highlight?.id === item.id)
   const kind = KIND_META[item.kind]
@@ -458,9 +465,7 @@ function FeedDetails({ item, incidentId, command, nowMs }: { item: FeedItem; inc
           {item.children.map((c) => (
             <li key={c.id}>
               <button type="button" className="uf-child" onClick={() => focusFeedItem(c)} data-tip="Move the timeline to this pass and show it on the map">
-                <span className="uf-child-time">
-                  {fmtTime(c.tMs)} {tzLabel(c.tMs)}
-                </span>
+                <span className="uf-child-time">{fmtClock(c.tMs, tf, { zone: true })}</span>
                 <span className="uf-child-text">
                   {c.title.replace(/^Satellite pass: /, '')} · {c.source.replace(/^NASA FIRMS \(|\)$/g, '')}
                 </span>
@@ -568,6 +573,7 @@ function FeedDetails({ item, incidentId, command, nowMs }: { item: FeedItem; inc
 
 /** Pin a note at the timeline time and at the selected point (else the map centre). Saved in this browser only. */
 function AddNote({ incidentId, onDone }: { incidentId: string; onDone: () => void }) {
+  const tf = useTimeFormat()
   const [title, setTitle] = useState('')
   // whole minute at or before the timeline time, so the new note is never "later" than the replay time
   const timeMs = useStore((s) => Math.floor(s.timeMs / 60_000) * 60_000)
@@ -604,7 +610,7 @@ function AddNote({ incidentId, onDone }: { incidentId: string; onDone: () => voi
         </button>
       </div>
       <span className="uf-add-hint">
-        At {fmtDateTime(timeMs)} {tzLabel(timeMs)}
+        At {fmtAt(timeMs, tf, { zone: true })}
         {where ? `, pinned at ${where.what}` : ', without a map location'}. Saved only in this browser.
       </span>
     </form>

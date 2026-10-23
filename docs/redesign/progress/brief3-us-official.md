@@ -26,9 +26,12 @@ Started 2026-10-23 ~01:45 UTC (late start; us-catalog finished, us-web past M5, 
   feed), dev preset us-official (screenshot docs/screenshots/brief3-us-official-dev-preset-desktop.png, 0 non-GET).
   Gates: tc 0, lint 55, 67 files / 1077, build OK. Servers: API 8713 + Vite 5183 running (kill before finishing).
 
+- M5 committed f6ddb54. Container restarted ~02:50 UTC (servers gone). M6: time migration done, checker 0/0,
+  zone lines; gates tc 0, lint 55, 67 files / 1078, build OK.
+
 ## Next
-- M6 time migration (check-time-api --role us-official → 0 and 0), then screenshots (overview, Reno, Brookings,
-  fixture-east, cameras non-CA, Eaton, Horse Gulch), wording scan, report.
+- Screenshots (overview, Reno, Brookings, fixture-east Command, cameras non-CA, Eaton Command, Horse Gulch), backend
+  pytest, wording scan, key scan, report. Kill servers on 8713/5183.
 
 ## Decisions
 - State check before the past-date check (a Nevada replay says not available, not 'past dates').

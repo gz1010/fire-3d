@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '../api/client'
 import { agoText, durationText, envelopeStatusLine, fmtWhen, freshnessText, relativeToText, requestErrorText } from './format'
+import { setCaliforniaCommandClock } from './__fixtures__/clock.testutil'
+
+setCaliforniaCommandClock()
 
 describe('time text', () => {
   it('formats durations', () => {

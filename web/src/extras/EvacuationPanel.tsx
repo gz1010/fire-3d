@@ -5,6 +5,7 @@
 // in this state, county not in the statewide layer, outage). Presentational: pass the state from useEvacuations().
 import { ExternalLink, RefreshCw } from 'lucide-react'
 import { useState } from 'react'
+import { useTimeFormat } from '../state/timeZone'
 import { useNow } from '../ui/hooks'
 import { aggregatorOf, answeredNames, answeredSources, evacStatusCounts, zoneDetail } from './evacuation'
 import { ExtrasNotice, LegendSwatch, SourceFooter } from './ExtrasCommon'
@@ -32,6 +33,7 @@ export interface EvacuationPanelProps {
 
 export function EvacuationPanel({ state, onShowZone, selectedZoneId }: EvacuationPanelProps) {
   const now = useNow(30_000)
+  const tf = useTimeFormat()
   const [all, setAll] = useState(false)
   const data = state.data
   const line = envelopeStatusLine(data, 'Official evacuation zones', state.error)
@@ -54,11 +56,11 @@ export function EvacuationPanel({ state, onShowZone, selectedZoneId }: Evacuatio
         answered.length > 1 ? (
           answered.map((s) => (
             <p key={s.id} className="xs-meta">
-              {freshnessText({ source_updated_ms: s.updated_ms ?? null, retrieved_ms: s.retrieved_ms ?? null }, now, `${aggregatorOf(data, s.id)} data last changed`)}
+              {freshnessText({ source_updated_ms: s.updated_ms ?? null, retrieved_ms: s.retrieved_ms ?? null }, now, `${aggregatorOf(data, s.id)} data last changed`, tf)}
             </p>
           ))
         ) : (
-          <p className="xs-meta">{freshnessText(data, now, `${answeredNames(data) ?? 'Cal OES'} data last changed`)}</p>
+          <p className="xs-meta">{freshnessText(data, now, `${answeredNames(data) ?? 'Cal OES'} data last changed`, tf)}</p>
         )
       ) : (
         <ExtrasNotice line={line} onRetry={state.error ? state.refresh : undefined} />
@@ -88,7 +90,7 @@ export function EvacuationPanel({ state, onShowZone, selectedZoneId }: Evacuatio
           {shown.length > 0 && (
             <ul className="xs-list" aria-label="Zones">
               {shown.map((f) => {
-                const z = zoneDetail(f, now)
+                const z = zoneDetail(f, now, tf)
                 const g = z.group === 'hidden' ? 'other' : z.group
                 return (
                   <li key={z.id} className={selectedZoneId === z.id ? 'xs-selected' : undefined}>
@@ -161,7 +163,7 @@ export function EvacuationPanel({ state, onShowZone, selectedZoneId }: Evacuatio
       <p className="xs-note">Fire-3d's modeled spread is not an evacuation instruction. Follow local officials; in an emergency call 911.</p>
       <SourceFooter
         sources={data?.sources ?? []}
-        extra={data?.retrieved_ms ? <p className="xs-dim">Fetched by Fire-3d {fmtWhen(data.retrieved_ms, now)}</p> : null}
+        extra={data?.retrieved_ms ? <p className="xs-dim">Fetched by Fire-3d {fmtWhen(data.retrieved_ms, now, tf)}</p> : null}
       />
     </section>
   )

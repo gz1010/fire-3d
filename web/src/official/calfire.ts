@@ -5,7 +5,8 @@
 import type { IncidentManifest, IncidentSummary, Mode } from '../api/types'
 import { fmtWhen } from '../extras/format'
 import { lonLatToLocal } from '../lib/reproject'
-import { fmtDateTimeYear, tzLabel } from '../lib/time'
+import { fmtAt, type TimeFmt } from '../lib/time'
+import { getTimeFormat } from '../state/timeZone'
 import type { FeedItem } from '../ui/feed/types'
 import type { QueryState } from './query'
 import type { CalFireChange, CalFireResponse } from './types'
@@ -126,6 +127,8 @@ export interface CalFireFeedContext {
   mode: Mode
   manifest: Pick<IncidentManifest, 'grid' | 'time_range'> | null
   summary: Pick<IncidentSummary, 'lat' | 'lon' | 'url' | 'contained_ms'> | null
+  /** Zone and clock of the times (the fire's; CONTRACT §14.9.5). Default `getTimeFormat()`. */
+  tf?: TimeFmt
 }
 
 function reportedLocation(ctx: CalFireFeedContext): FeedItem['location'] {
@@ -142,11 +145,11 @@ export function officialSeekable(tMs: number, manifest: Pick<IncidentManifest, '
   return !!tr && Number.isFinite(tMs) && tMs >= tr.start_ms && tMs <= tr.now_ms
 }
 
-/** "Jan 31, 2025 10:48 PST": past records always name the year. */
-const fmtWhenYear = (ms: number) => `${fmtDateTimeYear(ms)} ${tzLabel(ms)}`
+/** "Jan 31, 2025 10:48 PST": past records always name the year (in the fire's zone, the preset's clock). */
+const fmtWhenYear = (ms: number, tf: TimeFmt = getTimeFormat()) => fmtAt(ms, tf, { year: 'always', zone: true })
 
-const RECORDING_NOTE = (since: number | null | undefined) =>
-  since != null ? `Fire-3d records CAL FIRE's changes since ${fmtWhenYear(since)}; earlier changes are not available.` : "Fire-3d has not recorded CAL FIRE's changes for this fire."
+const RECORDING_NOTE = (since: number | null | undefined, tf?: TimeFmt) =>
+  since != null ? `Fire-3d records CAL FIRE's changes since ${fmtWhenYear(since, tf)}; earlier changes are not available.` : "Fire-3d has not recorded CAL FIRE's changes for this fire."
 
 /**
  * Feed rows: one per recorded change (official, not automated, key), timed at CAL FIRE's update time (else when
@@ -189,7 +192,7 @@ export function calfireFeedItems(d: CalFireResponse | null, ctx: CalFireFeedCont
       id: `calfire:${t}:${parts.join('|')}`,
       tMs: t,
       title: `CAL FIRE: ${parts.join(' · ')}`,
-      detail: `CAL FIRE updated its incident record${c.updated_ms != null ? ` at ${fmtWhen(c.updated_ms)}` : ''}. Values as published by CAL FIRE.`,
+      detail: `CAL FIRE updated its incident record${c.updated_ms != null ? ` at ${fmtWhen(c.updated_ms, undefined, ctx.tf)}` : ''}. Values as published by CAL FIRE.`,
       key: true,
       seekable: officialSeekable(t, ctx.manifest),
       updatedMs: c.updated_ms,
@@ -208,7 +211,7 @@ export function calfireFeedItems(d: CalFireResponse | null, ctx: CalFireFeedCont
     const facts = [
       { label: 'Area (CAL FIRE)', text: acresText(cur.acres), scientific: null },
       { label: 'Containment', text: pct(cur.percent_contained), scientific: null },
-      ...((cur.extinguished_ms ?? ctx.summary?.contained_ms) ? [{ label: 'Contained', text: fmtWhenYear((cur.extinguished_ms ?? ctx.summary?.contained_ms) as number), scientific: null }] : []),
+      ...((cur.extinguished_ms ?? ctx.summary?.contained_ms) ? [{ label: 'Contained', text: fmtWhenYear((cur.extinguished_ms ?? ctx.summary?.contained_ms) as number, ctx.tf), scientific: null }] : []),
     ]
     items.push({
       ...base,
@@ -221,8 +224,8 @@ export function calfireFeedItems(d: CalFireResponse | null, ctx: CalFireFeedCont
       updatedMs: t,
       timeNotGiven: t == null,
       notes: [
-        t != null ? `CAL FIRE last edited this record ${fmtWhenYear(t)}${ctx.manifest && t > ctx.manifest.time_range.end_ms ? ', after the end of the record shown here' : ''}.` : 'CAL FIRE gives no update time for this record.',
-        RECORDING_NOTE(d.recording_since_ms),
+        t != null ? `CAL FIRE last edited this record ${fmtWhenYear(t, ctx.tf)}${ctx.manifest && t > ctx.manifest.time_range.end_ms ? ', after the end of the record shown here' : ''}.` : 'CAL FIRE gives no update time for this record.',
+        RECORDING_NOTE(d.recording_since_ms, ctx.tf),
       ],
       facts,
     })
@@ -231,8 +234,8 @@ export function calfireFeedItems(d: CalFireResponse | null, ctx: CalFireFeedCont
 }
 
 /** The note shown under the CAL FIRE status: what history exists. */
-export function calfireHistoryNote(s: CalFireStatus, mode: Mode): string | null {
+export function calfireHistoryNote(s: CalFireStatus, mode: Mode, tf?: TimeFmt): string | null {
   if (s.state !== 'available') return null
-  if (mode === 'historical' || s.final) return `CAL FIRE's update-by-update history is not available for past fires. ${RECORDING_NOTE(s.recordingSinceMs)}`
-  return s.recordingSinceMs != null ? RECORDING_NOTE(s.recordingSinceMs) : null
+  if (mode === 'historical' || s.final) return `CAL FIRE's update-by-update history is not available for past fires. ${RECORDING_NOTE(s.recordingSinceMs, tf)}`
+  return s.recordingSinceMs != null ? RECORDING_NOTE(s.recordingSinceMs, tf) : null
 }

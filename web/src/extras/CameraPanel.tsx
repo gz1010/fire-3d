@@ -4,6 +4,7 @@
 // is ever played automatically. Presentational: pass useCameras() and useCameraFrame() state.
 import { Camera, ExternalLink, RefreshCw, X } from 'lucide-react'
 import { useState } from 'react'
+import { useTimeFormat } from '../state/timeZone'
 import { useNow } from '../ui/hooks'
 import { cameraServiceText, cameraViewText, compassWord, frameTimeText, sortCameras } from './cameras'
 import { apiPath } from './client'
@@ -33,6 +34,7 @@ function distText(m: number, units: 'us' | 'metric'): string {
 
 export function CameraPanel({ state, frame, selectedId, onSelect, centre = null, units = 'us' }: CameraPanelProps) {
   const now = useNow(15_000)
+  const tf = useTimeFormat()
   const [all, setAll] = useState(false)
   const data = state.data
   const items = sortCameras(data, centre)
@@ -51,7 +53,7 @@ export function CameraPanel({ state, frame, selectedId, onSelect, centre = null,
       </header>
       <p className="xs-sub">Wildfire cameras (ALERTCalifornia) and traffic cameras (Caltrans). An image loads only when you ask for it.</p>
       {data?.status === 'available' && !state.error ? (
-        <p className="xs-meta">{freshnessText(data, now, 'Cal OES list last changed')}</p>
+        <p className="xs-meta">{freshnessText(data, now, 'Cal OES list last changed', tf)}</p>
       ) : (
         <ExtrasNotice line={line} onRetry={state.error ? state.refresh : undefined} />
       )}
@@ -104,7 +106,7 @@ export function CameraPanel({ state, frame, selectedId, onSelect, centre = null,
               <img src={apiPath(f.image_url)} alt={`Latest image from ${selected.feature.properties.name} (${f.credit})`} width={f.width ?? undefined} height={f.height ?? undefined} />
               <figcaption>
                 <span className="xs-frame-credit">{f.credit}</span>
-                <span>{frameTimeText(f, now)}. The camera's own capture time is printed on the image.</span>
+                <span>{frameTimeText(f, now, tf)}. The camera's own capture time is printed on the image.</span>
                 <span className="xs-dim">{f.license}</span>
                 {f.viewer_url && (
                   <a href={f.viewer_url} target="_blank" rel="noreferrer noopener" className="xs-ext">

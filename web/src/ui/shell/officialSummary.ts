@@ -9,6 +9,7 @@ import { fmtWhen } from '../../extras/format'
 import { distanceText } from '../../official/geo'
 import { evacuationWho, groupZones, type CalFireOfficial, type EvacuationOfficial, type FireWeatherOfficial } from '../../official/model'
 import { fmtAcres, fmtNumber } from '../../lib/format'
+import type { TimeFmt } from '../../lib/time'
 
 export type SummaryTone = 'order' | 'warning' | 'alert' | 'quiet' | 'muted'
 
@@ -55,7 +56,7 @@ export function evacuationLine(e: EvacuationOfficial, metric: boolean): SummaryL
   }
 }
 
-export function calfireLine(c: CalFireOfficial, nowMs: number): SummaryLine {
+export function calfireLine(c: CalFireOfficial, nowMs: number, tf?: TimeFmt): SummaryLine {
   // labelled from the record's issuer (CONTRACT §14.5): "CAL FIRE", "USFS (USDA Forest Service) via NIFC WFIGS"
   const base = { key: 'calfire' as const, label: c.issuer && c.issuer !== 'Agency record' ? c.issuer : 'Agency record', source: null }
   if (c.state === 'loading') return { ...base, text: 'Checking…', tone: 'muted' }
@@ -68,7 +69,7 @@ export function calfireLine(c: CalFireOfficial, nowMs: number): SummaryLine {
     c.percentContained != null ? `${fmtNumber(c.percentContained)}% contained` : null,
     c.isActive !== true && c.final ? 'final record' : null,
     c.blocks && c.blocks.length > 1 ? 'the agencies differ on whether it is active' : null,
-    c.updatedMs != null ? `updated ${fmtWhen(c.updatedMs, nowMs)}` : null,
+    c.updatedMs != null ? `updated ${fmtWhen(c.updatedMs, nowMs, tf)}` : null,
   ].filter(Boolean)
   return { ...base, text: parts.length ? parts.join(' · ') : 'Record without size or containment.', tone: 'quiet' }
 }
@@ -95,6 +96,6 @@ export function fireWeatherLine(f: FireWeatherOfficial): SummaryLine {
   }
 }
 
-export function officialSummary(info: { evacuation: EvacuationOfficial; calfire: CalFireOfficial; fireWeather: FireWeatherOfficial }, nowMs: number, metric: boolean): SummaryLine[] {
-  return [evacuationLine(info.evacuation, metric), calfireLine(info.calfire, nowMs), fireWeatherLine(info.fireWeather)]
+export function officialSummary(info: { evacuation: EvacuationOfficial; calfire: CalFireOfficial; fireWeather: FireWeatherOfficial }, nowMs: number, metric: boolean, tf?: TimeFmt): SummaryLine[] {
+  return [evacuationLine(info.evacuation, metric), calfireLine(info.calfire, nowMs, tf), fireWeatherLine(info.fireWeather)]
 }

@@ -22,7 +22,8 @@ import { alertTimeFmt } from '../../official/fireWeather'
 import { useOfficialRuntime } from '../../official/runtime'
 import { showOfficialArea } from '../../official/select'
 import { useStore } from '../../state/store'
-import { useTimeFormat } from '../../state/timeZone'
+import { zoneLine } from '../../lib/time'
+import { useTimeFormat, useZoneSource } from '../../state/timeZone'
 import { useWorkspace } from '../../state/workspace'
 import { useNow } from '../hooks'
 import { NOT_AN_ORDER } from './feedMeta'
@@ -263,7 +264,7 @@ function RecordRow({ c, nowMs, wallMs, live }: { c: CalFireOfficial; nowMs: numb
     )
   const cf = c.source !== 'wfigs'
   const status = c.final ? 'final record' : c.isActive === false ? 'not active' : c.isActive ? 'active' : null
-  const note = cf ? calfireHistoryNote(c, mode) : 'NIFC WFIGS publishes the current record only; Fire-3d does not record changes to it yet.'
+  const note = cf ? calfireHistoryNote(c, mode, tf) : 'NIFC WFIGS publishes the current record only; Fire-3d does not record changes to it yet.'
   const lagged = laggedEditNote(c)
   const lastParts = cf && last ? changeTitleParts(last) : []
   const extra =
@@ -505,6 +506,8 @@ export function OfficialNow() {
   // "Official now · lower 48 states" only when the answer covers all 49 codes; today's California-only backend:
   // "California" (the header follows states_checked, never a hard-coded scope)
   const headScope = officialNowScope(fireWeather)
+  const tf = useTimeFormat()
+  const whose = useZoneSource()
   const wallMs = useNow(30_000)
   const { hasIncident, live, minute } = useStore(
     useShallow((s) => ({
@@ -529,6 +532,7 @@ export function OfficialNow() {
           <FireWeatherRow f={fireWeather} nowMs={wallMs} wallMs={wallMs} metric={metric} statewide />
         </ul>
         <p className="on-meta">Official evacuation information and each fire&apos;s agency record are shown for a fire: zoom in on a fire or pick one, or check an address.</p>
+        <p className="on-meta">Times: each alert in its own area&apos;s local time.</p>
         <p className="on-foot">{NOT_AN_ORDER}</p>
       </section>
     )
@@ -545,6 +549,7 @@ export function OfficialNow() {
         <FireWeatherRow f={fireWeather} nowMs={nowMs} wallMs={wallMs} metric={metric} />
         {local && <LocalAlertsRow l={local} wallMs={wallMs} />}
       </ul>
+      <p className="on-meta">{zoneLine(tf, wallMs, whose)}</p>
       <p className="on-foot">{NOT_AN_ORDER}</p>
     </section>
   )

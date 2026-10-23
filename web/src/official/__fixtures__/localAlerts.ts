@@ -51,7 +51,7 @@ export const LOCAL_LIVE_LA_CEM: LocalAlertsResponse = {
       match: 'county',
       covers_reported_location: null,
       nearest_km: null,
-      time_zone: 'America/Los_Angeles',
+      time_zone: 'America/Los_Angeles', // tz-ok: recorded data, the message area's own zone
       phase: 'in_effect',
     },
   ],
@@ -200,7 +200,7 @@ export const LOCAL_ARCHIVE_KERN_FRW: LocalAlertsResponse = {
       match: 'polygon',
       covers_reported_location: true,
       nearest_km: 0.0,
-      time_zone: 'America/Los_Angeles',
+      time_zone: 'America/Los_Angeles', // tz-ok: recorded data, the message area's own zone
       phase: 'in_effect',
     },
   ],

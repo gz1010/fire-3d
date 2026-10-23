@@ -16,6 +16,9 @@ import {
   sortCameras,
 } from './cameras'
 import type { CamerasResponse } from './types'
+import { setCaliforniaCommandClock } from './__fixtures__/clock.testutil'
+
+setCaliforniaCommandClock()
 
 const COOLEY: [number, number] = [-123.192868, 38.827218]
 

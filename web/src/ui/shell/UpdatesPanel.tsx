@@ -11,6 +11,8 @@ import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useOfficialNow } from '../../official/hooks'
 import { useStore } from '../../state/store'
+import { zoneLine } from '../../lib/time'
+import { useTimeFormat, useZoneSource } from '../../state/timeZone'
 import { useWorkspace } from '../../state/workspace'
 import { OfficialNow } from '../feed/OfficialNow'
 import { useNow } from '../hooks'
@@ -31,9 +33,18 @@ function useStatusRows() {
   )
   const official = useOfficialNow()
   const nowMs = useNow(30_000)
-  const rows = useMemo(() => buildDataStatus({ ...inp, official }, nowMs), [inp, official, nowMs])
+  // the fire's zone and the preset's clock (CONTRACT §14.9): a Montana fire's rows read MDT, never PDT
+  const tf = useTimeFormat()
+  const rows = useMemo(() => buildDataStatus({ ...inp, official, tf }, nowMs), [inp, official, nowMs, tf])
   const checks = [official.evacuation.checkedMs, official.fireWeather.checkedMs, official.calfire.checkedMs].filter((t): t is number => t != null && Number.isFinite(t))
-  return { manifest: inp.manifest, rows, nowMs, checkedMs: checks.length ? Math.max(...checks) : null }
+  return { manifest: inp.manifest, rows, nowMs, checkedMs: checks.length ? Math.max(...checks) : null, tf }
+}
+
+/** "Times: Mountain Time (MDT), the fire's local time" (CONTRACT §14.9.1): which zone the rows are in. */
+function ZoneNote({ nowMs }: { nowMs: number }) {
+  const tf = useTimeFormat()
+  const whose = useZoneSource()
+  return <p className="mw-set-note mw-status-zone">{zoneLine(tf, nowMs, whose)}</p>
 }
 
 function StatusRows({ rows }: { rows: StatusRow[] }) {
@@ -60,7 +71,7 @@ function StatusRows({ rows }: { rows: StatusRow[] }) {
 
 /** Command: every source's newest time, open by default. */
 function DataStatus() {
-  const { manifest, rows } = useStatusRows()
+  const { manifest, rows, nowMs } = useStatusRows()
   const [open, setOpen] = useState(true)
   if (!manifest) return null
   return (
@@ -70,7 +81,12 @@ function DataStatus() {
         <span className="mw-status-mode">{manifest.mode === 'live' ? 'Live data' : 'Archived replay'}</span>
         {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
       </button>
-      {open && <StatusRows rows={rows} />}
+      {open && (
+        <>
+          <StatusRows rows={rows} />
+          <ZoneNote nowMs={nowMs} />
+        </>
+      )}
     </section>
   )
 }
@@ -78,10 +94,10 @@ function DataStatus() {
 /** Public: one freshness line ("Sources checked 2 min ago · satellite data 16 h old"), the same rows on demand. The
  *  compact panel shows the line in its summary list; the expanded panel shows it here with the rows. */
 function Freshness({ defaultOpen = false }: { defaultOpen?: boolean }) {
-  const { manifest, rows, nowMs, checkedMs } = useStatusRows()
+  const { manifest, rows, nowMs, checkedMs, tf } = useStatusRows()
   const [open, setOpen] = useState(defaultOpen)
   if (!manifest) return null
-  const line = freshnessLine(rows, manifest.mode === 'live', nowMs, checkedMs)
+  const line = freshnessLine(rows, manifest.mode === 'live', nowMs, checkedMs, tf)
   return (
     <section className="mw-status is-public" aria-label="How current the data is">
       <button type="button" className="mw-status-head" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
@@ -90,7 +106,12 @@ function Freshness({ defaultOpen = false }: { defaultOpen?: boolean }) {
         <span className="mw-fresh-more">{open ? 'Hide' : 'Sources'}</span>
         {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
       </button>
-      {open && <StatusRows rows={rows} />}
+      {open && (
+        <>
+          <StatusRows rows={rows} />
+          <ZoneNote nowMs={nowMs} />
+        </>
+      )}
     </section>
   )
 }
@@ -107,10 +128,10 @@ function OfficialSummary() {
   const info = useOfficialNow()
   const metric = useWorkspace((s) => s.units === 'metric')
   const hasIncident = useStore((s) => s.incidentId != null)
-  const { manifest, rows, nowMs, checkedMs } = useStatusRows()
-  const lines = useMemo(() => officialSummary(info, nowMs, metric), [info, nowMs, metric])
+  const { manifest, rows, nowMs, checkedMs, tf } = useStatusRows()
+  const lines = useMemo(() => officialSummary(info, nowMs, metric, tf), [info, nowMs, metric, tf])
   if (!hasIncident) return null
-  const fresh = manifest ? freshnessLine(rows, manifest.mode === 'live', nowMs, checkedMs) : null
+  const fresh = manifest ? freshnessLine(rows, manifest.mode === 'live', nowMs, checkedMs, tf) : null
   return (
     <div className="os">
       <ul className="os-rows">

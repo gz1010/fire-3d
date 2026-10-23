@@ -13,7 +13,8 @@ import { EvacuationPanel } from '../../extras/EvacuationPanel'
 import { zonesBounds } from '../../extras/evacuation'
 import { ImageryLayerSummary, ImageryPanel } from '../../extras/ImageryPanel'
 import { useExtrasRuntime } from '../../extras/runtime'
-import { fmtDateTimeTz } from '../../lib/time'
+import { fmtAt } from '../../lib/time'
+import { useTimeFormat } from '../../state/timeZone'
 import { MapLegend } from '../../map/MapLegend'
 import { fitOfficialBounds } from '../../official/select'
 import { BASEMAP_LABEL } from '../../map/providers'
@@ -155,6 +156,7 @@ function Section({ title, children, aside }: { title: string; children: ReactNod
 
 function ForecastRunPicker() {
   const command = useWorkspace((s) => s.preset === 'command')
+  const tf = useTimeFormat()
   const { runs, runId, mode } = useStore(
     useShallow((s) => ({ runs: s.manifest?.status === 'ready' ? s.manifest.forecasts : [], runId: s.forecastRunId, mode: s.manifest?.mode ?? s.mode })),
   )
@@ -172,7 +174,7 @@ function ForecastRunPicker() {
         <option value="">No forecast</option>
         {ready.map((r) => (
           <option key={r.run_id} value={r.run_id}>
-            Issued {fmtDateTimeTz(r.issued_ms)} · {r.horizon_h} h · {r.members} runs ({ENSEMBLE_LABEL[r.ensemble] ?? r.ensemble})
+            Issued {fmtAt(r.issued_ms, tf, { zone: true })} · {r.horizon_h} h · {r.members} runs ({ENSEMBLE_LABEL[r.ensemble] ?? r.ensemble})
           </option>
         ))}
       </select>

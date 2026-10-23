@@ -142,13 +142,13 @@ export function useExtrasFeedItems(): FeedItem[] {
     const mode = manifest?.mode ?? summary?.mode ?? 'live'
     const items = [
       ...evacuationFeedItems(evac, manifest, { fire: ctx.fire, metric, tf }),
-      ...(ctx.demo ? [] : calfireFeedItems(calfire, { mode, manifest, summary })),
+      ...(ctx.demo ? [] : calfireFeedItems(calfire, { mode, manifest, summary, tf })),
       // a NIFC WFIGS fire's own record (a California fire's matched record stays on the card, not in the feed)
       ...(ctx.demo || (summary?.record_source ?? 'calfire') !== 'wfigs' ? [] : wfigsRecordFeedItems(record, { mode, manifest, summary, tf })),
       ...(ctx.demo ? [] : fireWeatherFeedItems(fw, { mode, refMs: ctx.refMs, manifest, metric, tf })),
       // local officials' messages relayed by NWS / archived by FEMA (CONTRACT §14.7)
       ...(ctx.demo ? [] : localAlertFeedItems(localAlertsState({ data: localData, loading: false, error: null }), { manifest, tf })),
-      ...cameraFeedItems(v.cams),
+      ...cameraFeedItems(v.cams, tf),
       ...imageryFeedItems(v.imgs, range, startedMs),
     ]
     return items.length ? items : NO_ITEMS

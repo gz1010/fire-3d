@@ -5,7 +5,8 @@
 import type { Map as MapLibreMap, SourceSpecification } from 'maplibre-gl'
 import type { FeedItem } from '../ui/feed/types'
 import { apiPath } from './client'
-import { fmtDateTime } from '../lib/time'
+import { fmtAt, type TimeFmt } from '../lib/time'
+import { getTimeFormat } from '../state/timeZone'
 import { agoText, durationText, fmtWhen, relativeToText } from './format'
 import type { ExtrasLegendEntry } from './legend'
 import { LayerGroupHandle, type BeforeId, type LayerGroup, type LayerHandleOptions } from './mapLayers'
@@ -291,16 +292,16 @@ export function resolutionText(p: ImageryProduct): string {
   return shown != null ? `${p.resolution_m} m pixels (shown at about ${Math.round(shown)} m over this area)` : `${p.resolution_m} m pixels`
 }
 
-export function imageryLegend(p: ImageryProduct | null, refMs: number): ExtrasLegendEntry[] {
+export function imageryLegend(p: ImageryProduct | null, refMs: number, tf: TimeFmt = getTimeFormat()): ExtrasLegendEntry[] {
   if (!p || !p.available) return []
   return [
     {
       id: `imagery-${p.id}`,
       layer: 'recentImagery',
       label: `Satellite image · ${p.platform}`,
-      detail: `${p.family === 'viirs' && p.pass_times_ms.length > 1 ? 'passes from' : 'acquired'} ${fmtWhen(p.acquired_ms, refMs)} · ${resolutionText(p).toLowerCase()} · not live`,
+      detail: `${p.family === 'viirs' && p.pass_times_ms.length > 1 ? 'passes from' : 'acquired'} ${fmtWhen(p.acquired_ms, refMs, tf)} · ${resolutionText(p).toLowerCase()} · not live`,
       swatch: { kind: 'raster' },
-      compact: `Satellite image · ${platformText(p)} · ${fmtDateTime(p.acquired_ms)}`,
+      compact: `Satellite image · ${platformText(p)} · ${fmtAt(p.acquired_ms, tf)}`,
     },
   ]
 }

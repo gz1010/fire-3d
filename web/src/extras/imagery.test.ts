@@ -16,6 +16,9 @@ import {
   resolutionText,
 } from './imagery'
 import type { ImageryProduct, ImageryResponse } from './types'
+import { setCaliforniaCommandClock } from './__fixtures__/clock.testutil'
+
+setCaliforniaCommandClock()
 
 const byId = (id: string) => IMAGERY_SAMPLE.products.find((p) => p.id.startsWith(id))!
 const S2 = 'sentinel-2:S2C_10SDJ_20261013'

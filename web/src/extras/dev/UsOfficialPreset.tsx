@@ -30,7 +30,7 @@ const ok = <T,>(data: T) => ({ data, loading: false, error: null, refresh: () =>
 /** The stores are seeded by usOfficialSeed.ts (main.tsx) before the first render. */
 export function UsOfficialPreset() {
   const nowMs = useNow(60_000)
-  const pacific12 = timeFmt('America/Los_Angeles', '12h')
+  const pacific12 = timeFmt('America/Los_Angeles', '12h') // tz-ok: the preset's point (Jackson County, Oregon) is in Pacific time; Public clock
   const card = useMemo(() => {
     const evacuation = evacuationAtPointState({ lon: MEDFORD_POINT.lon, lat: MEDFORD_POINT.lat, incident: null, incidentBbox: null, point: ok(OR_EVAC_MEDFORD), past: false, fire: null, pointState: 'OR' })
     const fireWeather = fireWeatherAtPointState({ lon: MEDFORD_POINT.lon, lat: MEDFORD_POINT.lat, refMs: nowMs, incident: null, statewide: ok(FW_NATIONAL_MT_WY), hasIncident: false, demo: false, past: false, fallbackArea: null, pointState: 'OR', tf: pacific12 })

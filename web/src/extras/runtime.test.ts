@@ -7,7 +7,8 @@ import { compactExtrasLegend, EXTRAS_LAYER_KEYS, extrasStatusLines, fireWeatherS
 import { fireWeatherLegend } from '../official/fireWeather'
 import { FW_EATON_ARCHIVE } from '../official/__fixtures__/samples'
 import type { CamerasResponse, EvacuationsResponse } from './types'
-import { fmtDateTime } from '../lib/time'
+import { fmtAt } from '../lib/time'
+import { getTimeFormat } from '../state/timeZone'
 
 const ALL_ON = { evacuation: true, cameras: true, recentImagery: true }
 const ALL_OFF = { evacuation: false, cameras: false, recentImagery: false }
@@ -55,7 +56,7 @@ describe('compactExtrasLegend', () => {
     const entries = [...imageryLegend(product, IMAGERY_SAMPLE.reference_ms), ...cameraLegend(CAMERAS_SAMPLE), ...evacuationLegend(EVAC_SAMPLE)]
     const c = compactExtrasLegend(entries)
     expect(c.map((x) => x.layer)).toEqual(['evacuation', 'cameras', 'recentImagery'])
-    expect(c.map((x) => x.label)).toEqual(['Evacuation zones (official)', 'Public cameras', `Satellite image · ${product!.platform} · ${fmtDateTime(product!.acquired_ms)}`])
+    expect(c.map((x) => x.label)).toEqual(['Evacuation zones (official)', 'Public cameras', `Satellite image · ${product!.platform} · ${fmtAt(product!.acquired_ms, getTimeFormat())}`])
     // the most urgent official wording comes first (orders before warnings)
     expect(c[0].entry.label).toBe('Evacuation Order')
     expect(c[0].entry.swatch.kind).toBe('hatch')

@@ -192,3 +192,29 @@ fetching, envelope).
   request); `extras-dev.html?preset=us-official`. Fixtures: `official/__fixtures__/national.ts` (the recorded national
   NWS sample, 3 Red Flag Warnings in Montana and Wyoming, 49 `states_checked`), `official/__fixtures__/localAlerts.ts`
   (recorded NWEM and OpenFEMA messages parsed by the backend's own parsers).
+
+## 14.9.5 Time migration of us-official's files (M6)
+
+- `node web/scripts/check-time-api.mjs --role us-official` → **0 deprecated uses, 0 `America/Los_Angeles` literals**
+  (89 files). Four `tz-ok` opt-outs: `ui/shell/dataStatus.ts` (the `@deprecated` `fmtStatusTime`, Pacific by definition
+  until the integration deletes it), `extras/dev/UsOfficialPreset.tsx` (the preset's Oregon point), two
+  `official/__fixtures__/localAlerts.ts` lines (recorded data: the message area's own zone).
+- `extras/format.ts` `fmtWhen(ms, refMs?, tf?)` and `freshnessText(…, tf?)` default to `getTimeFormat()` (the open
+  fire's zone, else the selected place's, else the viewer's; the preset's clock); the year is added when the local
+  year differs from `refMs`'s. Every pure helper of the owned files takes an optional `tf` with that default:
+  `zoneTimeText`, `zoneDetail`, `evacuationFeedItems` (`opts.tf`), `cameraFeedItems`, `frameTimeText`,
+  `imageryLegend`, `calfireFeedItems` (`ctx.tf`), `calfireHistoryNote`, `alertTimeText` (the alert's own zone),
+  `fireWeatherFeedItems` (`ctx.tf`), `fireWeatherNow` / `fireWeatherAtPointState` (`tf`), `buildFeedItems`
+  (`FeedInput.tf`), `groupPassesByDay`, `quietItem`, `officialBlock` (`OfficialContext.tf`), `calfireLine`,
+  `officialSummary` / `calfireLine` (summary), `buildDataStatus` (`DataStatusInput.tf`), `officialRows`,
+  `freshnessLine`, `wfigsRecordFeedItems`, `localAlertLines`, `sentText`.
+- Components use the hooks: `UpdatesFeed` (rows, details, children, notes; `buildFeedItems({ …, tf })`),
+  `OfficialNow` (every row), `UpdatesPanel` (data status, freshness, summary), `LayersPanel` (forecast runs),
+  `EvacuationPanel`, `CameraPanel`, `ImageryPanel`; `useOfficialNow` / `useOfficialAtPoint` pass `useTimeFormat()`;
+  `useExtrasFeedItems` passes it to every producer.
+- Panel zone lines (§14.9.1): the data status (Command, and Public's "Sources" list) ends with `zoneLine(tf, now,
+  whose)` ("Times: Mountain Time (MDT), the fire's local time"); the fire's Official now block too; the overview's
+  Official now says "Times: each alert in its own area's local time."
+- Tests that check the brief-2 California strings through the defaults set a California place in Command once
+  (`extras/__fixtures__/clock.testutil.ts`, `setCaliforniaCommandClock()`); new tests check Montana (MST/MDT,
+  12-hour Public) in the data status, Denver and New York in `fmtStatusTimeAt`, Denver 12-hour in the card.

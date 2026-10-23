@@ -12,7 +12,8 @@
 import type { DetectionsFile, ForecastManifest, IncidentManifest, IncidentSummary, PerimetersFile, WeatherFile } from '../../api/types'
 import { fmtAcres, satelliteName } from '../../lib/format'
 import { evacuationWho, type EvacuationOfficial } from '../../official/model'
-import { fmtAt, fmtDate, fmtDateTimeTz, fmtDateTimeYearTz, fmtRelative, laParts, type TimeFmt } from '../../lib/time'
+import { fmtAt, fmtDayDate, fmtRelative, timeFmt, type TimeFmt } from '../../lib/time'
+import { getTimeFormat } from '../../state/timeZone'
 import { STALE_AFTER_MS } from '../timeline/model'
 
 /** Gap between the newest detection / perimeter and the latest observation above which the latter is a quiet pass. */
@@ -52,6 +53,9 @@ export interface DataStatusInput {
   forecast: Pick<ForecastManifest, 'run_id' | 'issued_ms' | 'start_ms' | 'horizon_h' | 'weather'> | null
   weather: Pick<WeatherFile, 'source' | 't_ms' | 'forecast_from_ms'> | null
   official?: OfficialStatusInput | null
+  /** Zone and clock of every time (the fire's zone; 12-hour in Public, 24-hour in Command; CONTRACT §14.9). Default
+   *  `getTimeFormat()`. */
+  tf?: TimeFmt
 }
 
 function latest<T extends { t_ms: number }>(rows: readonly T[] | undefined): T | null {
@@ -74,7 +78,7 @@ export function weatherSourceLabel(source: string): string {
 /** Absolute time with zone; the year is added when it differs from the year of `nowMs`.
  *  @deprecated Pacific-bound: use `fmtStatusTimeAt(tMs, nowMs, tf)` (CONTRACT §14.9.6). */
 export function fmtStatusTime(tMs: number, nowMs: number): string {
-  return laParts(tMs).year === laParts(nowMs).year ? fmtDateTimeTz(tMs) : fmtDateTimeYearTz(tMs)
+  return fmtStatusTimeAt(tMs, nowMs, timeFmt('America/Los_Angeles', '24h')) // tz-ok: the deprecated brief-2 helper is Pacific by definition until the integration deletes it
 }
 
 /** Absolute time in `tf`'s zone and clock with the zone abbreviation; the year is added when the local year differs
@@ -84,6 +88,7 @@ export function fmtStatusTimeAt(tMs: number, nowMs: number, tf: TimeFmt): string
 }
 
 export function buildDataStatus(inp: DataStatusInput, nowMs: number): StatusRow[] {
+  const tf = inp.tf ?? getTimeFormat()
   const live = (inp.manifest?.mode ?? inp.summary?.mode) === 'live'
   const row = (key: StatusKey, label: string, tMs: number | null, detail: string | null, missing: string, staleAfterMs?: number): StatusRow => {
     const ok = tMs != null && Number.isFinite(tMs)
@@ -91,7 +96,7 @@ export function buildDataStatus(inp: DataStatusInput, nowMs: number): StatusRow[
     return {
       key,
       label,
-      value: ok ? fmtStatusTime(tMs, nowMs) : missing,
+      value: ok ? fmtStatusTimeAt(tMs, nowMs, tf) : missing,
       tMs: ok ? tMs : null,
       detail,
       age: age != null ? fmtRelative(tMs as number, nowMs) : null,
@@ -122,14 +127,14 @@ export function buildDataStatus(inp: DataStatusInput, nowMs: number): StatusRow[
       'forecast',
       'Forecast issued',
       f?.issued_ms ?? null,
-      f ? `${f.horizon_h} h from ${fmtStatusTime(f.start_ms, nowMs)} · ${f.weather.members} member${f.weather.members === 1 ? '' : 's'} · ${f.run_id}` : null,
+      f ? `${f.horizon_h} h from ${fmtStatusTimeAt(f.start_ms, nowMs, tf)} · ${f.weather.members} member${f.weather.members === 1 ? '' : 's'} · ${f.run_id}` : null,
       'No forecast run',
     ),
   )
   const w = inp.weather
   const wLast = w && w.t_ms.length ? w.t_ms[w.t_ms.length - 1] : null
-  out.push(row('weather', 'Weather to', wLast, w ? `${weatherSourceLabel(w.source)}${w.forecast_from_ms != null ? ` · forecast from ${fmtStatusTime(w.forecast_from_ms, nowMs)}` : ''}` : null, 'Not loaded'))
-  out.push(...officialRows(inp, nowMs, live))
+  out.push(row('weather', 'Weather to', wLast, w ? `${weatherSourceLabel(w.source)}${w.forecast_from_ms != null ? ` · forecast from ${fmtStatusTimeAt(w.forecast_from_ms, nowMs, tf)}` : ''}` : null, 'Not loaded'))
+  out.push(...officialRows(inp, nowMs, live, tf))
   out.push(row('bundle', 'Bundle built', m ? m.built_ms : null, null, 'Not built'))
   return out
 }
@@ -138,7 +143,8 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 
 /** Evacuation (state source), NWS and agency record rows: the issuer's time where it gives one, Fire-3d's check time
  *  as the age. */
-export function officialRows(inp: Pick<DataStatusInput, 'summary' | 'official'>, nowMs: number, live: boolean): StatusRow[] {
+export function officialRows(inp: Pick<DataStatusInput, 'summary' | 'official'>, nowMs: number, live: boolean, tf: TimeFmt = getTimeFormat()): StatusRow[] {
+  const at = (ms: number) => fmtStatusTimeAt(ms, nowMs, tf)
   const o = inp.official ?? null
   const out: StatusRow[] = []
   const ago = (t: number | null | undefined) => (t != null && Number.isFinite(t) ? `checked ${fmtRelative(t, nowMs)}` : null)
@@ -166,9 +172,9 @@ export function officialRows(inp: Pick<DataStatusInput, 'summary' | 'official'>,
     // several sources (a border fire): each with its own time, never one time for both
     const value =
       answered.length > 1
-        ? answered.map((s) => `${s.aggregator} ${s.updatedMs != null ? fmtStatusTime(s.updatedMs, nowMs) : 'no time'}`).join('; ')
+        ? answered.map((s) => `${s.aggregator} ${s.updatedMs != null ? at(s.updatedMs) : 'no time'}`).join('; ')
         : updated != null
-          ? `${who ?? 'Source'} ${fmtStatusTime(updated, nowMs)}`
+          ? `${who ?? 'Source'} ${at(updated)}`
           : ev.state === 'loading'
             ? 'Checking'
             : ev.state === 'not-available'
@@ -211,7 +217,7 @@ export function officialRows(inp: Pick<DataStatusInput, 'summary' | 'official'>,
     out.push({
       key: 'fire-weather',
       label: 'Fire weather',
-      value: fw.checkedMs != null ? `NWS, checked ${fmtStatusTime(fw.checkedMs, nowMs)}` : fw.state === 'loading' ? 'Checking' : 'Not checked',
+      value: fw.checkedMs != null ? `NWS, checked ${at(fw.checkedMs)}` : fw.state === 'loading' ? 'Checking' : 'Not checked',
       tMs: fw.checkedMs ?? null,
       detail,
       age: live ? ago(fw.checkedMs) : null,
@@ -231,7 +237,7 @@ export function officialRows(inp: Pick<DataStatusInput, 'summary' | 'official'>,
       key: 'record',
       label: `${issuer} record`,
       // a past fire's record is often edited long after the fire: always show the year and say what the time is
-      value: live ? fmtStatusTime(recordMs, nowMs) : fmtDateTimeYearTz(recordMs),
+      value: live ? at(recordMs) : fmtAt(recordMs, tf, { year: 'always', zone: true }),
       tMs: recordMs,
       detail: live ? facts || `${issuer}’s latest update of the incident` : `Last edit of ${issuer}’s record${facts ? ` · ${facts}` : ''}`,
       age: live ? fmtRelative(recordMs, nowMs) : null,
@@ -254,9 +260,9 @@ export interface FreshnessLine {
 }
 
 /** Public's one freshness line from the data-status rows (live: ages; replays: the archived record's end). */
-export function freshnessLine(rows: readonly StatusRow[], live: boolean, nowMs: number, checkedMs: number | null): FreshnessLine {
+export function freshnessLine(rows: readonly StatusRow[], live: boolean, nowMs: number, checkedMs: number | null, tf: TimeFmt = getTimeFormat()): FreshnessLine {
   const obs = rows.find((r) => r.key === 'observations')
-  if (!live) return { text: obs?.tMs != null ? `Archived replay to ${fmtDate(obs.tMs)}` : 'Archived replay', stale: false }
+  if (!live) return { text: obs?.tMs != null ? `Archived replay to ${fmtDayDate(obs.tMs, tf.tz, { year: 'always' })}` : 'Archived replay', stale: false }
   const parts: string[] = []
   if (checkedMs != null && Number.isFinite(checkedMs)) parts.push(`Sources checked ${fmtRelative(checkedMs, nowMs)}`)
   if (obs?.tMs != null) parts.push(`satellite data ${fmtAge(nowMs - obs.tMs)} old`)
