@@ -1,61 +1,326 @@
-// Time helpers. Data timestamps are epoch ms UTC; the UI shows America/Los_Angeles time (SPEC 4.2),
-// e.g. "Aug 14, 17:02". Raster times are hours since manifest.time_origin_ms.
+// Time helpers (CONTRACT §14.9). Data timestamps are epoch ms UTC; raster times are hours since manifest.time_origin_ms.
+//
+// Every wall-clock string is made in an explicit IANA zone with an explicit clock (`TimeFmt`): a fire's own times use
+// the fire's `summary.time_zone`, overview rows use each row's zone, a point without a fire uses /api/geo/lookup's
+// zone, and the fallback is the viewer's own zone, labelled — never Pacific by default (brief 3). The clock is 12-hour
+// in the map workspace's Public preset ("3:40 PM MDT") and 24-hour in Command and Forensic ("15:40 MDT").
+// Components get their TimeFmt from `useTimeFormat()` (state/timeZone.ts); pure helpers take it as an argument.
+//
+// The Pacific-bound names at the end of this file (TZ, laParts, fmtDateTime, …) are DEPRECATED: kept only until the
+// brief-3 integration deletes them (`node web/scripts/check-time-api.mjs web/src` must report 0 uses first).
 
-export const TZ = 'America/Los_Angeles'
 export const MINUTE_MS = 60_000
 export const HOUR_MS = 3_600_000
 export const DAY_MS = 86_400_000
+export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+export const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-const cache = new Map<string, Intl.DateTimeFormat>()
-function fmt(key: string, opts: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
-  let f = cache.get(key)
+// ------------------------------------------------------------------------------------------------- zones and clocks
+export type Clock = '12h' | '24h'
+/** A zone (IANA) and a clock: what every wall-clock formatter needs. Instances from `timeFmt` are frozen and shared, so
+ *  they are safe as React dependencies. */
+export interface TimeFmt {
+  readonly tz: string
+  readonly clock: Clock
+}
+
+const validCache = new Map<string, boolean>()
+/** True when `tz` is an IANA zone this runtime knows. */
+export function isValidZone(tz: string): boolean {
+  if (typeof tz !== 'string' || !tz) return false
+  let ok = validCache.get(tz)
+  if (ok === undefined) {
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: tz })
+      ok = true
+    } catch {
+      ok = false
+    }
+    validCache.set(tz, ok)
+  }
+  return ok
+}
+
+/** The viewer's own zone (the device's), else 'UTC'. */
+export function viewerZone(): string {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+    if (tz && isValidZone(tz)) return tz
+  } catch {
+    // fall through
+  }
+  return 'UTC'
+}
+
+const fmtCache = new Map<string, TimeFmt>()
+/** A TimeFmt for `tz` (a null, empty or unknown zone falls back to the viewer's zone, never Pacific) and `clock`. */
+export function timeFmt(tz: string | null | undefined, clock: Clock): TimeFmt {
+  const zone = tz && isValidZone(tz) ? tz : viewerZone()
+  const key = `${zone}|${clock}`
+  let f = fmtCache.get(key)
   if (!f) {
-    f = new Intl.DateTimeFormat('en-US', { timeZone: TZ, hourCycle: 'h23', ...opts })
-    cache.set(key, f)
+    f = Object.freeze({ tz: zone, clock })
+    fmtCache.set(key, f)
   }
   return f
 }
 
-/** "Aug 14, 17:02" */
-export function fmtDateTime(ms: number): string {
-  const p = laParts(ms)
-  return `${MONTHS[p.month - 1]} ${p.day}, ${pad2(p.hour)}:${pad2(p.minute)}`
+const dtfCache = new Map<string, Intl.DateTimeFormat>()
+function dtf(tz: string, key: string, opts: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const k = `${tz}|${key}`
+  let f = dtfCache.get(k)
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', ...opts })
+    dtfCache.set(k, f)
+  }
+  return f
 }
 
-/** "Aug 14, 2025" */
-export function fmtDate(ms: number): string {
-  return fmt('date', { month: 'short', day: 'numeric', year: 'numeric' }).format(ms)
+function zonePart(ms: number, tz: string, style: 'short' | 'longGeneric' | 'long'): string | null {
+  try {
+    return dtf(tz, `tzn-${style}`, { timeZoneName: style }).formatToParts(ms).find((p) => p.type === 'timeZoneName')?.value ?? null
+  } catch {
+    return null
+  }
 }
 
-/** "Aug 14, 2025 14:26" */
-export function fmtDateTimeYear(ms: number): string {
-  const p = laParts(ms)
-  return `${MONTHS[p.month - 1]} ${p.day}, ${p.year} ${pad2(p.hour)}:${pad2(p.minute)}`
+/** "UTC−7", "UTC+5:30", "UTC" for an offset in minutes. */
+function offsetLabel(minutes: number): string {
+  if (minutes === 0) return 'UTC'
+  const a = Math.abs(minutes)
+  const h = Math.floor(a / 60)
+  const m = a % 60
+  return `UTC${minutes < 0 ? '−' : '+'}${h}${m ? `:${pad2(m)}` : ''}`
 }
 
-/** "17:02" */
-export function fmtTime(ms: number): string {
-  const p = laParts(ms)
-  return `${pad2(p.hour)}:${pad2(p.minute)}`
+/** Short zone abbreviation at `ms`: "PDT", "MST", "CDT", "EST" (Intl short, en-US). Zones without an English
+ *  abbreviation get the offset: "UTC−7". */
+export function zoneAbbr(ms: number, tz: string): string {
+  const zone = isValidZone(tz) ? tz : viewerZone()
+  const s = zonePart(ms, zone, 'short')
+  if (s && !/^GMT|^UTC/.test(s)) return s
+  return offsetLabel(zoneOffsetMinutes(ms, zone))
 }
 
-/** "Aug 14" */
-export function fmtDay(ms: number): string {
-  const p = laParts(ms)
-  return `${MONTHS[p.month - 1]} ${p.day}`
+const UTC_NAMES = new Set(['UTC', 'Etc/UTC', 'Etc/GMT', 'GMT', 'Etc/Universal', 'Universal', 'Etc/Zulu', 'Zulu'])
+/** The zone's generic name: "Mountain Time", "Eastern Time" (Intl longGeneric, en-US); Arizona reads "Mountain
+ *  Standard Time" (no daylight saving time). */
+export function zoneName(tz: string, ms: number = Date.now()): string {
+  const zone = isValidZone(tz) ? tz : viewerZone()
+  if (UTC_NAMES.has(zone)) return 'Coordinated Universal Time'
+  return zonePart(ms, zone, 'longGeneric') ?? zone
 }
 
-/** "Aug 14, 2025 – Aug 18, 2025" (the reference header style). */
-export function fmtDateRange(startMs: number, endMs: number): string {
-  return `${fmtDate(startMs)} – ${fmtDate(endMs)}`
+/** The panel's zone line (§14.9.1): "Times: Mountain Time (MDT), the fire's local time" / "Times: Eastern Time (EDT),
+ *  local time at this place" / "Times: your device's time (CDT)". */
+export function zoneLine(tf: TimeFmt, ms: number, whose: 'fire' | 'place' | 'viewer'): string {
+  const abbr = zoneAbbr(ms, tf.tz)
+  if (whose === 'viewer') return `Times: your device's time (${abbr})`
+  return `Times: ${zoneName(tf.tz, ms)} (${abbr}), ${whose === 'fire' ? "the fire's local time" : 'local time at this place'}`
 }
 
-/** Short zone label for a timestamp: "PDT" / "PST". */
-export function tzLabel(ms: number): string {
-  const part = fmt('tz', { timeZoneName: 'short' }).formatToParts(ms).find((p) => p.type === 'timeZoneName')
-  return part?.value ?? 'PT'
+// ------------------------------------------------------------------------------------------------- wall-clock parts
+export interface WallParts {
+  year: number
+  month: number // 1..12
+  day: number
+  hour: number // 0..23
+  minute: number
+  weekday: number // 0 = Sunday
 }
 
+const WD: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
+
+/** Wall-clock parts of `ms` in `tz`. */
+export function wallParts(ms: number, tz: string): WallParts {
+  const parts = dtf(tz, 'parts', {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    weekday: 'short',
+  }).formatToParts(ms)
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '0'
+  return {
+    year: Number(get('year')),
+    month: Number(get('month')),
+    day: Number(get('day')),
+    hour: Number(get('hour')) % 24,
+    minute: Number(get('minute')),
+    weekday: WD[get('weekday')] ?? 0,
+  }
+}
+
+/** UTC offset of `tz` at `ms`, in minutes (-420 for PDT, -240 for EDT). */
+export function zoneOffsetMinutes(ms: number, tz: string): number {
+  const p = wallParts(ms, tz)
+  const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute)
+  return Math.round((asUtc - Math.floor(ms / MINUTE_MS) * MINUTE_MS) / MINUTE_MS)
+}
+
+/** Epoch ms of local midnight in `tz` on the day containing `ms` (DST-safe). */
+export function startOfLocalDay(ms: number, tz: string): number {
+  const p = wallParts(ms, tz)
+  return wallTimeToMs(tz, p.year, p.month, p.day)
+}
+
+/** Epoch ms of a wall-clock time in `tz` (month 1..12). Two passes over the zone's offsets around the time, no fixed
+ *  offsets: an ambiguous fall-back time gives the earlier instant, a nonexistent spring-forward time resolves forward
+ *  (02:30 on the spring-forward day reads as 03:30 daylight time). */
+export function wallTimeToMs(tz: string, y: number, mo: number, d: number, h = 0, mi = 0): number {
+  const asUtc = Date.UTC(y, mo - 1, d, h, mi)
+  // pass 1: the offsets in effect a day either side (a DST change lies between them, if any)
+  const offsets = new Set([zoneOffsetMinutes(asUtc - DAY_MS, tz), zoneOffsetMinutes(asUtc + DAY_MS, tz)])
+  // pass 2: the offset at the first guess (covers zones whose offset changed for other reasons)
+  for (const o of [...offsets]) offsets.add(zoneOffsetMinutes(asUtc - o * MINUTE_MS, tz))
+  const candidates = [...offsets].map((o) => asUtc - o * MINUTE_MS).sort((a, b) => a - b)
+  const target = wallKey(y, mo, d, h % 24, mi)
+  for (const c of candidates) {
+    const p = wallParts(c, tz)
+    if (wallKey(p.year, p.month, p.day, p.hour, p.minute) === target) return c // earliest match
+  }
+  return candidates[candidates.length - 1] // in a spring-forward gap: resolve forward
+}
+const wallKey = (y: number, mo: number, d: number, h: number, mi: number) => (((y * 13 + mo) * 32 + d) * 24 + h) * 60 + mi
+
+/** The calendar year of `ms` in `tz` (a fire found at 8 PM EST on Dec 31 belongs to that year, not UTC's next one). */
+export function localYear(ms: number, tz: string): number {
+  return wallParts(ms, tz).year
+}
+
+// ------------------------------------------------------------------------------------------------- ticks
+export interface TimeTick {
+  t: number
+  /** true at local midnight (day boundary) */
+  day: boolean
+  /** "Aug 15" at midnight, else "" */
+  dayLabel: string
+  /** "06:00" (24-hour) or "6 AM" (12-hour) */
+  timeLabel: string
+}
+
+/** Local-time ticks in `tz` between start and end every `stepHours` (aligned to local midnight). */
+export function localHourTicks(startMs: number, endMs: number, tz: string, stepHours = 24): number[] {
+  const out: number[] = []
+  let day = startOfLocalDay(startMs, tz)
+  while (day <= endMs + DAY_MS) {
+    for (let h = 0; h < 24; h += stepHours) {
+      const t = day + h * HOUR_MS
+      if (t >= startMs && t <= endMs) out.push(t)
+    }
+    day = startOfLocalDay(day + 26 * HOUR_MS, tz)
+  }
+  return out
+}
+
+/** Local-midnight ticks in `tz` every `stepDays` days between start and end (DST-safe). */
+export function localDayTicks(startMs: number, endMs: number, tz: string, stepDays = 1): number[] {
+  const out: number[] = []
+  let day = startOfLocalDay(startMs, tz)
+  let i = 0
+  while (day <= endMs) {
+    if (day >= startMs && i % stepDays === 0) out.push(day)
+    day = startOfLocalDay(day + 26 * HOUR_MS, tz)
+    i++
+  }
+  return out
+}
+
+const TICK_STEPS_H = [1, 3, 6, 12, 24, 48, 168, 336, 672]
+
+/** Smallest tick step (hours) from 1 h … 4 weeks whose spacing is at least `minPx` for the given width. */
+export function tickStepHours(spanMs: number, widthPx: number, minPx: number): number {
+  const pxPerHour = widthPx / Math.max(1, spanMs / HOUR_MS)
+  return TICK_STEPS_H.find((h) => h * pxPerHour >= minPx) ?? TICK_STEPS_H[TICK_STEPS_H.length - 1]
+}
+
+/** Hour label of a tick: "06:00" (24-hour) or "6 AM" / "12 PM" (12-hour). */
+function hourLabel(h: number, clock: Clock): string {
+  if (clock === '24h') return `${pad2(h)}:00`
+  return `${h % 12 === 0 ? 12 : h % 12} ${h < 12 ? 'AM' : 'PM'}`
+}
+
+/** Wall-clock aligned ticks in `tf.tz` every `stepHours` (multi-day steps land on local midnights). Hourly steps skip
+ *  the spring-forward gap and keep both hours of a fall-back day only once each. */
+export function localWallTicks(startMs: number, endMs: number, stepHours: number, tf: TimeFmt): TimeTick[] {
+  const out: TimeTick[] = []
+  if (!(endMs > startMs)) return out
+  const tz = tf.tz
+  const p0 = wallParts(startMs, tz)
+  let y = p0.year
+  let mo = p0.month
+  let d = p0.day
+  const nDays = Math.max(1, Math.round(stepHours / 24))
+  for (let guard = 0; guard < 2000; guard++) {
+    const midnight = wallTimeToMs(tz, y, mo, d)
+    if (midnight > endMs) break
+    if (stepHours >= 24) {
+      // stable alignment: even days for 2-day steps, Mondays for weekly steps (day 0 = Thu Jan 1 1970)
+      const dayNumber = Math.round(Date.UTC(y, mo - 1, d) / DAY_MS) + (nDays % 7 === 0 ? 3 : 0)
+      if (dayNumber % nDays === 0 && midnight >= startMs)
+        out.push({ t: midnight, day: true, dayLabel: fmtDayDate(midnight, tz), timeLabel: hourLabel(0, tf.clock) })
+    } else {
+      for (let h = 0; h < 24; h += stepHours) {
+        const t = wallTimeToMs(tz, y, mo, d, h)
+        if (t < startMs || t > endMs || (stepHours < 6 && wallParts(t, tz).hour !== h)) continue // skip the spring-forward gap
+        out.push({ t, day: h === 0, dayLabel: h === 0 ? fmtDayDate(t, tz) : '', timeLabel: hourLabel(h, tf.clock) })
+      }
+    }
+    // next local day: noon + 24 h is always inside the next day
+    const next = wallParts(wallTimeToMs(tz, y, mo, d, 12) + DAY_MS, tz)
+    y = next.year
+    mo = next.month
+    d = next.day
+  }
+  return out
+}
+
+// ------------------------------------------------------------------------------------------------- formatters
+/** "15:40" / "07:05" (24-hour) or "3:40 PM" / "7:05 AM" / "12:05 AM" (12-hour); `zone: true` adds " MDT". */
+export function fmtClock(ms: number, tf: TimeFmt, o: { zone?: boolean } = {}): string {
+  const p = wallParts(ms, tf.tz)
+  const clock =
+    tf.clock === '24h' ? `${pad2(p.hour)}:${pad2(p.minute)}` : `${p.hour % 12 === 0 ? 12 : p.hour % 12}:${pad2(p.minute)} ${p.hour < 12 ? 'AM' : 'PM'}`
+  return o.zone ? `${clock} ${zoneAbbr(ms, tf.tz)}` : clock
+}
+
+type YearMode = 'auto' | 'always' | 'never'
+function showYear(ms: number, tz: string, year: YearMode | undefined, refMs: number | undefined): boolean {
+  if (year === 'always') return true
+  if (year !== 'auto') return false
+  return localYear(ms, tz) !== localYear(refMs ?? Date.now(), tz)
+}
+
+/** A day and a time: "Oct 22, 15:40" / "Oct 22, 3:40 PM"; `zone` adds the abbreviation ("Oct 22, 15:40 MDT"),
+ *  `year` 'always' gives "Oct 22, 2026 15:40 MDT" ('auto': only when the local year differs from `refMs`'s, default
+ *  now; default 'never'), `weekday` gives "Thu Oct 22, 15:40". */
+export function fmtAt(
+  ms: number,
+  tf: TimeFmt,
+  o: { year?: YearMode; zone?: boolean; weekday?: boolean; refMs?: number } = {},
+): string {
+  const p = wallParts(ms, tf.tz)
+  const wd = o.weekday ? `${WEEKDAYS[p.weekday]} ` : ''
+  const day = `${wd}${MONTHS[p.month - 1]} ${p.day}`
+  const date = showYear(ms, tf.tz, o.year, o.refMs) ? `${day}, ${p.year} ` : `${day}, `
+  return `${date}${fmtClock(ms, tf, { zone: o.zone })}`
+}
+
+/** A day without a time in `tz`: "Oct 22"; `year` 'always' gives "Oct 22, 2026"; `weekday` gives "Thu Oct 22". */
+export function fmtDayDate(ms: number, tz: string, o: { year?: YearMode; weekday?: boolean; refMs?: number } = {}): string {
+  const p = wallParts(ms, tz)
+  const wd = o.weekday ? `${WEEKDAYS[p.weekday]} ` : ''
+  const day = `${wd}${MONTHS[p.month - 1]} ${p.day}`
+  return showYear(ms, tz, o.year, o.refMs) ? `${day}, ${p.year}` : day
+}
+
+/** "Aug 14, 2025 – Aug 18, 2025" (the header style), each day in `tz`. */
+export function fmtDayRange(startMs: number, endMs: number, tz: string): string {
+  return `${fmtDayDate(startMs, tz, { year: 'always' })} – ${fmtDayDate(endMs, tz, { year: 'always' })}`
+}
+
+// ------------------------------------------------------------------------------------------------- zone-free helpers
 /** "T+05:30" style offset for hours (negative -> "T−01:00"). */
 export function fmtTPlus(hours: number): string {
   const sign = hours < 0 ? '−' : '+'
@@ -75,99 +340,6 @@ export function fmtDuration(ms: number): string {
   return `${mm}m`
 }
 
-export interface LaParts {
-  year: number
-  month: number // 1..12
-  day: number
-  hour: number
-  minute: number
-  weekday: number // 0 = Sunday
-}
-
-const WD: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
-export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-export const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
-/** Wall-clock parts in America/Los_Angeles. */
-export function laParts(ms: number): LaParts {
-  const parts = fmt('parts', {
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-    weekday: 'short',
-  }).formatToParts(ms)
-  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '0'
-  return {
-    year: Number(get('year')),
-    month: Number(get('month')),
-    day: Number(get('day')),
-    hour: Number(get('hour')) % 24,
-    minute: Number(get('minute')),
-    weekday: WD[get('weekday')] ?? 0,
-  }
-}
-
-/** UTC offset of America/Los_Angeles at `ms`, in minutes (e.g. -420 for PDT). */
-export function laOffsetMinutes(ms: number): number {
-  const p = laParts(ms)
-  const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute)
-  return Math.round((asUtc - Math.floor(ms / MINUTE_MS) * MINUTE_MS) / MINUTE_MS)
-}
-
-/** Epoch ms of local (LA) midnight on the day containing `ms` (DST-safe). */
-export function startOfLaDay(ms: number): number {
-  const p = laParts(ms)
-  let guess = Date.UTC(p.year, p.month - 1, p.day) - laOffsetMinutes(ms) * MINUTE_MS
-  // correct across a DST change between midnight and `ms`
-  guess -= (laOffsetMinutes(guess) - laOffsetMinutes(ms)) * MINUTE_MS
-  return guess
-}
-
-/** Local-time ticks between start and end every `stepHours` (aligned to LA midnight). */
-export function laTicks(startMs: number, endMs: number, stepHours = 24): number[] {
-  const out: number[] = []
-  let day = startOfLaDay(startMs)
-  while (day <= endMs + DAY_MS) {
-    for (let h = 0; h < 24; h += stepHours) {
-      const t = day + h * HOUR_MS
-      if (t >= startMs && t <= endMs) out.push(t)
-    }
-    day = startOfLaDay(day + 26 * HOUR_MS)
-  }
-  return out
-}
-
-/** Local-midnight ticks every `stepDays` days between start and end (DST-safe). */
-export function laDayTicks(startMs: number, endMs: number, stepDays = 1): number[] {
-  const out: number[] = []
-  let day = startOfLaDay(startMs)
-  let i = 0
-  while (day <= endMs) {
-    if (day >= startMs && i % stepDays === 0) out.push(day)
-    day = startOfLaDay(day + 26 * HOUR_MS)
-    i++
-  }
-  return out
-}
-
-/** "Aug 14, 17:02 PDT" */
-export function fmtDateTimeTz(ms: number): string {
-  return `${fmtDateTime(ms)} ${tzLabel(ms)}`
-}
-
-/** "Aug 14, 2025 14:26 PDT" */
-export function fmtDateTimeYearTz(ms: number): string {
-  return `${fmtDateTimeYear(ms)} ${tzLabel(ms)}`
-}
-
-/** "Fri Aug 14" */
-export function fmtWeekdayDay(ms: number): string {
-  const p = laParts(ms)
-  return `${WEEKDAYS[p.weekday]} ${MONTHS[p.month - 1]} ${p.day}`
-}
-
 /** Relative wall-clock time: "just now", "4 min ago", "3 h ago", "2 d ago", "in 12 min". */
 export function fmtRelative(ms: number, nowMs: number = Date.now()): string {
   const d = nowMs - ms
@@ -178,71 +350,6 @@ export function fmtRelative(ms: number, nowMs: number = Date.now()): string {
   else if (a < 36 * HOUR_MS) s = `${Math.round(a / HOUR_MS)} h`
   else s = `${Math.round(a / DAY_MS)} d`
   return d >= 0 ? `${s} ago` : `in ${s}`
-}
-
-/** Epoch ms of an America/Los_Angeles wall-clock time (DST-safe; nonexistent spring-forward times resolve forward). */
-export function laWallToMs(year: number, month: number, day: number, hour = 0, minute = 0): number {
-  const asUtc = Date.UTC(year, month - 1, day, hour, minute)
-  // Pacific time is UTC-7 (PDT) or UTC-8 (PST): keep the candidate whose wall clock matches (earliest if ambiguous)
-  const pdt = asUtc + 420 * MINUTE_MS
-  const pst = asUtc + 480 * MINUTE_MS
-  const matches = (ms: number) => {
-    const p = laParts(ms)
-    return p.day === day && p.hour === hour % 24 && p.minute === minute
-  }
-  if (matches(pdt)) return pdt
-  if (matches(pst)) return pst
-  return pst // nonexistent spring-forward time: resolve forward
-}
-
-export interface TimeTick {
-  t: number
-  /** true at local midnight (day boundary) */
-  day: boolean
-  /** "Aug 15" at midnight, else "" */
-  dayLabel: string
-  /** "06:00" */
-  timeLabel: string
-}
-
-const TICK_STEPS_H = [1, 3, 6, 12, 24, 48, 168, 336, 672]
-
-/** Smallest tick step (hours) from 1 h … 4 weeks whose spacing is at least `minPx` for the given width. */
-export function tickStepHours(spanMs: number, widthPx: number, minPx: number): number {
-  const pxPerHour = widthPx / Math.max(1, spanMs / HOUR_MS)
-  return TICK_STEPS_H.find((h) => h * pxPerHour >= minPx) ?? TICK_STEPS_H[TICK_STEPS_H.length - 1]
-}
-
-/** Wall-clock aligned ticks in Pacific time (every `stepHours`; multi-day steps land on local midnights). */
-export function laWallTicks(startMs: number, endMs: number, stepHours: number): TimeTick[] {
-  const out: TimeTick[] = []
-  if (!(endMs > startMs)) return out
-  const p0 = laParts(startMs)
-  let y = p0.year
-  let mo = p0.month
-  let d = p0.day
-  const nDays = Math.max(1, Math.round(stepHours / 24))
-  for (let guard = 0; guard < 2000; guard++) {
-    const midnight = laWallToMs(y, mo, d)
-    if (midnight > endMs) break
-    if (stepHours >= 24) {
-      // stable alignment: even days for 2-day steps, Mondays for weekly steps (day 0 = Thu Jan 1 1970)
-      const dayNumber = Math.round(Date.UTC(y, mo - 1, d) / DAY_MS) + (nDays % 7 === 0 ? 3 : 0)
-      if (dayNumber % nDays === 0 && midnight >= startMs) out.push({ t: midnight, day: true, dayLabel: fmtDay(midnight), timeLabel: '00:00' })
-    } else {
-      for (let h = 0; h < 24; h += stepHours) {
-        const t = laWallToMs(y, mo, d, h)
-        if (t < startMs || t > endMs || (stepHours < 6 && laParts(t).hour !== h)) continue // skip the spring-forward gap
-        out.push({ t, day: h === 0, dayLabel: h === 0 ? fmtDay(t) : '', timeLabel: `${pad2(h)}:00` })
-      }
-    }
-    // next local day: noon + 24 h is always inside the next day
-    const next = laParts(laWallToMs(y, mo, d, 12) + DAY_MS)
-    y = next.year
-    mo = next.month
-    d = next.day
-  }
-  return out
 }
 
 /** Floor to the whole UTC hour (forecast start times are hourly). */
@@ -262,4 +369,100 @@ export function msFromHours(hours: number, originMs: number): number {
 
 function pad2(n: number): string {
   return n < 10 ? `0${n}` : String(n)
+}
+
+// ------------------------------------------------------------------------------------------------- DEPRECATED (§14.9.3)
+// Pacific-bound names from before brief 3. Each delegates to the zone-aware API with America/Los_Angeles and a 24-hour
+// clock, so not-yet-migrated callers keep today's strings. Deleted by the integration once nothing imports them.
+
+/** @deprecated Pacific-bound; use a TimeFmt (`useTimeFormat()` / `timeFmt(tz, clock)`). */
+export const TZ = 'America/Los_Angeles'
+const LA_24: TimeFmt = Object.freeze({ tz: TZ, clock: '24h' })
+
+/** @deprecated use `WallParts`. */
+export type LaParts = WallParts
+
+/** @deprecated "Aug 14, 17:02" in Pacific time; use `fmtAt(ms, tf)`. */
+export function fmtDateTime(ms: number): string {
+  return fmtAt(ms, LA_24)
+}
+
+/** @deprecated "Aug 14, 2025" in Pacific time; use `fmtDayDate(ms, tz, { year: 'always' })`. */
+export function fmtDate(ms: number): string {
+  return fmtDayDate(ms, TZ, { year: 'always' })
+}
+
+/** @deprecated "Aug 14, 2025 14:26" in Pacific time; use `fmtAt(ms, tf, { year: 'always' })`. */
+export function fmtDateTimeYear(ms: number): string {
+  return fmtAt(ms, LA_24, { year: 'always' })
+}
+
+/** @deprecated "17:02" in Pacific time; use `fmtClock(ms, tf)`. */
+export function fmtTime(ms: number): string {
+  return fmtClock(ms, LA_24)
+}
+
+/** @deprecated "Aug 14" in Pacific time; use `fmtDayDate(ms, tz)`. */
+export function fmtDay(ms: number): string {
+  return fmtDayDate(ms, TZ)
+}
+
+/** @deprecated "Aug 14, 2025 – Aug 18, 2025" in Pacific time; use `fmtDayRange(start, end, tz)`. */
+export function fmtDateRange(startMs: number, endMs: number): string {
+  return fmtDayRange(startMs, endMs, TZ)
+}
+
+/** @deprecated "PDT" / "PST"; use `zoneAbbr(ms, tz)`. */
+export function tzLabel(ms: number): string {
+  return zoneAbbr(ms, TZ)
+}
+
+/** @deprecated use `wallParts(ms, tz)`. */
+export function laParts(ms: number): LaParts {
+  return wallParts(ms, TZ)
+}
+
+/** @deprecated use `zoneOffsetMinutes(ms, tz)`. */
+export function laOffsetMinutes(ms: number): number {
+  return zoneOffsetMinutes(ms, TZ)
+}
+
+/** @deprecated use `startOfLocalDay(ms, tz)`. */
+export function startOfLaDay(ms: number): number {
+  return startOfLocalDay(ms, TZ)
+}
+
+/** @deprecated use `localHourTicks(start, end, tz, stepHours)`. */
+export function laTicks(startMs: number, endMs: number, stepHours = 24): number[] {
+  return localHourTicks(startMs, endMs, TZ, stepHours)
+}
+
+/** @deprecated use `localDayTicks(start, end, tz, stepDays)`. */
+export function laDayTicks(startMs: number, endMs: number, stepDays = 1): number[] {
+  return localDayTicks(startMs, endMs, TZ, stepDays)
+}
+
+/** @deprecated "Aug 14, 17:02 PDT"; use `fmtAt(ms, tf, { zone: true })`. */
+export function fmtDateTimeTz(ms: number): string {
+  return fmtAt(ms, LA_24, { zone: true })
+}
+
+/** @deprecated "Aug 14, 2025 14:26 PDT"; use `fmtAt(ms, tf, { year: 'always', zone: true })`. */
+export function fmtDateTimeYearTz(ms: number): string {
+  return fmtAt(ms, LA_24, { year: 'always', zone: true })
+}
+
+/** @deprecated "Fri Aug 14"; use `fmtDayDate(ms, tz, { weekday: true })`. */
+export function fmtWeekdayDay(ms: number): string {
+  return fmtDayDate(ms, TZ, { weekday: true })
+}
+
+/** @deprecated use `wallTimeToMs(tz, y, mo, d, h, mi)`. */
+export function laWallToMs(year: number, month: number, day: number, hour = 0, minute = 0): number {
+  return wallTimeToMs(TZ, year, month, day, hour, minute)
+}
+
+/** @deprecated use `localWallTicks(start, end, stepHours, tf)`. */
+export function laWallTicks(startMs: number, endMs: number, stepHours: number): TimeTick[] {
+  return localWallTicks(startMs, endMs, stepHours, LA_24)
 }
