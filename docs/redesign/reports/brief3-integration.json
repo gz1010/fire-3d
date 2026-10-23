@@ -518,7 +518,7 @@
    "b66adcb progress",
    "d9629d8 screenshots",
    "d8205ee search while lists load",
-   "(this report commit)"
+   "08f5fac report, progress, final screenshots"
   ],
   "part2_list": {
    "fold contract3/validation.md into CONTRACT §14": "done: '14.4 as built' (validation's file, results, null region ratio, per-fire ratio, fuel groups, caveats; the amended wording) and '14.12 as built' 14.12.10 (GSI method, inputs, never-silent texts, deviations) and 14.12.13 (the AOI bug fix); §14.15 'Integration part 2'.",
