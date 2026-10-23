@@ -121,3 +121,89 @@ def test_credit_notice_and_terms() -> None:
                                "endorsed by FEMA")
     assert openfema.TERMS_URL == "https://www.fema.gov/about/openfema/terms-conditions"
     assert openfema.SOURCE["credit"] == openfema.CREDIT and openfema.SOURCE["url"].startswith("https://")
+
+
+# ----------------------------------------------------------------------------------------------------------------
+# Incident windows, disk cache, background fetch (cut-line item a)
+# ----------------------------------------------------------------------------------------------------------------
+def test_incident_window_covers_the_record() -> None:
+    now = iso_to_ms("2026-10-23T00:41:00Z")
+    start, end = iso_to_ms("2025-03-22T18:00:00Z"), iso_to_ms("2025-04-10T00:00:00Z")
+    w = openfema.incident_window(start, end, iso_to_ms("2025-03-25T12:00:00Z"), now)
+    assert w == (iso_to_ms("2025-03-21T00:00:00Z"), iso_to_ms("2025-04-11T00:00:00Z"))
+    assert openfema.incident_window(start, end, iso_to_ms("2025-04-01T00:00:00Z"), now) == w     # one window per fire
+    live = openfema.incident_window(iso_to_ms("2026-10-15T20:00:00Z"), None, iso_to_ms("2026-10-20T00:00:00Z"), now)
+    assert live == (iso_to_ms("2026-10-14T00:00:00Z"), iso_to_ms("2026-10-23T00:00:00Z"))       # up to today 00:00
+    other = openfema.incident_window(start, end, iso_to_ms("2025-08-01T12:00:00Z"), now)          # outside the record
+    assert other == (iso_to_ms("2025-07-31T00:00:00Z"), iso_to_ms("2025-08-02T00:00:00Z"))
+
+
+def _fema_server(monkeypatch, handler) -> None:
+    monkeypatch.setattr(fhttp, "_transport", httpx.MockTransport(handler))
+    monkeypatch.setattr(fhttp, "BACKOFF_BASE_S", 0.001)
+    monkeypatch.setattr(openfema, "OPENFEMA_LIMITER", fhttp.RateLimiter(100, 60.0, "test"))
+    openfema.reset_state()
+
+
+def test_ensure_fetches_in_the_background_and_stores_on_disk(tmp_data_dir, monkeypatch: pytest.MonkeyPatch) -> None:
+    import threading
+    import time
+
+    gate = threading.Event()
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        gate.wait(10)
+        return httpx.Response(200, json={"metadata": {"count": len(ROWS)}, "IpawsArchivedAlerts": ROWS})
+
+    _fema_server(monkeypatch, handler)
+    monkeypatch.setattr(openfema, "REQUEST_WAIT_S", 0.2)
+    now = iso_to_ms("2026-10-23T00:41:00Z")
+    w = openfema.incident_window(iso_to_ms("2026-10-09T20:00:00Z"), iso_to_ms("2026-10-11T00:00:00Z"),
+                                 iso_to_ms("2026-10-10T00:00:00Z"), now)
+    t0 = time.monotonic()
+    assert openfema.ensure(w, now=now) == ("pending", None, None)
+    assert openfema.ensure(w, now=now)[0] == "pending"
+    assert time.monotonic() - t0 < 2.0 and len(calls) == 1                    # one fetch, deduplicated
+    gate.set()
+    for _ in range(100):
+        if openfema.load_cached(w, now) is not None:
+            break
+        time.sleep(0.05)
+    status, doc, _ = openfema.ensure(w, now=now)
+    assert status == "available" and doc is not None and len(calls) == 1
+    assert openfema.cache_file(w).is_file() and openfema.cache_file(w).parent.name == "openfema"
+    assert openfema.cache_file(w).is_relative_to(tmp_data_dir)
+    stored = openfema.load_cached(w, now)
+    assert {a["event_code"] for a in stored["alerts"]} == {"FRW", "SPW"}
+    assert any(a["_geom"] is not None for a in stored["alerts"]) and all("sender" not in a for a in stored["alerts"])
+    at = iso_to_ms("2026-10-10T00:30:00Z")
+    picked = openfema.answer(w, at, stored)
+    assert picked and all(at - 24 * HOUR_MS <= a["sent_ms"] <= at + HOUR_MS for a in picked)
+
+
+def test_ensure_remembers_a_failure(tmp_data_dir, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        return httpx.Response(503)
+
+    _fema_server(monkeypatch, handler)
+    now = iso_to_ms("2026-10-23T00:41:00Z")
+    w = (iso_to_ms("2026-10-09T00:00:00Z"), iso_to_ms("2026-10-11T00:00:00Z"))
+    status, doc, why = openfema.ensure(w, now=now, wait_s=5.0)
+    assert status == "unavailable" and doc is None and "could not be reached" in why
+    n = len(calls)
+    assert openfema.ensure(w, now=now)[0] == "unavailable" and len(calls) == n       # not asked again for 10 min
+
+
+def test_prefetch_after_a_build(tmp_data_dir, monkeypatch: pytest.MonkeyPatch) -> None:
+    _fema_server(monkeypatch, lambda r: httpx.Response(200, json={"metadata": {"count": len(ROWS)}, "IpawsArchivedAlerts": ROWS}))
+    now = iso_to_ms("2026-10-23T00:41:00Z")
+    start, end = iso_to_ms("2026-10-09T20:00:00Z"), iso_to_ms("2026-10-11T00:00:00Z")
+    assert openfema.prefetch(start, end, now=now) is True
+    w = openfema.incident_window(start, end, start + 24 * HOUR_MS, now)
+    assert openfema.load_cached(w, now) is not None
+    assert openfema.prefetch(now - HOUR_MS, None, now=now) is False                    # nothing archived yet

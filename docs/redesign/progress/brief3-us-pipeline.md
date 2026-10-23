@@ -16,9 +16,11 @@ endpoint, §14.6, §14.7, §14.9.7, §14.12.2/3/5/6/7/8/10/11). Ports API 8714, 
   openfema_window_frw) + tests (test_local_alerts_nws 16, test_openfema_parse 8). Full suite 737 passed.
   Archive channel answers not_checked until cut-line (a).
 
+- Cut-line (a) done early: OpenFEMA incident windows, disk cache, background fetch, pending within 4 s, post-build
+  prefetch. Full suite 743 passed.
+
 ## Next
-- While waiting for `brief 3 us-catalog: M3`: cut-line (a) OpenFEMA background prefetch + disk cache + pending.
-- Then M2 build anywhere, M4 smoke builds.
+- M2 build anywhere once `brief 3 us-catalog: M3` is in git log; then M4 smoke builds.
 
 ## Decisions
 - probe adds a `detail` key; any request-limit period maps to status `daily_limit`.

@@ -596,8 +596,23 @@ def _build_locked(bdir: Path, summary: IncidentSummary, prog: BuildProgress, *, 
     except BaseException as e:
         _set_status_error(bdir, e)
         raise
+    archive_prefetch(summary, model)
     prog.finish("forecast" if mode == "live" else "behavior", f"bundle ready in {(now_ms() - t_start) / 1000:.0f} s")
     return model
+
+
+def archive_prefetch(summary: IncidentSummary, manifest: IncidentManifest) -> bool:
+    """After a successful build: fetch the incident's FEMA IPAWS archive (OpenFEMA) so the local-alerts endpoint
+    answers past days at once (CONTRACT 14.7). Best effort; never fails the build."""
+    try:
+        from ..sources import openfema
+
+        tr = manifest.time_range
+        end = int(tr.end_ms) if summary.mode == "historical" and tr is not None else None
+        return openfema.prefetch(int(summary.started_ms), end)
+    except Exception as e:  # noqa: BLE001
+        log.info("%s: archive prefetch skipped: %s", summary.id, config.mask_secrets(e))
+        return False
 
 
 def _optional_steps(bdir: Path, prog: BuildProgress, mode: str, *, forecast: bool = True) -> None:

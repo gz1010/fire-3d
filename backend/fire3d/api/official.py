@@ -77,7 +77,8 @@ ARCHIVE_RECENT_REASON = ("FEMA publishes its archive about a day later; messages
                          "National Weather Service.")
 ARCHIVE_POINT_REASON = "The FEMA archive is checked for a chosen fire only."
 NWS_PAST_POINT_REASON = "Past local alerts are checked for a chosen fire only."
-ARCHIVE_ENABLED = False                # the background OpenFEMA prefetch (below us-pipeline's cut line)
+ARCHIVE_ENABLED = True                 # the background OpenFEMA prefetch (us-pipeline cut-line item a)
+ARCHIVE_PENDING_REASON = "FEMA's archive is being fetched; ask again in a minute."
 
 BBox = tuple[float, float, float, float]
 
@@ -498,16 +499,31 @@ def _channel(cid: str, status: str, reason: str | None = None, retrieved: int | 
     return {"id": cid, "status": status, "retrieved_ms": retrieved, "source_updated_ms": updated, "reason": reason}
 
 
-def _archive_channel(incident: str | None, at: int, now: int, area: BBox, point: tuple[float, float] | None,
+def _archive_channel(ref: IncidentRef | None, at: int, now: int, area: BBox, point: tuple[float, float] | None,
                      fips: list[str], point_county: str | None) -> tuple[dict, list[dict], list[str]]:
-    """The ``openfema_archive`` channel: ``(channel, alerts, caveats)``."""
-    if incident is None:
+    """The ``openfema_archive`` channel: ``(channel, alerts, caveats)``. Never waits on the request path longer than
+    ``openfema.REQUEST_WAIT_S``; a cache miss answers ``pending`` while the background fetch runs."""
+    if ref is None:
         return _channel("openfema_archive", "not_checked", ARCHIVE_POINT_REASON), [], []
     if at > now - openfema.ARCHIVE_DELAY_MS:
         return _channel("openfema_archive", "not_checked", ARCHIVE_RECENT_REASON), [], []
     if not ARCHIVE_ENABLED:
         return _channel("openfema_archive", "not_checked", ARCHIVE_NOT_BUILT_REASON), [], []
-    return _channel("openfema_archive", "not_checked", ARCHIVE_NOT_BUILT_REASON), [], []
+    credit = [ARCHIVE_CAVEAT, f"{openfema.CREDIT}: {openfema.NOTICE}."]
+    window = openfema.incident_window(ref.started_ms, ref.end_ms if ref.mode == "historical" else None, at, now)
+    try:
+        status, doc, why = openfema.ensure(window, now=now)
+    except nws.SourceBusy as e:
+        return _channel("openfema_archive", "unavailable", str(e)), [], credit
+    if status == "pending":
+        return _channel("openfema_archive", "pending", ARCHIVE_PENDING_REASON), [], credit
+    if status != "available" or doc is None:
+        return _channel("openfema_archive", "unavailable", f"{why}. Archived local alerts are not shown; that does "
+                                                           "not mean there were none."), [], credit
+    alerts = nws.place_local(openfema.answer(window, at, doc), area, point, fips, at, point_county=point_county)
+    if doc.get("truncated"):
+        credit.append("FEMA's archive had more messages in this period than Fire-3d reads; some may be missing.")
+    return _channel("openfema_archive", "available", None, int(doc["fetched_ms"]), None), alerts, credit
 
 
 def merge_local(nws_alerts: list[dict], archive_alerts: list[dict]) -> tuple[list[dict], int]:
@@ -531,6 +547,7 @@ def local_alerts_payload(incident: str | None, bbox: str | None, at_ms: int | No
     out = _envelope("local_alerts", LOCAL_SOURCE, incident, at_ms, now)
     out.update(alerts=[], channels=[], area_bbox=None, reported_location=None, counties=[])
     point: tuple[float, float] | None = None
+    ref: IncidentRef | None = None
     if incident is not None:
         ref = incident_ref(incident)
         fill_from_catalog(ref)
@@ -578,7 +595,7 @@ def local_alerts_payload(incident: str | None, bbox: str | None, at_ms: int | No
     except nws.SourceError as e:
         nws_ch = _channel("nws_api", "unavailable", f"{e}. Local officials' alerts relayed by NWS are not shown; "
                                                     "that does not mean there were none.")
-    arch_ch, arch_alerts, arch_cav = _archive_channel(incident, at, now, area, point, fips, point_county)
+    arch_ch, arch_alerts, arch_cav = _archive_channel(ref, at, now, area, point, fips, point_county)
     caveats += arch_cav
     kept, no_link = merge_local(nws_alerts, arch_alerts)
     dropped += no_link

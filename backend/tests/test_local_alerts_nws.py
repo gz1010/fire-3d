@@ -104,6 +104,8 @@ class Upstream:
     def __init__(self):
         self.active = copy.deepcopy(NATIONAL)
         self.past = {"type": "FeatureCollection", "features": [copy.deepcopy(NWEM)]}
+        self.fema: dict = FEMA
+        self.fema_gate: Any = None              # a threading.Event the OpenFEMA answer waits for
         self.calls: list[str] = []
         self.fail: set[str] = set()
 
@@ -117,7 +119,9 @@ class Upstream:
         if url.startswith("https://api.weather.gov/zones/"):
             return httpx.Response(404, json={"title": "Not Found"})
         if url.startswith(openfema.API_URL):
-            return httpx.Response(503) if "fema" in self.fail else httpx.Response(200, json=FEMA)
+            if self.fema_gate is not None:
+                self.fema_gate.wait(10)
+            return httpx.Response(503) if "fema" in self.fail else httpx.Response(200, json=self.fema)
         raise RuntimeError(f"unrouted request in test: {url}")
 
     def count(self, part: str) -> int:
@@ -135,8 +139,13 @@ def upstream(monkeypatch: pytest.MonkeyPatch, tmp_data_dir: Path) -> Upstream:
     up = Upstream()
     monkeypatch.setattr(fhttp, "_transport", httpx.MockTransport(up))
     monkeypatch.setattr(catalog, "get_summary", lambda iid: None)
+    monkeypatch.setattr(openfema, "OPENFEMA_LIMITER", fhttp.RateLimiter(1000, 60.0, "test"))
+    openfema.reset_state()
     yield up
+    if up.fema_gate is not None:
+        up.fema_gate.set()
     nws.reset_state()
+    openfema.reset_state()
 
 
 @pytest.fixture
@@ -416,3 +425,66 @@ def test_local_alert_without_link_is_dropped_and_counted(upstream: Upstream, cli
     d = client.get("/api/official/local-alerts", params={"bbox": "-118.4,34.2,-118.1,34.4"}).json()
     assert [a["id"] for a in d["alerts"]] == [NWEM["properties"]["id"]]
     assert any(c == "1 alert(s) without a source link were not shown." for c in d["caveats"])
+
+
+def fema_record(identifier: str, code: str, event: str, sent_iso: str, same: str, text: str) -> dict:
+    """An OpenFEMA record in the recorded shape (no polygon: matched by county)."""
+    return {"identifier": identifier, "sent": sent_iso, "msgType": "Alert", "status": "Actual", "originalMessage": "",
+            "info": [{"language": "en-US", "event": event, "eventCode": [{"name": "SAME", "value": code}],
+                      "senderName": "Public Alert System", "headline": "Alert from AlertLACounty", "description": text,
+                      "expires": None, "parameter": [{"name": "CMAMtext", "value": text}],
+                      "area": [{"areaDesc": "Los Angeles", "geocode": [{"name": "SAME", "value": same}]}]}]}
+
+
+def test_local_alerts_30h_ago_from_both_channels_one_per_cap_id(upstream: Upstream, client: TestClient,
+                                                               tmp_data_dir: Path, monkeypatch) -> None:
+    at = CEM_SENT + 10 * 60_000
+    monkeypatch.setattr(official, "now_ms", lambda: at + 30 * HOUR_MS)
+    write_manifest(tmp_data_dir, "2026-test-fire-abcdef", "live", LA_POINT, LA_AOI, "2026-10-15T20:00:00Z", state="CA")
+    same_id = NWEM["properties"]["id"]
+    upstream.fema = {"metadata": {"count": 2}, "IpawsArchivedAlerts": [
+        fema_record(same_id, "CEM", "Civil Emergency Message", "2026-10-16T01:23:59.000Z", "006037",
+                    "Due to the Bryson Fire, wildfires burning in the area can spread."),
+        fema_record("ARCH-ONLY-1", "FRW", "Fire Warning", "2026-10-15T23:30:00.000Z", "006037",
+                    "Brush fire near the 5 freeway. Evacuate now."),
+    ]}
+    r = client.get("/api/official/local-alerts", params={"incident": "2026-test-fire-abcdef", "at_ms": at})
+    assert r.status_code == 200 and contract_problems(LocalAlertsResponse, r.content) == []
+    d = r.json()
+    assert [c["status"] for c in d["channels"]] == ["available", "available"]
+    by_id = {a["id"]: a for a in d["alerts"]}
+    assert set(by_id) == {same_id, "ARCH-ONLY-1"} and len(d["alerts"]) == 2          # one alert per CAP id
+    assert by_id[same_id]["channel"] == "nws_api" and by_id[same_id]["archived"] is False
+    arch = by_id["ARCH-ONLY-1"]
+    assert arch["channel"] == "openfema_archive" and arch["archived"] is True and arch["match"] == "county"
+    assert arch["source_url"] == openfema.record_url("ARCH-ONLY-1") and arch["source_url"].startswith("https://")
+    assert all(a["source_url"].startswith("https://") for a in d["alerts"])
+    assert "sender" not in keys_anywhere(d)
+    assert any(c.startswith("Archived copy from FEMA (OpenFEMA, published about a day later)") for c in d["caveats"])
+    assert any(openfema.NOTICE in c for c in d["caveats"])
+    assert upstream.count("/alerts/active") == 0 and upstream.count("/alerts?") == 1 and upstream.count("IpawsArchivedAlerts") == 1
+
+
+def test_archive_path_answers_pending_within_5_s(upstream: Upstream, client: TestClient, tmp_data_dir: Path,
+                                                 monkeypatch) -> None:
+    import threading
+    import time
+
+    monkeypatch.setattr(official, "now_ms", lambda: iso_to_ms("2026-10-23T00:41:00Z"))
+    write_manifest(tmp_data_dir, "2025-black-cove-95c3c8", "historical", (-82.298, 35.286),
+                   [-82.40, 35.20, -82.20, 35.37], "2025-03-22T18:00:00Z", record_source="wfigs", state="NC")
+    upstream.fema_gate = threading.Event()
+    params = {"incident": "2025-black-cove-95c3c8", "at_ms": iso_to_ms("2025-03-23T18:00:00Z")}
+    t0 = time.monotonic()
+    d = client.get("/api/official/local-alerts", params=params).json()
+    assert time.monotonic() - t0 < 5.0 and openfema.REQUEST_WAIT_S < 5.0
+    assert d["channels"][1]["status"] == "pending" and d["alerts"] == []
+    assert d["status"] == "available" and d["channels"][0]["status"] == "not_checked"      # read the channels
+    assert d["channels"][1]["reason"] == "FEMA's archive is being fetched; ask again in a minute."
+    upstream.fema_gate.set()
+    for _ in range(100):
+        if not openfema._running:
+            break
+        time.sleep(0.05)
+    again = client.get("/api/official/local-alerts", params=params).json()
+    assert again["channels"][1]["status"] == "available" and upstream.count("IpawsArchivedAlerts") == 1

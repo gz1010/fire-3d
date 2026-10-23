@@ -15,17 +15,28 @@ identifiers are kept, never the operators' sender addresses.
 
 Every alert's ``source_url`` is the OpenFEMA query for that record, by its CAP ``identifier`` (:func:`record_url`).
 Requests go through :mod:`fire3d.http` (disk cache) behind :data:`OPENFEMA_LIMITER`.
+
+Never on the request path for long (:func:`ensure`): an incident's archive is one window covering its whole record
+(:func:`incident_window`), fetched once in a background thread (deduplicated per window) and stored, parsed, under
+``DATA_DIR/official/openfema/``. A request waits at most :data:`REQUEST_WAIT_S` for it and otherwise answers
+``pending``; a successful build fetches it right away (:func:`prefetch`, from ``build/pipeline.py``). A failed fetch
+is remembered for :data:`RETRY_AFTER_S`, so a broken upstream is not asked again on every request.
 """
 
 from __future__ import annotations
 
 import logging
 import re
+import threading
+import time
+from pathlib import Path
 from typing import Any, Iterable
 from urllib.parse import quote
 
+import orjson
 import shapely
 
+from .. import config
 from .. import http as fhttp
 from ..timeutil import DAY_MS, HOUR_MS, ms_to_dt, now_ms
 from . import nws
@@ -53,6 +64,11 @@ RETRIES = 1
 RECENT_TTL_S = 3600.0                  # a window that ended less than 3 days ago may still be filling
 PAST_TTL_S = 30 * 86400.0
 OPENFEMA_LIMITER = fhttp.RateLimiter(20, 60.0, "official: OpenFEMA")
+REQUEST_WAIT_S = 4.0                   # the request path never waits longer for the archive (CONTRACT 14.7: 5 s)
+RETRY_AFTER_S = 600.0                  # a failed window is not asked again for 10 min
+INCIDENT_SPAN_MAX_MS = 75 * DAY_MS     # one incident window covers at most this much (like the IEM archive)
+CACHE_SUBDIR = ("official", "openfema")
+CACHE_VERSION = 1
 _NAME = "FEMA's IPAWS archive (OpenFEMA)"
 _REFS_RE = re.compile(r"<(?:\w+:)?references>(.*?)</(?:\w+:)?references>", re.S)
 
@@ -233,3 +249,159 @@ def archived_alerts(at_ms: int, *, now: int | None = None, timeout: float = TIME
     a, b = archive_window(at_ms)
     recs, fetched, truncated = fetch_window(a, b, now=now, timeout=timeout)
     return parse_records(recs), fetched, truncated
+
+
+# ----------------------------------------------------------------------------------------------------------------
+# Incident windows, the disk cache and the background fetch (CONTRACT 14.7, us-pipeline cut-line item a)
+# ----------------------------------------------------------------------------------------------------------------
+_lock = threading.Lock()
+_running: dict[tuple[int, int], threading.Thread] = {}
+_failed: dict[tuple[int, int], tuple[float, str]] = {}
+
+
+def reset_state() -> None:
+    """Forget running fetches and remembered failures (tests)."""
+    with _lock:
+        _running.clear()
+        _failed.clear()
+
+
+def _floor_day(ms: int) -> int:
+    return int(ms) // DAY_MS * DAY_MS
+
+
+def _ceil_day(ms: int) -> int:
+    return -(-int(ms) // DAY_MS) * DAY_MS
+
+
+def incident_window(started_ms: int | None, end_ms: int | None, at_ms: int, now: int) -> tuple[int, int]:
+    """The archive window answering ``at_ms`` for an incident: its whole record ``[day(start − 1 d), day(end + 1 d)]``
+    (end = now for a fire that has not ended; at most 75 days; never past today's 00:00 UTC, since the archive is a
+    day late) when ``at_ms`` falls in it, so one fetch serves every replay time (and a live fire one fetch a day);
+    else the UTC days around :func:`archive_window`."""
+    today = _floor_day(now)
+    if started_ms:
+        lo = _floor_day(int(started_ms) - DAY_MS)
+        hi = min(_ceil_day(int(end_ms if end_ms else now) + DAY_MS), lo + INCIDENT_SPAN_MAX_MS, today)
+        if hi > lo and lo + nws.PAST_BEFORE_MS <= at_ms <= hi:
+            return lo, hi
+    a, b = archive_window(at_ms)
+    lo = _floor_day(a)
+    return lo, max(min(_ceil_day(b), today), lo + DAY_MS)
+
+
+def cache_file(window: tuple[int, int]) -> Path:
+    return Path(config.DATA_DIR).joinpath(*CACHE_SUBDIR, f"window_{window[0]}_{window[1]}.json")
+
+
+def _fresh(doc: dict, window: tuple[int, int], now: int) -> bool:
+    if doc.get("version") != CACHE_VERSION:
+        return False
+    age_s = (now - int(doc.get("fetched_ms") or 0)) / 1000.0
+    return age_s < window_ttl_s(window[1], now)
+
+
+def load_cached(window: tuple[int, int], now: int | None = None) -> dict | None:
+    """The stored archive of ``window`` (``{version, window, fetched_ms, truncated, alerts}``; alerts parsed, with
+    their ``_geom`` rebuilt), or None when missing, unreadable or stale."""
+    t = now if now is not None else now_ms()
+    p = cache_file(window)
+    try:
+        doc = orjson.loads(p.read_bytes())
+    except (OSError, orjson.JSONDecodeError):
+        return None
+    if not isinstance(doc, dict) or not _fresh(doc, window, t) or not isinstance(doc.get("alerts"), list):
+        return None
+    for a in doc["alerts"]:
+        a["_geom"] = nws.polygonal(a.get("polygon"))
+    return doc
+
+
+def store(window: tuple[int, int], alerts: list[dict], fetched_ms: int, truncated: bool) -> dict:
+    doc = {"version": CACHE_VERSION, "window": list(window), "fetched_ms": int(fetched_ms), "truncated": bool(truncated),
+           "alerts": [{k: v for k, v in a.items() if not k.startswith("_")} for a in alerts]}
+    try:
+        fhttp.atomic_write_bytes(cache_file(window), orjson.dumps(doc))
+    except OSError as e:   # a read-only data dir: the answer still serves this process via the http cache
+        log.warning("openfema: could not store %s: %s", cache_file(window).name, e)
+    for a, src in zip(doc["alerts"], alerts):
+        a["_geom"] = src.get("_geom")
+    return doc
+
+
+def fetch_and_store(window: tuple[int, int], *, now: int | None = None, timeout: float = TIMEOUT_S) -> dict:
+    """Fetch, parse and store one window (raises ``nws.SourceError`` / ``nws.SourceBusy``)."""
+    recs, fetched, truncated = fetch_window(window[0], window[1], now=now, timeout=timeout)
+    return store(window, parse_records(recs), fetched, truncated)
+
+
+def _run(window: tuple[int, int]) -> None:
+    try:
+        fetch_and_store(window)
+        with _lock:
+            _failed.pop(window, None)
+    except Exception as e:  # noqa: BLE001 - remembered and reported as "unavailable"
+        msg = str(e) if isinstance(e, nws.SourceError) else f"{_NAME} could not be reached (no response)"
+        log.info("openfema: window %s failed: %s", window, config.mask_secrets(e))
+        with _lock:
+            _failed[window] = (time.monotonic(), msg)
+    finally:
+        with _lock:
+            _running.pop(window, None)
+
+
+def start(window: tuple[int, int]) -> threading.Thread:
+    """Start (or join) the one background fetch of ``window``."""
+    with _lock:
+        th = _running.get(window)
+        if th is None:
+            th = threading.Thread(target=_run, args=(window,), name=f"openfema-{window[0]}", daemon=True)
+            _running[window] = th
+            th.start()
+    return th
+
+
+def ensure(window: tuple[int, int], *, wait_s: float | None = None, now: int | None = None) -> tuple[str, dict | None, str | None]:
+    """``("available", doc, None)`` from the disk cache; else starts the background fetch and waits at most
+    ``wait_s``: ``("available", doc, None)`` when it finished in time, ``("pending", None, None)`` otherwise;
+    ``("unavailable", None, reason)`` when the last fetch of this window failed less than 10 min ago."""
+    doc = load_cached(window, now)
+    if doc is not None:
+        return "available", doc, None
+    with _lock:
+        fail = _failed.get(window)
+    if fail is not None and time.monotonic() - fail[0] < RETRY_AFTER_S:
+        return "unavailable", None, fail[1]
+    th = start(window)
+    th.join(max(0.0, REQUEST_WAIT_S if wait_s is None else wait_s))
+    doc = load_cached(window, now)
+    if doc is not None:
+        return "available", doc, None
+    with _lock:
+        fail = _failed.get(window) if window not in _running else None
+    if fail is not None:
+        return "unavailable", None, fail[1]
+    return "pending", None, None
+
+
+def prefetch(started_ms: int | None, end_ms: int | None, *, now: int | None = None, timeout: float = TIMEOUT_S) -> bool:
+    """Fetch an incident's archive now (after a successful build), when part of its record is older than the 24 h
+    publication delay and the window is not stored yet. True when the window is stored. Never raises."""
+    t = now if now is not None else now_ms()
+    if not started_ms or int(started_ms) > t - ARCHIVE_DELAY_MS:
+        return False
+    window = incident_window(started_ms, end_ms, int(started_ms) + DAY_MS, t)
+    if load_cached(window, t) is not None:
+        return True
+    try:
+        fetch_and_store(window, now=t, timeout=timeout)
+        return True
+    except Exception as e:  # noqa: BLE001 - a build never fails over the archive
+        log.info("openfema: prefetch %s failed: %s", window, config.mask_secrets(e))
+        return False
+
+
+def answer(window: tuple[int, int], at_ms: int, doc: dict) -> list[dict]:
+    """The stored messages of ``doc`` sent in ``[at_ms − 24 h, at_ms + 1 h]`` (the replay window)."""
+    lo, hi = int(at_ms) - nws.PAST_BEFORE_MS, int(at_ms) + nws.PAST_AFTER_MS
+    return [a for a in doc.get("alerts") or [] if a.get("sent_ms") is not None and lo <= a["sent_ms"] <= hi]

@@ -9,7 +9,8 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
 | Milestone | Commit | State |
 |---|---|---|
 | M1 weather quota (§14.12.2) | `brief 3 us-pipeline: M1 weather quota` | done |
-| M3 NWS and local alerts (§14.6, §14.7) | `brief 3 us-pipeline: M3 national NWS and local alerts` | done (archive channel `not_checked` until the prefetch lands) |
+| M3 NWS and local alerts (§14.6, §14.7) | `brief 3 us-pipeline: M3 national NWS and local alerts` | done |
+| Cut-line (a) OpenFEMA prefetch | `brief 3 us-pipeline: M3 OpenFEMA archive channel` | done (done early, while waiting for `us-catalog` M3) |
 | M2 build anywhere (§14.2 gate, §14.12.3/5/6/8/10, §14.9.7) | - | waiting for `brief 3 us-catalog: M3` |
 | M4 smoke builds (§14.12.11) | - | after M2 |
 
@@ -70,7 +71,7 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
   live fuel moisture uses the month table (<reason>)".
 - `fire3d.types.BuildContext` gains `time_zone: str | None = None` and `require_hrrr: bool = False`.
 - Tests: `backend/tests/test_us_pipeline_quota.py` (34 tests).
-- Below the cut line, not built in M1: the weighted counter `open_meteo_usage()`, `OPEN_METEO_DAILY_SOFT_CAP` and the
+- Below the cut line, not built: the weighted counter `open_meteo_usage()`, `OPEN_METEO_DAILY_SOFT_CAP` and the
   hourly live refetch.
 
 ## §14.6 NWS fire weather nationally (as built, M3)
@@ -116,10 +117,25 @@ local officials' messages. This note replaces "append to §14" (CONTRACT §14.0)
   (TTL 10 min); older → `not_checked` "NWS keeps about 7 days of alerts."; the bbox form older than 2 h →
   `not_checked` "Past local alerts are checked for a chosen fire only."; NWS down → `unavailable` with "… that does
   not mean there were none."
-- Channel `openfema_archive` (M3): bbox form → `not_checked` "The FEMA archive is checked for a chosen fire only.";
+- Channel `openfema_archive`: bbox form → `not_checked` "The FEMA archive is checked for a chosen fire only.";
   `at_ms` within 24 h → `not_checked` "FEMA publishes its archive about a day later; messages of the last 24 hours
-  come from the National Weather Service."; older → `not_checked` "The FEMA archive is not checked in this version."
-  (until the background prefetch, cut-line item (a), lands; see below).
+  come from the National Weather Service."; older (incident form) → `openfema.ensure(incident_window(...))`:
+  `available` from the disk cache; on a miss one background fetch per window (deduplicated) and a wait of at most
+  `openfema.REQUEST_WAIT_S` = 4 s, then `pending` ("FEMA's archive is being fetched; ask again in a minute.");
+  `unavailable` ("… that does not mean there were none.") when the window's last fetch failed less than 10 min ago.
+  `official.ARCHIVE_ENABLED = True` (False gives the fallback `not_checked` "The FEMA archive is not checked in
+  this version."). When the archive channel is consulted the caveats add "Archived copy from FEMA (OpenFEMA, published
+  about a day later); FEMA does not validate message content. Replays can list more than was visible live." and
+  "FEMA IPAWS archive via OpenFEMA: This product uses the Federal Emergency Management Agency's OpenFEMA API, but is
+  not endorsed by FEMA."
+- Archive windows (`openfema.incident_window(started, end, at, now)`): one window per incident covering
+  `[day(start − 1 d), day(end + 1 d)]` (end = now for a live fire; at most 75 days; never past today 00:00 UTC), so
+  every replay time of a fire is served by one fetch; outside the record, the UTC days around `[at − 24 h, at + 1 h]`.
+  Stored parsed (no `_geom`, no `sender`) in `DATA_DIR/official/openfema/window_<lo>_<hi>.json`; fresh for 1 h when
+  the window ends within 3 days of now, else 30 days. The answer lists the stored messages sent in
+  `[at − 24 h, at + 1 h]` (`openfema.answer`), matched like the NWS ones (`place_local`).
+- After a successful build `pipeline.archive_prefetch(summary, manifest)` fetches the incident's window
+  synchronously (best effort, logged; never fails the build; skipped when the fire began less than 24 h ago).
 - Scope (`nws.local_in_scope`): FRW, EVI, SPW, CDW always; CEM and LAE only when the event, headline, description,
   instruction or WEA text matches `fire(s) | wildfire(s) | brush fire | grass fire | smoke | evacuat*`, after removing
   names that are not about a fire ("Fire Station", "Fire Department", "fire hydrant", "fireworks", "smoke
