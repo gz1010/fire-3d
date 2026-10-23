@@ -461,14 +461,15 @@ def tables_markdown(run_dir: Path, checks: list[dict]) -> str:
         out.append(f"| {f.n} | {f.name} ({f.state}, {f.region}; {f.time_zone}) | {len(f.main_starts_utc)} / {len(sc)} | "
                    f"**{_fmt(_mean(main_rows))}** | {_fmt(det)} | {_fmt(ign)} | {_fmt(abl)} | {_fmt(tot)} | "
                    f"{0 if og is None else og:,.0f} / {0 if fg is None else fg:,.0f} | {_fmt(ratio, 2)} | {gsi} | {hw} |")
-    out += ["", "| fire | start (UTC; local) | lead (h) | observed growth (ac) | forecast growth p50 (ac) | growth Sørensen | "
-            "total Sørensen |", "|---|---|---:|---:|---:|---:|---:|"]
+    out += ["", "| fire | start (UTC; local) | burned at the start (ac) | lead (h) | observed growth (ac) | "
+            "forecast growth p50 (ac) | growth Sørensen | total Sørensen |", "|---|---|---:|---:|---:|---:|---:|---:|"]
     for f in FIRES:
         for r in [r for r in _load_rows(run_dir, f.id, "main") or [] if "lead_h" in r]:
             st = r.get("start_utc") or ""
-            out.append(f"| {f.name} | {st} ({local_label(st, f.time_zone) if st else ''}) | {r['lead_h']:.0f} | "
-                       f"{r['observed_growth_acres']:,.0f} | {r['forecast_growth_acres']:,.0f} | {r['sorensen_growth']:.2f} | "
-                       f"{r['sorensen']:.2f} |")
+            at_start = float(r["observed_acres"]) - float(r["observed_growth_acres"])
+            out.append(f"| {f.name} | {st} ({local_label(st, f.time_zone) if st else ''}) | {at_start:,.0f} | "
+                       f"{r['lead_h']:.0f} | {r['observed_growth_acres']:,.0f} | {r['forecast_growth_acres']:,.0f} | "
+                       f"{r['sorensen_growth']:.2f} | {r['sorensen']:.2f} |")
     return "\n".join(out) + "\n"
 
 
