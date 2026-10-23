@@ -38,9 +38,20 @@ rewritten as this instance's own log).
   14.9.3 script; 14.12.1/2/8/9/10/11), regenerated plan3-roles.json (cut lines in every role, schedule, reviews,
   validation `owns_bugfix_only`), updated PLAN-3.md (schedule, commits, reviews, cut lines, integration checklist,
   appendix B rerun, Revision notes). Ownership check: wave 1 466 paths, 0 clashes; wave 2 69 paths, 0 clashes.
+- ~00:40-01:40 (second revision pass): received the critics' remaining 19 problems (items 23-41) in full. Checked
+  each against the code: firms.py loaders and their callers (`pipeline.py:655`, `api/live.py:138/:163`), the live loop
+  (`auto_build_done`, `auto_build`), weather.py (`ERA5_DELAY_DAYS`, `ENSEMBLE_URL`, the GFS fill at `:388-393`), the
+  moisture fallbacks (`ensemble.py:307-315`, `weather_bundle.py:393-396`), the fixed ensemble seeds, `FireCard.tsx`
+  `.fc-official`, `nws.py:418` (`@id`), V §3's relative starts and reserves, and the evacuations audit's 6 % `web`
+  links. 2 were already fixed by the first pass (23, 28; small additions), 17 were fixed, none was rejected (34 partly
+  wrong: auto-build runs once per loop start). Revised CONTRACT §14 (14.0 wording scan; 14.1 `aliases`; 14.2 complex
+  and id pinning; 14.4 in-sample templates, `gfs_fill_hours`, the label outside `.fc-official`; 14.5 complex reason
+  and member links; 14.7 `source_url`; 14.11/14.14 list absence; 14.12.1/2/7/10/11), plan3-roles.json (acceptance
+  checks for FIRMS, RX/CX, quota, links, GSI, the California re-run; cut-line moves), and PLAN-3.md (revision notes,
+  second pass). Ownership check: wave 1 475 paths, 0 clashes; wave 2 77 paths; no glob changed.
 
 ## Open problems
-- Roles are sized at about 4-5 h each above their cut lines (above the 3-4 h target); every role now has an explicit
-  cut line with fallbacks, and the overflow is on the integration checklist.
-- Critic items 24-41 were not received in the revision pass.
+- Roles are sized at about 4.5-5 h each above their cut lines (us-catalog about 5 h), above the 3-4 h target; every
+  role has an explicit cut line with fallbacks, and the overflow is on the integration checklist.
+- Validation grew to about 6.5-8.5 h (the California re-run after GSI, the live GSI input).
 - RUNBOOK-3 still shows a plain `git commit`; the orchestrator should use the pathspec form of CONTRACT §14.0.

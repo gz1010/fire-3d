@@ -29,15 +29,19 @@
     "Live fuel moisture outside California stays California's table (with a bundle warning) until the validation role lands the pre-registered GSI method in wave 2.",
     "Backend-generated text with a clock time is 24-hour with the fire's zone ('Jan 07, 18:18 MST'), so Public shows those few baked strings in 24-hour form.",
     "NWCG agency-code terms and wording are not yet verified (us-catalog task).",
-    "Revision pass: the critics' problem list was truncated after item 23 of 41; items 24-41 were not reviewed.",
-    "RUNBOOK-3 (not the planner's file) still shows a plain 'git commit' and 'append to section 14'; PLAN-3 and CONTRACT 14.0 override both, and the orchestrator should use their wording in the role prompts."
+    "First revision pass: the critics' problem list was truncated after item 23 of 41; the second revision pass received items 23-41 in full and handled all of them (see 'revision2').",
+    "RUNBOOK-3 (not the planner's file) still shows a plain 'git commit' and 'append to section 14'; PLAN-3 and CONTRACT 14.0 override both, and the orchestrator should use their wording in the role prompts.",
+    "Second pass sizes: us-catalog about 5 h above its cut line (the top of the 4-5 h range); validation grew to 6.5-8.5 h (California re-run after GSI, live GSI input, per-fire weather records)."
   ],
   "notes_for_integrator": [
     "Fold docs/redesign/contract3/*.md into CONTRACT section 14 as 'as built' sub-headings; apply us-pipeline's SPEC section 8 text.",
     "Pass tf at every remaining cross-role call (14.9.6), make the shims' tf required, run node web/scripts/check-time-api.mjs web/src (must be 0), then delete the deprecated Pacific time API (14.9.3).",
     "Make IncidentSummary uid, record_source, record_issuer, state, time_zone and IncidentListResponse.sources required in web/src/api/types.ts; update fixtures (summaryFixture()).",
     "Carry-over: web/src/data/rasters.test.ts tests (useRasterSet reload on key change, one layer above the 256 MiB cap stays cached, two names sharing one URL keep their names) if us-web left them below its cut line; also W11 windowing and W15 phone fixes if left; W16 comment clean-up if time allows.",
-    "README.md rows come from CONTRACT 14.13 (final verification)."
+    "README.md rows come from CONTRACT 14.13 (final verification).",
+    "Extend the contracts <-> TS parity test to the official shapes in web/src/official/types.ts (IncidentRecordResponse, LocalAlertsResponse/LocalAlert incl. source_url, the FireWeatherResponse/FireWeatherAlert additions); us-catalog covers web/src/api/types.ts (PLAN-3 checklist item 3).",
+    "Wording scan over the whole brief (PLAN-3 checklist item 4a): added lines of git diff 1c500b1 -- web/src backend/fire3d (non-test) searched for \\bsafe\\b|low risk|all[- ]clear|Fire[T]race; justify or fix every hit. Final verification repeats it.",
+    "New cut-line items that may reach the integration: nwcg_agency_codes.json and id pinning (us-catalog), W14 reprojection tests and the location card's accuracy line (us-web), the SkillEntry.growth_sorensen writer and the 3rd smoke build or recorded NoData test (us-pipeline)."
   ],
   "revision": {
     "date": "2026-10-22/23 (UTC)",
@@ -114,6 +118,62 @@
       "Give the first free slot to us-pipeline; queue reviewers and fixers after it; never run a 4th agent.",
       "Reviewers work in a clean worktree and write review3-<label> report and screenshots (PLAN-3 'Reviews').",
       "Ask the critics for items 24-41 if they matter; this pass did not receive them."
+    ]
+  },
+  "revision2": {
+    "date": "2026-10-23 (UTC)",
+    "summary": "Second revision pass on the critics' remaining 19 problems (items 23-41 of 41: 5 major, 14 minor), received in full. Each was checked against the code, the audits and the plan. 2 were already fixed by the first pass (items 23 and 28; small additions made), 17 were fixed now, none was rejected outright (item 34 was partly wrong: auto-build runs once per loop start, so it never retries each cycle; its other points were confirmed). No role, port or start order changed; no ownership glob changed; four items moved below cut lines to keep the roles near their size target. PLAN-3.md 'Revision notes' has a 'Second pass' section with one entry per problem.",
+    "problems_received": 19,
+    "verdicts": {
+      "23 CA complex row (major)": "already fixed (first pass item 23). Added: the complex-specific not_covered reason, member names linked on the card with CAL FIRE's heading and numbers, tests in us-catalog/us-web/us-official that a complex never shows a member's record or numbers as its own.",
+      "24 national FIRMS acceptance (major)": "fixed. Confirmed pipeline.py:655 and api/live.py:138/:163 use load_live_ca. us-catalog checks: lower-48 box (TX/FL/ME kept, 0.5 deg beyond the borders kept, HI/AK dropped), load_year_us with filters= and never a CA file, national live-loop candidates (non-CA fire, cap 4, 100 ac/48 h), detections_24h on /api/live/status; us-pipeline: refresh_live on load_live_us and > 0 detections per smoke build.",
+      "25 GSI outside California (major)": "fixed. Confirmed ERA5_DELAY_DAYS = 6 and the silent fallbacks (ensemble.py:307-315, weather_bundle.py:393-396). CONTRACT 14.12.10: switch on summary.state; historical inputs ERA5, live inputs forecast host past_days=28, both pre-registered; never-silent fallback with a named moisture note; require_hrrr fails on a refused GSI series (non-CA) or water-year total (CA, us-pipeline M1); interim warning until it lands. Acceptance: every non-CA fire lfm_method gsi_nfdrs2016, Madre has precip_wy_mm. No label change: the Command line describes the hindcasts (14.4 now says so).",
+      "26 CA unchanged after GSI (major)": "fixed. Validation step 2 ends with a re-run of Eaton, Madre and Palisades that must equal step 1 (|delta| < 0.001; seeds fixed at ensemble.py:325), side by side; a unit test of unchanged (herb, woody) values for Eaton, Palisades, Madre and fixture-demo; OSCC uses the re-run.",
+      "27 link on every local alert (major)": "fixed. Confirmed (web on about 6 % of messages, evacuations audit 2.2). LocalAlert.source_url always set (NWS @id as brief 2's FireWeatherAlert.url at nws.py:418; the OpenFEMA query by identifier); card shows web else source_url; an alert without an https link is dropped and counted; tests in us-pipeline and us-official.",
+      "28 nws_api past window (minor)": "already fixed (first pass item 7: /alerts?start=&end= for 2 h to 7 days back). Added us-pipeline tests for 12 h and 30 h ago.",
+      "29 untestable rules (minor)": "fixed. Offline us-catalog tests on recorded rows (RX, CX parent, non-CA complex member); curl no longer claims '0 prescribed burns'; the Alaska 422 with the 14.14 sentence through the CLI and POST /build (us-pipeline).",
+      "30 relative starts (minor)": "fixed. Confirmed (V 3 rows 4, 8, 11). The pre-registration commit lists absolute UTC starts for all 12 fires from WFIGS FireDiscoveryDateTime; secondary ignition-relative times likewise.",
+      "31 replacement, in-sample, build count (minor)": "fixed. Pre-registered replacement rule (failed bundle check only, before any score, next reserve of the same region; Southern Plains has none -> limited), 'replaced' per fire, in_sample for regions informing an adopted change, the count restated (13 builds incl. the two force-rebuilds).",
+      "32 OSCC literal numbers (minor)": "fixed. OSCC uses the general templates filled from the file plus a fixed in-sample sentence for any in_sample region; us-web fixture test.",
+      "33 label inside .fc-official (minor)": "fixed. Confirmed FireCard.tsx .fc-official 'CAL FIRE official record'. 14.4 places the label outside it next to .fc-note; DOM test.",
+      "34 quota for live builds, ensemble host (minor)": "partly confirmed. Auto-build runs once per loop start (STATE.auto_build_done, api/live.py:430), so no per-cycle retry; but remaining candidates would each try, live builds had no rule and the probe skipped ENSEMBLE_URL (weather.py:51). 14.12.2: per-host block until the reset with no network call, live builds fail with the message, refused refresh keeps last weather with a warning, ensemble fallback keeps its reason, probe adds ensemble and a 'live' status (exit code still from overall). All in us-pipeline's files.",
+      "35 smoke builds and the quota (minor)": "fixed. Stop rule (wait only if the reset is < 1 h away, else 'pending (quota)'; the us-pipeline fixer or validation builds them; reviewers never build); 3rd-build fallback: a unit test on a recorded LF2025 NoData window (below the cut line).",
+      "36 GFS fill hours (minor)": "fixed. Confirmed (weather.py:388-393). AccuracyFire gains gfs_fill_hours, weather_source, replaced; validation reports and justifies fill hours; smoke builds report them.",
+      "37 parity coverage (minor)": "fixed. us-catalog's parity test covers every shape in web/src/api/types.ts; the official shapes (us-official's official/types.ts) are checked by the integration (checklist item 3), as the critic allowed, so no cross-role test fails in wave 1.",
+      "38 thin CA visual checks (minor)": "fixed. us-web baselines before its first change (Eaton and Palisades Command, Eaton Forensic) compared with after-shots; new Palisades Command, Eaton Forensic and fixture-east Forensic screenshots.",
+      "39 unstable ids when CAL FIRE lists late (minor)": "fixed in the contract (14.2 'Id pinning': an existing bundle keeps its WFIGS id, the CAL FIRE id becomes an alias, both resolve, a build by the alias is 409; IncidentSummary.aliases). Placed below us-catalog's cut line; fallback: the old bundle stays reachable by its old link.",
+      "40 banned words (minor)": "fixed. Wording scan of each role's added lines in every role's gates (CONTRACT 14.0), integration item 4a and final verification; added lines only, because existing code uses 'safe area' for layout (about 60 such hits today).",
+      "41 list absence (minor)": "fixed. 14.14 list-absence sentence in the legend, list footer and empty view, short form in the phone peek (14.11, us-web M2 and tests)."
+    },
+    "role_changes": {
+      "roles_ports_start_order": "unchanged (us-catalog 8711/5181, us-web 8712/5182, us-official 8713/5183 first batch; us-pipeline 8714/5184 first free slot; validation 8716 wave 2)",
+      "ownership": "no glob changed; 11 new planned paths all fall under existing globs",
+      "moved_below_cut_lines": [
+        "us-catalog: nwcg_agency_codes.json (fallback: agency codes verbatim); id pinning (fallback: old link still works)",
+        "us-web: W14 reprojection tests zones 12-19 (P1; fallback: alignment in fixture-east and smoke screenshots); the location card's accuracy line (fire card keeps it)",
+        "us-pipeline: SkillEntry.growth_sorensen writer (V-R13, P1; fallback: relabelled total only); the 3rd smoke build now falls back to a recorded NoData test"
+      ],
+      "estimates": {
+        "us-catalog": "about 5 h above the cut line (was 4.5-5)",
+        "us-web": "4.5-5 h (unchanged)",
+        "us-official": "4.5-5 h (unchanged)",
+        "us-pipeline": "4.5-5 h plus build time (was 4-4.5; M1 grows to about 60 min)",
+        "validation": "6.5-8.5 h (was 6-8)"
+      },
+      "schedule": "unchanged, plus the smoke builds' stop rule: no slot is held waiting for an Open-Meteo reset"
+    },
+    "ownership_check": "PLAN-3 appendix B script over 861 tracked files plus 78 planned new paths: wave 1 owns 475 paths (us-catalog 71, us-web 219, us-official 99, us-pipeline 86), 0 clashes, 0 empty globs; wave 2 (validation) 77 paths, 0 clashes; code without a wave-1 owner: the three package __init__.py files and the wave-2-only backend/scripts/validate_regional.py.",
+    "files": [
+      "docs/redesign/PLAN-3.md",
+      "docs/redesign/CONTRACT.md (section 14)",
+      "docs/redesign/plan3-roles.json",
+      "docs/redesign/progress/brief3-planner.md",
+      "docs/redesign/reports/brief3-planner.json"
+    ],
+    "notes_for_orchestrator": [
+      "No role, port or start-order change; role prompts can be generated from plan3-roles.json as before.",
+      "Tell us-pipeline's fixer that it may run the smoke builds after an Open-Meteo reset if us-pipeline reported them 'pending (quota)' (CONTRACT 14.12.11); reviewers never build.",
+      "Final verification: run weather-probe and check 'live: ok' before the national live-loop cycle; repeat the wording scan (PLAN-3 item 4a)."
     ]
   }
 }
