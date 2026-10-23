@@ -354,9 +354,10 @@ def run_hindcast(fid: str, what: str, out_dir: Path, workers: int | None = None)
 # Collection: fires.json for ``fire3d.spread.validate regional`` and the markdown tables of docs/validation.md 10
 # ----------------------------------------------------------------------------------------------------------------
 REGION_CAVEATS: dict[str, list[str]] = {
-    "NWCC": ["Lower Sugarloaf's run has no perimeter between Sep 17 and Sep 21: its truth is timed by VIIRS only."],
-    "SACC-SP": ["Windy Deuce scores only the second day (65 % of its final area burned by the first perimeter).",
-                "Rush's first perimeter already held 46 % of the final area; its first leads are timed by VIIRS."],
+    "NWCC": ["Lower Sugarloaf has no perimeter from Sep 19 to Sep 22 during its run: its later leads are timed by "
+             "satellite detections."],
+    "SACC-SP": ["Windy Deuce's run is timed by satellite detections: WFIGS has one perimeter during it.",
+                "Rush's first two starts come before its first perimeter; their leads are timed by satellite detections."],
 }
 COMMON_CAVEAT = "Two fires: a rough value (about ±0.05)."
 

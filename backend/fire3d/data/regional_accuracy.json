@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "generated_ms": 1792762376963,
+  "generated_ms": 1792763445678,
   "model": {
     "engine": "pyretechnics 2026.8.10",
-    "settings": "config.FORECAST_* (multiplier 0.5 with the 12 h decay, held inactive perimeter, growth-coincident activity) @ 9cf2936"
+    "settings": "config.FORECAST_* (multiplier 0.5 with the 12 h decay, held inactive perimeter, growth-coincident activity) @ b501d96"
   },
   "method": {
     "metric": "growth_sorensen",
@@ -68,7 +68,7 @@
       ],
       "caveats": [
         "Two fires: a rough value (about ±0.05).",
-        "Lower Sugarloaf's run has no perimeter between Sep 17 and Sep 21: its truth is timed by VIIRS only."
+        "Lower Sugarloaf has no perimeter from Sep 19 to Sep 22 during its run: its later leads are timed by satellite detections."
       ],
       "fires": [
         {
@@ -330,8 +330,8 @@
       ],
       "caveats": [
         "Two fires: a rough value (about ±0.05).",
-        "Windy Deuce scores only the second day (65 % of its final area burned by the first perimeter).",
-        "Rush's first perimeter already held 46 % of the final area; its first leads are timed by VIIRS."
+        "Windy Deuce's run is timed by satellite detections: WFIGS has one perimeter during it.",
+        "Rush's first two starts come before its first perimeter; their leads are timed by satellite detections."
       ],
       "fires": [
         {
