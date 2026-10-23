@@ -1,0 +1,99 @@
+{
+ "role": "validation",
+ "summary": "Validation outside California is done. Madre was rebuilt and California re-measured: the 31-member p50 before GSI (pre-GSI worktree at 29f0e2d) equals docs/validation.md 5.1 to the third decimal (Eaton 0.438, Madre 0.395, Palisades 0.467, 32 leads 0.438), and after the GSI code it equals that run exactly (max |delta| 0.0 on every lead). The pre-registration (12 fires, absolute UTC starts incl. ignition + 6/12/24 h, GSI method with parameters and both inputs, replacement rule) was committed (29f0e2d) before any score outside California. GSI (NFDRS 2016 Growing Season Index, NFDRS4 defaults) is implemented for fires outside California with the backend-only sim/lfm_gsi.json, a never-silent fallback and --require-hrrr failing on a refused series; California's values and notes are unchanged (tested). All 12 fires were built with --require-hrrr (0 ERA5 and 0 GFS-filled hours each) and pass every bundle check; none was replaced. One build bug was found and fixed (catalog AOI sizing ignored WFIGS perimeters outside California; Windy Deuce's AOI clipped the fire), with a regression test and before/after values for every fire. Results (mean of fire means, 31-member p50 growth Sorensen): Northwest 0.255, Northern Rockies 0.341, Great Basin 0.247, Southwest 0.351, Southern Plains 0.394, Southeast 0.193; Southern California 0.433 (in-sample); Rocky Mountain, Eastern and Northern California untested. Outside California the model usually forecasts too little growth (8 of 12 fires); a faster multiplier helps those fires but lowers California, so nothing was adopted. GSI fixes the California table's failure on February grass (Windy Deuce 0.021 -> 0.302) and is neutral elsewhere. backend/fire3d/data/regional_accuracy.json is written by validate regional and served by /api/accuracy-regions.",
+ "files": [
+  "backend/fire3d/config.py (GSI_* parameters, LFM_FORCE_CALIFORNIA)",
+  "backend/fire3d/spread/moisture.py (GSI functions)",
+  "backend/fire3d/spread/behavior.py (per-day GSI in the behaviour annotation)",
+  "backend/fire3d/spread/ensemble.py (fallback members use live_moisture_detail)",
+  "backend/fire3d/spread/validate.py (absolute starts, region_status/fire_score/region_accuracy/regional_accuracy, CLI regional, --lfm california, live-start --until)",
+  "backend/fire3d/sources/weather.py (gsi_inputs, gsi_daily_rows)",
+  "backend/fire3d/build/weather_bundle.py (sim/lfm_gsi.json, live_moisture_detail, gsi_at, never-silent fallback, require_hrrr failure, INTERIM_LFM_NOTE text)",
+  "backend/fire3d/catalog.py (bug fix: AOI sizing by the WFIGS identity)",
+  "backend/fire3d/data/regional_accuracy.json (written by the validation tooling)",
+  "backend/scripts/validate_us_fires.py (pre-registered FIRES, starts, checks, hindcast, collect, tables)",
+  "backend/tests/test_gsi.py (new, 40)",
+  "backend/tests/test_regional_accuracy.py (new, 9)",
+  "backend/tests/test_regional_accuracy_script.py (new, 5)",
+  "backend/tests/test_spread_validate.py (+2 tests, live-start until)",
+  "backend/tests/test_firedata_catalog.py (+1 regression test)",
+  "backend/tests/test_us_pipeline_quota.py (1 test adapted to GSI)",
+  "backend/tests/test_us_catalog_records.py (seed test adapted to the validation-written file)",
+  "docs/validation.md (summary bullet, section 10.1-10.11)",
+  "docs/redesign/contract3/validation.md",
+  "docs/redesign/progress/brief3-validation.md",
+  "docs/redesign/reports/brief3-validation.json"
+ ],
+ "verification": {
+  "backend_tests": "cd backend && uv run pytest -q -> 975 passed (58 s)",
+  "web_gates": "cd web && npm run typecheck (0) && npm run lint (0 errors, 55 warnings, all in src/scene) && npm test (75 files, 1173 passed, 2 skipped) && npm run build (ok); no web file changed by this role",
+  "pre_registration_order": "git log --format='%h %s' -- docs/validation.md: 807d309 (M4 results) after e408707 (M3 California only) after 29f0e2d (M1 pre-registration: absolute UTC starts for all 12 fires, both GSI inputs, the replacement rule)",
+  "california_baseline": "31-member p50, docs 5.1 starts: step 1 (pre-GSI worktree 29f0e2d) Eaton 0.4379 / Madre 0.3949 / Palisades 0.4670, 32 leads 0.4381, per lead 0.349/0.432/0.481/0.490, ratio 1.85; step 2 (post-GSI) identical on all 32 leads (max |delta| 0.0); deterministic Eaton 0.432 / Madre 0.392 / Palisades 0.458 (= docs 6.3)",
+  "builds": [
+   "2025-black-cove-95c3c8: final build ended 06:29:03Z in 30 s after probe [06:28:33Z forecast=unreachable historical-forecast=ok archive=ok overall=unreachable]; checks ok=True, area ratio 1.077, perimeters 17 (6 in growth), LF2024, UTM 17, weather open-meteo:historical-forecast:gfs_hrrr HRRR 339 h / GFS fill 0 h / ERA5 0 h, cells >2 km outside final perimeter 0",
+   "2025-madre-fire-01e7e8: final build ended 06:43:34Z in 398 s after probe [06:36:56Z forecast=ok historical-forecast=ok archive=ok overall=ok]; California baseline: 225 h HRRR, 0 GFS fill, 0 ERA5, 81,938 ac (ratio 1.014 vs CAL FIRE), sim/antecedent.json precip_wy_mm 207.0",
+   "2025-emigrant-241e2b: final build ended 08:16:39Z in 539 s after probe [08:07:40Z forecast=ok historical-forecast=ok archive=ok overall=ok]; checks ok=True, area ratio 0.989, perimeters 11 (8 in growth), LF2024, UTM 10, weather open-meteo:historical-forecast:gfs_hrrr HRRR 424 h / GFS fill 0 h / ERA5 0 h, cells >2 km outside final perimeter 0",
+   "2025-island-creek-ff270c: final build ended 07:03:21Z in 1099 s after probe [06:45:01Z forecast=ok historical-forecast=ok archive=unreachable overall=unreachable]; checks ok=True, area ratio 1.008, perimeters 23 (19 in growth), LF2024, UTM 11, weather open-meteo:historical-forecast:gfs_hrrr HRRR 937 h / GFS fill 0 h / ERA5 0 h, cells >2 km outside final perimeter 0",
+   "2025-france-canyon-7d16d1: final build ended 07:26:06Z in 1346 s after probe [07:03:39Z forecast=ok historical-forecast=unreachable archive=ok overall=unreachable]; checks ok=True, area ratio 1.009, perimeters 16 (11 in growth), LF2024, UTM 12, weather open-meteo:historical-forecast:gfs_hrrr HRRR 529 h / GFS fill 0 h / ERA5 0 h, cells >2 km outside final perimeter 0",
+   "2025-cottonwood-peak-a3ba9f: final build ended 08:29:59Z in 427 s after probe [08:22:52Z forecast=ok historical-forecast=ok archive=ok overall=ok]; checks ok=True, area ratio 1.011, perimeters 11 (8 in growth), LF2024, UTM 11, weather open-meteo:historical-forecast:gfs_hrrr HRRR 332 h / GFS fill 0 h / ERA5 0 h, cells >2 km outside final perimeter 0",
+   "2025-greer-a746c6: final build ended 08:34:52Z in 74 s after probe [08:33:37Z forecast=ok historical-forecast=ok archive=ok overall=ok]; checks ok=True, area ratio 1.036, perimeters 11 (7 in growth), LF2024, UTM 12, weather open-meteo:historical-forecast:gfs_hrrr HRRR 270 h / GFS fill 0 h / ERA5 0 h, cells >2 km outside final perimeter 0",
+   "2024-windy-deuce-b972cf: final build ended 08:07:36Z in 145 s after probe [08:05:11Z forecast=unreachable historical-forecast=unreachable archive=ok overall=unreachable]; checks ok=True, area ratio 1.04, perimeters 9 (1 in growth), LF2023, UTM 14, weather open-meteo:historical-forecast:gfs_hrrr HRRR 214 h / GFS fill 0 h / ERA5 0 h, cells >2 km outside final perimeter 0",
+   "2025-table-rock-20616f: final build ended 08:37:30Z in 135 s after probe [08:35:16Z forecast=ok historical-forecast=ok archive=unreachable overall=unreachable]; checks ok=True, area ratio 1.005, perimeters 15 (8 in growth), LF2024, UTM 17, weather open-meteo:historical-forecast:gfs_hrrr HRRR 341 h / GFS fill 0 h / ERA5 0 h, cells >2 km outside final perimeter 0",
+   "2024-rush-641e3e: final build ended 08:02:59Z in 99 s after probe [08:01:20Z forecast=ok historical-forecast=ok archive=unreachable overall=unreachable]; checks ok=True, area ratio 1.015, perimeters 5 (3 in growth), LF2024, UTM 14, weather open-meteo:historical-forecast:gfs_hrrr HRRR 230 h / GFS fill 0 h / ERA5 0 h, cells >2 km outside final perimeter 0",
+   "2025-lower-sugarloaf-569fb7: final build ended 08:22:48Z in 364 s after probe [08:16:44Z forecast=ok historical-forecast=ok archive=ok overall=ok]; checks ok=True, area ratio 1.006, perimeters 36 (29 in growth), LF2024, UTM 10, weather open-meteo:historical-forecast:gfs_hrrr HRRR 967 h / GFS fill 0 h / ERA5 0 h, cells >2 km outside final perimeter 0",
+   "2025-trout-4fd248: final build ended 08:33:33Z in 196 s after probe [08:30:17Z forecast=unreachable historical-forecast=ok archive=ok overall=unreachable]; checks ok=True, area ratio 1.008, perimeters 16 (12 in growth), LF2024, UTM 12, weather open-meteo:historical-forecast:gfs_hrrr HRRR 363 h / GFS fill 0 h / ERA5 0 h, cells >2 km outside final perimeter 0",
+   "2024-horse-gulch-889237: final build ended 08:57:37Z in 52 s after probe [08:56:45Z forecast=ok historical-forecast=ok archive=ok overall=ok]; checks ok=True, area ratio 1.01, perimeters 20 (12 in growth), LF2023, UTM 12, weather open-meteo:historical-forecast:gfs_hrrr HRRR 346 h / GFS fill 0 h / ERA5 0 h, cells >2 km outside final perimeter 0"
+  ],
+  "earlier_build_attempts": [
+   "Black Cove 04:20-04:22 warm-up with pre-GSI code (ready, replaced)",
+   "Emigrant 04:36-04:39 failed (historical-forecast refused part-way)",
+   "Black Cove 04:40 failed (GSI request refused)",
+   "Emigrant 06:29-06:30 failed (non-JSON HRRR chunk)",
+   "pre-fix builds later rebuilt: Lower Sugarloaf 06:36, Emigrant 06:44, Cottonwood Peak 07:40, Trout 07:50, Greer 07:54, Windy Deuce 07:57 (failed checks: area 0.78, AOI edge), Table Rock 08:01",
+   "Horse Gulch rebuilt 08:01 by another session, then by validation 08:56-08:57 into a scratch DATA_DIR and swapped in"
+  ],
+  "regions": [
+   "NWCC tested: n_fires 2, n_leads 24, growth_sorensen 0.255, range [0.231, 0.279], ignition_relative 0.167, in_sample False",
+   "NRCC tested: n_fires 2, n_leads 24, growth_sorensen 0.341, range [0.189, 0.492], ignition_relative 0.313, in_sample False",
+   "GBCC tested: n_fires 2, n_leads 28, growth_sorensen 0.247, range [0.218, 0.275], ignition_relative 0.213, in_sample False",
+   "SWCC tested: n_fires 2, n_leads 32, growth_sorensen 0.351, range [0.348, 0.355], ignition_relative 0.304, in_sample False",
+   "SACC-SP tested: n_fires 2, n_leads 24, growth_sorensen 0.394, range [0.299, 0.49], ignition_relative 0.397, in_sample False",
+   "SACC-SE tested: n_fires 2, n_leads 24, growth_sorensen 0.193, range [0.174, 0.212], ignition_relative 0.14, in_sample False",
+   "RMCC untested: n_fires 0, n_leads None, growth_sorensen None, range None, ignition_relative None, in_sample None",
+   "EACC untested: n_fires 0, n_leads None, growth_sorensen None, range None, ignition_relative None, in_sample None",
+   "ONCC untested: n_fires 0, n_leads None, growth_sorensen None, range None, ignition_relative None, in_sample None",
+   "OSCC tested: n_fires 3, n_leads 32, growth_sorensen 0.433, range [0.395, 0.467], ignition_relative 0.403, in_sample True"
+  ],
+  "api": "FIRE3D_LIVE=0 uvicorn on 8716: GET /api/accuracy-regions -> 200, Cache-Control no-cache, schema_version 1, 10 regions, same content as the file (None fields omitted); GET /api/incidents/2025-greer-a746c6 summary accuracy_region SWCC; non-GET requests in the API log: 0 (grep -cE '\"(POST|PUT|PATCH|DELETE) ')",
+  "key_scan": "count-only: 387 scratch logs/outputs + 4 committed files: 0 occurrences of the FIRMS key value; 135 bundle JSON files: 0",
+  "wording_scan": "git diff 02a4e00 -- (owned non-test sources, regional_accuracy.json, docs/validation.md, contract3/validation.md) | grep '^+' | grep -inE '\\bsafe\\b|low risk|all[- ]clear|Fire[T]race' -> no hits",
+  "frame_rate": "not measured (no GPU; not meaningful here)"
+ },
+ "screenshots": [],
+ "contract_deviations": [
+  "Build gate: builds started when historical-forecast or the archive answered the probe, not only on overall ok (the forecast host is not used by historical builds); --require-hrrr made them fail rather than fill, so every scored bundle has 0 ERA5 / 0 GFS-filled hours and an ERA5 GSI series.",
+  "14.12.10 day length: NFDRS4's own formula (CalcDayl, MT-CLIM constants, DAYSOFF 10.25); Open-Meteo daylight_duration is fetched and stored for audit only.",
+  "14.12.10 inputs: hourly temperature_2m and relative_humidity_2m aggregated to the fire's local days (Tmin, Tmax, RHmin), not Open-Meteo daily aggregates; models=era5 on the archive.",
+  "14.12.10 window: the series covers start - 28 d through the end of the bundle's weather window, so later hindcast starts use their own 21 days.",
+  "Outside California the water-year request is still made best-effort (no warning while GSI applies): it serves the never-silent fallback and the ablation.",
+  "INTERIM_LFM_NOTE text is now the 14.12.10 wording 'Live fuel moisture: California's seasonal values (GSI series unavailable); experimental.' (wave 1 said 'regional method not tested yet').",
+  "Herb treated as perennial (no NFDRS4 annual curing state), no snow-day flag (pre-registered).",
+  "fuel_groups_tested is computed from the LANDFIRE FBFM40 families of each fire's burned area (words grass/shrub/timber with >= 25 %); OSCC now reads grass, shrub (the seed said chaparral, grass)."
+ ],
+ "known_issues": [
+  "Outside California the CA-fitted multiplier (0.5 decaying to 0.05) under-predicts most fires; a regional setting needs more fires (10.7). Not adopted by rule.",
+  "The perimeter reader dates re-edited WFIGS polygons by their edit time: Windy Deuce's 93,622 ac polygon is used at Feb 28 18:50 (the audit timed it Feb 27 06:23), so its run is timed by VIIRS; Lower Sugarloaf's perimeter gap differs from the audit's. Reported, not changed after the scores.",
+  "Two fires per region: rough values (NRCC fires 0.19 and 0.49).",
+  "Pseudo-live growth Sorensen 0.23 (12 fires, 531 leads), below the label 0.30; live forecasts will do worse.",
+  "Tooling incident: a scratch file named queue.py shadowed the stdlib in one comparison run (redone), and one 'pkill -f multiprocessing.spawn' at about 08:04Z may have stopped other sessions' spawn workers too (none visible afterwards); kills are by PID since.",
+  "data/incidents now holds 13 more bundles (about 300 MB; gitignored)."
+ ],
+ "notes_for_integrator": [
+  "SPEC 8.4 (not validation's file): replace the interim bullet with the GSI paragraph:\nSPEC §8.4, replace the bullet \"Outside California these California values are used as an interim ...\" with:\n  - Outside California (`summary.state != \"CA\"`) live fuel moisture follows the NFDRS 2016 Growing Season Index\n    (Jolly et al. 2005; the default parameters of the USFS reference code NFDRS4): daily GSI = iTmin · iVPD · iDayl\n    with iTmin 0 at −2 °C .. 1 at 5 °C (daily minimum temperature), iVPD 1 at 900 Pa .. 0 at 4100 Pa (VPD =\n    es(Tmax) · (1 − max(RHmin, 5 %)/100), es = 610.7 · exp(17.38 T / (239 + T)) Pa), iDayl 0 at 10 h .. 1 at 11 h (MT-CLIM\n    day length); the GSI at a forecast start is the mean of the 21 local days before the start's day (all 21 required),\n    scaled by MaxGSI 1.0; below the green-up threshold 0.5 herb 0.30 and woody 0.60, above it linear to herb 2.50 and\n    woody 2.00 at GSI 1. Inputs: hourly 2 m temperature and humidity at the fire, aggregated to the fire's local days,\n    from the Open-Meteo ERA5 archive (`models=era5`, historical builds: start − 28 d through the end of the weather\n    window) or the forecast host's `past_days=28` (live builds); stored in the backend-only `sim/lfm_gsi.json`\n    (hindcasts never fetch). The forecast note reads \"live fuel moisture herb H%, woody W%: NFDRS 2016 growing season\n    index G (mean of the 21 days A..B; source)\". `config.GSI_*`. California keeps the month table and drought rule.\n  - Never silent: a bundle outside California without the series (refused or failed request, or fewer than 21 days\n    before a start) uses California's values with the manifest warning \"Live fuel moisture outside California uses\n    California's seasonal values until a regional method is tested; experimental.\" and the forecast note prefix \"Live\n    fuel moisture: California's seasonal values (GSI series unavailable); experimental.\"; `build --require-hrrr` fails\n    instead. docs/validation.md section 10 reports the method's test on 12 fires.\n",
+  "CONTRACT 14.4 as built: regional_accuracy.json is written by `python -m fire3d.spread.validate regional fires.json --out ...` (fires.json from scripts/validate_us_fires.py collect); no seed key; all six test regions tested; OSCC in_sample true, others false.",
+  "Bug fix in a us-catalog file under validation's permission: backend/fire3d/catalog.py _estimate passes record_source/state/irwin_id for WFIGS rows (regression test test_estimate_fire_bbox_matches_a_wfigs_fire_by_irwin_id). Effect listed in docs/validation.md 10.9.",
+  "Tests of other roles adapted: tests/test_us_pipeline_quota.py::test_water_year_refused_outside_california_is_a_warning_even_with_flag (GSI applies outside CA), tests/test_us_catalog_records.py::test_accuracy_regions_seed (no seed; statuses by rule).",
+  "Web wording: the fuel caveat will read 'Tested on grass, shrub and timber fires only; other fuels here are untested.' for NRCC, GBCC and SWCC; worth a look in the integration screenshots.",
+  "Consider (later brief) the re-edited-polygon timing rule in sources/perimeters.py for fires like Windy Deuce."
+ ]
+}
