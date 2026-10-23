@@ -237,8 +237,9 @@ export interface NwsAlert {
   /** Fire-3d only (never from the backend): the alert left the live NWS feed before its end time; when it was last
    *  checked missing. */
   dropped_ms?: number | null
-  /** Brief 3 (CONTRACT §14.6): IANA zone of the alert's area (its first zone's outline, else its state's main zone). */
-  time_zone?: string | null
+  /** Brief 3 (CONTRACT §14.6; required since the integration): IANA zone of the alert's area (its first zone's outline,
+   *  else its state's main zone); null when neither is known. */
+  time_zone: string | null
 }
 
 export type GeoPolygon = { type: 'Polygon'; coordinates: number[][][] } | { type: 'MultiPolygon'; coordinates: number[][][][] }
@@ -268,10 +269,10 @@ export interface FireWeatherResponse extends OfficialEnvelope {
   caveats?: string[]
   kind?: string
   incident_id?: string | null
-  /** Brief 3 (CONTRACT §14.6): the states this answer actually covers (USPS codes; the overview: all 49 of the lower 48
-   *  + DC once the national request is live). Missing (an older backend asking `area=CA`) is read as `["CA"]`;
-   *  `[]` = nothing was checked (NWS could not be reached). */
-  states_checked?: string[] | null
-  /** Brief 3: the states with at least one alert in this answer. */
-  alert_states?: string[] | null
+  /** Brief 3 (CONTRACT §14.6; required since the integration): the states this answer actually covers (USPS codes;
+   *  the overview: all 49 of the lower 48 + DC); `[]` = nothing was checked (NWS could not be reached, or a point
+   *  outside the lower 48). A cached answer of an older backend without it is still read as `["CA"]`. */
+  states_checked: string[]
+  /** Brief 3 (required since the integration): the states with at least one alert in this answer. */
+  alert_states: string[]
 }

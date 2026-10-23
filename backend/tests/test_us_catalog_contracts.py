@@ -81,7 +81,23 @@ def test_given_fields_are_never_overwritten() -> None:
 
 def test_wfigs_summary_without_issuer_never_defaults_to_calfire() -> None:
     s = IncidentSummary.model_validate({**OLD_SUMMARY, "calfire_uid": "", "record_source": "wfigs"})
-    assert s.record_issuer is None and s.agency is None and s.active_sources == []
+    # the 14.2 issuer rule (integration: record_issuer is always sent): no agency code -> "NIFC WFIGS (IRWIN)"
+    assert s.record_issuer == "NIFC WFIGS (IRWIN)" and s.agency is None and s.active_sources == []
+    coded = IncidentSummary.model_validate({**OLD_SUMMARY, "calfire_uid": "", "record_source": "wfigs", "agency_code": "USFS"})
+    assert coded.record_issuer == "USFS via NIFC WFIGS"
+    assert "CAL FIRE" not in dump(s)["record_issuer"] + dump(coded)["record_issuer"]
+
+
+def test_the_five_r_fields_are_always_in_the_dump() -> None:
+    """Integration (CONTRACT 14.1): uid, record_source, record_issuer, state and time_zone are required in
+    web/src/api/types.ts, so every dump carries them, filled on read for old manifests; state is null off the US."""
+    for raw in (OLD_SUMMARY, {**OLD_SUMMARY, "lat": 19.5, "lon": -155.5}, {**OLD_SUMMARY, "lat": 49.5, "lon": -30.0}):
+        d = dump(IncidentSummary.model_validate(raw))
+        for k in FILLED_ON_READ:
+            assert k in d, (k, raw["lat"])
+        assert isinstance(d["time_zone"], str) and d["time_zone"], raw["lat"]
+    off = dump(IncidentSummary.model_validate({**OLD_SUMMARY, "lat": 49.5, "lon": -30.0}))   # mid-Atlantic
+    assert off["state"] is None and "state" in off and off["time_zone"]
 
 
 def test_time_zone_is_never_assumed_pacific_without_a_location_rule() -> None:
@@ -92,12 +108,15 @@ def test_time_zone_is_never_assumed_pacific_without_a_location_rule() -> None:
 # ------------------------------------------------------------------------------------------------------------------
 # New models and defaulted additions (14.0)
 # ------------------------------------------------------------------------------------------------------------------
-def test_defaulted_additions_are_optional_and_omitted() -> None:
-    assert not LiveStatus.model_fields["detections_24h"].is_required()
-    assert not IncidentListResponse.model_fields["sources"].is_required()
-    assert not FireWeatherResponse.model_fields["states_checked"].is_required()
-    assert not FireWeatherResponse.model_fields["alert_states"].is_required()
-    assert not FireWeatherAlert.model_fields["time_zone"].is_required()
+def test_r_fields_are_required_since_the_integration() -> None:
+    """CONTRACT 14.0: the wave-1 (R) defaults of the response models become required once every producer sends
+    them (the integration). SkillEntry.growth_sorensen stays optional: forecast manifests built before brief 3 lack it.
+    The IncidentSummary additions keep a default (old manifests are filled on read)."""
+    assert LiveStatus.model_fields["detections_24h"].is_required()
+    assert IncidentListResponse.model_fields["sources"].is_required()
+    assert FireWeatherResponse.model_fields["states_checked"].is_required()
+    assert FireWeatherResponse.model_fields["alert_states"].is_required()
+    assert FireWeatherAlert.model_fields["time_zone"].is_required()
     assert not SkillEntry.model_fields["growth_sorensen"].is_required()
     for name, f in IncidentSummary.model_fields.items():
         if name in ("uid", "record_source", "record_issuer", "state", "time_zone", "agency", "agency_code", "irwin_id",
@@ -105,9 +124,13 @@ def test_defaulted_additions_are_optional_and_omitted() -> None:
                     "complex_name", "complex_members", "aliases"):
             assert not f.is_required(), name
     st = {"last_refresh_ms": None, "next_refresh_ms": None, "active_incidents": 3, "detections_24h_ca": 12, "auto_build": False}
-    assert contract_problems(LiveStatus, st) == []
-    assert "detections_24h" not in dump(LiveStatus.model_validate(st))
+    assert contract_problems(LiveStatus, st) == ["detections_24h: Field required"]
+    assert contract_problems(LiveStatus, {**st, "detections_24h": None}) == []
+    assert dump(LiveStatus.model_validate({**st, "detections_24h": None}))["detections_24h"] is None
     assert contract_problems(LiveStatus, {**st, "detections_24h": 140}) == []
+    lst = {"mode": "live", "updated_ms": 1, "incidents": []}
+    assert contract_problems(IncidentListResponse, lst) == ["sources: Field required"]
+    assert contract_problems(IncidentListResponse, {**lst, "sources": []}) == []
 
 
 def test_official_kinds_and_reason_codes_are_widened() -> None:
@@ -203,6 +226,11 @@ def _py_fields(model: type[BaseModel]) -> dict[str, bool]:
     return {name: not f.is_required() for name, f in model.model_fields.items()}
 
 
+# IncidentSummary fields that are required in TS but keep a Python default: old manifests lack them and the
+# after-validator fills them on read, so every response carries them (test_the_five_r_fields_are_always_in_the_dump).
+FILLED_ON_READ = ("uid", "record_source", "record_issuer", "state", "time_zone")
+
+
 TS = _ts_interfaces(_strip_comments(TYPES_TS.read_text())) if TYPES_TS.is_file() else {}
 PAIRS = [
     ("IncidentSummary", IncidentSummary), ("OtherRecord", OtherRecord), ("ListSource", ListSource),
@@ -219,6 +247,9 @@ def test_types_ts_parity(ts_name: str, model: type[BaseModel]) -> None:
     if ts_name == "IncidentSummary":
         ts.pop("bbox_lonlat")           # list rows only: Python IncidentListRow.bbox_lonlat
         assert "aliases" in ts and "aliases" in py
+        for k in FILLED_ON_READ:
+            assert ts[k][0] is False, f"IncidentSummary.{k} must be required in TS (CONTRACT 14.1 (R))"
+            py[k] = False
     assert set(ts) == set(py), f"{ts_name}: only TS {sorted(set(ts) - set(py))}, only Python {sorted(set(py) - set(ts))}"
     for name, (optional, _) in ts.items():
         assert optional == py[name], f"{ts_name}.{name}: TS optional={optional}, Python optional={py[name]}"
@@ -245,3 +276,58 @@ def test_types_ts_parity_inline_objects() -> None:
     assert "RecordSource = 'calfire' | 'wfigs'" in TYPES_TS.read_text()
     ids = re.search(r"AccuracyRegionId =([^\n]*)", TYPES_TS.read_text()).group(1)
     assert set(re.findall(r"'([A-Z-]+)'", ids)) == set(IncidentSummary.model_fields["accuracy_region"].annotation.__args__[0].__args__)
+
+
+# ------------------------------------------------------------------------------------------------------------------
+# contracts.py <-> web/src/official/types.ts parity (integration, PLAN-3 checklist item 3): the brief-3 official shapes
+# ------------------------------------------------------------------------------------------------------------------
+OFFICIAL_TS_PATH = config.REPO_ROOT / "web" / "src" / "official" / "types.ts"
+OFFICIAL_TS = _ts_interfaces(_strip_comments(OFFICIAL_TS_PATH.read_text())) if OFFICIAL_TS_PATH.is_file() else {}
+# brief 2's official types (official-web) keep the envelope's kind / incident_id / caveats optional and fill
+# defaults in their normalize functions; the brief-3 shapes follow the Python models field for field otherwise.
+ENVELOPE_LENIENT = {"kind", "incident_id", "caveats"}
+OFFICIAL_PAIRS = [
+    ("IncidentRecordResponse", IncidentRecordResponse), ("IncidentRecordCurrent", None), ("LocalAlert", None),
+    ("LocalChannelStatus", None), ("LocalAlertsResponse", LocalAlertsResponse),
+]
+
+
+def _official_fields(ts_name: str) -> dict[str, tuple[bool, str]]:
+    m = re.search(rf"export interface {ts_name}(?:\s+extends\s+(\w+))?", _strip_comments(OFFICIAL_TS_PATH.read_text()))
+    assert m, ts_name
+    out = dict(_ts_fields(OFFICIAL_TS[m.group(1)])) if m.group(1) else {}
+    out.update(_ts_fields(OFFICIAL_TS[ts_name]))
+    return out
+
+
+@pytest.mark.skipif(not OFFICIAL_TS, reason="web/src/official/types.ts not found")
+@pytest.mark.parametrize("ts_name", [p[0] for p in OFFICIAL_PAIRS])
+def test_official_types_ts_parity(ts_name: str) -> None:
+    from fire3d import contracts
+
+    model = dict(OFFICIAL_PAIRS)[ts_name] or getattr(contracts, ts_name)
+    ts = _official_fields(ts_name)
+    py = _py_fields(model)
+    assert set(ts) == set(py), f"{ts_name}: only TS {sorted(set(ts) - set(py))}, only Python {sorted(set(py) - set(ts))}"
+    for name, (optional, _) in ts.items():
+        if optional and name in ENVELOPE_LENIENT:
+            continue
+        assert optional == py[name], f"{ts_name}.{name}: TS optional={optional}, Python optional={py[name]}"
+
+
+@pytest.mark.skipif(not OFFICIAL_TS, reason="web/src/official/types.ts not found")
+def test_official_types_ts_brief3_additions() -> None:
+    """The 14.6 additions (required since the integration) and the 14.7 alert fields the web relies on."""
+    fw = _official_fields("FireWeatherResponse")
+    for k in ("states_checked", "alert_states"):
+        assert fw[k][0] is False and FireWeatherResponse.model_fields[k].is_required(), k
+        assert "null" not in fw[k][1], k
+    alert = _official_fields("NwsAlert")
+    assert alert["time_zone"][0] is False and FireWeatherAlert.model_fields["time_zone"].is_required()
+    # every Python FireWeatherAlert field is in the TS NwsAlert (TS adds the web-only dropped_ms)
+    assert set(FireWeatherAlert.model_fields) <= set(alert), sorted(set(FireWeatherAlert.model_fields) - set(alert))
+    assert set(alert) - set(FireWeatherAlert.model_fields) == {"dropped_ms"}
+    local = _official_fields("LocalAlert")
+    assert local["source_url"] == (False, "string")
+    assert "MultiPolygon" in OFFICIAL_TS_PATH.read_text() and local["polygon"][1] == "GeoPolygon | null"
+    assert set(_official_fields("LocalAlertsResponse")["kind"][1].strip("'").split("' | '")) == {"local_alerts"}

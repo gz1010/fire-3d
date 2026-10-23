@@ -85,7 +85,9 @@ def _fill_summary_defaults(s: IncidentSummary) -> None:
     calfire_uid``, ``record_source "calfire"``, ``record_issuer "CAL FIRE"``, ``agency "CAL FIRE"``, ``source_name <-
     name``, ``active_sources ["calfire"] if is_active else []``, and ``state`` / ``time_zone`` from the location
     (``regions.state_at`` / ``regions.time_zone_at``; fallback the state's main zone, then "UTC"; never
-    America/Los_Angeles by default). Only fields the input did not give are filled (``model_fields_set``).
+    America/Los_Angeles by default). Only fields the input did not give are filled (``model_fields_set``). A NIFC
+    WFIGS summary without an issuer gets the 14.2 issuer text from its ``agency_code`` ("USFS via NIFC WFIGS", else
+    "NIFC WFIGS (IRWIN)"), never "CAL FIRE".
 
     Runs after validation (not as a before-validator), so strict JSON checks keep their JSON semantics."""
     given = s.model_fields_set
@@ -95,8 +97,10 @@ def _fill_summary_defaults(s: IncidentSummary) -> None:
     cal = s.record_source == "calfire"
     if "uid" not in given:
         put("uid", s.calfire_uid)
-    if "record_issuer" not in given and cal:
-        put("record_issuer", "CAL FIRE")
+    if "record_issuer" not in given or s.record_issuer is None:
+        # CONTRACT 14.2 issuer rule (catalog.record_issuer): never CAL FIRE for a NIFC WFIGS record
+        code = (s.agency_code or "").strip()
+        put("record_issuer", "CAL FIRE" if cal else (f"{code} via NIFC WFIGS" if code else "NIFC WFIGS (IRWIN)"))
     if "agency" not in given and cal:
         put("agency", "CAL FIRE")
     if "source_name" not in given:
@@ -145,13 +149,14 @@ class IncidentSummary(ContractModel):
     detections_24h: int | None          # live only
     bundle_status: BundleStatus
     bundle_built_ms: int | None
-    # Brief 3 additions (CONTRACT 14.1). All defaulted in wave 1 (14.0); the (R) ones become required at the
-    # integration. The before-validator fills old manifests and fixtures, so responses always carry them.
-    uid: str | None = Optional_()                       # (R) CAL FIRE UniqueId, or IRWIN id (upper case, no braces)
-    record_source: RecordSource | None = Optional_()    # (R) whose record this row is; absent = "calfire"
-    record_issuer: str | None = Optional_()             # (R) "CAL FIRE" | "USFS via NIFC WFIGS" | "NIFC WFIGS (IRWIN)"
-    state: str | None = Optional_()                     # (R) USPS code of the point of origin (48 + "DC")
-    time_zone: str | None = Optional_()                 # (R) IANA zone of the reported location, never assumed
+    # Brief 3 additions (CONTRACT 14.1). The five (R) fields are required in web/src/api/types.ts since the
+    # integration; here they keep a default because old manifests and fixtures lack them, and the after-validator
+    # (_fill_summary_defaults) fills them on read, so every dump and every response carries them (never omitted).
+    uid: str | None = None                              # (R) CAL FIRE UniqueId, or IRWIN id (upper case, no braces)
+    record_source: RecordSource | None = None           # (R) whose record this row is; absent on read = "calfire"
+    record_issuer: str | None = None                    # (R) "CAL FIRE" | "USFS via NIFC WFIGS" | "NIFC WFIGS (IRWIN)"
+    state: str | None = None                            # (R) USPS code of the point of origin (48 + "DC"); null off-US
+    time_zone: str | None = None                        # (R) IANA zone of the reported location, never assumed
     agency: str | None = None                           # protecting agency, plain name; "CAL FIRE" for CAL FIRE rows
     agency_code: str | None = None                      # protecting-agency code, verbatim ("USFS", "C&L")
     irwin_id: str | None = None                         # WFIGS rows; CAL FIRE rows matched to ONE WFIGS fire
@@ -512,7 +517,7 @@ class IncidentListResponse(ContractModel):
     updated_ms: int
     incidents: list[IncidentListRow]
     year: int | None = Optional_()      # historical lists: the year listed
-    sources: list[ListSource] | None = Optional_()   # (R) brief 3: which source lists answered (14.1)
+    sources: list[ListSource]           # brief 3 (14.1): which source lists answered; required since the integration
 
 
 class IncidentDetailResponse(ContractModel):
@@ -542,7 +547,7 @@ class LiveStatus(ContractModel):
     active_incidents: int
     detections_24h_ca: int | None       # kept for one release (brief 3)
     auto_build: bool
-    detections_24h: int | None = Optional_()   # (R) brief 3: FIRMS feed rows of the last 24 h in the lower-48 states
+    detections_24h: int | None          # brief 3 (14.1): FIRMS feed rows of the last 24 h in the lower-48 states
 
 
 # ----------------------------------------------------------------------------------------------------------------
@@ -734,7 +739,7 @@ class FireWeatherAlert(ContractModel):
     nearest_km: float | None
     archived: bool
     phase: AlertPhase
-    time_zone: str | None = Optional_()   # (R) brief 3 (14.6): IANA zone of the alert's first zone, else its state's
+    time_zone: str | None               # brief 3 (14.6): IANA zone of the alert's first zone, else its state's
 
 
 class FireWeatherResponse(OfficialEnvelope):
@@ -742,8 +747,8 @@ class FireWeatherResponse(OfficialEnvelope):
     zones: dict[str, Any]               # GeoJSON FeatureCollection; properties ugc, name, alert_ids
     area_bbox: tuple[float, float, float, float] | None
     reported_location: tuple[float, float] | None    # lon, lat
-    states_checked: list[str] | None = Optional_()   # (R) brief 3 (14.6): the states this answer covers; absent = ["CA"]
-    alert_states: list[str] | None = Optional_()     # (R) brief 3 (14.6): the states with at least one alert here
+    states_checked: list[str]           # brief 3 (14.6): the states this answer covers ([] = none could be checked)
+    alert_states: list[str]             # brief 3 (14.6): the states with at least one alert here
 
 
 # ----------------------------------------------------------------------------------------------------------------
@@ -816,7 +821,7 @@ class LocalAlert(ContractModel):
     area_desc: str | None
     same_codes: list[str]
     ugcs: list[str]
-    polygon: dict[str, Any] | None      # GeoJSON Polygon
+    polygon: dict[str, Any] | None      # GeoJSON Polygon, or MultiPolygon when an archived message had several areas
     match: Literal["polygon", "county"]
     covers_reported_location: bool | None
     nearest_km: float | None
