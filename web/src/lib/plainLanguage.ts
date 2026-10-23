@@ -9,7 +9,8 @@ import type { EnsembleKind, ForecastManifest, Mode } from '../api/types'
 import type { LatticeField } from '../state/store'
 import type { Units } from '../state/workspace'
 import { CHAIN_M, FT_PER_M, MPH_PER_MS, cardinal, satelliteName } from './format'
-import { HOUR_MS, fmtDateTime, fmtDateTimeYear, fmtRelative, tzLabel } from './time'
+import { getTimeFormat } from '../state/timeZone'
+import { HOUR_MS, fmtAt, fmtRelative, zoneAbbr, type TimeFmt } from './time'
 
 export interface PlainValue {
   /** Primary everyday text, e.g. "0.4 mph". "—" when unknown. */
@@ -188,21 +189,22 @@ type ForecastPeriodInput = Pick<ForecastManifest, 'start_ms' | 'horizon_h'>
 
 export const forecastEndMs = (f: ForecastPeriodInput): number => f.start_ms + f.horizon_h * HOUR_MS
 
-const when = (ms: number) => `${fmtDateTime(ms)} ${tzLabel(ms)}`
+const when = (ms: number, tf: TimeFmt) => fmtAt(ms, tf, { zone: true })
 
-/** The period a forecast covers: "Jan 8, 00:18 – Jan 11, 00:18 PST (72 h)" (both zones when DST changes inside). */
-export function forecastPeriod(f: ForecastPeriodInput): string {
+/** The period a forecast covers in the fire's zone and the preset's clock: "Jan 8, 00:18 – Jan 11, 00:18 PST (72 h)"
+ *  (both zones when DST changes inside). `tf` defaults to `getTimeFormat()` (the open fire's zone). */
+export function forecastPeriod(f: ForecastPeriodInput, tf: TimeFmt = getTimeFormat()): string {
   const end = forecastEndMs(f)
-  const z0 = tzLabel(f.start_ms)
-  const z1 = tzLabel(end)
-  return `${fmtDateTime(f.start_ms)}${z0 !== z1 ? ` ${z0}` : ''} – ${fmtDateTime(end)} ${z1} (${f.horizon_h} h)`
+  const z0 = zoneAbbr(f.start_ms, tf.tz)
+  const z1 = zoneAbbr(end, tf.tz)
+  return `${fmtAt(f.start_ms, tf)}${z0 !== z1 ? ` ${z0}` : ''} – ${fmtAt(end, tf)} ${z1} (${f.horizon_h} h)`
 }
 
 /** Burn probability for its real period (the whole horizon, never "next 24 h"):
  *  "12% of model runs (4 of 31) burned this spot by Jan 11, 00:18 PST (72 h after Jan 8, 00:18 PST)". */
-export function burnProbabilityText(fraction: number, f: ForecastPeriodInput, members?: number): string {
+export function burnProbabilityText(fraction: number, f: ForecastPeriodInput, members?: number, tf: TimeFmt = getTimeFormat()): string {
   const end = forecastEndMs(f)
-  const period = `by ${when(end)} (${f.horizon_h} h after ${when(f.start_ms)})`
+  const period = `by ${when(end, tf)} (${f.horizon_h} h after ${when(f.start_ms, tf)})`
   const n = members != null && members > 0 ? members : null
   if (!(fraction > 0)) return `None of the ${n != null ? `${n} ` : ''}model runs burned this spot ${period}`
   const pct = fraction >= 1 ? '100%' : fraction > 0.995 ? 'Over 99%' : fraction < 0.005 ? 'Under 1%' : `${Math.round(fraction * 100)}%`
@@ -285,17 +287,18 @@ export const keepUnits = (s: string): string => s.replace(/(\d) (h|min|days)\b/g
 export function forecastDescription(
   f: Pick<ForecastManifest, 'start_ms' | 'horizon_h' | 'issued_ms' | 'weather'>,
   mode: Mode,
-  opts: { plain?: boolean } = {},
+  opts: { plain?: boolean; tf?: TimeFmt } = {},
 ): ForecastDescription {
+  const tf = opts.tf ?? getTimeFormat()
   const end = forecastEndMs(f)
   const n = f.weather.members
   const hind = mode === 'historical'
   return {
     title: keepUnits(`${hind ? (opts.plain ? 'Model re-run on past weather' : 'Hindcast') : 'Spread forecast'} (${f.horizon_h} h)`),
-    period: keepUnits(forecastPeriod(f)),
-    issued: hind ? `Model re-run ${fmtDateTimeYear(f.issued_ms)} ${tzLabel(f.issued_ms)}, after the fire, to compare with what happened` : `Issued ${when(f.issued_ms)}`,
+    period: keepUnits(forecastPeriod(f, tf)),
+    issued: hind ? `Model re-run ${fmtAt(f.issued_ms, tf, { year: 'always', zone: true })}, after the fire, to compare with what happened` : `Issued ${when(f.issued_ms, tf)}`,
     runs: ensemblePhrase(f.weather.ensemble, n),
-    probability: `Chances are shares of the ${n} model runs. Inside the period the map shades where at least 10%, 50% or 90% of the runs had reached by the time shown; a spot's burn chance covers the whole period, until ${when(end)}. They describe this model ensemble, not a guarantee.`,
+    probability: `Chances are shares of the ${n} model runs. Inside the period the map shades where at least 10%, 50% or 90% of the runs had reached by the time shown; a spot's burn chance covers the whole period, until ${when(end, tf)}. They describe this model ensemble, not a guarantee.`,
     uncertainty: EXPLAIN.arrivalQuantiles,
     weather: weatherSourceName(f.weather.source),
     caveat: EXPLAIN.experimental,
@@ -376,6 +379,177 @@ export function sourceName(raw: string | null | undefined): string {
   if (/terrain\s*\+\s*observed arrival/i.test(s)) return `Fire-3d analysis (${/3DEP/i.test(s) ? 'USGS 3DEP terrain' : 'terrain'} + reconstructed spread)${tag}`
   if (/^CAL FIRE\s*\+\s*FIRMS GOES$/i.test(s)) return `CAL FIRE report + NASA FIRMS (GOES)${tag}`
   if (/^CAL FIRE\b/i.test(s)) return `CAL FIRE${tag}`
+  // brief 3 (§14.12.5): bundle text names the record's issuer ("USFS via NIFC WFIGS", "NIFC WFIGS (IRWIN)")
+  const issuer = s.match(/^(\S+ via NIFC WFIGS|NIFC WFIGS \(IRWIN\))(.*)$/i)
+  if (issuer) {
+    const rest = issuer[2].trim()
+    if (/^\+\s*FIRMS GOES$/i.test(rest)) return `${issuer[1]} report + NASA FIRMS (GOES)${tag}`
+    return `${issuer[1]}${tag}`
+  }
   if (/WFIGS/i.test(s)) return `${s.replace(/\bContainmentDateTime\b/, 'containment record')}${tag}`
   return `${s}${tag}`
+}
+
+// ------------------------------------------------------------------------------------------------- accuracy (§14.4)
+// The per-region accuracy label of the experimental model (brief 3 decision 3; round 2 item 7: words in Public with the
+// score one tap away, the score in Command). Every number comes from the regional file (GET /api/accuracy-regions);
+// none is written into a template, OSCC included. A clause whose value the file lacks is left out, never guessed.
+// Never "accurate", "reliable", "safe" or "low risk".
+
+/** Always shown under the label. */
+export const ACCURACY_ALWAYS = 'Outside the modeled area is unknown, not low.'
+export const ACCURACY_UNTESTED = 'Accuracy not yet tested here.'
+export const ACCURACY_LIMITED = 'Tested on only 1 past fire in this region: too few for a score.'
+export const ACCURACY_IN_SAMPLE_PUBLIC = "The model's settings were tuned on these same fires, so this is a best case."
+export const ACCURACY_IN_SAMPLE_COMMAND = 'in-sample: settings fitted on these fires'
+
+/** The parts of the regional file the label reads (AccuracyRegion and the file's method). */
+export interface AccuracyRegionInput {
+  id: string
+  name: string
+  status: 'tested' | 'limited' | 'untested'
+  in_sample?: boolean
+  /** The California seed of §14.4 (docs/validation.md baseline, its starts not pre-registered for this file). */
+  seed?: boolean
+  n_fires: number
+  n_leads?: number
+  growth_sorensen?: number | null
+  range?: [number, number] | null
+  by_lead?: Record<string, number>
+  growth_ratio_median?: number | null
+  years?: number[]
+  lfm_method?: string
+  fuels_editions?: string[]
+  fuel_groups_tested?: string[]
+  fires?: { growth_sorensen: number; n_leads: number }[]
+}
+export interface AccuracyMethodInput {
+  leads_h?: number[]
+  starts?: string
+}
+
+export interface AccuracyLabel {
+  status: 'tested' | 'limited' | 'untested'
+  /** Public's line ("Tested on 2 past fires in this region (2024-2025; grass fires)."). */
+  publicLine: string
+  /** Public's "How was it tested?" text (tested regions only). */
+  publicDetail: string | null
+  /** Command's line (the score with its counts, or the limited / untested words). */
+  commandLine: string
+  /** "Tested on timber fires only; other fuels here are untested." whenever the file lists the fuels tested. */
+  fuelCaveat: string | null
+  /** ACCURACY_ALWAYS. */
+  always: string
+}
+
+/** The live fuel moisture method in words. */
+export function lfmMethodWords(m: string | null | undefined): string | null {
+  if (!m) return null
+  if (m === 'gsi_nfdrs2016') return 'GSI'
+  if (m === 'ca_month_table_drought') return 'California seasonal values, drought-adjusted'
+  if (m === 'ca_month_table') return 'California seasonal values'
+  return m
+}
+
+/** "a", "a and b", "a, b and c". */
+export function listWords(xs: readonly string[]): string {
+  const v = xs.map((x) => x.trim()).filter(Boolean)
+  if (v.length <= 1) return v[0] ?? ''
+  return `${v.slice(0, -1).join(', ')} and ${v[v.length - 1]}`
+}
+
+/** "2025", "2024-2025". */
+export function yearsWords(ys: readonly number[] | null | undefined): string | null {
+  const v = [...new Set((ys ?? []).filter((y) => Number.isFinite(y)))].sort((a, b) => a - b)
+  if (!v.length) return null
+  return v.length === 1 ? String(v[0]) : `${v[0]}-${v[v.length - 1]}`
+}
+
+const num = (x: number | null | undefined): x is number => typeof x === 'number' && Number.isFinite(x)
+const d1 = (x: number) => x.toFixed(1)
+const d2 = (x: number) => x.toFixed(2)
+/** A growth ratio as few digits as needed: 1.85 → "1.85", 2.1 → "2.1". */
+const ratio2 = (x: number) => String(Number(x.toFixed(2)))
+
+/** The lead hours tested: "+12-72 h" from the region's by_lead keys, else the file's method. */
+function leadSpan(r: AccuracyRegionInput, method: AccuracyMethodInput | null | undefined): string | null {
+  const keys = Object.keys(r.by_lead ?? {})
+    .map(Number)
+    .filter((x) => Number.isFinite(x))
+  const leads = keys.length ? keys : (method?.leads_h ?? []).filter((x) => Number.isFinite(x))
+  if (!leads.length) return null
+  const lo = Math.min(...leads)
+  const hi = Math.max(...leads)
+  return lo === hi ? `+${lo} h` : `+${lo}-${hi} h`
+}
+
+/** "about 2.1× too much growth" / "about 60% of the real growth" (Public, one decimal). */
+function growthWords(ratio: number): string {
+  if (ratio >= 1.05) return `It usually predicted about ${d1(ratio)}× too much growth.`
+  if (ratio > 0.95) return 'It usually predicted about as much growth as really happened.'
+  const pct = Math.round(ratio * 100)
+  return `It usually predicted about ${pct >= 45 && pct <= 55 ? 'half' : `${pct}%`} of the real growth.`
+}
+
+/** The accuracy label of a fire's region (CONTRACT §14.4). `region` null: an unassigned or untested region. */
+export function accuracyLabel(region: AccuracyRegionInput | null | undefined, method?: AccuracyMethodInput | null): AccuracyLabel {
+  const fuels = region?.fuel_groups_tested?.filter((f) => f.trim()) ?? []
+  const fuelCaveat = region && region.status !== 'untested' && fuels.length ? `Tested on ${listWords(fuels)} fires only; other fuels here are untested.` : null
+  if (!region || region.status === 'untested' || !(region.n_fires > 0)) {
+    return {
+      status: 'untested',
+      publicLine: ACCURACY_UNTESTED,
+      publicDetail: null,
+      commandLine: region?.name ? `${ACCURACY_UNTESTED} No past fires in the ${region.name} region have been re-run.` : ACCURACY_UNTESTED,
+      fuelCaveat: null,
+      always: ACCURACY_ALWAYS,
+    }
+  }
+  if (region.status === 'limited') {
+    const f = region.fires?.[0]
+    const bits = [f && num(f.growth_sorensen) ? `that fire ${d2(f.growth_sorensen)}` : null, f && num(f.n_leads) ? `${f.n_leads} leads` : null].filter(Boolean)
+    return {
+      status: 'limited',
+      publicLine: ACCURACY_LIMITED,
+      publicDetail: null,
+      commandLine: bits.length ? `${ACCURACY_LIMITED} [${bits.join(', ')}; not a regional score]` : ACCURACY_LIMITED,
+      fuelCaveat,
+      always: ACCURACY_ALWAYS,
+    }
+  }
+  // tested
+  const n = region.n_fires
+  const fires = `${n} past fire${n === 1 ? '' : 's'}`
+  const clauses = [yearsWords(region.years), fuels.length ? `${listWords(fuels)} fires` : null].filter((x): x is string => x != null)
+  const inSample = region.in_sample === true
+  const publicLine = `Tested on ${fires} in this region${clauses.length ? ` (${clauses.join('; ')})` : ''}.${inSample ? ` ${ACCURACY_IN_SAMPLE_PUBLIC}` : ''}`
+  const score = num(region.growth_sorensen) ? region.growth_sorensen : null
+  const range = region.range && num(region.range[0]) && num(region.range[1]) ? region.range : null
+  const ratio = num(region.growth_ratio_median) ? region.growth_ratio_median : null
+  // "starts during main growth" only when the file's method says so, and not for the California seed (§14.4's exact seed
+  // lines carry no such clause: its starts were set before the regional protocol)
+  const mainGrowth = /main growth/i.test(method?.starts ?? '') && region.seed !== true
+  const detailParts: string[] = []
+  if (score != null)
+    detailParts.push(
+      `When re-run on these fires, the predicted new spread matched the real new spread with a score of about ${d1(score)} out of 1 (1 = perfect, 0 = none${range ? `; the fires ranged ${d1(range[0])}-${d1(range[1])}` : ''}).`,
+    )
+  if (ratio != null) detailParts.push(growthWords(ratio))
+  detailParts.push(`These re-runs ${mainGrowth ? "started during the fires' main growth and " : ''}used archived weather, so live forecasts usually do worse.`)
+  detailParts.push('Experimental: follow local officials.')
+  const lead = leadSpan(region, method)
+  const lfm = lfmMethodWords(region.lfm_method)
+  const editions = region.fuels_editions?.filter((e) => e.trim()) ?? []
+  const counts = [`${n} fire${n === 1 ? '' : 's'}`, num(region.n_leads) ? `${region.n_leads} leads` : null, lead].filter(Boolean).join(', ')
+  const parts = [
+    range ? `fires ${d2(range[0])}-${d2(range[1])}` : null,
+    counts,
+    ratio != null ? `growth ×${ratio2(ratio)}` : null,
+    mainGrowth ? 'starts during main growth' : null,
+    lfm ? `live fuel moisture ${lfm}` : null,
+    editions.length ? `fuels ${editions.join(', ')}` : null,
+    inSample ? ACCURACY_IN_SAMPLE_COMMAND : null,
+  ].filter((x): x is string => !!x)
+  const commandLine = `${score != null ? `Hindcast growth score ${d2(score)}` : 'Hindcast growth score not given'} (${parts.join('; ')}).`
+  return { status: 'tested', publicLine, publicDetail: detailParts.join(' '), commandLine, fuelCaveat, always: ACCURACY_ALWAYS }
 }

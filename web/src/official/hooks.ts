@@ -1,13 +1,17 @@
-// Official information hooks (owner: official-web; CONTRACT §13 I5). Consumers: the location card (location), the
-// "Official now" block, the phone Updates badge (shell). Each hook reads the shared runtime (official/runtime.ts,
-// extras/runtime.ts), which ExtrasSync fills for the open fire whatever the map layers show; useOfficialAtPoint also
-// checks Cal OES around a point outside the fire's area itself. The states are explicit and never an all-clear
+// Official information hooks (owner: official-web; CONTRACT §13 I5, brief 3 §14.6-14.8). Consumers: the location
+// card (location), the "Official now" block, the phone Updates badge (shell). Each hook reads the shared runtime
+// (official/runtime.ts, extras/runtime.ts), which ExtrasSync fills for the open fire whatever the map layers show;
+// useOfficialAtPoint also asks the backend about a point outside the fire's area itself (the backend's state registry
+// answers "not available in this state" without an upstream request) and looks up the point's state
+// (/api/geo/lookup), which decides what was checked there. The states are explicit and never an all-clear
 // (official/model.ts).
 import { useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { DEFAULT_MARGIN_KM } from '../extras/client'
 import { useEvacuations } from '../extras/hooks'
 import { useExtrasRuntime } from '../extras/runtime'
+import type { Coverage } from '../api/types'
+import { useGeoLookup } from '../location/geoLookup'
 import { useStore } from '../state/store'
 import { calfireStatus } from './calfire'
 import { useOfficialContext, type OfficialContext } from './context'
@@ -34,11 +38,42 @@ import type { FireWeatherResponse } from './types'
 export type { CalFireOfficial, EvacuationOfficial, FireWeatherOfficial, OfficialAlert, OfficialBadge, OfficialZone } from './model'
 export { useOfficialContext, type OfficialContext } from './context'
 
-/** The three official answers (I5). */
+/** The point's place from /api/geo/lookup (brief 3; CONTRACT §14.9.6): its state decides what was checked there. */
+export interface OfficialPlace {
+  /** 'loading' until the lookup answers; 'error' when it failed (then nothing is claimed as checked). */
+  status: 'loading' | 'ok' | 'error'
+  /** USPS code in the lower 48 (+ DC), else null. */
+  state: string | null
+  stateName: string | null
+  /** IANA zone of the point (null outside the lower 48). */
+  timeZone: string | null
+  coverage: Coverage | null
+}
+
+/** The three official answers (I5), plus (brief 3, optional) the point's place. */
 export interface OfficialInfo {
   evacuation: EvacuationOfficial
   fireWeather: FireWeatherOfficial
   calfire: CalFireOfficial
+  place?: OfficialPlace | null
+}
+
+/** The point's state for the models: undefined while unknown, null outside the lower 48 or when the lookup failed. */
+export function placeState(p: Pick<OfficialPlace, 'status' | 'state'> | null | undefined): string | null | undefined {
+  if (!p || p.status === 'loading') return undefined
+  return p.status === 'ok' ? p.state : null
+}
+
+function usePlace(lon: number | null, lat: number | null): OfficialPlace | null {
+  const g = useGeoLookup(lon, lat)
+  const valid = lon != null && lat != null && Number.isFinite(lon) && Number.isFinite(lat)
+  return useMemo(() => {
+    if (!valid) return null
+    if (g.status === 'loading') return { status: 'loading', state: null, stateName: null, timeZone: null, coverage: null }
+    if (g.status === 'error') return { status: 'error', state: null, stateName: null, timeZone: null, coverage: null }
+    const d = g.data
+    return { status: 'ok', state: d.supported ? d.state : null, stateName: d.supported ? d.state_name : null, timeZone: d.time_zone, coverage: d.coverage }
+  }, [g, valid])
 }
 
 function useIncidentEvac(incidentId: string | null) {
@@ -66,12 +101,15 @@ function useCalfire(ctx: OfficialContext): CalFireOfficial {
 }
 
 /**
- * Official information at a point (I5): Cal OES zones containing it (checked around the point itself when it lies
- * outside the open fire's area, current time only), NWS fire weather alerts covering it, and the fire's CAL FIRE
- * record. Pass null coordinates for "no point".
+ * Official information at a point (I5): the state source's evacuation zones containing it (checked around the point
+ * itself when it lies outside the open fire's area, current time only; "not available in this state" where no state
+ * feed exists), NWS fire weather alerts covering it (only where the answer's `states_checked` holds the point's
+ * state), the fire's agency record and the point's place. Pass null coordinates for "no point".
  */
 export function useOfficialAtPoint(lon: number | null, lat: number | null): OfficialInfo {
   const ctx = useOfficialContext()
+  const place = usePlace(lon, lat)
+  const pointState = placeState(place)
   const incident = useIncidentEvac(ctx.incidentId)
   const wanted = needsPointQuery({ lon, lat, incidentBbox: ctx.evacBbox, past: ctx.past, incidentData: incident.data })
   const pq = useEvacuations(wanted && lon != null && lat != null ? { bbox: pointQueryBbox(lon, lat) } : null, wanted)
@@ -91,8 +129,9 @@ export function useOfficialAtPoint(lon: number | null, lat: number | null): Offi
         point: wanted ? point : null,
         past: ctx.past,
         fire: ctx.fire,
+        pointState,
       }),
-    [lon, lat, ctx, incident, wanted, point],
+    [lon, lat, ctx, incident, wanted, point, pointState],
   )
   const fireWeather = useMemo(
     () =>
@@ -106,10 +145,11 @@ export function useOfficialAtPoint(lon: number | null, lat: number | null): Offi
         demo: ctx.demo,
         past: ctx.past,
         fallbackArea: ctx.evacBbox,
+        pointState,
       }),
-    [fw, statewide, swWanted, lon, lat, ctx],
+    [fw, statewide, swWanted, lon, lat, ctx, pointState],
   )
-  return useMemo(() => ({ evacuation, fireWeather, calfire }), [evacuation, fireWeather, calfire])
+  return useMemo(() => ({ evacuation, fireWeather, calfire, place }), [evacuation, fireWeather, calfire, place])
 }
 
 /** Official information for the open fire (I5; the "Official now" block): zones near it, its NWS alerts, its record. */

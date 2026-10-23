@@ -1,4 +1,5 @@
-// "Check an address" search (owner: location; CONTRACT §5.1, brief 2 C-R1/R3/R4/R5, O-R9). One explicitly submitted
+// "Check an address" search (owner: us-web; CONTRACT §5.1, brief 2 C-R1/R3/R4/R5, O-R9; brief 3 §14.10: every
+// lower-48 state, "Boise, ID", "83702 ID", the lat/lon order guess of W8 and US wording). One explicitly submitted
 // query, no autocomplete: pasted coordinates are read locally (lib/geodesy); an exact incident name opens that fire
 // (search.ts); street addresses go to the Census Geocoder proxy and towns / ZIP codes to the local Census Gazetteer
 // index through /api/geocode. Census positions are interpolated along address ranges: they are selected as
@@ -28,6 +29,9 @@ import {
   areaBounds,
   areaLabel,
   areaSub,
+  NOT_SUPPORTED_NOTE,
+  OUTSIDE_LOWER48_WARNING,
+  placeName,
   cancelledLookup,
   decide,
   incidentAction,
@@ -177,7 +181,8 @@ export function SearchBox() {
     useWorkspace.getState().selectLocation({ lat: p.lat, lon: p.lon, source: 'coords' }, { fly: true, zoom: flyZoom() })
     const how = read?.fromLink ? ' (from the map link)' : read?.order === 'lon-lat' ? ' (read as longitude, latitude)' : ''
     const east = read && likelyMissingWestSign(read)
-    if (east) message('warn', `Showing ${formatLat(p.lat)}, ${formatLon(p.lon)}${how}: east longitude, far from California.`, null, { lat: p.lat, lon: -p.lon })
+    if (east) message('warn', `Showing ${formatLat(p.lat)}, ${formatLon(p.lon)}${how}: east longitude, far from the lower 48 states.`, null, { lat: p.lat, lon: -p.lon })
+    else if (read?.outsideLower48) message('warn', `Showing ${formatLat(p.lat)}, ${formatLon(p.lon)}${how}. ${OUTSIDE_LOWER48_WARNING}`)
     else message('ok', `Showing ${formatLat(p.lat)}, ${formatLon(p.lon)}${how}.`)
     afterPick()
   }
@@ -198,7 +203,8 @@ export function SearchBox() {
     ws.clearSelection() // the previous point belongs to another search
     const b = areaBounds(m)
     ws.requestMapFlyTo({ lon: m.lon, lat: m.lat, bounds: b })
-    message('info', `Showing ${areaLabel(m)}. To check a spot, enter a street address with a house number, or click the map.`, others, null, GAZETTEER_CREDIT)
+    if (m.supported === false) message('warn', `Showing ${areaLabel(m)}. ${NOT_SUPPORTED_NOTE}`, others, null, GAZETTEER_CREDIT)
+    else message('info', `Showing ${areaLabel(m)}. To check a spot, enter a street address with a house number, or click the map.`, others, null, GAZETTEER_CREDIT)
     afterPick()
   }
 
@@ -233,7 +239,7 @@ export function SearchBox() {
   }
 
   const lookup = async (plan: Extract<SearchPlan, { kind: 'lookup' }>) => {
-    dispatch({ type: 'lookup', text: plan.expect === 'address' ? 'Looking up the address (U.S. Census Bureau)…' : 'Searching California towns and ZIP codes…' })
+    dispatch({ type: 'lookup', text: plan.expect === 'address' ? 'Looking up the address (U.S. Census Bureau)…' : 'Searching US towns and ZIP codes…' })
     const seq = stateRef.current.seq
     const ctrl = new AbortController()
     ctrls.current.set(seq, ctrl)
@@ -377,8 +383,8 @@ export function SearchBox() {
       <div ref={belowRef} id={statusId} className="loc-search-below" aria-live="polite">
         {p.kind === 'hint' && (
           <p className="mw-panel loc-search-hint">
-            Enter a street address with a house number (<span className="mw-mono">600 E Mariposa St, Altadena</span>), a California town or ZIP code (
-            <span className="mw-mono">91001</span>), coordinates or a fire’s name, then press Enter. Or click the map.
+            Enter a street address with a house number (<span className="mw-mono">600 E Mariposa St, Altadena</span>), a US town or ZIP code (
+            <span className="mw-mono">Boise, ID</span>; <span className="mw-mono">83702</span>), coordinates or a fire’s name, then press Enter. Or click the map.
           </p>
         )}
         {(p.kind === 'busy' || p.kind === 'message') && !lists && (
@@ -470,7 +476,7 @@ function Results({ lists, response, others, units, near, currentId, onAddress, o
                 <button type="button" className="loc-result" onClick={() => onArea(m)}>
                   {m.kind === 'zip' ? <Hash size={14} aria-hidden="true" className="loc-result-icon" /> : <Building2 size={14} aria-hidden="true" className="loc-result-icon" />}
                   <span className="loc-result-text">
-                    <span className="loc-result-title">{m.kind === 'zip' ? `ZIP ${m.zip ?? m.name}` : m.name}</span>
+                    <span className="loc-result-title">{m.kind === 'zip' ? (m.zip ? `ZIP ${m.zip}${m.state ? `, ${m.state}` : ''}` : (m.name ?? m.matched_address)) : placeName(m)}</span>
                     <span className="loc-result-sub">{areaSub(m)}</span>
                   </span>
                 </button>

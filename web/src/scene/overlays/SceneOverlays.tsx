@@ -6,8 +6,9 @@ import { Aperture, Crosshair, Maximize2, Minimize2, X } from 'lucide-react'
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { fmtNumber } from '../../lib/format'
 import { fuelInfo } from '../../lib/fuels'
-import { fmtDateTime, fmtTPlus } from '../../lib/time'
+import { fmtAt, fmtTPlus } from '../../lib/time'
 import { useStore, type Quality } from '../../state/store'
+import { useTimeFormat } from '../../state/timeZone'
 import { useAssetsError, useAssetsLoading } from '../assets'
 import { useSceneStore } from '../sceneStore'
 import './overlays.css'
@@ -229,6 +230,7 @@ function useElementSize(ref: RefObject<HTMLElement | null>): { w: number; h: num
 }
 
 function ProbeReadout({ area }: { area: { w: number; h: number } }) {
+  const tf = useTimeFormat()
   const probe = useSceneStore((s) => s.probe)
   const interacting = useSceneStore((s) => s.interacting)
   const style = useStore((s) => s.visualStyle)
@@ -287,7 +289,7 @@ function ProbeReadout({ area }: { area: { w: number; h: number } }) {
           <span className="sc-dim">unburned</span>
         ) : (
           <span className={burnedNow ? 'sc-hot' : undefined}>
-            {fmtDateTime(origin + probe.arrivalH * HOUR)}
+            {fmtAt(origin + probe.arrivalH * HOUR, tf)}
             {ignH != null ? ` ${fmtTPlus(probe.arrivalH - ignH)}` : ''}
           </span>
         )}

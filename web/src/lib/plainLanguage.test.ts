@@ -1,3 +1,4 @@
+import { timeFmt } from './time'
 import { describe, expect, it } from 'vitest'
 import type { ForecastManifest } from '../api/types'
 import {
@@ -29,6 +30,8 @@ import {
 
 const H = 3_600_000
 // 2025-01-08 08:18 UTC = Jan 8, 00:18 PST (the Eaton hindcast start)
+const LA24 = timeFmt('America/Los_Angeles', '24h') // tz-ok: test
+const LA12 = timeFmt('America/Los_Angeles', '12h') // tz-ok: test
 const EATON = { start_ms: 1736324280000, horizon_h: 72 }
 
 describe('spread speed (chains per hour -> everyday units)', () => {
@@ -117,16 +120,23 @@ describe('everyday units', () => {
 
 describe('forecast wording (period, probability, uncertainty)', () => {
   it('states the real period, with both time zones across a DST change', () => {
-    expect(forecastPeriod(EATON)).toBe('Jan 8, 00:18 – Jan 11, 00:18 PST (72 h)')
+    // Command / Forensic: 24-hour, unchanged California strings
+    expect(forecastPeriod(EATON, LA24)).toBe('Jan 8, 00:18 – Jan 11, 00:18 PST (72 h)')
     // 2026-03-07 20:00 UTC = 12:00 PST; DST starts Mar 8
-    expect(forecastPeriod({ start_ms: Date.UTC(2026, 2, 7, 20), horizon_h: 72 })).toBe('Mar 7, 12:00 PST – Mar 10, 13:00 PDT (72 h)')
+    expect(forecastPeriod({ start_ms: Date.UTC(2026, 2, 7, 20), horizon_h: 72 }, LA24)).toBe('Mar 7, 12:00 PST – Mar 10, 13:00 PDT (72 h)')
+    // Public: 12-hour (round 2 item 8)
+    expect(forecastPeriod(EATON, LA12)).toBe('Jan 8, 12:18 AM – Jan 11, 12:18 AM PST (72 h)')
+    // a fire in the East reads Eastern time, and in Denver Mountain time (brief 3: never Pacific by default)
+    expect(forecastPeriod(EATON, timeFmt('America/New_York', '24h'))).toBe('Jan 8, 03:18 – Jan 11, 03:18 EST (72 h)')
+    expect(forecastPeriod({ start_ms: Date.UTC(2026, 2, 7, 20), horizon_h: 72 }, timeFmt('America/Denver', '12h'))).toBe('Mar 7, 1:00 PM MST – Mar 10, 2:00 PM MDT (72 h)')
   })
 
   it('labels burn probability with the whole horizon, never "next 24 h"', () => {
-    const t = burnProbabilityText(0.12, EATON, 31)
+    const t = burnProbabilityText(0.12, EATON, 31, LA24)
     expect(t).toBe('12% of model runs (4 of 31) burned this spot by Jan 11, 00:18 PST (72 h after Jan 8, 00:18 PST)')
     expect(t).not.toMatch(/next 24|24 h/)
-    expect(burnProbabilityText(0, EATON, 31)).toBe('None of the 31 model runs burned this spot by Jan 11, 00:18 PST (72 h after Jan 8, 00:18 PST)')
+    expect(burnProbabilityText(0, EATON, 31, LA24)).toBe('None of the 31 model runs burned this spot by Jan 11, 00:18 PST (72 h after Jan 8, 00:18 PST)')
+    expect(burnProbabilityText(0.12, EATON, 31, LA12)).toBe('12% of model runs (4 of 31) burned this spot by Jan 11, 12:18 AM PST (72 h after Jan 8, 12:18 AM PST)')
     expect(burnProbabilityText(0.001, EATON)).toMatch(/^Under 1% of model runs burned/)
     expect(burnProbabilityText(1, EATON, 31)).toMatch(/^100% of model runs \(31 of 31\)/)
   })
@@ -139,7 +149,7 @@ describe('forecast wording (period, probability, uncertainty)', () => {
 
   it('describes hindcasts and live forecasts honestly', () => {
     const f = { ...EATON, issued_ms: Date.UTC(2026, 9, 17, 19, 7), weather: { source: 'open-meteo:historical-forecast:gfs_hrrr', ensemble: 'perturbed' as const, members: 31 } }
-    const hind = forecastDescription(f, 'historical')
+    const hind = forecastDescription(f, 'historical', { tf: LA24 })
     expect(hind.title).toBe('Hindcast (72\u00a0h)') // no-break space: the unit never wraps away
     // Public (plain words, brief 2 C-R8): never "hindcast"
     expect(forecastDescription(f, 'historical', { plain: true }).title).toBe('Model re-run on past weather (72\u00a0h)')
@@ -153,7 +163,8 @@ describe('forecast wording (period, probability, uncertainty)', () => {
     expect(hind.probability).toContain('Jan 11, 00:18 PST')
     expect(hind.uncertainty).toMatch(/not best-case or worst-case/)
     expect(hind.weather).toBe('Archived NOAA HRRR weather-model forecasts (via Open-Meteo)')
-    const live = forecastDescription({ ...f, weather: { source: 'open-meteo:gfs025', ensemble: 'gfs025', members: 31 } }, 'live')
+    const live = forecastDescription({ ...f, weather: { source: 'open-meteo:gfs025', ensemble: 'gfs025', members: 31 } }, 'live', { tf: LA24 })
+    expect(forecastDescription({ ...f, weather: { source: 'open-meteo:gfs025', ensemble: 'gfs025', members: 31 } }, 'live', { plain: true, tf: LA12 }).issued).toBe('Issued Oct 17, 12:07 PM PDT')
     expect(live.title).toBe('Spread forecast (72\u00a0h)')
     expect(live.issued).toBe('Issued Oct 17, 12:07 PDT')
     expect(live.runs).toMatch(/GFS weather ensemble/)
@@ -200,6 +211,10 @@ describe('names and sources', () => {
     expect(sourceName('USGS 3DEP terrain + observed arrival')).toBe('Fire-3d analysis (USGS 3DEP terrain + reconstructed spread)')
     expect(sourceName('CAL FIRE + FIRMS GOES')).toBe('CAL FIRE report + NASA FIRMS (GOES)')
     expect(sourceName('CAL FIRE (100% contained)')).toBe('CAL FIRE')
+    // brief 3: the record's issuer outside California, never "CAL FIRE"
+    expect(sourceName('USFS via NIFC WFIGS + FIRMS GOES')).toBe('USFS via NIFC WFIGS report + NASA FIRMS (GOES)')
+    expect(sourceName('USFS via NIFC WFIGS (100% contained)')).toBe('USFS via NIFC WFIGS')
+    expect(sourceName('NIFC WFIGS (IRWIN)')).toBe('NIFC WFIGS (IRWIN)')
     expect(sourceName('NIFC WFIGS')).toBe('NIFC WFIGS')
     expect(sourceName('Something new')).toBe('Something new')
   })

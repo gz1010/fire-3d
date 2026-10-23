@@ -70,6 +70,19 @@ describe('bundleCredits', () => {
     expect(c.every((x) => safeHref(x.href) === x.href)).toBe(true)
   })
 
+  it('credits "NIFC WFIGS (IRWIN)" for a WFIGS fire record and never CAL FIRE (brief 3, §14.12.6)', () => {
+    const c = bundleCredits([
+      { name: 'NIFC WFIGS incident record (IRWIN)', detail: 'IrwinID {889237AB-...}' },
+      { name: 'NIFC WFIGS fire perimeters', detail: '3 perimeters' },
+      { name: 'LANDFIRE LF2023', detail: 'FBFM40' },
+    ])
+    expect(c.map((x) => x.id)).toEqual(['wfigs-record', 'wfigs', 'landfire'])
+    expect(c[0].text).toBe('NIFC WFIGS (IRWIN)')
+    expect(c.some((x) => /CAL FIRE/.test(x.text))).toBe(false)
+    // California keeps its CAL FIRE credit
+    expect(bundleCredits([{ name: 'CAL FIRE incidents', detail: '' }])[0]).toMatchObject({ id: 'calfire', text: 'CAL FIRE' })
+  })
+
   it('keeps NASA FIRMS acknowledgement text verbatim', () => {
     expect(FIRMS_ACKNOWLEDGEMENT).toMatch(/^We acknowledge the use of data and\/or imagery from NASA's Fire Information for Resource Management System \(FIRMS\)/)
     expect(FIRMS_ACKNOWLEDGEMENT).toMatch(/\(LANCE\) and NASA's Earth Science Data and Information System \(ESDIS\)\.$/)

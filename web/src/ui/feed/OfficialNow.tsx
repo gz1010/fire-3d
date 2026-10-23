@@ -1,7 +1,8 @@
 // "Official now" (owner: official-web; PLAN-2 U-R3, CONTRACT §13 I5): the official status of the open fire, pinned at
 // the top of the updates panel and the phone sheet (mounted by shell). Three compact rows, each with its issuer, the
 // issuer's own time, a source link and an explicit quiet state that says it is not an all-clear:
-//   evacuations (Cal OES, zones within 15 km with their distance), CAL FIRE's incident record, NWS fire weather.
+//   evacuations (the state source: Cal OES, Oregon OEM; zones within 15 km with their distance; "not available in this
+//   state" elsewhere), the fire's agency record, NWS fire weather.
 // Extras (agencies, county maps, recording notes, ended alerts) sit behind each row's "More". Shown whatever the map
 // layers show; "Show" fits and highlights the official area. Official wording is verbatim, and the block never mixes
 // in observations, estimates or model output.
@@ -14,10 +15,11 @@ import { calfireHistoryNote, changeTitleParts, laggedEditNote } from '../../offi
 import { distanceText } from '../../official/geo'
 import { useOfficialNow, type CalFireOfficial, type EvacuationOfficial, type FireWeatherOfficial } from '../../official/hooks'
 import { forIncident } from '../../official/guard'
-import { groupZones } from '../../official/model'
+import { evacuationWho, groupZones } from '../../official/model'
 import { useOfficialRuntime } from '../../official/runtime'
 import { showOfficialArea } from '../../official/select'
 import { useStore } from '../../state/store'
+import { useTimeFormat } from '../../state/timeZone'
 import { useWorkspace } from '../../state/workspace'
 import { useNow } from '../hooks'
 import { NOT_AN_ORDER } from './feedMeta'
@@ -34,7 +36,7 @@ function SourceLink({ href, children }: { href: string | null | undefined; child
 
 type Tone = 'alert' | 'quiet' | 'muted' | 'info'
 
-function Row({ icon, label, source, tone, aside, more, children }: { icon: ReactNode; label: string; source: string; tone: Tone; aside?: ReactNode; more?: ReactNode; children: ReactNode }) {
+function Row({ icon, label, source, tone, aside, more, children }: { icon: ReactNode; label: string; source: string | null; tone: Tone; aside?: ReactNode; more?: ReactNode; children: ReactNode }) {
   const [open, setOpen] = useState(false)
   return (
     <li className={`on-row is-${tone}`}>
@@ -43,7 +45,7 @@ function Row({ icon, label, source, tone, aside, more, children }: { icon: React
           {icon}
         </span>
         <span className="on-row-label">{label}</span>
-        <span className="on-row-src">{source}</span>
+        {source && <span className="on-row-src">{source}</span>}
         {aside && <span className="on-row-aside">{aside}</span>}
       </div>
       {children}
@@ -63,12 +65,22 @@ function Row({ icon, label, source, tone, aside, more, children }: { icon: React
 const checked = (ms: number | null | undefined, wallMs: number): string | null => (ms != null ? `checked ${agoText(ms, wallMs)}` : null)
 const join = (parts: (string | null | undefined | false)[]) => parts.filter(Boolean).join(' · ')
 
+const capital = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s)
+
 function EvacuationRow({ e, nowMs, wallMs, metric }: { e: EvacuationOfficial; nowMs: number; wallMs: number; metric: boolean }) {
   const highlightId = useOfficialRuntime((s) => s.highlight?.id ?? null)
   const groups = useMemo(() => groupZones(e.zones), [e.zones])
+  const tf = useTimeFormat()
   const id = 'official-now:evacuation'
   const label = 'Evacuations'
-  const source = 'via Cal OES'
+  const who = evacuationWho(e) ?? 'the state source'
+  const source = `via ${who}`
+  // each source's own update time (several sources: one per source), and its data page
+  const answered = (e.sources ?? []).filter((s) => s.answered)
+  const updates = answered.length
+    ? answered.map((s) => (s.updatedMs != null ? `${s.aggregator} updated ${fmtWhen(s.updatedMs, nowMs, tf)}` : null))
+    : [e.sourceUpdatedMs != null ? `${who} updated ${fmtWhen(e.sourceUpdatedMs, nowMs, tf)}` : null]
+  const dataLinks = answered.length ? answered.map((s) => ({ label: `${s.aggregator} data`, url: s.url })) : [{ label: `${who} data`, url: e.sourceUrl }]
   const icon = <TriangleAlert size={13} />
   const counties =
     e.links && e.links.length > 0 ? (
@@ -92,20 +104,34 @@ function EvacuationRow({ e, nowMs, wallMs, metric }: { e: EvacuationOfficial; no
   if (e.state === 'loading')
     return (
       <Row icon={icon} label={label} source={source} tone="muted">
-        <p className="on-line">Checking Cal OES…</p>
+        <p className="on-line">Checking official evacuation zones…</p>
       </Row>
     )
   if (e.state === 'past-date')
     return (
       <Row icon={icon} label={label} source={source} tone="muted">
         <p className="on-line">
-          <strong>Not available for past dates.</strong> Cal OES publishes current status only. Follow local officials.
+          <strong>Not available for past dates.</strong> {who} {who.includes(' and ') ? 'publish' : 'publishes'} current status only. Follow local officials.
+        </p>
+      </Row>
+    )
+  if (e.state === 'not-available')
+    return (
+      <Row icon={icon} label={label} source={null} tone="muted">
+        <p className="on-line">
+          {e.notAvailableIn && e.notAvailableIn.length ? (
+            // CONTRACT §14.14 (full form)
+            <strong>Official evacuation zones are not available in {e.notAvailableIn.length === 1 ? `this state (${e.notAvailableIn[0]})` : `these states (${e.notAvailableIn.join(', ')})`}.</strong>
+          ) : (
+            <strong>{e.reason ?? 'Official evacuation zones are not available here.'}</strong>
+          )}{' '}
+          Follow local officials.
         </p>
       </Row>
     )
   if (e.state === 'unavailable' || e.state === 'not-checked')
     return (
-      <Row icon={icon} label={label} source={source} tone="muted" more={counties ?? undefined}>
+      <Row icon={icon} label={label} source={e.state === 'unavailable' ? source : null} tone="muted" more={counties ?? undefined}>
         <p className="on-line">
           <strong>{e.state === 'unavailable' ? 'Unavailable right now.' : 'Not checked.'}</strong> {e.reason ?? ''} Follow local officials.
         </p>
@@ -131,7 +157,7 @@ function EvacuationRow({ e, nowMs, wallMs, metric }: { e: EvacuationOfficial; no
         <p className="on-line">
           <strong>None listed within {DEFAULT_MARGIN_KM.evacuations} km of this fire.</strong> Not an all-clear: follow local officials.
         </p>
-        <p className="on-meta">{join([e.sourceUpdatedMs != null && `Cal OES updated ${fmtWhen(e.sourceUpdatedMs, nowMs)}`, checked(e.checkedMs, wallMs)])}</p>
+        <p className="on-meta">{join([...updates, checked(e.checkedMs, wallMs)])}</p>
       </Row>
     )
   const shown = groups.slice(0, 2)
@@ -154,26 +180,31 @@ function EvacuationRow({ e, nowMs, wallMs, metric }: { e: EvacuationOfficial; no
           {counties}
           {layerOff}
           <p className="on-meta">
-            {e.sourceUpdatedMs != null ? `Cal OES updated ${fmtWhen(e.sourceUpdatedMs, nowMs)}. ` : ''}
-            <SourceLink href={e.sourceUrl}>Cal OES data</SourceLink>
+            {updates.filter(Boolean).map((u) => `${u}. `)}
+            {dataLinks.map((l) => (
+              <SourceLink key={l.label} href={l.url}>
+                {l.label}
+              </SourceLink>
+            ))}
           </p>
         </>
       }
     >
       {shown.map((g) => (
-        <div key={`${g.status}|${g.issuer}`} className={`on-zone is-${g.group}`}>
+        <div key={`${g.status}|${g.issuer}|${g.aggregator}`} className={`on-zone is-${g.group}`}>
           <p className="on-line">
             <strong className="on-official">{g.status}</strong> · {g.zones.length} zone{g.zones.length === 1 ? '' : 's'} · {g.issuer}
           </p>
+          {!g.verbatim && <p className="on-meta">{`${g.aggregator}'s level number, with ${g.aggregator}'s definition (shown by Fire-3d)`}</p>}
           <p className="on-meta">
             {join([
               g.distanceKm == null ? null : g.distanceKm === 0 ? 'touches the fire area' : `${distanceText(g.distanceKm, metric)} from the fire`,
-              g.outsideAnalysisArea ? 'Cal OES does not say which fire this is for' : null,
+              g.outsideAnalysisArea ? `${g.aggregator} does not say which fire this is for` : null,
             ])}
           </p>
           <p className="on-meta">
             {join([
-              g.updatedMs != null ? `Updated by the issuer ${fmtWhen(g.updatedMs, nowMs)}` : g.listedMs != null ? `Listed by Cal OES ${fmtWhen(g.listedMs, nowMs)} (no issuer time)` : 'No issuer time',
+              g.updatedMs != null ? `Updated by the issuer ${fmtWhen(g.updatedMs, nowMs, tf)}` : g.listedMs != null ? `${capital(g.listedPhrase)} ${fmtWhen(g.listedMs, nowMs, tf)} (no issuer time)` : 'No issuer time',
               checked(e.checkedMs, wallMs),
             ])}
           </p>

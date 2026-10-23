@@ -49,6 +49,8 @@ export function bundleCredits(
     const detail = s.detail ?? ''
     if (/synthetic/i.test(name) || /^fixture:/i.test(detail)) continue
     if (/^CAL FIRE/i.test(name)) add({ id: 'calfire', text: 'CAL FIRE', href: 'https://www.fire.ca.gov/incidents' })
+    // brief 3 (§14.12.6): a fire whose record is NIFC WFIGS's (outside California, or a CAL FIRE gap)
+    else if (/NIFC WFIGS incident record/i.test(name)) add({ id: 'wfigs-record', text: 'NIFC WFIGS (IRWIN)', href: 'https://data-nifc.opendata.arcgis.com/' })
     else if (/FIRMS/i.test(name)) add({ id: 'firms', text: 'NASA FIRMS (LANCE, ESDIS)', href: 'https://www.earthdata.nasa.gov/data/tools/firms' })
     else if (/WFIGS|NIFC/i.test(name)) {
       if (!/^no perimeter/i.test(detail)) add({ id: 'wfigs', text: 'Wildland Fire Interagency Geospatial Services (WFIGS) Group, NIFC', href: 'https://data-nifc.opendata.arcgis.com/' })

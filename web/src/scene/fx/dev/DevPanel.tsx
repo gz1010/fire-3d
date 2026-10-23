@@ -2,7 +2,8 @@
 // profile-path drawing, FPS and layer toggles. Plain glass HTML over the canvas (?panel=0 hides it).
 import type { CSSProperties } from 'react'
 import { getTimeBounds, LAYER_KEYS, SPEEDS_HOURS_PER_SEC, useStore, type LatticeField, type Quality, type VisualStyle } from '../../../state/store'
-import { fmtDateTime } from '../../../lib/time'
+import { useTimeFormat } from '../../../state/timeZone'
+import { fmtAt } from '../../../lib/time'
 import { useSceneStore } from '../../sceneStore'
 import { fxStore } from '../state'
 
@@ -38,6 +39,7 @@ function Seg<T extends string>({ value, options, onChange }: { value: T; options
 }
 
 export function DevPanel() {
+  const tf = useTimeFormat()
   // re-render on discrete changes and every 5 min of sim time (not every playback frame)
   useStore((st) => Math.floor(st.timeMs / 300_000))
   useStore((st) => st.playing)
@@ -62,7 +64,7 @@ export function DevPanel() {
       {m && b && (
         <>
           <div className="mono" style={{ marginTop: 6, color: 'var(--text)' }}>
-            {fmtDateTime(s.timeMs)} · t={nowH.toFixed(2)} h
+            {fmtAt(s.timeMs, tf)} · t={nowH.toFixed(2)} h
           </div>
           <input
             type="range"

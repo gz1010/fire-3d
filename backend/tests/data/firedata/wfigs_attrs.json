@@ -1,0 +1,446 @@
+{
+ "objectIdFieldName": "OBJECTID",
+ "uniqueIdField": {
+  "name": "OBJECTID",
+  "isSystemMaintained": true
+ },
+ "globalIdFieldName": "GlobalID",
+ "fields": [
+  {
+   "name": "OBJECTID",
+   "type": "esriFieldTypeOID",
+   "alias": "OBJECTID",
+   "sqlType": "sqlTypeOther",
+   "domain": null,
+   "defaultValue": null
+  },
+  {
+   "name": "poly_IncidentName",
+   "type": "esriFieldTypeString",
+   "alias": "poly_IncidentName",
+   "sqlType": "sqlTypeOther",
+   "length": 50,
+   "domain": null,
+   "defaultValue": null
+  },
+  {
+   "name": "attr_IncidentName",
+   "type": "esriFieldTypeString",
+   "alias": "attr_IncidentName",
+   "sqlType": "sqlTypeOther",
+   "length": 50,
+   "domain": null,
+   "defaultValue": null
+  },
+  {
+   "name": "attr_CpxName",
+   "type": "esriFieldTypeString",
+   "alias": "attr_CpxName",
+   "sqlType": "sqlTypeOther",
+   "length": 50,
+   "domain": null,
+   "defaultValue": null
+  },
+  {
+   "name": "attr_IsCpxChild",
+   "type": "esriFieldTypeSmallInteger",
+   "alias": "attr_IsCpxChild",
+   "sqlType": "sqlTypeOther",
+   "domain": null,
+   "defaultValue": null
+  },
+  {
+   "name": "poly_FeatureCategory",
+   "type": "esriFieldTypeString",
+   "alias": "poly_FeatureCategory",
+   "sqlType": "sqlTypeOther",
+   "length": 50,
+   "domain": null,
+   "defaultValue": null
+  },
+  {
+   "name": "poly_GISAcres",
+   "type": "esriFieldTypeDouble",
+   "alias": "poly_GISAcres",
+   "sqlType": "sqlTypeOther",
+   "domain": null,
+   "defaultValue": null
+  },
+  {
+   "name": "poly_PolygonDateTime",
+   "type": "esriFieldTypeDate",
+   "alias": "poly_PolygonDateTime",
+   "sqlType": "sqlTypeOther",
+   "length": 8,
+   "domain": null,
+   "defaultValue": null
+  },
+  {
+   "name": "poly_DateCurrent",
+   "type": "esriFieldTypeDate",
+   "alias": "poly_DateCurrent",
+   "sqlType": "sqlTypeOther",
+   "length": 8,
+   "domain": null,
+   "defaultValue": null
+  },
+  {
+   "name": "poly_CreateDate",
+   "type": "esriFieldTypeDate",
+   "alias": "poly_CreateDate",
+   "sqlType": "sqlTypeOther",
+   "length": 8,
+   "domain": null,
+   "defaultValue": null
+  },
+  {
+   "name": "poly_IRWINID",
+   "type": "esriFieldTypeString",
+   "alias": "poly_IRWINID",
+   "sqlType": "sqlTypeOther",
+   "length": 38,
+   "domain": null,
+   "defaultValue": null
+  },
+  {
+   "name": "attr_IrwinID",
+   "type": "esriFieldTypeString",
+   "alias": "attr_IrwinID",
+   "sqlType": "sqlTypeOther",
+   "length": 38,
+   "domain": null,
+   "defaultValue": null
+  },
+  {
+   "name": "attr_POOState",
+   "type": "esriFieldTypeString",
+   "alias": "attr_POOState",
+   "sqlType": "sqlTypeOther",
+   "length": 6,
+   "domain": null,
+   "defaultValue": null
+  },
+  {
+   "name": "attr_FireDiscoveryDateTime",
+   "type": "esriFieldTypeDate",
+   "alias": "attr_FireDiscoveryDateTime",
+   "sqlType": "sqlTypeOther",
+   "length": 8,
+   "domain": null,
+   "defaultValue": null
+  },
+  {
+   "name": "attr_ContainmentDateTime",
+   "type": "esriFieldTypeDate",
+   "alias": "attr_ContainmentDateTime",
+   "sqlType": "sqlTypeOther",
+   "length": 8,
+   "domain": null,
+   "defaultValue": null
+  },
+  {
+   "name": "attr_ControlDateTime",
+   "type": "esriFieldTypeDate",
+   "alias": "attr_ControlDateTime",
+   "sqlType": "sqlTypeOther",
+   "length": 8,
+   "domain": null,
+   "defaultValue": null
+  },
+  {
+   "name": "attr_FireOutDateTime",
+   "type": "esriFieldTypeDate",
+   "alias": "attr_FireOutDateTime",
+   "sqlType": "sqlTypeOther",
+   "length": 8,
+   "domain": null,
+   "defaultValue": null
+  },
+  {
+   "name": "attr_FireCause",
+   "type": "esriFieldTypeString",
+   "alias": "attr_FireCause",
+   "sqlType": "sqlTypeOther",
+   "length": 15,
+   "domain": null,
+   "defaultValue": null
+  },
+  {
+   "name": "attr_InitialLatitude",
+   "type": "esriFieldTypeDouble",
+   "alias": "attr_InitialLatitude",
+   "sqlType": "sqlTypeOther",
+   "domain": null,
+   "defaultValue": null
+  },
+  {
+   "name": "attr_InitialLongitude",
+   "type": "esriFieldTypeDouble",
+   "alias": "attr_InitialLongitude",
+   "sqlType": "sqlTypeOther",
+   "domain": null,
+   "defaultValue": null
+  },
+  {
+   "name": "attr_IncidentTypeCategory",
+   "type": "esriFieldTypeString",
+   "alias": "attr_IncidentTypeCategory",
+   "sqlType": "sqlTypeOther",
+   "length": 2,
+   "domain": null,
+   "defaultValue": null
+  }
+ ],
+ "features": [
+  {
+   "attributes": {
+    "OBJECTID": 101,
+    "poly_IncidentName": "Test",
+    "attr_IncidentName": "TEST",
+    "attr_CpxName": null,
+    "attr_IsCpxChild": 0,
+    "poly_FeatureCategory": "Wildfire Daily Fire Perimeter",
+    "poly_GISAcres": null,
+    "poly_PolygonDateTime": 1736373600000,
+    "poly_DateCurrent": 1736374500000,
+    "poly_CreateDate": 1736374200000,
+    "poly_IRWINID": "{AAAAAAAA-0000-0000-0000-000000000001}",
+    "attr_IrwinID": "{AAAAAAAA-0000-0000-0000-000000000001}",
+    "attr_POOState": "US-CA",
+    "attr_FireDiscoveryDateTime": 1736301600000,
+    "attr_ContainmentDateTime": 1738029600000,
+    "attr_ControlDateTime": null,
+    "attr_FireOutDateTime": null,
+    "attr_FireCause": "Human",
+    "attr_InitialLatitude": 34.2,
+    "attr_InitialLongitude": -118.07,
+    "attr_IncidentTypeCategory": "WF"
+   }
+  },
+  {
+   "attributes": {
+    "OBJECTID": 102,
+    "poly_IncidentName": "Test",
+    "attr_IncidentName": "TEST",
+    "attr_CpxName": null,
+    "attr_IsCpxChild": 0,
+    "poly_FeatureCategory": "Wildfire Daily Fire Perimeter",
+    "poly_GISAcres": 500.0,
+    "poly_PolygonDateTime": 1736409600000,
+    "poly_DateCurrent": 1736413200000,
+    "poly_CreateDate": 1736410800000,
+    "poly_IRWINID": "{AAAAAAAA-0000-0000-0000-000000000001}",
+    "attr_IrwinID": "{AAAAAAAA-0000-0000-0000-000000000001}",
+    "attr_POOState": "US-CA",
+    "attr_FireDiscoveryDateTime": 1736301600000,
+    "attr_ContainmentDateTime": 1738029600000,
+    "attr_ControlDateTime": null,
+    "attr_FireOutDateTime": null,
+    "attr_FireCause": "Human",
+    "attr_InitialLatitude": 34.2,
+    "attr_InitialLongitude": -118.07,
+    "attr_IncidentTypeCategory": "WF"
+   }
+  },
+  {
+   "attributes": {
+    "OBJECTID": 103,
+    "poly_IncidentName": "Test",
+    "attr_IncidentName": "TEST",
+    "attr_CpxName": null,
+    "attr_IsCpxChild": 0,
+    "poly_FeatureCategory": "Wildfire Daily Fire Perimeter",
+    "poly_GISAcres": 502.0,
+    "poly_PolygonDateTime": 1736409640000,
+    "poly_DateCurrent": 1736420400000,
+    "poly_CreateDate": 1736420100000,
+    "poly_IRWINID": "{AAAAAAAA-0000-0000-0000-000000000001}",
+    "attr_IrwinID": "{AAAAAAAA-0000-0000-0000-000000000001}",
+    "attr_POOState": "US-CA",
+    "attr_FireDiscoveryDateTime": 1736301600000,
+    "attr_ContainmentDateTime": 1738029600000,
+    "attr_ControlDateTime": null,
+    "attr_FireOutDateTime": null,
+    "attr_FireCause": "Human",
+    "attr_InitialLatitude": 34.2,
+    "attr_InitialLongitude": -118.07,
+    "attr_IncidentTypeCategory": "WF"
+   }
+  },
+  {
+   "attributes": {
+    "OBJECTID": 104,
+    "poly_IncidentName": "Test",
+    "attr_IncidentName": "TEST",
+    "attr_CpxName": null,
+    "attr_IsCpxChild": 0,
+    "poly_FeatureCategory": "Wildfire Daily Fire Perimeter",
+    "poly_GISAcres": 800.0,
+    "poly_PolygonDateTime": 1736409600000,
+    "poly_DateCurrent": 1736445600000,
+    "poly_CreateDate": 1736411100000,
+    "poly_IRWINID": "{AAAAAAAA-0000-0000-0000-000000000001}",
+    "attr_IrwinID": "{AAAAAAAA-0000-0000-0000-000000000001}",
+    "attr_POOState": "US-CA",
+    "attr_FireDiscoveryDateTime": 1736301600000,
+    "attr_ContainmentDateTime": 1738029600000,
+    "attr_ControlDateTime": null,
+    "attr_FireOutDateTime": null,
+    "attr_FireCause": "Human",
+    "attr_InitialLatitude": 34.2,
+    "attr_InitialLongitude": -118.07,
+    "attr_IncidentTypeCategory": "WF"
+   }
+  },
+  {
+   "attributes": {
+    "OBJECTID": 105,
+    "poly_IncidentName": "Test",
+    "attr_IncidentName": "TEST",
+    "attr_CpxName": null,
+    "attr_IsCpxChild": 0,
+    "poly_FeatureCategory": "Wildfire Final Fire Perimeter",
+    "poly_GISAcres": 2300.0,
+    "poly_PolygonDateTime": 1778603400000,
+    "poly_DateCurrent": 1778603520000,
+    "poly_CreateDate": 1778603400000,
+    "poly_IRWINID": "{AAAAAAAA-0000-0000-0000-000000000001}",
+    "attr_IrwinID": "{AAAAAAAA-0000-0000-0000-000000000001}",
+    "attr_POOState": "US-CA",
+    "attr_FireDiscoveryDateTime": 1736301600000,
+    "attr_ContainmentDateTime": 1738029600000,
+    "attr_ControlDateTime": null,
+    "attr_FireOutDateTime": null,
+    "attr_FireCause": "Human",
+    "attr_InitialLatitude": 34.2,
+    "attr_InitialLongitude": -118.07,
+    "attr_IncidentTypeCategory": "WF"
+   }
+  },
+  {
+   "attributes": {
+    "OBJECTID": 106,
+    "poly_IncidentName": "Test",
+    "attr_IncidentName": "TEST",
+    "attr_CpxName": null,
+    "attr_IsCpxChild": 0,
+    "poly_FeatureCategory": "Wildfire Daily Fire Perimeter",
+    "poly_GISAcres": 40.0,
+    "poly_PolygonDateTime": 1736337600000,
+    "poly_DateCurrent": 1736341200000,
+    "poly_CreateDate": 1736337900000,
+    "poly_IRWINID": "{AAAAAAAA-0000-0000-0000-000000000006}",
+    "attr_IrwinID": "{AAAAAAAA-0000-0000-0000-000000000006}",
+    "attr_POOState": "US-NV",
+    "attr_FireDiscoveryDateTime": 1736312400000,
+    "attr_ContainmentDateTime": 1736474400000,
+    "attr_ControlDateTime": null,
+    "attr_FireOutDateTime": null,
+    "attr_FireCause": "Undetermined",
+    "attr_InitialLatitude": 39.55,
+    "attr_InitialLongitude": -119.75,
+    "attr_IncidentTypeCategory": "WF"
+   }
+  },
+  {
+   "attributes": {
+    "OBJECTID": 107,
+    "poly_IncidentName": "Test",
+    "attr_IncidentName": "TEST",
+    "attr_CpxName": null,
+    "attr_IsCpxChild": 0,
+    "poly_FeatureCategory": "Prescribed Fire",
+    "poly_GISAcres": 120.0,
+    "poly_PolygonDateTime": 1736481600000,
+    "poly_DateCurrent": 1736485200000,
+    "poly_CreateDate": 1736483400000,
+    "poly_IRWINID": "{AAAAAAAA-0000-0000-0000-000000000007}",
+    "attr_IrwinID": "{AAAAAAAA-0000-0000-0000-000000000007}",
+    "attr_POOState": "US-CA",
+    "attr_FireDiscoveryDateTime": 1736474400000,
+    "attr_ContainmentDateTime": 1736560800000,
+    "attr_ControlDateTime": null,
+    "attr_FireOutDateTime": null,
+    "attr_FireCause": null,
+    "attr_InitialLatitude": 34.25098106603779,
+    "attr_InitialLongitude": -118.00858735032415,
+    "attr_IncidentTypeCategory": "RX"
+   }
+  },
+  {
+   "attributes": {
+    "OBJECTID": 108,
+    "poly_IncidentName": "Test",
+    "attr_IncidentName": "TEST",
+    "attr_CpxName": null,
+    "attr_IsCpxChild": 0,
+    "poly_FeatureCategory": "Wildfire Daily Fire Perimeter",
+    "poly_GISAcres": 300.0,
+    "poly_PolygonDateTime": 1736391600000,
+    "poly_DateCurrent": 1736395200000,
+    "poly_CreateDate": 1736392800000,
+    "poly_IRWINID": "{AAAAAAAA-0000-0000-0000-000000000008}",
+    "attr_IrwinID": "{AAAAAAAA-0000-0000-0000-000000000008}",
+    "attr_POOState": "US-CA",
+    "attr_FireDiscoveryDateTime": 1736319600000,
+    "attr_ContainmentDateTime": 1736560800000,
+    "attr_ControlDateTime": null,
+    "attr_FireOutDateTime": null,
+    "attr_FireCause": "Undetermined",
+    "attr_InitialLatitude": 34.19877162319855,
+    "attr_InitialLongitude": -117.5210060838074,
+    "attr_IncidentTypeCategory": "WF"
+   }
+  },
+  {
+   "attributes": {
+    "OBJECTID": 109,
+    "poly_IncidentName": "Contest",
+    "attr_IncidentName": "CONTEST",
+    "attr_CpxName": null,
+    "attr_IsCpxChild": 0,
+    "poly_FeatureCategory": "Wildfire Daily Fire Perimeter",
+    "poly_GISAcres": 60.0,
+    "poly_PolygonDateTime": 1736496000000,
+    "poly_DateCurrent": 1736499600000,
+    "poly_CreateDate": 1736496600000,
+    "poly_IRWINID": "{AAAAAAAA-0000-0000-0000-000000000009}",
+    "attr_IrwinID": "{AAAAAAAA-0000-0000-0000-000000000009}",
+    "attr_POOState": "US-CA",
+    "attr_FireDiscoveryDateTime": 1736474400000,
+    "attr_ContainmentDateTime": 1736647200000,
+    "attr_ControlDateTime": null,
+    "attr_FireOutDateTime": null,
+    "attr_FireCause": "Natural",
+    "attr_InitialLatitude": 34.04048395858595,
+    "attr_InitialLongitude": -117.87856099255181,
+    "attr_IncidentTypeCategory": "WF"
+   }
+  },
+  {
+   "attributes": {
+    "OBJECTID": 110,
+    "poly_IncidentName": "Test",
+    "attr_IncidentName": "TEST",
+    "attr_CpxName": null,
+    "attr_IsCpxChild": 0,
+    "poly_FeatureCategory": "Wildfire Daily Fire Perimeter",
+    "poly_GISAcres": 75.0,
+    "poly_PolygonDateTime": 1701828000000,
+    "poly_DateCurrent": 1701831600000,
+    "poly_CreateDate": 1701829200000,
+    "poly_IRWINID": "{AAAAAAAA-0000-0000-0000-000000000010}",
+    "attr_IrwinID": "{AAAAAAAA-0000-0000-0000-000000000010}",
+    "attr_POOState": "US-CA",
+    "attr_FireDiscoveryDateTime": 1701741600000,
+    "attr_ContainmentDateTime": 1702000800000,
+    "attr_ControlDateTime": null,
+    "attr_FireOutDateTime": null,
+    "attr_FireCause": "Human",
+    "attr_InitialLatitude": 34.2,
+    "attr_InitialLongitude": -118.07,
+    "attr_IncidentTypeCategory": "WF"
+   }
+  }
+ ]
+}

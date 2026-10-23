@@ -3,14 +3,15 @@
 //                  slot for its owner's component (map, location, official-web) or the shell's own panels.
 //   Forensic       today's analytical UI (SPEC 9.4), loaded lazily from ui/shell/ForensicWorkspace.tsx.
 // Only the active workspace is mounted, so the inactive one never renders (its WebGL context is released).
-// Start-up (brief 2, decision 1): no ?incident= opens the California overview (no incident, no default pick, no build);
-// ?incident=<id> opens that fire directly, loading in parallel with CAL FIRE's lists; an unknown id falls back to the
+// Start-up (brief 2, decision 1; brief 3): no ?incident= opens the national overview of the lower 48 (no incident, no
+// default pick, no build); ?incident=<id> opens that fire directly, loading in parallel with the fire lists; an unknown id falls back to the
 // overview with a notice. ?t=<epoch ms> sets the time once the bundle is ready. Opening and leaving fires are history
 // entries (state/history.ts), so Back returns to the overview. Workspace URL state (?ws=&preset=&persp=&basemap=&units=)
 // lives in state/workspace.ts.
 // Each workspace publishes the map / canvas area its chrome leaves free as CSS vars --safe-top/right/bottom/left
 // (Forensic from its panels; Public/Command from every [data-chrome] slot via ui/shell/useMapSafeArea.ts, which also
 // feeds useWorkspace.safeInsets for MapLibre padding).
+import { recordIssuerLabel } from './api/records'
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { applyTimeWhenReady, useHistorySync } from './state/history'
@@ -57,7 +58,7 @@ const ForensicWorkspace = lazy(() => import('./ui/shell/ForensicWorkspace'))
 /** Started once per page (StrictMode runs effects twice in development). */
 let bootstrapped = false
 
-/** CAL FIRE's lists and the linked fire, in parallel. No link = the California overview: nothing is picked and
+/** The fire lists and the linked fire, in parallel. No link = the national overview: nothing is picked and
  *  nothing is built. Runs before the URL sync effects (declared first), so they start from the linked incident. */
 function useBootstrap(): void {
   useEffect(() => {
@@ -270,12 +271,13 @@ function useNotPrepared(): { name: string; failed: boolean } | null {
 
 function NotPreparedNotice({ name, failed }: { name: string; failed: boolean }) {
   const id = useStore((s) => s.incidentId)
+  const issuer = useStore((s) => (s.summary && s.summary.id === s.incidentId ? recordIssuerLabel(s.summary) : null))
   if (!id) return null
   return (
     <div className="banner banner-info mw-notprepared" role="status">
       <span className="banner-text">
-        {failed ? `The last preparation of the ${name} analysis failed.` : `Fire-3d has not prepared an analysis of the ${name} yet.`} The map shows CAL FIRE's reported
-        location and official information.
+        {failed ? `The last preparation of the ${name} analysis failed.` : `Fire-3d has not prepared an analysis of the ${name} yet.`} The map shows{' '}
+        {issuer ? `${issuer}'s` : "the agency's"} reported location and official information.
       </span>
       <button type="button" className="btn btn-sm btn-gold" onClick={() => void openFire(id, 'prepare')}>
         {failed ? 'Prepare again (1-3 min)' : 'Prepare analysis (1-3 min)'}
@@ -284,8 +286,8 @@ function NotPreparedNotice({ name, failed }: { name: string; failed: boolean }) 
   )
 }
 
-/** Public/Command: the map-first layout (styles/map-layout.css documents the regions). No incident = the California
- *  overview: the fire list takes the right column, the timeline is hidden and the header reads "California · all
+/** Public/Command: the map-first layout (styles/map-layout.css documents the regions). No incident = the national
+ *  overview: the fire list takes the right column, the timeline is hidden and the header reads "United States · all
  *  fires". */
 function MapWorkspace() {
   const root = useRef<HTMLDivElement | null>(null)
@@ -348,7 +350,7 @@ function MapWorkspace() {
         <div className="mw-controls" data-chrome="controls">
           <MapControls />
         </div>
-        <aside className="mw-updates" id="mw-updates" data-chrome="updates" aria-label={overview ? 'California fires' : 'Incident updates'}>
+        <aside className="mw-updates" id="mw-updates" data-chrome="updates" aria-label={overview ? 'Fires in the lower 48' : 'Incident updates'}>
           {overview ? (
             <OverviewPanel />
           ) : (

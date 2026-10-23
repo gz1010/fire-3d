@@ -1,0 +1,263 @@
+{
+ "@context": [
+  "https://geojson.org/geojson-ld/geojson-context.jsonld",
+  {
+   "@version": "1.1",
+   "wx": "https://api.weather.gov/ontology#",
+   "@vocab": "https://api.weather.gov/ontology#"
+  }
+ ],
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.49866909068854810fa94ea20dbd214b16b1a5fc.001.1",
+   "type": "Feature",
+   "geometry": null,
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.49866909068854810fa94ea20dbd214b16b1a5fc.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.49866909068854810fa94ea20dbd214b16b1a5fc.001.1",
+    "areaDesc": "Northern Cheyenne Indian Reservation/Ashland Ranger District Custer Natl Forest; Sioux Ranger District Custer National Forest; Sheridan County/Casper BLM",
+    "geocode": {
+     "SAME": [
+      "030003",
+      "030075",
+      "030087",
+      "030103",
+      "030011",
+      "030025",
+      "046063",
+      "056033"
+     ],
+     "UGC": [
+      "MTZ131",
+      "MTZ133",
+      "WYZ274"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/fire/MTZ131",
+     "https://api.weather.gov/zones/fire/MTZ133",
+     "https://api.weather.gov/zones/fire/WYZ274"
+    ],
+    "references": [],
+    "sent": "2026-10-22T12:14:00-06:00",
+    "effective": "2026-10-22T12:14:00-06:00",
+    "onset": "2026-10-23T12:00:00-06:00",
+    "expires": "2026-10-23T12:15:00-06:00",
+    "ends": "2026-10-23T21:00:00-06:00",
+    "status": "Actual",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Likely",
+    "urgency": "Expected",
+    "event": "Red Flag Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Billings MT",
+    "headline": "Red Flag Warning issued October 22 at 12:14PM MDT until October 23 at 9:00PM MDT by NWS Billings MT",
+    "description": "The National Weather Service in Billings has issued a Red Flag\nWarning...which is in effect from noon to 9 PM MDT Friday.\n\n* IMPACTS: Low humidities, unseasonably warm temperatures, strong\ngusty winds, and a wind shift with a cold front will create\nerratic fire behavior and difficult control of new or existing\nfires.\n\n* AFFECTED AREA:\nIn North Central WY Fire Zone...274.\nIn Southeast MT Fire Zone...131.\nIn Southeast MT and Northwest SD Fire Zone...133.\n\n* COUNTIES AFFECTED:\nIn North Central WY...Sheridan.\nIn Northwest SD...Harding.\nIn South Central MT...Big Horn.\nIn Southeast MT...Carter...Fallon...Powder River...Rosebud\nTreasure.\n\nThe most dangerous conditions are expected along and southeast of\na Baker Montana to Sheridan Wyoming line.\n\n* COLD FRONT: Late afternoon into early evening.\n\n* WIND: Southwest 20 to 30 mph with gusts up to 45 mph. Winds\nshifting to the northwest behind the cold front, with continued\ngusts up to 45 mph through late Friday night.\n\n* HUMIDITY: 15 to 25 percent.\n\n* TEMPERATURES: 75 to 85 degrees.",
+    "instruction": "A Red Flag Warning means that critical fire weather conditions are\neither occurring now, or will shortly. A combination of strong\nwinds, low relative humidity, and warm temperatures can contribute\nto extreme fire behavior.",
+    "response": "Prepare",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "RFWBYZ"
+     ],
+     "WMOidentifier": [
+      "WWUS85 KBYZ 221814"
+     ],
+     "NWSheadline": [
+      "RED FLAG WARNING IN EFFECT FROM NOON TO 9 PM MDT FRIDAY"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "VTEC": [
+      "/O.NEW.KBYZ.FW.W.0015.261023T1800Z-261024T0300Z/"
+     ],
+     "eventEndingTime": [
+      "2026-10-23T21:00:00-06:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "NWS"
+     ],
+     "NationalWeatherService": [
+      "FWW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.df4580455977900e0a0e8e0a209e72dc934daefd.001.1",
+   "type": "Feature",
+   "geometry": null,
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.df4580455977900e0a0e8e0a209e72dc934daefd.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.df4580455977900e0a0e8e0a209e72dc934daefd.001.1",
+    "areaDesc": "Johnson County/Casper BLM",
+    "geocode": {
+     "SAME": [
+      "056019",
+      "056025"
+     ],
+     "UGC": [
+      "WYZ281"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/fire/WYZ281"
+    ],
+    "references": [],
+    "sent": "2026-10-22T11:31:00-06:00",
+    "effective": "2026-10-22T11:31:00-06:00",
+    "onset": "2026-10-23T12:00:00-06:00",
+    "expires": "2026-10-23T07:00:00-06:00",
+    "ends": "2026-10-23T20:00:00-06:00",
+    "status": "Actual",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Likely",
+    "urgency": "Expected",
+    "event": "Red Flag Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Riverton WY",
+    "headline": "Red Flag Warning issued October 22 at 11:31AM MDT until October 23 at 8:00PM MDT by NWS Riverton WY",
+    "description": "The National Weather Service in Riverton has issued a Red Flag\nWarning, which is in effect from noon to 8 PM MDT Friday.\n\n* IMPACTS: Low Humidities...Strong Gusty Winds...and Wind Shift\nwith a Cold Front could cause erratic fire behavior.\n\n* AFFECTED AREA:\nIn North Central WY...Fire Weather Zone 281.\n\n* COUNTIES AFFECTED:\nIn North Central WY...Johnson.\n\n* COLD FRONT: Moves in after 8 PM MDT Friday, with northerly 20 to\n35 mph winds and gusts of 35 to 40 mph.\n\n* WIND: Southwest 25 to 35 mph with gusts up to 50 mph.\n\n* HUMIDITY: As low as 20 percent.",
+    "instruction": "A Red Flag Warning means that critical fire weather conditions are\neither occurring now....or will shortly. A combination of strong\nwinds...low relative humidity...and warm temperatures can\ncontribute to extreme fire behavior.",
+    "response": "Prepare",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "RFWRIW"
+     ],
+     "WMOidentifier": [
+      "WWUS85 KRIW 221731"
+     ],
+     "NWSheadline": [
+      "RED FLAG WARNING IN EFFECT FROM NOON TO 8 PM MDT FRIDAY"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "VTEC": [
+      "/O.NEW.KRIW.FW.W.0031.261023T1800Z-261024T0200Z/"
+     ],
+     "eventEndingTime": [
+      "2026-10-23T20:00:00-06:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "NWS"
+     ],
+     "NationalWeatherService": [
+      "FWW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.09a508e62964f0ca250437b38e1a35cc77b2dd9f.001.2",
+   "type": "Feature",
+   "geometry": null,
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.09a508e62964f0ca250437b38e1a35cc77b2dd9f.001.2",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.09a508e62964f0ca250437b38e1a35cc77b2dd9f.001.2",
+    "areaDesc": "Northern Campbell; Southern Campbell; Crook County Plains; Weston County Plains",
+    "geocode": {
+     "SAME": [
+      "056005",
+      "056011",
+      "056045"
+     ],
+     "UGC": [
+      "WYZ314",
+      "WYZ315",
+      "WYZ316",
+      "WYZ317"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/fire/WYZ314",
+     "https://api.weather.gov/zones/fire/WYZ315",
+     "https://api.weather.gov/zones/fire/WYZ316",
+     "https://api.weather.gov/zones/fire/WYZ317"
+    ],
+    "references": [],
+    "sent": "2026-10-22T10:44:00-06:00",
+    "effective": "2026-10-22T10:44:00-06:00",
+    "onset": "2026-10-23T11:00:00-06:00",
+    "expires": "2026-10-23T01:45:00-06:00",
+    "ends": "2026-10-23T23:00:00-06:00",
+    "status": "Actual",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Likely",
+    "urgency": "Expected",
+    "event": "Red Flag Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Rapid City SD",
+    "headline": "Red Flag Warning issued October 22 at 10:44AM MDT until October 23 at 11:00PM MDT by NWS Rapid City SD",
+    "description": "...RED FLAG WARNING IN EFFECT FROM 11 AM TO 11 PM MDT FRIDAY DUE TO\nGUSTY WINDS AND LOW RELATIVE HUMIDITY FOR NORTHERN CAMPBELL, SOUTHERN\nCAMPBELL, CROOK COUNTY PLAINS, AND WESTON COUNTY PLAINS...\n\n.Warm temperatures, humidities as low as 13%, and southwest winds\ngusting to 50 mph ahead of an approaching cold front will create\nwidespread critical fire weather conditions Friday afternoon through\nFriday evening. Southwest winds increase over northeastern Wyoming\nafter 10 am Friday morning with sustained winds of 25 to 35 mph and\ngusts of 40 to 50 mph through the afternoon. Winds will shift to the\nnorthwest after midnight as the front moves through. While some\nshowers may accompany the front, not expecting any widespread wetting\nrains.\n\nThe National Weather Service in Rapid City SD has issued a Red Flag\nWarning in effect from 11 AM to 11 PM MDT Friday.\n\n* TIMING...From 11 AM to 11 PM MDT Friday.\n\n* WINDS...Southwest winds 25 to 35 mph with gusts up to 50 mph.\n\n* RELATIVE HUMIDITY...As low as 13 percent.\n\n* IMPACTS...Any fires that develop will spread rapidly. Outdoor\nburning is not recommended.",
+    "instruction": "A Red Flag Warning means that critical fire weather conditions are\neither occurring now, or will shortly. A combination of strong winds,\nlow relative humidity, and warm temperatures can contribute to\nextreme fire behavior.",
+    "response": "Prepare",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "RFWUNR"
+     ],
+     "WMOidentifier": [
+      "WWUS83 KUNR 221644"
+     ],
+     "NWSheadline": [
+      "RED FLAG WARNING IN EFFECT FROM 11 AM TO 11 PM MDT FRIDAY"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "VTEC": [
+      "/O.NEW.KUNR.FW.W.0040.261023T1700Z-261024T0500Z/"
+     ],
+     "eventEndingTime": [
+      "2026-10-23T23:00:00-06:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "NWS"
+     ],
+     "NationalWeatherService": [
+      "FWW"
+     ]
+    }
+   }
+  }
+ ],
+ "title": "Current watches, warnings, and advisories for Alabama, Arizona, Arkansas, California, Colorado, Connecticut, Delaware, District of Columbia, Florida, Georgia, Idaho, Illinois, Indiana, Iowa, Kansas, Kentucky, Louisiana, Maine, Maryland, Massachusetts, Michigan, Minnesota, Mississippi, Missouri, Montana, Nebraska, Nevada, New Hampshire, New Jersey, New Mexico, New York, North Carolina, North Dakota, Ohio, Oklahoma, Oregon, Pennsylvania, Rhode Island, South Carolina, South Dakota, Tennessee, Texas, Utah, Vermont, Virginia, Washington, West Virginia, Wisconsin, Wyoming",
+ "updated": "2026-10-23T00:49:25+00:00"
+}

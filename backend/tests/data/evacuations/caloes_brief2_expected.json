@@ -1,0 +1,373 @@
+{
+ "meta": {
+  "what": "brief-2 GET /api/extras/evacuations answers for California bboxes, from backend/fire3d/api/extras.py as last changed in commit b07e0cb (brief 2, unchanged until brief 3), with the recorded Cal OES samples of tests/test_extras.py; retrieved_ms is Fire-3d's fetch time and is not compared"
+ },
+ "answers": {
+  "la_zones": {
+   "kind": "evacuations",
+   "status": "available",
+   "reason": null,
+   "reason_code": null,
+   "retrieved_ms": "<fetch time>",
+   "source_updated_ms": 1792263695245,
+   "requested_at_ms": null,
+   "now_ms": 1792268900000,
+   "bbox": [
+    -119.0,
+    33.95,
+    -118.5,
+    34.3
+   ],
+   "incident_id": null,
+   "sources": [
+    {
+     "id": "caloes_evacuations",
+     "name": "California Evacuation Aggregation Layer",
+     "publisher": "California Governor's Office of Emergency Services (Cal OES)",
+     "url": "https://gis.data.ca.gov/datasets/CalEMA::california-evacuation-aggregation-layer",
+     "service_url": "https://services.arcgis.com/BLN4oKB0N1YSgvY8/arcgis/rest/services/CA_EVACUATIONS_CalOESHosted_view/FeatureServer/0",
+     "license": "Public use (data.ca.gov: \"No restrictions on public use\")",
+     "terms_url": "https://data.ca.gov/dataset/california-evacuation-aggregation-layer",
+     "attribution": "Evacuation zones: local officials via county GIS and Genasys Protect, aggregated by Cal OES",
+     "disclaimer": "This information is constantly changing, and Cal OES does not verify or certify the information contained herein.",
+     "cadence": "Rebuilt by Cal OES about every 5 minutes; current status only"
+    },
+    {
+     "id": "caloes_evacuation_inventory",
+     "name": "County Evacuation Inventory",
+     "publisher": "Cal OES",
+     "url": "https://www.arcgis.com/home/item.html?id=c685585b99da416fa6ab70027597ad47",
+     "service_url": "https://services.arcgis.com/BLN4oKB0N1YSgvY8/arcgis/rest/services/County_Evacuation_Inventory_Public/FeatureServer/0",
+     "license": "Public use",
+     "terms_url": "https://www.arcgis.com/home/item.html?id=c685585b99da416fa6ab70027597ad47",
+     "attribution": "County coverage: Cal OES County Evacuation Inventory",
+     "disclaimer": null,
+     "cadence": "Updated by Cal OES as counties join"
+    }
+   ],
+   "caveats": [
+    "Shown as current status. During Cal OES's 5-minute rebuild the layer can briefly miss zones."
+   ],
+   "issuing_authority": "Local emergency officials (county sheriff or emergency services, cities); each zone names its county. Cal OES aggregates and does not verify.",
+   "zones": {
+    "type": "FeatureCollection",
+    "features": [
+     {
+      "type": "Feature",
+      "id": "US-CA-XLA-KAN-U017",
+      "geometry": {
+       "type": "Polygon",
+       "coordinates": [
+        [
+         [
+          -118.812772,
+          34.10384
+         ],
+         [
+          -118.798423,
+          34.09908
+         ],
+         [
+          -118.793212,
+          34.03579
+         ],
+         [
+          -118.83181,
+          34.042128
+         ],
+         [
+          -118.851014,
+          34.087134
+         ],
+         [
+          -118.812772,
+          34.10384
+         ]
+        ]
+       ]
+      },
+      "properties": {
+       "zone_id": "US-CA-XLA-KAN-U017",
+       "zone_name": null,
+       "status": "Evacuation Order",
+       "status_key": "order",
+       "county": "LOS ANGELES",
+       "jurisdiction": "Los Angeles County",
+       "city_code": "KAN",
+       "event_type": null,
+       "notes": "Local authorities are responding to a fast-moving Wildfire. An EVACUATION ORDER has been issued. LEAVE NOW. Your safety is in danger if you stay. Call 911 if you need emergency assistance. Visit Alertla.org for more information.",
+       "critical_info": null,
+       "public_info": null,
+       "status_updated_ms": 1792112236000,
+       "aggregated_ms": 1792112431851
+      }
+     },
+     {
+      "type": "Feature",
+      "id": "US-CA-XLA-WLV-C201",
+      "geometry": {
+       "type": "Polygon",
+       "coordinates": [
+        [
+         [
+          -118.809146,
+          34.132073
+         ],
+         [
+          -118.85265,
+          34.113123
+         ],
+         [
+          -118.852044,
+          34.115221
+         ],
+         [
+          -118.867959,
+          34.119699
+         ],
+         [
+          -118.821423,
+          34.131424
+         ],
+         [
+          -118.809146,
+          34.132073
+         ]
+        ]
+       ]
+      },
+      "properties": {
+       "zone_id": "US-CA-XLA-WLV-C201",
+       "zone_name": null,
+       "status": "Evacuation Warning",
+       "status_key": "warning",
+       "county": "LOS ANGELES",
+       "jurisdiction": "Los Angeles County",
+       "city_code": "WLV",
+       "event_type": null,
+       "notes": "Local authorities are responding to a Wildfire. An EVACUATION WARNING has been issued. PREPARE TO LEAVE.  Consider leaving now if you need more time to evacuate. Call 911 for emergency assistance. Visit AlertLA.org for more information.",
+       "critical_info": null,
+       "public_info": null,
+       "status_updated_ms": 1792112632000,
+       "aggregated_ms": 1792112732471
+      }
+     }
+    ]
+   },
+   "counts": {
+    "order": 1,
+    "warning": 1
+   },
+   "coverage": [
+    {
+     "county": "Los Angeles",
+     "in_statewide_layer": true,
+     "acquisition_status": "Acquired",
+     "zone_source": "Genasys Protect (Zonehaven)",
+     "reference_url": "https://lacounty.maps.arcgis.com/apps/webappviewer/index.html?id=695f0c805ba046b28c84da79bbf252dc"
+    },
+    {
+     "county": "Ventura",
+     "in_statewide_layer": true,
+     "acquisition_status": "Acquired",
+     "zone_source": "County GIS",
+     "reference_url": "https://vcoes.maps.arcgis.com/apps/View/index.html?appid=24d2d88d701b4eaa8e9fe6e5882c8258"
+    }
+   ]
+  },
+  "la_empty": {
+   "kind": "evacuations",
+   "status": "available",
+   "reason": null,
+   "reason_code": null,
+   "retrieved_ms": "<fetch time>",
+   "source_updated_ms": 1792263695245,
+   "requested_at_ms": null,
+   "now_ms": 1792268900000,
+   "bbox": [
+    -119.0,
+    33.95,
+    -118.5,
+    34.3
+   ],
+   "incident_id": null,
+   "sources": [
+    {
+     "id": "caloes_evacuations",
+     "name": "California Evacuation Aggregation Layer",
+     "publisher": "California Governor's Office of Emergency Services (Cal OES)",
+     "url": "https://gis.data.ca.gov/datasets/CalEMA::california-evacuation-aggregation-layer",
+     "service_url": "https://services.arcgis.com/BLN4oKB0N1YSgvY8/arcgis/rest/services/CA_EVACUATIONS_CalOESHosted_view/FeatureServer/0",
+     "license": "Public use (data.ca.gov: \"No restrictions on public use\")",
+     "terms_url": "https://data.ca.gov/dataset/california-evacuation-aggregation-layer",
+     "attribution": "Evacuation zones: local officials via county GIS and Genasys Protect, aggregated by Cal OES",
+     "disclaimer": "This information is constantly changing, and Cal OES does not verify or certify the information contained herein.",
+     "cadence": "Rebuilt by Cal OES about every 5 minutes; current status only"
+    },
+    {
+     "id": "caloes_evacuation_inventory",
+     "name": "County Evacuation Inventory",
+     "publisher": "Cal OES",
+     "url": "https://www.arcgis.com/home/item.html?id=c685585b99da416fa6ab70027597ad47",
+     "service_url": "https://services.arcgis.com/BLN4oKB0N1YSgvY8/arcgis/rest/services/County_Evacuation_Inventory_Public/FeatureServer/0",
+     "license": "Public use",
+     "terms_url": "https://www.arcgis.com/home/item.html?id=c685585b99da416fa6ab70027597ad47",
+     "attribution": "County coverage: Cal OES County Evacuation Inventory",
+     "disclaimer": null,
+     "cadence": "Updated by Cal OES as counties join"
+    }
+   ],
+   "caveats": [
+    "Shown as current status. During Cal OES's 5-minute rebuild the layer can briefly miss zones.",
+    "No orders or warnings are listed here right now. That is not an all-clear: follow local officials."
+   ],
+   "issuing_authority": "Local emergency officials (county sheriff or emergency services, cities); each zone names its county. Cal OES aggregates and does not verify.",
+   "zones": {
+    "type": "FeatureCollection",
+    "features": []
+   },
+   "counts": {},
+   "coverage": [
+    {
+     "county": "Los Angeles",
+     "in_statewide_layer": true,
+     "acquisition_status": "Acquired",
+     "zone_source": "Genasys Protect (Zonehaven)",
+     "reference_url": "https://lacounty.maps.arcgis.com/apps/webappviewer/index.html?id=695f0c805ba046b28c84da79bbf252dc"
+    },
+    {
+     "county": "Ventura",
+     "in_statewide_layer": true,
+     "acquisition_status": "Acquired",
+     "zone_source": "County GIS",
+     "reference_url": "https://vcoes.maps.arcgis.com/apps/View/index.html?appid=24d2d88d701b4eaa8e9fe6e5882c8258"
+    }
+   ]
+  },
+  "imperial_not_covered": {
+   "kind": "evacuations",
+   "status": "unavailable",
+   "reason": "The statewide layer has no evacuation zones from Imperial County. Check the county's official channels.",
+   "reason_code": "not_covered",
+   "retrieved_ms": null,
+   "source_updated_ms": null,
+   "requested_at_ms": null,
+   "now_ms": 1792268900000,
+   "bbox": [
+    -115.7,
+    32.7,
+    -115.3,
+    33.0
+   ],
+   "incident_id": null,
+   "sources": [
+    {
+     "id": "caloes_evacuations",
+     "name": "California Evacuation Aggregation Layer",
+     "publisher": "California Governor's Office of Emergency Services (Cal OES)",
+     "url": "https://gis.data.ca.gov/datasets/CalEMA::california-evacuation-aggregation-layer",
+     "service_url": "https://services.arcgis.com/BLN4oKB0N1YSgvY8/arcgis/rest/services/CA_EVACUATIONS_CalOESHosted_view/FeatureServer/0",
+     "license": "Public use (data.ca.gov: \"No restrictions on public use\")",
+     "terms_url": "https://data.ca.gov/dataset/california-evacuation-aggregation-layer",
+     "attribution": "Evacuation zones: local officials via county GIS and Genasys Protect, aggregated by Cal OES",
+     "disclaimer": "This information is constantly changing, and Cal OES does not verify or certify the information contained herein.",
+     "cadence": "Rebuilt by Cal OES about every 5 minutes; current status only"
+    },
+    {
+     "id": "caloes_evacuation_inventory",
+     "name": "County Evacuation Inventory",
+     "publisher": "Cal OES",
+     "url": "https://www.arcgis.com/home/item.html?id=c685585b99da416fa6ab70027597ad47",
+     "service_url": "https://services.arcgis.com/BLN4oKB0N1YSgvY8/arcgis/rest/services/County_Evacuation_Inventory_Public/FeatureServer/0",
+     "license": "Public use",
+     "terms_url": "https://www.arcgis.com/home/item.html?id=c685585b99da416fa6ab70027597ad47",
+     "attribution": "County coverage: Cal OES County Evacuation Inventory",
+     "disclaimer": null,
+     "cadence": "Updated by Cal OES as counties join"
+    }
+   ],
+   "caveats": [],
+   "issuing_authority": "Local emergency officials (county sheriff or emergency services, cities); each zone names its county. Cal OES aggregates and does not verify.",
+   "zones": {
+    "type": "FeatureCollection",
+    "features": []
+   },
+   "counts": {},
+   "coverage": [
+    {
+     "county": "Imperial",
+     "in_statewide_layer": false,
+     "acquisition_status": "No Data",
+     "zone_source": null,
+     "reference_url": null
+    }
+   ]
+  },
+  "la_upstream_503": {
+   "kind": "evacuations",
+   "status": "unavailable",
+   "reason": "Cal OES ArcGIS services could not be reached (HTTP 503). No evacuation zones are shown.",
+   "reason_code": "upstream_error",
+   "retrieved_ms": null,
+   "source_updated_ms": null,
+   "requested_at_ms": null,
+   "now_ms": 1792268900000,
+   "bbox": [
+    -119.0,
+    33.95,
+    -118.5,
+    34.3
+   ],
+   "incident_id": null,
+   "sources": [
+    {
+     "id": "caloes_evacuations",
+     "name": "California Evacuation Aggregation Layer",
+     "publisher": "California Governor's Office of Emergency Services (Cal OES)",
+     "url": "https://gis.data.ca.gov/datasets/CalEMA::california-evacuation-aggregation-layer",
+     "service_url": "https://services.arcgis.com/BLN4oKB0N1YSgvY8/arcgis/rest/services/CA_EVACUATIONS_CalOESHosted_view/FeatureServer/0",
+     "license": "Public use (data.ca.gov: \"No restrictions on public use\")",
+     "terms_url": "https://data.ca.gov/dataset/california-evacuation-aggregation-layer",
+     "attribution": "Evacuation zones: local officials via county GIS and Genasys Protect, aggregated by Cal OES",
+     "disclaimer": "This information is constantly changing, and Cal OES does not verify or certify the information contained herein.",
+     "cadence": "Rebuilt by Cal OES about every 5 minutes; current status only"
+    },
+    {
+     "id": "caloes_evacuation_inventory",
+     "name": "County Evacuation Inventory",
+     "publisher": "Cal OES",
+     "url": "https://www.arcgis.com/home/item.html?id=c685585b99da416fa6ab70027597ad47",
+     "service_url": "https://services.arcgis.com/BLN4oKB0N1YSgvY8/arcgis/rest/services/County_Evacuation_Inventory_Public/FeatureServer/0",
+     "license": "Public use",
+     "terms_url": "https://www.arcgis.com/home/item.html?id=c685585b99da416fa6ab70027597ad47",
+     "attribution": "County coverage: Cal OES County Evacuation Inventory",
+     "disclaimer": null,
+     "cadence": "Updated by Cal OES as counties join"
+    }
+   ],
+   "caveats": [],
+   "issuing_authority": "Local emergency officials (county sheriff or emergency services, cities); each zone names its county. Cal OES aggregates and does not verify.",
+   "zones": {
+    "type": "FeatureCollection",
+    "features": []
+   },
+   "counts": {},
+   "coverage": [
+    {
+     "county": "Los Angeles",
+     "in_statewide_layer": true,
+     "acquisition_status": "Acquired",
+     "zone_source": "Genasys Protect (Zonehaven)",
+     "reference_url": "https://lacounty.maps.arcgis.com/apps/webappviewer/index.html?id=695f0c805ba046b28c84da79bbf252dc"
+    },
+    {
+     "county": "Ventura",
+     "in_statewide_layer": true,
+     "acquisition_status": "Acquired",
+     "zone_source": "County GIS",
+     "reference_url": "https://vcoes.maps.arcgis.com/apps/View/index.html?appid=24d2d88d701b4eaa8e9fe6e5882c8258"
+    }
+   ]
+  }
+ }
+}

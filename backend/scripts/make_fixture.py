@@ -1,11 +1,15 @@
 #!/usr/bin/env python
-"""Write two synthetic, contract-complete incident bundles into ``DATA_DIR/incidents``:
+"""Write synthetic, contract-complete incident bundles into ``DATA_DIR/incidents`` (the default run writes the first two):
 
 * ``fixture-demo``  historical (2025), 12 km AOI near Altadena (EPSG:32611): ~5 days to ~12,000 ac, a wind event,
   a spot fire across the creek, containment; hindcast ``fx-001`` launched 24 h after ignition (perturbed x31).
 * ``fixture-live``  live, 16 km AOI in the Santa Lucia Range (EPSG:32610): "now" is ~2/3 through the observed
   period, nothing is observed after now, and forecast ``fx-001`` (gfs025 x31) starts at now. Dates are relative to
   the moment this script runs.
+* ``fixture-east``  (``--only east``, brief 3) historical (2025), 12 km AOI near Black Cove, NC (EPSG:32617,
+  America/New_York): a synthetic NIFC WFIGS-style fire (``state`` "NC", ``record_source`` "wfigs", ``record_issuer``
+  "NIFC WFIGS (IRWIN)", ``irwin_id`` null, ``calfire_uid`` ""), for browser checks of Eastern time and UTM 17 without a
+  build. It is bundle-only: never buildable, and it has no agency record (CONTRACT 14.12.9).
 
 Everything is procedural (numpy/scipy/Pillow, fixed seeds): ridged-fBm terrain with a carved river valley, FBFM40
 fuels by elevation/aspect/slope, canopy, a NAIP-like aerial photo, sky-view AO, water, ~60k trees, an anisotropic
@@ -13,7 +17,7 @@ fuels by elevation/aspect/slope, canopy, a NAIP-like aerial photo, sky-view AO, 
 hourly series, events, diurnal weather with a wind event, and an ensemble forecast. Every JSON file is validated
 strictly against ``fire3d.contracts``. The spread here is NOT pyretechnics output: it only has to look plausible.
 
-Usage: ``uv run python scripts/make_fixture.py [--data-dir DIR] [--only demo|live] [--members 31] [--quicklook DIR]``
+Usage: ``uv run python scripts/make_fixture.py [--data-dir DIR] [--only demo|live|east] [--members 31] [--quicklook DIR]``
 """
 
 from __future__ import annotations
@@ -56,7 +60,7 @@ from fire3d.contracts import (  # noqa: E402
 from fire3d.grid import Grid, fire_grid_size, manifest_grid, slope_aspect, transformer, utm_epsg_for, weather_axes  # noqa: E402
 from fire3d.timeutil import DAY_MS, HOUR_MS, floor_hour_ms, now_ms, time_origin_for  # noqa: E402
 
-LA = ZoneInfo("America/Los_Angeles")
+LA = ZoneInfo("America/Los_Angeles")      # the zone of the scenario being built (set by build_fixture; demo/live: Pacific)
 NEVER = config.NEVER
 ACRE = config.ACRE_M2
 CHAIN = config.CHAIN_M
@@ -216,6 +220,10 @@ class Scenario:
     percent_contained: float
     now_ms: int | None = None              # live: wall-clock "now" used to cut observations
     forecast_events: list[WindEvent] = field(default_factory=list)
+    tz: str = "America/Los_Angeles"        # the fire's own zone (local hours, labels); brief 3
+    tz_abbr: str = "PT"                    # zone word in event text
+    issuer: str = "CAL FIRE"               # who "reported" the synthetic fire (event and ignition text)
+    summary_extra: dict = field(default_factory=dict)   # brief-3 summary fields written explicitly (east)
 
 
 def demo_scenario() -> Scenario:
@@ -252,6 +260,38 @@ def live_scenario() -> Scenario:
         fuels_edition="LF2025", percent_contained=18.0, now_ms=real_now,
         forecast_events=[WindEvent((real_now - started) / HOUR_MS + 26.0, 0.7, 6.0, 13.0)],
     )
+
+
+def east_scenario() -> Scenario:
+    """Brief 3 (CONTRACT 14.12.9): a synthetic historical fire near Black Cove, NC (35.29, -82.30), UTM 17, Eastern
+    time (EDT on these dates), with a NIFC WFIGS-style record that matches no real record (``irwin_id`` null)."""
+    started = int(datetime(2025, 3, 22, 18, 10, tzinfo=timezone.utc).timestamp() * 1000)   # 14:10 EDT
+    return Scenario(
+        id="fixture-east", name="Fixture East (synthetic)", mode="historical", seed=31,
+        center_lon=-82.30, center_lat=35.29, extent_m=12000.0, started_ms=started,
+        wind_from=250.0, ignition_uv=(0.38, 0.55),
+        river_u0=0.62, river_amp=0.07, river_phase=0.4, river_top_m=700.0,
+        town=(0.70, 1.0, 0.80, 1.0),
+        events=[WindEvent(3.0, 0.8, 3.5, 9.0), WindEvent(25.0, 1.8, 6.0, 16.0), WindEvent(47.0, 0.6, 4.0, 10.0)],
+        spot_h=26.0, target_acres=4000.0, target_at_h=None, contain_h=(70.0, 100.0),
+        t_mean=16.0, t_amp=8.0, rh_mean=34.0, rh_amp=14.0,
+        county="Polk", location="Blue Ridge escarpment (synthetic fixture)",
+        admin_unit="Synthetic fixture (North Carolina)", calfire_uid="",
+        fuels_edition="LF2024", percent_contained=100.0,
+        tz="America/New_York", tz_abbr="ET", issuer="NIFC WFIGS (IRWIN)",
+        summary_extra={
+            "uid": "", "record_source": "wfigs", "record_issuer": "NIFC WFIGS (IRWIN)", "state": "NC",
+            "time_zone": "America/New_York", "agency": None, "agency_code": None, "irwin_id": None,
+            "unique_fire_id": None, "source_name": "Fixture East (synthetic)", "gacc": None, "accuracy_region": None,
+            "active_sources": [], "other_records": [], "complex_name": None, "complex_members": [], "aliases": [],
+        },
+    )
+
+
+def _use_zone(tz: str) -> None:
+    """Point the module's local-time helpers (local hours, wall times, labels) at the scenario's zone."""
+    global LA
+    LA = ZoneInfo(tz)
 
 
 # =================================================================================================================
@@ -925,8 +965,8 @@ def make_events(sc: Scenario, fire: Grid, fu: Fuels, truth: TruthFire, arrival_h
 
     ix, iz = fire.pixel_center_local(*truth.ign_rc)
     ev.append({"type": "ignition", "t_ms": sc.started_ms, "title": "Ignition (est.)",
-               "detail": f"Reported by CAL FIRE; fixture ignition at {la_label(sc.started_ms)} PT.", "x": round(ix, 1), "z": round(iz, 1),
-               "confidence": "estimated", "source": "CAL FIRE (fixture)"})
+               "detail": f"Reported by {sc.issuer}; fixture ignition at {la_label(sc.started_ms)} {sc.tz_abbr}.", "x": round(ix, 1), "z": round(iz, 1),
+               "confidence": "estimated", "source": f"{sc.issuer} (fixture)"})
     growth = np.array(ts["growth_acres_per_h"])
     t_arr = np.array(ts["t_ms"])
     pos = growth[growth > 0]
@@ -1244,6 +1284,7 @@ def make_trees(fire: Grid, render: Grid, terr: Terrain, fu: Fuels, rng: np.rando
 # =================================================================================================================
 def build_fixture(sc: Scenario, data_dir: Path, members: int, quicklook: Path | None) -> dict:
     t_start = time.time()
+    _use_zone(sc.tz)
     rng = np.random.default_rng(sc.seed)
     built = now_ms()
     epsg = utm_epsg_for(sc.center_lon)
@@ -1359,6 +1400,7 @@ def build_fixture(sc: Scenario, data_dir: Path, members: int, quicklook: Path | 
         "contained_ms": contained_ms, "acres": round(final_acres, 1), "percent_contained": sc.percent_contained,
         "is_active": sc.mode == "live", "county": sc.county, "location": sc.location, "admin_unit": sc.admin_unit, "url": None,
         "lat": round(ign_lat, 6), "lon": round(ign_lon, 6), "detections_24h": det_24h, "bundle_status": "ready", "bundle_built_ms": built,
+        **sc.summary_extra,
     }
     sources = [
         ("Terrain (synthetic)", "Ridged-fBm DEM with a carved river valley, 1024² render grid"),
@@ -1374,7 +1416,7 @@ def build_fixture(sc: Scenario, data_dir: Path, members: int, quicklook: Path | 
             "time_origin_ms": int(origin), "time_range": {"start_ms": int(start_), "end_ms": int(end_), "now_ms": int(now_)},
             "grid": manifest_grid(render, fire, float(terr.dem.min()), float(terr.dem.max())),
             "ignition": {"x": round(ign_x, 1), "z": round(ign_z, 1), "lat": round(ign_lat, 6), "lon": round(ign_lon, 6), "t_ms": sc.started_ms,
-                         "source": "CAL FIRE incident point (fixture)"},
+                         "source": f"{sc.issuer} incident point (fixture)"},
             "default_profile_path": profile, "fuels_edition": sc.fuels_edition,
             "data_sources": [{"name": n, "detail": d, "fetched_ms": built} for n, d in sources],
             "stats": {"final_acres_observed": round(final_acres, 1), "detections": len(detections), "perimeters": len(perimeters)},
@@ -1446,7 +1488,8 @@ def write_quicklooks(out: Path, name: str, terr: Terrain, svf: np.ndarray, fu: F
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--data-dir", type=Path, default=None, help="data dir (default: FIRE3D_DATA_DIR or <repo>/data)")
-    ap.add_argument("--only", choices=("demo", "live"), default=None)
+    ap.add_argument("--only", choices=("demo", "live", "east"), default=None,
+                    help="one fixture; the default run writes demo + live (east only with --only east)")
     ap.add_argument("--members", type=int, default=31)
     ap.add_argument("--quicklook", type=Path, default=None, help="also write quick-look PNGs to this directory")
     args = ap.parse_args(argv)
@@ -1456,6 +1499,8 @@ def main(argv: list[str] | None = None) -> int:
         scenarios.append(demo_scenario())
     if args.only in (None, "live"):
         scenarios.append(live_scenario())
+    if args.only == "east":
+        scenarios.append(east_scenario())
     for sc in scenarios:
         build_fixture(sc, data_dir, args.members, args.quicklook)
     print(f"fixtures written to {data_dir / 'incidents'} and validated against fire3d.contracts")

@@ -5,8 +5,9 @@ import { Component, useEffect, useRef, useState, type ErrorInfo, type ReactNode 
 import { useShallow } from 'zustand/react/shallow'
 import type { JobStatus } from '../api/types'
 import { fmtAcres } from '../lib/format'
-import { fmtDate } from '../lib/time'
+import { fmtDayDate } from '../lib/time'
 import { useStore } from '../state/store'
+import { useTimeFormat } from '../state/timeZone'
 import { CornerMarks, ProgressBar, Spinner } from './controls'
 import { JobProgress } from './AnalysisTab'
 import { useToasts } from './toast'
@@ -33,7 +34,7 @@ export function StatusOverlay() {
   const name = s.summary?.name ?? s.id ?? 'incident'
   const ready = s.manifest?.status === 'ready'
   if (!s.id) {
-    if (s.catalogLoading) card = <LoadingCard text="Loading CAL FIRE incidents…" />
+    if (s.catalogLoading) card = <LoadingCard text="Loading the fire lists…" />
     else if (s.catalogError) card = <CatalogErrorCard error={s.catalogError} />
     else if (s.nCatalog === 0) card = <NothingCard />
   } else if (ready) {
@@ -100,13 +101,14 @@ function BuildCard({ name, job }: { name: string; job: JobStatus | null }) {
 }
 
 function NotBuiltCard({ name, acres, started, autoBuild }: { name: string; acres: number | null; started: number; autoBuild: boolean }) {
+  const tf = useTimeFormat()
   return (
     <div className="ov-card glass">
       <CornerMarks />
       <div className="ov-eyebrow eyebrow">Analysis not prepared</div>
       <div className="ov-title">{name}</div>
       <p className="ov-text secondary">
-        <span className="mono">{fmtAcres(acres)}</span> · started <span className="mono">{fmtDate(started)}</span>. Prepare the analysis (incident bundle) to replay the fire in 3D and run
+        <span className="mono">{fmtAcres(acres)}</span> · started <span className="mono">{fmtDayDate(started, tf.tz, { year: 'always' })}</span>. Prepare the analysis (incident bundle) to replay the fire in 3D and run
         forecasts{autoBuild ? '.' : ' (the setting “Prepare analysis when I pick an unprepared fire” is off).'}
       </p>
       <div className="ov-actions">
@@ -152,7 +154,7 @@ function NothingCard() {
   return (
     <div className="ov-card glass">
       <div className="ov-eyebrow eyebrow">No incidents</div>
-      <p className="ov-text secondary">The catalog is empty: no active CAL FIRE incidents and no 2025 fires above the size threshold.</p>
+      <p className="ov-text secondary">The fire list is empty: no active fires listed by CAL FIRE or NIFC and no 2025 fires above the size threshold. That is not an all-clear: follow local officials.</p>
       <div className="ov-actions">
         <button type="button" className="btn btn-gold" onClick={() => void useStore.getState().loadCatalog({ minAcres: 100 })}>
           Include fires ≥ 100 ac
@@ -189,7 +191,7 @@ export function ErrorBanner() {
   )
 }
 
-/** "No active CAL FIRE incidents" notice when live mode has nothing and a replay is shown instead. */
+/** "No active fires listed" notice when live mode has nothing and a replay is shown instead. */
 export function NoLiveNotice() {
   const show = useStore((s) => !s.catalog.loading && s.catalog.updatedMs.live != null && s.catalog.live.length === 0 && s.summary?.mode === 'historical')
   const [dismissed, setDismissed] = useState(false)
@@ -197,7 +199,7 @@ export function NoLiveNotice() {
   return (
     <div className="banner banner-info">
       <Info size={13} />
-      <span className="banner-text">No active CAL FIRE incidents right now · showing a 2025 replay</span>
+      <span className="banner-text">No active fires listed by CAL FIRE or NIFC right now · showing a 2025 replay</span>
       <button type="button" className="icon-btn" aria-label="Dismiss" onClick={() => setDismissed(true)}>
         <X size={13} />
       </button>

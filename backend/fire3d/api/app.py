@@ -1,9 +1,10 @@
 """FastAPI application (SPEC 6), served as ``fire3d.api.app:app`` on port 8710. Owner: api agent.
 
-Routes: health; incident list (``year=`` for historical lists, ``bbox_lonlat`` on rows) + detail; build and
-forecast jobs; job status; bundle files (gzip, ETag, ``Cache-Control: no-cache``, traversal-safe); live aircraft
-(10 s cache per incident); live status. Routers: geocode, extras (optional map sources), official (CAL FIRE status
-history and NWS fire weather alerts, ``api/official.py``).
+Routes: health; incident list (``year=`` / ``state=`` filters, ``bbox_lonlat`` on rows, ``sources``, gzip) + detail;
+build and forecast jobs; job status; bundle files (gzip, ETag, ``Cache-Control: no-cache``, traversal-safe); live
+aircraft (10 s cache per incident); live status; point lookup (``/api/geo/lookup``, brief 3). Routers: geocode, extras
+(optional map sources), official (CAL FIRE status history, NWS fire weather and local alerts, ``api/official.py``),
+records (NIFC WFIGS incident records and accuracy regions, ``api/records.py``).
 Startup (lifespan) starts the live refresh loop when FIRE3D_LIVE=1 (``config.LIVE_ENABLED``).
 
 Blocking work never runs on the event loop: route functions that touch the network or disk are plain ``def``
@@ -44,6 +45,7 @@ from . import live
 from . import extras as extras_routes
 from . import geocode as geocode_routes
 from . import official as official_routes
+from . import records as records_routes
 
 log = logging.getLogger(__name__)
 
@@ -172,7 +174,8 @@ def _catalog_summary(incident_id: str) -> dict | None:
 
 def _resolve(incident_id: str, m: dict | None) -> tuple[dict, bool] | None:
     """``(summary dict, buildable)`` from the catalog, else from the bundle manifest; None when unknown.
-    ``buildable``: a real CAL FIRE incident (bundle-only incidents such as the fixtures are read-only)."""
+    ``buildable``: ``pipeline.is_catalog_incident`` (a listed CAL FIRE or NIFC WFIGS fire; bundle-only incidents such
+    as the fixtures are read-only)."""
     s = _catalog_summary(incident_id)
     if s is None and m and isinstance(m.get("summary"), dict):
         try:
@@ -414,6 +417,7 @@ app.add_middleware(
 app.include_router(geocode_routes.router)
 app.include_router(extras_routes.router)
 app.include_router(official_routes.router)       # BRIEF-2: CAL FIRE status history, NWS fire weather alerts
+app.include_router(records_routes.router)        # brief 3: NIFC WFIGS incident records, accuracy regions (14.4, 14.5)
 
 
 @app.get("/api/health")
@@ -422,25 +426,53 @@ async def health() -> Response:
     return _json(dump(HealthResponse(ok=True, version=config.VERSION)))
 
 
+GZIP_MIN_BYTES = 1024
+
+
+def _maybe_gzip(body: bytes, request: Request | None, headers: dict[str, str] | None = None) -> Response:
+    """JSON ``body`` gzip-compressed in the handler when the request accepts it (brief 3, B-R17), with
+    ``Vary: Accept-Encoding``; small bodies are sent as they are."""
+    h = {"Vary": "Accept-Encoding", **(headers or {})}
+    accepts = request is not None and "gzip" in request.headers.get("accept-encoding", "").lower()
+    if accepts and len(body) >= GZIP_MIN_BYTES:
+        h["Content-Encoding"] = "gzip"
+        return Response(gzip.compress(body, compresslevel=6, mtime=0), media_type="application/json", headers=h)
+    return Response(body, media_type="application/json", headers=h)
+
+
+def _bundle_sources(reason: str) -> list[dict]:
+    return [{"id": sid, "name": name, "status": "unavailable", "retrieved_ms": None, "reason": reason}
+            for sid, name in (("calfire", "CAL FIRE"), ("wfigs", "NIFC WFIGS (IRWIN)"))]
+
+
 @app.get("/api/incidents")
 def list_incidents(
+    request: Request,
     mode: Literal["live", "historical"] = "historical",
     min_acres: float | None = Query(None, ge=0),
     year: int | None = Query(None, ge=2000, le=2100),
+    state: str | None = Query(None, min_length=2, max_length=2, pattern=r"^[A-Za-z]{2}$"),
 ) -> Response:
-    """``{mode, updated_ms, incidents, year?}``: catalog incidents (historical: CAL FIRE's list of ``year``, default
-    2025, >= 300 ac by default, by acres; live by detections_24h then acres; ``year`` applies to historical only).
-    Rows carry ``bbox_lonlat`` (the analysis area of a ready bundle, else null). Falls back to the bundles on disk
-    when the catalog is unavailable."""
+    """``{mode, updated_ms, incidents, year?, sources}`` (CONTRACT 14.1): the national list (live: every active
+    wildfire of the lower 48 by detections_24h then acres; historical: the wildfires of ``year``, default the current
+    UTC year, >= 300 ac by default, by acres; CAL FIRE is the record in California). ``state`` (USPS) filters rows.
+    Rows carry ``bbox_lonlat`` (the analysis area of a ready bundle, else null). ``sources`` says which source lists
+    answered. gzip when accepted. Falls back to the bundles on disk when both source lists are unavailable."""
     lo = min_acres if min_acres is not None else (DEFAULT_HISTORICAL_MIN_ACRES if mode == "historical" else None)
     from .. import catalog
 
     yr = year if mode == "historical" else None
+    st = state.upper() if state else None
     try:
         raw = catalog.get_catalog(mode, min_acres=lo, **({"year": yr} if yr is not None else {}))
+        sources = catalog.cached_sources(mode, year=yr, min_acres=lo)
+        if st is not None:
+            raw = [x for x in raw if (getattr(x, "state", None) or "").upper() == st]
     except Exception as e:
-        log.warning("catalog.get_catalog(%s) failed (%s); listing bundles on disk", mode, config.mask_secrets(e))
-        rows = _bundle_rows(mode, lo, yr)
+        log.warning("catalog.list_incidents(%s) failed (%s); listing bundles on disk", mode, config.mask_secrets(e))
+        rows = [r for r in _bundle_rows(mode, lo, yr) if st is None or (r.get("state") or "").upper() == st]
+        sources = _bundle_sources("The fire lists (CAL FIRE and NIFC) are unavailable right now; only fires with a "
+                                  "bundle on this server are listed.")
     else:
         rows = []
         for s in raw:
@@ -450,8 +482,9 @@ def list_incidents(
                 log.warning("skipping a catalog row that does not match IncidentSummary: %s", e)
     body: dict[str, Any] = {"mode": mode, "updated_ms": now_ms(), "incidents": rows}
     if mode == "historical":
-        body["year"] = yr if yr is not None else catalog.HISTORICAL_YEAR
-    return _json(body)
+        body["year"] = yr if yr is not None else catalog.default_year()
+    body["sources"] = sources
+    return _maybe_gzip(orjson.dumps(body, option=orjson.OPT_SERIALIZE_NUMPY | orjson.OPT_NON_STR_KEYS), request)
 
 
 @app.get("/api/incidents/{incident_id}")
@@ -479,6 +512,30 @@ def _build_job_fn(incident_id: str, force: bool):
     return fn
 
 
+UNSUPPORTED_TEXT = "Fire-3d does not support Alaska, Hawaii or US territories yet."
+
+
+def _not_buildable(incident_id: str, summary: dict) -> tuple[int, str]:
+    """The build gate's answer for an id ``pipeline.is_catalog_incident`` refuses (CONTRACT 14.2): 422 for Alaska,
+    Hawaii or a territory; 409 for a local or synthetic bundle (no CAL FIRE or NIFC WFIGS list knows the id) or an
+    alias of a listed fire; else 409 "cannot be built in this version"."""
+    from .. import catalog, regions
+
+    listed = None
+    try:
+        listed = catalog.resolve_listed(incident_id)
+    except Exception as e:  # noqa: BLE001 - a lookup failure must not turn into a 500
+        log.warning("build gate: resolve_listed(%s) failed: %s", incident_id, config.mask_secrets(e))
+    st = (listed.state if listed is not None else summary.get("state")) or None
+    if listed is not None and not regions.is_supported_state(st):
+        return 422, UNSUPPORTED_TEXT
+    if listed is None:
+        return 409, f"'{incident_id}' is a local or synthetic bundle; it cannot be rebuilt."
+    if listed.id != incident_id:
+        return 409, f"'{incident_id}' is listed as '{listed.id}'."
+    return 409, f"'{incident_id}' cannot be built in this version yet."
+
+
 @app.post("/api/incidents/{incident_id}/build")
 def start_build(incident_id: str, force: bool = False) -> Response:
     """Build (``force``: rebuild) the bundle in the background; returns the running build job if there is one."""
@@ -491,9 +548,9 @@ def start_build(incident_id: str, force: bool = False) -> Response:
     res = _resolve(incident_id, m)
     if res is None:
         raise _http_error(404, f"unknown incident {incident_id!r}")
-    _, buildable = res
+    summary, buildable = res
     if not buildable and (force or not m or m.get("status") != "ready"):
-        raise _http_error(409, f"incident {incident_id!r} is not in the CAL FIRE catalog, so its bundle cannot be (re)built")
+        raise _http_error(*_not_buildable(incident_id, summary))
     st = jm.submit("build", incident_id, _build_job_fn(incident_id, force), progress_mode="overall",
                    message="build queued" if not force else "rebuild queued")
     return _json(dump(st))
@@ -589,5 +646,28 @@ def incident_aircraft(incident_id: str, all: str = "0") -> Response:  # noqa: A0
 
 @app.get("/api/live/status")
 def live_status() -> Response:
-    """``{last_refresh_ms, next_refresh_ms, active_incidents, detections_24h_ca, auto_build}``."""
+    """``{last_refresh_ms, next_refresh_ms, active_incidents, detections_24h_ca, auto_build, detections_24h}``."""
     return _json(dump(live.live_status()))
+
+
+def _coord(raw: str | None, name: str, lo: float, hi: float) -> float:
+    try:
+        v = float(str(raw).strip())
+    except (TypeError, ValueError):
+        raise _http_error(400, f"{name} must be a number") from None
+    if not math.isfinite(v) or not lo <= v <= hi:
+        raise _http_error(400, f"{name} must be between {lo:g} and {hi:g}")
+    return v
+
+
+@app.get("/api/geo/lookup")
+def geo_lookup(lon: str | None = None, lat: str | None = None) -> Response:
+    """Brief 3 (CONTRACT 14.3): state, county, time zone and coverage at a point, offline (``fire3d.regions``).
+    400 on missing or bad numbers; cached by browsers for a day (the region files change only with a release)."""
+    from .. import regions
+    from ..contracts import GeoLookup
+
+    x = _coord(lon, "lon", -180.0, 180.0)
+    y = _coord(lat, "lat", -90.0, 90.0)
+    body = dump(GeoLookup.model_validate(regions.lookup(x, y)))
+    return _json(body, headers={"Cache-Control": "public, max-age=86400"})

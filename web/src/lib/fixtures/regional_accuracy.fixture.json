@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "generated_ms": 1792713600000,
+  "served_ms": 1792713600000,
+  "model": { "engine": "pyretechnics 2026.8.10", "settings": "config.FORECAST_* (fixture)" },
+  "method": {
+    "metric": "growth_sorensen",
+    "forecast": "p50 of 31 perturbed members",
+    "leads_h": [12, 24, 48, 72],
+    "aggregate": "mean_of_fire_means",
+    "min_fires": 2,
+    "min_leads": 16,
+    "weather": "archived HRRR (hindcast), no ERA5 fill",
+    "starts": "during main growth (Eaton and Palisades: ignition + 6, 12, 24 h; Madre: ignition + 24, 48 h)",
+    "secondary": "ignition + 6/12/24 h"
+  },
+  "assignment": { "by": "WFIGS GACC", "split": { "SACC-SP": ["TX", "OK"] }, "fallback": "untested" },
+  "regions": [
+    {
+      "id": "OSCC", "name": "Southern California", "status": "tested", "in_sample": true, "seed": true,
+      "n_fires": 3, "n_leads": 32, "growth_sorensen": 0.433, "range": [0.395, 0.467], "pooled_leads": 0.438,
+      "growth_ratio_median": 1.85, "years": [2025], "lfm_method": "ca_month_table_drought",
+      "fuel_groups_tested": ["chaparral", "grass"],
+      "fires": [
+        { "id": "2025-eaton-fire-dbfa57", "name": "Eaton", "state": "CA", "n_leads": 11, "growth_sorensen": 0.438, "fuels_edition": "LF2024", "lfm_method": "ca_month_table_drought", "era5_hours": 0 },
+        { "id": "2025-madre-fire-0f2d6c", "name": "Madre", "state": "CA", "n_leads": 10, "growth_sorensen": 0.395, "fuels_edition": "LF2024", "lfm_method": "ca_month_table_drought", "era5_hours": 0 },
+        { "id": "2025-palisades-fire-abfed7", "name": "Palisades", "state": "CA", "n_leads": 11, "growth_sorensen": 0.467, "fuels_edition": "LF2024", "lfm_method": "ca_month_table_drought", "era5_hours": 0 }
+      ]
+    },
+    {
+      "id": "NWCC", "name": "Northwest", "status": "tested", "in_sample": false,
+      "n_fires": 2, "n_leads": 24, "growth_sorensen": 0.41, "range": [0.33, 0.48], "pooled_leads": 0.42,
+      "by_lead": { "12": 0.3, "24": 0.4, "48": 0.45, "72": 0.47 }, "growth_ratio_median": 2.1, "years": [2024, 2025],
+      "lfm_method": "gsi_nfdrs2016", "fuels_editions": ["LF2023", "LF2024"], "fuel_groups_tested": ["timber"],
+      "fires": []
+    },
+    {
+      "id": "SACC-SP", "name": "Southern Plains", "status": "limited", "n_fires": 1, "n_leads": 12,
+      "fuel_groups_tested": ["grass"],
+      "fires": [{ "id": "2026-rush-fire-aaaaaa", "name": "Rush", "state": "OK", "n_leads": 12, "growth_sorensen": 0.38, "fuels_edition": "LF2024", "lfm_method": "gsi_nfdrs2016", "era5_hours": 0 }]
+    },
+    { "id": "NRCC", "name": "Northern Rockies", "status": "untested", "n_fires": 0 },
+    { "id": "GBCC", "name": "Great Basin", "status": "untested", "n_fires": 0 },
+    { "id": "SWCC", "name": "Southwest", "status": "tested", "n_fires": 2, "n_leads": 20, "growth_sorensen": 0.3, "range": [0.25, 0.36], "growth_ratio_median": 0.6, "years": [2024], "lfm_method": "gsi_nfdrs2016" },
+    { "id": "SACC-SE", "name": "Southeast", "status": "untested", "n_fires": 0 },
+    { "id": "RMCC", "name": "Rocky Mountain", "status": "untested", "n_fires": 0 },
+    { "id": "EACC", "name": "Eastern", "status": "untested", "n_fires": 0 },
+    { "id": "ONCC", "name": "Northern California", "status": "untested", "n_fires": 0 }
+  ]
+}

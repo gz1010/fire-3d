@@ -1,11 +1,12 @@
-// Official evacuation zones panel (owner: optional-sources). Shows the issuing jurisdictions, the official wording
-// verbatim, the issuer's update time per zone, Cal OES's update time, county coverage and an honest state when the
-// status cannot be shown (past dates, county not in the statewide layer, outage). Presentational: pass the state
-// from useEvacuations().
+// Official evacuation zones panel (owner: us-official in brief 3; earlier optional-sources). Shows the issuing
+// jurisdictions, the official wording verbatim (Oregon's levels flagged as Fire-3d's wording of OEM's level number,
+// with OEM's definition), the issuer's update time per zone, each state source's own update time (Cal OES, Oregon
+// OEM), county coverage (California) and an honest state when the status cannot be shown (past dates, not available
+// in this state, county not in the statewide layer, outage). Presentational: pass the state from useEvacuations().
 import { ExternalLink, RefreshCw } from 'lucide-react'
 import { useState } from 'react'
 import { useNow } from '../ui/hooks'
-import { evacStatusCounts, zoneDetail } from './evacuation'
+import { aggregatorOf, answeredNames, answeredSources, evacStatusCounts, zoneDetail } from './evacuation'
 import { ExtrasNotice, LegendSwatch, SourceFooter } from './ExtrasCommon'
 import { envelopeStatusLine, fmtWhen, freshnessText } from './format'
 import type { ExtrasQueryState } from './hooks'
@@ -13,6 +14,13 @@ import { EVAC_GROUP_COLOR, EVAC_GROUP_HATCH, EVAC_GROUP_LINE } from './style'
 import type { EvacuationsResponse } from './types'
 
 const MAX_ZONES = 6
+
+/** "Current status issued by local officials and listed by Cal OES." / "… by Oregon OEM." / not available. */
+function panelSub(data: EvacuationsResponse | null): string {
+  if (data?.reason_code === 'state_not_available') return 'Official evacuation zones are shown only where a state publishes them (California, Oregon).'
+  const who = answeredNames(data) ?? (data?.sources.length ? [...new Set(data.sources.filter((s) => s.id !== 'caloes_evacuation_inventory').map((s) => aggregatorOf(data, s.id)))].join(' and ') : null)
+  return `Current status issued by local officials and listed by ${who || 'the state'}. Shown as current status only.`
+}
 
 export interface EvacuationPanelProps {
   state: ExtrasQueryState<EvacuationsResponse>
@@ -31,6 +39,7 @@ export function EvacuationPanel({ state, onShowZone, selectedZoneId }: Evacuatio
   const zones = data?.status === 'available' ? data.zones.features.filter((f) => !['normal', 'training'].includes(f.properties.status_key)) : []
   const shown = all ? zones : zones.slice(0, MAX_ZONES)
   const missing = data?.coverage.filter((c) => !c.in_statewide_layer) ?? []
+  const answered = answeredSources(data)
   return (
     <section className="xs-panel" aria-label="Official evacuation zones">
       <header className="xs-head">
@@ -40,9 +49,17 @@ export function EvacuationPanel({ state, onShowZone, selectedZoneId }: Evacuatio
           <RefreshCw size={14} aria-hidden="true" className={state.loading ? 'xs-spin' : undefined} />
         </button>
       </header>
-      <p className="xs-sub">Current status issued by local officials and listed by Cal OES. Shown as current status only.</p>
+      <p className="xs-sub">{panelSub(data)}</p>
       {data?.status === 'available' && !state.error ? (
-        <p className="xs-meta">{freshnessText(data, now, 'Cal OES data last changed')}</p>
+        answered.length > 1 ? (
+          answered.map((s) => (
+            <p key={s.id} className="xs-meta">
+              {freshnessText({ source_updated_ms: s.updated_ms ?? null, retrieved_ms: s.retrieved_ms ?? null }, now, `${aggregatorOf(data, s.id)} data last changed`)}
+            </p>
+          ))
+        ) : (
+          <p className="xs-meta">{freshnessText(data, now, `${answeredNames(data) ?? 'Cal OES'} data last changed`)}</p>
+        )
       ) : (
         <ExtrasNotice line={line} onRetry={state.error ? state.refresh : undefined} />
       )}

@@ -6,6 +6,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { bundleCredits, FIRMS_ACKNOWLEDGEMENT, OPEN_METEO_CREDIT, safeHref, type DataCredit } from '../lib/dataCredits'
 import { useStore } from '../state/store'
 import '../styles/credits.css'
+import { localYear, timeFmt } from '../lib/time'
 
 function CreditLink({ c }: { c: DataCredit }) {
   const href = safeHref(c.href)
@@ -32,7 +33,8 @@ export function DataSourcesNote({ className, inline }: { className?: string; inl
   const { sources, year, fcWeather, engine, version } = useStore(
     useShallow((s) => ({
       sources: s.manifest?.status === 'ready' ? s.manifest.data_sources : null,
-      year: s.summary ? new Date(s.summary.started_ms).getUTCFullYear() : null,
+      // the fire's year in its own zone (a fire found at 8 PM EST on Dec 31 belongs to that year, not UTC's next one)
+      year: s.summary ? localYear(s.summary.started_ms, timeFmt(s.summary.time_zone, '24h').tz) : null,
       fcWeather: s.forecast?.weather.source ?? null,
       engine: s.forecast?.model?.engine ?? null,
       version: s.forecast?.model?.version ?? null,

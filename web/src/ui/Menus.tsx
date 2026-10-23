@@ -23,10 +23,11 @@ import { useShallow } from 'zustand/react/shallow'
 import { getHealth } from '../api/client'
 import type { HealthResponse } from '../api/types'
 import { fmtNumber } from '../lib/format'
-import { fmtDateTimeTz, fmtRelative } from '../lib/time'
+import { fmtRelative, zoneLine } from '../lib/time'
 import { shareUrl } from '../state/runtime'
 import { peakGrowth } from '../state/selectors'
 import { useStore, type Quality, type ViewMode } from '../state/store'
+import { useTimeFormat, useZoneSource } from '../state/timeZone'
 import { MenuItem, MenuSection, MenuSeparator, Popover, Segmented, Slider, Switch } from './controls'
 import { useNow } from './hooks'
 import { EXAGGERATIONS, LATTICE_FIELDS, STYLE_OPTIONS } from './options'
@@ -293,6 +294,8 @@ function SettingsBody() {
   const liveStatus = useStore((s) => s.liveStatus)
   const [health, setHealth] = useState<HealthResponse | null | 'error'>(null)
   const now = useNow(15_000)
+  const tf = useTimeFormat()
+  const zoneSource = useZoneSource()
   useEffect(() => {
     let alive = true
     getHealth({ timeoutMs: 8000 })
@@ -328,16 +331,16 @@ function SettingsBody() {
           <dd className="mono">{liveStatus?.last_refresh_ms ? fmtRelative(liveStatus.last_refresh_ms, now) : '—'}</dd>
           <dt>Next refresh</dt>
           <dd className="mono">{liveStatus?.next_refresh_ms ? fmtRelative(liveStatus.next_refresh_ms, now) : '—'}</dd>
-          <dt>Active (CA)</dt>
+          <dt>Active (lower 48)</dt>
           <dd className="mono">
             {liveStatus
-              ? `${fmtNumber(liveStatus.active_incidents)} incident${liveStatus.active_incidents === 1 ? '' : 's'} · ${fmtNumber(liveStatus.detections_24h_ca)} det/24 h`
+              ? `${fmtNumber(liveStatus.active_incidents)} incident${liveStatus.active_incidents === 1 ? '' : 's'} · ${fmtNumber(liveStatus.detections_24h)} det/24 h`
               : '—'}
           </dd>
           <dt>Auto-build</dt>
           <dd className="mono">{liveStatus ? (liveStatus.auto_build ? 'on' : 'off') : '—'}</dd>
           <dt>Times</dt>
-          <dd className="mono">America/Los_Angeles · {fmtDateTimeTz(now).split(' ').pop()}</dd>
+          <dd className="mono">{zoneLine(tf, now, zoneSource).replace(/^Times: /, '')}</dd>
         </dl>
       </MenuSection>
       <MenuSection label="Keyboard" aside={<Keyboard size={13} className="muted" />}>

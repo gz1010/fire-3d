@@ -63,7 +63,7 @@ export async function openFire(id: string, action: FireAction = 'open'): Promise
   }
 }
 
-/** Back to the California overview. When this fire was opened from the overview, go back in history (no extra entry);
+/** Back to the national overview. When this fire was opened from the overview, go back in history (no extra entry);
  *  otherwise close it, which pushes an overview entry. */
 export function goToOverview(): void {
   useWorkspace.getState().setFireCard(null)

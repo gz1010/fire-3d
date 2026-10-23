@@ -9,8 +9,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { formatDecimalPair, formatDms, formatLat, formatLon } from '../lib/geodesy'
 import { lonLatToUtm } from '../lib/reproject'
-import { fmtDateTimeYearTz } from '../lib/time'
+import { recordIssuerLabel } from '../api/records'
+import { fmtAt } from '../lib/time'
 import { useStore } from '../state/store'
+import { useTimeFormat } from '../state/timeZone'
 import { useWorkspace, type SelectedLocation } from '../state/workspace'
 import { useCoordsVariant } from '../ui/shell/coordsVariant'
 import './location.css'
@@ -193,7 +195,10 @@ export function CoordinateStrip() {
   const command = variant === 'full'
   const { summary, manifest } = st
   const zone = manifest?.grid.utm_zone ?? null
-  const reportedBy = manifest?.data_sources.some((d) => /CAL FIRE/i.test(d.name)) ? 'CAL FIRE' : null
+  const tf = useTimeFormat()
+  // the agency whose record the bundle used (CAL FIRE in California, NIFC WFIGS elsewhere; §14.12.6), by its issuer
+  const reportedBy =
+    manifest?.data_sources.some((d) => /CAL FIRE|NIFC WFIGS incident/i.test(d.name)) && summary ? recordIssuerLabel(summary) : null
   const fly = (lat: number, lon: number) => useWorkspace.getState().requestMapFlyTo({ lon, lat, zoom: Math.max(useWorkspace.getState().view?.zoom ?? 13, 13) })
   const valid = summary && st.incidentId && Number.isFinite(summary.lat) && Number.isFinite(summary.lon) ? summary : null
   if (variant === 'line')
@@ -217,7 +222,7 @@ export function CoordinateStrip() {
         />
       ) : (
         <div className="loc-coord is-empty">
-          <span className="loc-coord-label">{st.incidentId ? 'Incident · reported location' : 'California overview'}</span>
+          <span className="loc-coord-label">{st.incidentId ? 'Incident · reported location' : 'United States overview'}</span>
           <span className="loc-coord-value mw-muted">{st.incidentId ? 'Loading…' : 'No fire open'}</span>
         </div>
       )}
@@ -240,12 +245,12 @@ export function CoordinateStrip() {
           {summary?.updated_ms != null && (
             <div>
               <dt>{reportedBy ? `${reportedBy} record updated` : 'Incident record updated'}</dt>
-              <dd className="mw-mono">{fmtDateTimeYearTz(summary.updated_ms)}</dd>
+              <dd className="mw-mono">{fmtAt(summary.updated_ms, tf, { year: 'always', zone: true })}</dd>
             </div>
           )}
           <div>
             <dt>Selected time</dt>
-            <dd className="mw-mono">{fmtDateTimeYearTz(st.timeMs)}</dd>
+            <dd className="mw-mono">{fmtAt(st.timeMs, tf, { year: 'always', zone: true })}</dd>
           </div>
           <div>
             <dt>Datum</dt>

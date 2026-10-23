@@ -2,9 +2,10 @@
 // helper, plus the incident's timeline annotations ("+ Add" in Key Events) with jump / delete.
 import { Clock3, StickyNote, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { fmtDateTime, fmtTime, tzLabel } from '../lib/time'
+import { fmtAt, fmtClock } from '../lib/time'
 import { loadNotes, saveNotes, useAnnotations, useIncidentAnnotations } from '../state/annotations'
 import { useStore } from '../state/store'
+import { useTimeFormat } from '../state/timeZone'
 import { EmptyNote, Section } from './controls'
 
 export function NotesTab() {
@@ -19,6 +20,7 @@ export function NotesTab() {
 }
 
 function NotesBody({ incidentId }: { incidentId: string }) {
+  const tf = useTimeFormat()
   const [text, setText] = useState(() => loadNotes(incidentId))
   const [savedAt, setSavedAt] = useState<number | null>(null)
   const [failed, setFailed] = useState(false)
@@ -48,7 +50,7 @@ function NotesBody({ incidentId }: { incidentId: string }) {
 
   const insertTime = () => {
     const t = useStore.getState().timeMs
-    const stamp = `[${fmtDateTime(t)} ${tzLabel(t)}] `
+    const stamp = `[${fmtAt(t, tf, { zone: true })}] `
     const el = area.current
     const pos = el ? el.selectionStart : text.length
     const before = text.slice(0, pos)
@@ -70,7 +72,7 @@ function NotesBody({ incidentId }: { incidentId: string }) {
         title="Analyst notes"
         aside={
           <span className={`mono small ${failed ? 'danger' : 'muted'}`}>
-            {failed ? 'storage blocked' : savedAt ? `saved ${fmtTime(savedAt)}` : 'local only'}
+            {failed ? 'storage blocked' : savedAt ? `saved ${fmtClock(savedAt, tf)}` : 'local only'}
           </span>
         }
       >
@@ -98,6 +100,7 @@ function NotesBody({ incidentId }: { incidentId: string }) {
 }
 
 function Annotations({ incidentId }: { incidentId: string }) {
+  const tf = useTimeFormat()
   const list = useIncidentAnnotations(incidentId)
   const st = useStore.getState
   return (
@@ -119,7 +122,7 @@ function Annotations({ incidentId }: { incidentId: string }) {
               >
                 <StickyNote size={12} className="ann-icon" />
                 <span className="ellipsis">{a.title}</span>
-                <span className="mono muted">{fmtDateTime(a.t_ms)}</span>
+                <span className="mono muted">{fmtAt(a.t_ms, tf)}</span>
               </button>
               <button type="button" className="icon-btn ann-del" aria-label="Delete annotation" data-tip="Delete" onClick={() => useAnnotations.getState().remove(incidentId, a.id)}>
                 <Trash2 size={12} />

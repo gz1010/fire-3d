@@ -14,7 +14,7 @@
 import type { Mode } from '../api/types'
 import { satelliteName } from '../lib/format'
 import { area, directionWord, distance, elevation, ensemblePhrase, forecastPeriod, weatherSourceName, windSpeed } from '../lib/plainLanguage'
-import { fmtDateTime, fmtDateTimeYearTz, fmtRelative, tzLabel } from '../lib/time'
+import { fmtAt, fmtRelative, type TimeFmt } from '../lib/time'
 import { formatLat, formatLatLon, formatLon } from '../lib/geodesy'
 import type { Preset, Units } from '../state/workspace'
 import { STALE_AFTER_MS } from '../ui/timeline/model'
@@ -133,9 +133,15 @@ export interface DescribeOptions {
   nowMs: number
   /** The official fire weather threshold in effect at the point, e.g. "NWS Red Flag Warning in effect here." */
   fireWeatherNote?: string | null
+  /** Brief 3 (§14.9): the zone (the fire's, else the place's, else the viewer's) and the preset's clock of every time. */
+  tf: TimeFmt
 }
 
-const at = (ms: number) => `${fmtDateTime(ms)} ${tzLabel(ms)}`
+// Every time in a card is formatted with the TimeFmt of the describeLocation call being run (set on entry, restored on
+// exit; describeLocation is synchronous), so the many small helpers below need no extra argument.
+let TF: TimeFmt = { tz: 'UTC', clock: '24h' }
+const at = (ms: number) => fmtAt(ms, TF, { zone: true })
+const atYear = (ms: number) => fmtAt(ms, TF, { year: 'always', zone: true })
 
 /** Said in every card's reliability block. */
 export const PROTOTYPE_NOTE = 'Research prototype, not an evacuation order'
@@ -290,14 +296,14 @@ function forecastSection(r: LocationReport, o: DescribeOptions): CardSection {
   const lines: CardLine[] = []
   // Public says "re-run" in plain words (brief 2 C-R8); Command keeps the technical "hindcast"
   const word = f.hindcast ? (o.preset === 'command' ? 'hindcast' : 'model re-run') : 'forecast'
-  const period = forecastPeriod({ start_ms: f.startMs, horizon_h: f.horizonH })
+  const period = forecastPeriod({ start_ms: f.startMs, horizon_h: f.horizonH }, TF)
   const endText = at(f.endMs)
   lines.push({
     key: 'period',
     label: f.hindcast ? (o.preset === 'command' ? 'Hindcast period' : 'Re-run period') : 'Forecast period',
     text: period,
     detail: f.hindcast
-      ? `Re-run after the fact on archived weather${o.preset === 'command' ? ' (a hindcast)' : ''}, computed ${fmtDateTimeYearTz(f.issuedMs)}. ${ensemblePhrase(f.ensemble, f.members)}.`
+      ? `Re-run after the fact on archived weather${o.preset === 'command' ? ' (a hindcast)' : ''}, computed ${atYear(f.issuedMs)}. ${ensemblePhrase(f.ensemble, f.members)}.`
       : `Issued ${at(f.issuedMs)} (${fmtRelative(f.issuedMs, o.nowMs)}). ${ensemblePhrase(f.ensemble, f.members)}.`,
     technical: `Run ${f.runId} · ${f.model.engine} ${f.model.version} · ${Math.round(f.model.gridResM)} m grid · crown fire ${f.model.crown ? 'on' : 'off'} · spotting ${f.model.spotting ? 'on' : 'off'}`,
     tone: 'forecast',
@@ -587,8 +593,8 @@ function modelSummary(r: LocationReport, o: DescribeOptions): ModelSummary | nul
 function commandRun(r: LocationReport): CommandRun | null {
   const f = r.forecast
   if (f.state !== 'ok') return null
-  const period = forecastPeriod({ start_ms: f.startMs, horizon_h: f.horizonH })
-  const run = `Run ${f.runId} · ${f.hindcast ? 'computed' : 'issued'} ${fmtDateTimeYearTz(f.issuedMs)} · ${f.members} members (${ensemblePhrase(f.ensemble, f.members).replace(/^\d+ /, '')}) · ${period}`
+  const period = forecastPeriod({ start_ms: f.startMs, horizon_h: f.horizonH }, TF)
+  const run = `Run ${f.runId} · ${f.hindcast ? 'computed' : 'issued'} ${atYear(f.issuedMs)} · ${f.members} members (${ensemblePhrase(f.ensemble, f.members).replace(/^\d+ /, '')}) · ${period}`
   const q = (k: string, a: ArrivalQuantile) => `${k} ${a.state === 'time' ? (a.atStart ? 'at the start' : at(a.ms)) : a.state === 'not_reached' ? 'not reached' : 'no data'}`
   const quantiles = f.burnedAtStart ? null : `Arrival ${q('P10', f.arrival.p10)} · ${q('P50', f.arrival.p50)} · ${q('P90', f.arrival.p90)}`
   return { run, quantiles }
@@ -605,7 +611,7 @@ function reliability(r: LocationReport, o: DescribeOptions): ReliabilityLine[] {
   if (f.state === 'ok')
     out.push({
       key: 'model',
-      text: f.hindcast ? `model re-run ${fmtDateTimeYearTz(f.issuedMs)}` : `model issued ${at(f.issuedMs)} (${fmtRelative(f.issuedMs, o.nowMs)})`,
+      text: f.hindcast ? `model re-run ${atYear(f.issuedMs)}` : `model issued ${at(f.issuedMs)} (${fmtRelative(f.issuedMs, o.nowMs)})`,
       stale: false,
     })
   out.push({ key: 'prototype', text: PROTOTYPE_NOTE, stale: false })
@@ -662,6 +668,16 @@ function summaryOf(r: LocationReport, o: DescribeOptions, h: LocationCardModel['
 const KIND_WORD: Record<ReportSource['kind'], string> = { observation: 'Observation', estimate: 'Estimate', model: 'Model', official: 'Official', reference: 'Reference' }
 
 export function describeLocation(r: LocationReport, o: DescribeOptions): LocationCardModel {
+  const prev = TF
+  TF = o.tf
+  try {
+    return describeWith(r, o)
+  } finally {
+    TF = prev
+  }
+}
+
+function describeWith(r: LocationReport, o: DescribeOptions): LocationCardModel {
   const sections = [fireSection(r, o), forecastSection(r, o), conditionsSection(r, o)].filter((s) => s.lines.length)
   const head = headline(r, o)
   const summary = summaryOf(r, o, head, new Set(sections.flatMap((s) => s.lines.map((l) => l.key))))
@@ -678,7 +694,7 @@ export function describeLocation(r: LocationReport, o: DescribeOptions): Locatio
     summary,
     details: detailsOf(sections, summary.keys),
     // with the year: source times can be far from the fire (a hindcast computed later, reference data fetched earlier)
-    sources: r.sources.map((s) => ({ text: `${KIND_WORD[s.kind]}: ${s.name}${s.timeMs != null ? ` · ${fmtDateTimeYearTz(s.timeMs)}` : ''}`, kind: s.kind })),
+    sources: r.sources.map((s) => ({ text: `${KIND_WORD[s.kind]}: ${s.name}${s.timeMs != null ? ` · ${atYear(s.timeMs)}` : ''}`, kind: s.kind })),
     caveats: r.caveats,
   }
 }

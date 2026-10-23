@@ -157,6 +157,10 @@ def mask_secrets(text: object) -> str:
 # Feature flags
 # ----------------------------------------------------------------------------------------------------------------
 LIVE_ENABLED = _env_flag("FIRE3D_LIVE", "1")                       # run the live refresh loop in the API
+# Open-Meteo weighted request budget (CONTRACT 14.12.2): the free API allows < 10,000 calls a day per IP; above this
+# many weighted calls today a live refresh keeps the bundle's last weather. Live weather is refetched at most hourly.
+OPEN_METEO_DAILY_SOFT_CAP = 6000.0
+LIVE_WEATHER_REFETCH_S = 3600.0
 AUTO_BUILD_LIVE = _env_flag("FIRE3D_AUTO_BUILD_LIVE", "1")          # auto-build live incidents on startup
 
 # ----------------------------------------------------------------------------------------------------------------

@@ -3,7 +3,9 @@
 
 /** Every response says explicitly whether it can be shown for the requested time. */
 export type ExtrasStatus = 'available' | 'unavailable' | 'not_available_for_past_dates'
-export type ExtrasReasonCode = 'past_date' | 'upstream_error' | 'not_covered' | null
+/** 'state_not_available' (brief 3, CONTRACT §14.8.2): the area is in no state with an official evacuation feed (or
+ *  outside California, for cameras); answered without any upstream request. */
+export type ExtrasReasonCode = 'past_date' | 'upstream_error' | 'not_covered' | 'state_not_available' | null
 
 export interface ExtrasSource {
   id: string
@@ -17,6 +19,19 @@ export interface ExtrasSource {
   attribution: string
   disclaimer: string | null
   cadence: string
+  // ---- brief 3 per-source fields of the evacuation answer (CONTRACT §14.8.2; optional until the integration)
+  /** When Fire-3d fetched this source for the answer (null = not fetched). */
+  retrieved_ms?: number | null
+  /** The source layer's own last update (ArcGIS `dataLastEditDate`). */
+  updated_ms?: number | null
+  status?: 'available' | 'unavailable'
+  reason?: string | null
+  /** USPS code of the state the source covers ("CA", "OR"). */
+  home_state?: string
+  /** Credit line ("Cal OES", "Oregon Department of Emergency Management"). */
+  credit?: string
+  /** Short name used in sentences ("Cal OES", "Oregon OEM"); us-official addition, falls back to a known id. */
+  aggregator?: string
 }
 
 /** Fields shared by the evacuation, camera and imagery responses. */
@@ -59,8 +74,30 @@ export interface EvacZoneProps {
   public_info: string | null
   /** When the issuing agency last edited this zone (null = not provided by the source). */
   status_updated_ms: number | null
-  /** When Cal OES last copied it into the statewide layer. */
+  /** When Cal OES last copied it into the statewide layer (Cal OES only; null for other sources). */
   aggregated_ms: number | null
+  // ---- brief 3 (CONTRACT §14.8.2; optional until the integration)
+  /** USPS code of the zone's state (Oregon OEM lists one California county, Del Norte). */
+  state?: string | null
+  /** Which source listed it ('caloes_evacuations', 'or_oem_evacuations'). */
+  source_id?: string
+  /** False when `status` is Fire-3d's rendering of the source's value (Oregon's level number: "Level 3"). */
+  status_verbatim?: boolean
+  /** The source's own value (Cal OES STATUS text; Oregon's level integer). */
+  status_raw?: string | number | null
+  /** The source's own definition of the level ("Level 3: GO NOW – Leave Immediately!", Oregon OEM). */
+  status_label?: string | null
+  /** Where that definition is published (https). */
+  status_label_source?: string | null
+  /** The incident name as the source records it (a name match is not proof it is this fire). */
+  incident_name?: string | null
+  /** Hazard type as the source records it ("Fire", "Other"). */
+  hazard_type?: string | null
+  /** When the zone entered the state layer (Oregon `created_date`; Cal OES: its copy time). */
+  listed_ms?: number | null
+  /** What the zone's time means: the issuer's, when it was added to the state layer, the state layer's last edit,
+   *  a date without a time, or none. */
+  time_basis?: 'issuer' | 'state_layer_added' | 'state_layer_edit' | 'date_only' | 'none'
 }
 
 export type GeoJsonPolygon = { type: 'Polygon'; coordinates: number[][][] } | { type: 'MultiPolygon'; coordinates: number[][][][] }
@@ -82,12 +119,26 @@ export interface EvacCountyCoverage {
   reference_url: string | null
 }
 
+/** One state the area touches (CONTRACT §14.8.2). */
+export interface EvacStateEntry {
+  state: string
+  name: string
+  availability: 'available' | 'not_available'
+  /** Its source answered for this area (false for a state without a feed, a failed source or a past date). */
+  checked: boolean
+  source_ids: string[]
+  note: string | null
+  links: { label: string; url: string }[]
+}
+
 export interface EvacuationsResponse extends ExtrasEnvelope {
   kind: 'evacuations'
   issuing_authority: string
   zones: { type: 'FeatureCollection'; features: EvacZoneFeature[] }
   counts: Partial<Record<EvacStatusKey, number>>
   coverage: EvacCountyCoverage[]
+  /** Brief 3: every state the area touches (optional until the integration). */
+  states?: EvacStateEntry[]
 }
 
 // ---- cameras --------------------------------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Detection, Perimeter } from '../../api/types'
-import { buildDataStatus, fmtAge, fmtStatusTime, freshnessLine, weatherSourceLabel, type DataStatusInput } from './dataStatus'
+import { timeFmt } from '../../lib/time'
+import { buildDataStatus, fmtAge, fmtStatusTime, fmtStatusTimeAt, freshnessLine, weatherSourceLabel, type DataStatusInput } from './dataStatus'
 
 const H = 3_600_000
 const T0 = Date.UTC(2025, 0, 8, 12, 0) // Jan 8 2025 04:00 PST
@@ -73,6 +74,12 @@ describe('fmtStatusTime', () => {
     const r = buildDataStatus(input('historical'), Date.UTC(2026, 9, 17, 20))
     expect(r.find((x) => x.key === 'bundle')?.value).toBe('Jan 8, 2025 06:00 PST')
   })
+  it("fmtStatusTimeAt uses the given zone and clock (CONTRACT §14.9.6)", () => {
+    expect(fmtStatusTimeAt(T0, T0 + 24 * H, timeFmt('America/Los_Angeles', '24h'))).toBe('Jan 8, 04:00 PST')
+    expect(fmtStatusTimeAt(T0, Date.UTC(2026, 9, 17, 20), timeFmt('America/Los_Angeles', '12h'))).toBe('Jan 8, 2025 4:00 AM PST')
+    expect(fmtStatusTimeAt(T0, T0 + H, timeFmt('America/New_York', '24h'))).toBe('Jan 8, 07:00 EST')
+    expect(fmtStatusTimeAt(T0, T0 + H, timeFmt('America/Denver', '12h'))).toBe('Jan 8, 5:00 AM MST')
+  })
 })
 
 describe('buildDataStatus: quiet satellite passes (live)', () => {
@@ -123,7 +130,7 @@ describe('weatherSourceLabel', () => {
 describe('official rows and freshness (brief 2, U-R9)', () => {
   it("adds Cal OES, NWS and CAL FIRE rows with the issuer's time and Fire-3d's check time", () => {
     const official = {
-      evacuation: { state: 'listed', checkedMs: T0 - 2 * 60_000, sourceUpdatedMs: T0 - 3 * H, zones: [{}, {}] },
+      evacuation: { state: 'listed' as const, checkedMs: T0 - 2 * 60_000, sourceUpdatedMs: T0 - 3 * H, zones: [{}, {}] },
       fireWeather: { state: 'none', checkedMs: T0 - 60_000, alerts: [] },
       calfire: { state: 'available', updatedMs: T0 - 5 * H, acres: 2450, percentContained: 65, isActive: true },
     }

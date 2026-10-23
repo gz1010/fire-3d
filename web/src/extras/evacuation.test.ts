@@ -20,6 +20,12 @@ import {
 } from './evacuation'
 import type { FireReference } from '../official/fire'
 import type { EvacuationsResponse, EvacZoneFeature, EvacZoneProps } from './types'
+import { timeFmt } from '../lib/time'
+import { EVAC_RENO_NOT_AVAILABLE, OR_EVAC_KLAMATH_NONE, OR_EVAC_MEDFORD } from './__fixtures__/samplesUs'
+import { evacuationCredits } from './credits'
+import { envelopeStatusLine } from './format'
+
+const LA24 = timeFmt('America/Los_Angeles', '24h')
 
 function zone(id: string, status: string | null, key: EvacZoneProps['status_key'], rings: number[][][], extra: Partial<EvacZoneProps> = {}): EvacZoneFeature {
   return {
@@ -169,12 +175,12 @@ describe('zones at a point', () => {
 
 describe('panel details and feed items', () => {
   it('labels who set each time and keeps the official message verbatim', () => {
-    const z = zoneDetail(EVAC_SAMPLE.zones.features[0], EVAC_SAMPLE.now_ms)
+    const z = zoneDetail(EVAC_SAMPLE.zones.features[0], EVAC_SAMPLE.now_ms, LA24)
     expect(z.status).toBe('Evacuation Order')
     expect(z.jurisdiction).toBe('Los Angeles County')
     expect(z.updatedText).toMatch(/^Updated by the issuer Oct 1[45], \d\d:\d\d PDT$/)
     expect(z.message).toBe(EVAC_SAMPLE.zones.features[0].properties.notes)
-    const none = zoneDetail(zone('x', 'Evacuation Warning', 'warning', [square(0, 0, 1)]), EVAC_SAMPLE.now_ms)
+    const none = zoneDetail(zone('x', 'Evacuation Warning', 'warning', [square(0, 0, 1)]), EVAC_SAMPLE.now_ms, LA24)
     expect(none.updatedText).toBe('Update time not given by the issuer')
   })
 
@@ -214,7 +220,7 @@ describe('panel details and feed items', () => {
     expect(layerTime[0]).toMatchObject({ tMs: 2_000, timeNotGiven: false })
     const none = evacuationFeedItems({ ...withZones([b]), source_updated_ms: null, retrieved_ms: 9_000 }, null)
     expect(none[0]).toMatchObject({ tMs: 9_000, timeNotGiven: true, checkedMs: 9_000 })
-    expect(zoneTimes({ status_updated_ms: 0, aggregated_ms: 5 })).toEqual({ issuerMs: null, aggregatedMs: 5 })
+    expect(zoneTimes({ status_updated_ms: 0, aggregated_ms: 5 })).toEqual({ issuerMs: null, aggregatedMs: 5, listedMs: 5, basis: 'state_layer_edit' })
   })
 
   it('names the distance to the fire and says Cal OES does not name the fire outside its area (U-R1, G2)', () => {
@@ -254,5 +260,45 @@ describe('panel details and feed items', () => {
     expect(evacuationFeedItems({ ...withZones([z]), coverage: cov('https://ventura.example.gov/map') }, null)[0].links).toEqual([{ label: 'County evacuation map', url: 'https://ventura.example.gov/map' }])
     expect(evacuationFeedItems({ ...withZones([z]), coverage: cov('http://insecure.example.gov/map') }, null)[0].links).toEqual([])
     expect(evacuationFeedItems({ ...withZones([z]), coverage: cov('javascript:alert(1)') }, null)[0].links).toEqual([])
+  })
+})
+
+// ---- brief 3: Oregon OEM (CONTRACT §14.8.4, §14.13) ---------------------------------------------------------------
+describe('Oregon OEM zones (brief 3)', () => {
+  const jac043 = OR_EVAC_MEDFORD.zones.features.find((f) => f.properties.zone_name === 'US-OR-JAC-JAC-043')!
+  it('panel details: OEM definition as status, the level flagged as Fire-3d wording, the state-layer time, the fire name as recorded', () => {
+    const z = zoneDetail(jac043, OR_EVAC_MEDFORD.now_ms, LA24)
+    expect(z.status).toBe('Level 3: GO NOW – Leave Immediately!')
+    expect(z.jurisdiction).toBe('Jackson County')
+    expect(z.updatedText).toBe('Issuer time not given; added to the Oregon state layer Aug 13, 17:20 PDT')
+    expect(z.extra).toContain('"Level 3" is Fire-3d\'s wording of Oregon OEM\'s level number; Oregon OEM defines it as "Level 3: GO NOW – Leave Immediately!".')
+    expect(z.extra).toContain('Fire name as recorded by Oregon OEM: Fielders Mountain; a name match is not proof it is this fire')
+    const slide = OR_EVAC_MEDFORD.zones.features.find((f) => f.properties.zone_name === 'HWY 229 Landslide')!
+    expect(zoneDetail(slide, OR_EVAC_MEDFORD.now_ms, LA24).extra).toContain('Evacuation for: Other, as recorded by Oregon OEM')
+    expect(hazardNote(jac043.properties)).toBeNull() // a fire
+  })
+  it('feed items name Oregon OEM, never Cal OES, and time zones by when they were added to the state layer', () => {
+    const items = evacuationFeedItems(OR_EVAC_MEDFORD, null, { tf: LA24 })
+    expect(items.length).toBeGreaterThan(0)
+    const l3 = items.find((i) => i.title.startsWith('Level 3: ') && i.issuer === 'Jackson County')!
+    expect(l3.source).toBe('Jackson County via Oregon OEM')
+    expect(l3.detail).toMatch(/listed by Oregon OEM\./)
+    expect(l3.notes?.join(' ')).toMatch(/The issuer gives no time; it was added to the Oregon state layer Aug 1[34], \d\d:\d\d PDT\./)
+    expect(l3.facts?.[0]).toMatchObject({ label: "Oregon OEM's level", text: 'Level 3 (Level 3: GO NOW – Leave Immediately!)' })
+    expect(l3.url).toBe('https://www.arcgis.com/home/item.html?id=dd2bee51e3004dc4b1004df34fbd9e29')
+    expect(JSON.stringify(items)).not.toMatch(/Cal OES/)
+    expect(evacuationSourceUrl(OR_EVAC_MEDFORD)).toBe('https://www.arcgis.com/home/item.html?id=dd2bee51e3004dc4b1004df34fbd9e29')
+    expect(answeredNames(OR_EVAC_MEDFORD)).toBe('Oregon OEM')
+    expect(answeredNames(EVAC_SAMPLE)).toBe('Cal OES') // a brief-2 answer
+    expect(answeredNames(EVAC_RENO_NOT_AVAILABLE)).toBeNull()
+  })
+  it('credits the Oregon Department of Emergency Management while its zones are listed', () => {
+    expect(evacuationCredits(OR_EVAC_MEDFORD)).toEqual([{ id: 'extras-evacuations-or_oem_evacuations', text: 'Evacuation zones: local officials via Oregon Department of Emergency Management', href: 'https://www.arcgis.com/home/item.html?id=dd2bee51e3004dc4b1004df34fbd9e29' }])
+    expect(evacuationCredits(OR_EVAC_KLAMATH_NONE)).toEqual([])
+    expect(evacuationCredits(EVAC_RENO_NOT_AVAILABLE)).toEqual([])
+    expect(evacuationCredits(EVAC_SAMPLE)[0].text).toBe('Evacuation zones: local officials via Cal OES')
+  })
+  it('a state without a feed is "not available in this state", never an outage', () => {
+    expect(envelopeStatusLine(EVAC_RENO_NOT_AVAILABLE, 'Official evacuation zones')).toEqual({ tone: 'muted', title: 'Official evacuation zones: not available in this state', detail: 'Official evacuation zones are not available in this state (Nevada). Follow local officials.' })
   })
 })

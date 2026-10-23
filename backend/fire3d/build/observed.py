@@ -64,10 +64,8 @@ import math
 import sys
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Sequence
-from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -78,15 +76,14 @@ from shapely.geometry.base import BaseGeometry
 
 from .. import bundle, config
 from ..grid import Grid
-from ..timeutil import DAY_MS, HOUR_MS, floor_hour_ms, ms_to_iso, now_ms
-from ..types import BuildContext
+from ..timeutil import DAY_MS, HOUR_MS, floor_hour_ms, fmt_local, ms_to_iso, now_ms, zone_of
+from ..types import BuildContext, record_issuer_of
 from . import live_observation as la_obs
 
 log = logging.getLogger(__name__)
 
 NEVER = float(config.NEVER)
 STEP = "observations"
-LA = ZoneInfo("America/Los_Angeles")
 SPATIAL_INSTRUMENTS = ("VIIRS", "MODIS", "LANDSAT")
 
 # --- time windows -------------------------------------------------------------------------------------------------
@@ -187,7 +184,9 @@ SHIFT_MAX_GAP_H = 18
 GOES_THIN_MS = 10 * 60_000
 GOES_THIN_CELL_M = 2000.0
 WARNING_PREFIX = "Observations: "
-SOURCE_PREFIXES = ("NASA FIRMS", "NIFC WFIGS", "NASA CMR")
+# data_sources entries this step owns (replaced on every run); "NIFC WFIGS incident record (IRWIN)", the fire's own
+# record written by the pipeline, is not one of them.
+SOURCE_PREFIXES = ("NASA FIRMS", "NIFC WFIGS fire perimeters", "NASA CMR")
 SATELLITE_NAMES = {"N": "Suomi NPP", "N20": "NOAA-20", "N21": "NOAA-21", "Terra": "Terra", "Aqua": "Aqua",
                    "G16": "GOES-16", "G17": "GOES-17", "G18": "GOES-18", "G19": "GOES-19", "L8": "Landsat 8", "L9": "Landsat 9"}
 EVENT_PRIORITY = ("ignition", "containment", "rapid_growth", "spot_fire", "ridge_crossing", "wind_shift", "perimeter_update")
@@ -196,9 +195,10 @@ EVENT_PRIORITY = ("ignition", "containment", "rapid_growth", "spot_fire", "ridge
 # ==================================================================================================================
 # Small helpers
 # ==================================================================================================================
-def la_time(ms: int | float) -> str:
-    """``"Jan 07, 18:18 PST"`` (America/Los_Angeles)."""
-    return datetime.fromtimestamp(int(ms) / 1000.0, tz=LA).strftime("%b %d, %H:%M %Z")
+def la_time(ms: int | float, tz: str | None = None) -> str:
+    """``"Jan 07, 18:18 MST"`` in the fire's zone ``tz`` (``timeutil.fmt_local``; UTC when None). The name is kept
+    from brief 2; nothing here assumes Pacific time any more."""
+    return fmt_local(ms, tz)
 
 
 def cardinal(deg: float) -> str:
@@ -682,8 +682,8 @@ def supported_spatial(spatial: pd.DataFrame) -> pd.DataFrame:
     return spatial[keep].reset_index(drop=True)
 
 
-def calibrate_shrink(spatial: pd.DataFrame, grid: Grid, target_acres: float | None, allow_reduce: bool = True
-                     ) -> tuple[float, np.ndarray, str | None]:
+def calibrate_shrink(spatial: pd.DataFrame, grid: Grid, target_acres: float | None, allow_reduce: bool = True,
+                     *, issuer: str = "CAL FIRE") -> tuple[float, np.ndarray, str | None]:
     """VIIRS shrink factor (and its detection mask) whose area is closest to ``target_acres`` when the default 2/3
     misses it by more than 20 % (search range 0.45-1.0). Small intense fires bloat more than any shrink removes:
     the mask is then also eroded (up to 400 m). ``allow_reduce=False`` (a CAL FIRE acreage older than the
@@ -739,12 +739,12 @@ def calibrate_shrink(spatial: pd.DataFrame, grid: Grid, target_acres: float | No
     how = f"VIIRS footprints scaled to {s:.2f} of the pixel (default {s0:.2f})"
     if eroded_m > 0:
         how += f" and eroded by {eroded_m:.0f} m"
-    note = f"detection-only burned area {a0:,.0f} ac vs {target_acres:,.0f} ac reported by CAL FIRE: {how} -> {m.sum() * ca:,.0f} ac"
+    note = f"detection-only burned area {a0:,.0f} ac vs {target_acres:,.0f} ac reported by {issuer}: {how} -> {m.sum() * ca:,.0f} ac"
     return float(s), m, note
 
 
 def final_mask(perim_last: np.ndarray | None, spatial: pd.DataFrame, grid: Grid, target_acres: float | None,
-               after_ms: int | None = None, allow_reduce: bool = True) -> FinalMask:
+               after_ms: int | None = None, allow_reduce: bool = True, *, issuer: str = "CAL FIRE") -> FinalMask:
     """Final burned mask F (SPEC 8.3 step 3).
 
     * No perimeter: the detection mask, its shrink calibrated to ``target_acres`` (CAL FIRE) when it misses by > 20 %.
@@ -758,7 +758,7 @@ def final_mask(perim_last: np.ndarray | None, spatial: pd.DataFrame, grid: Grid,
     has_p = perim_last is not None and bool(perim_last.any())
     spatial = supported_spatial(spatial)
     if not has_p:
-        s, D, note = calibrate_shrink(spatial, grid, target_acres, allow_reduce)
+        s, D, note = calibrate_shrink(spatial, grid, target_acres, allow_reduce, issuer=issuer)
         return FinalMask(D, "detections" if D.any() else "none", s, float(D.sum() * ca), 0.0, [note] if note else [])
     s = SHRINK["VIIRS"]
     D = detection_mask(spatial, grid, s)
@@ -782,7 +782,7 @@ def final_mask(perim_last: np.ndarray | None, spatial: pd.DataFrame, grid: Grid,
     else:
         F = clean_mask(P | D, res, close_radius_m(res)) | P
         method = "perimeter+detections"
-        tgt = f" ({100.0 * p_ac / target_acres:.0f}% of the {target_acres:,.0f} ac reported by CAL FIRE)" if target_acres else ""
+        tgt = f" ({100.0 * p_ac / target_acres:.0f}% of the {target_acres:,.0f} ac reported by {issuer})" if target_acres else ""
         notes.append(f"the WFIGS perimeter covers only {p_ac:,.0f} ac{tgt}; satellite detections fill the rest")
     return FinalMask(F, method, s, d_ac, p_ac, notes)
 
@@ -1322,19 +1322,20 @@ def first_persistent_goes(goes: pd.DataFrame, ign_xz: tuple[float, float]) -> tu
 
 
 def ignition_time(started_ms: int, origin_ms: int, ign_xz: tuple[float, float], goes: pd.DataFrame,
-                  spatial: pd.DataFrame, first_snapshot_ms: int | None) -> tuple[int, str, str, int | None, str | None]:
+                  spatial: pd.DataFrame, first_snapshot_ms: int | None, *, issuer: str = "CAL FIRE",
+                  tz: str | None = None) -> tuple[int, str, str, int | None, str | None]:
     """(t_ms, source text, confidence, first GOES ms, GOES satellite): the CAL FIRE start, moved earlier when the first
     persistent GOES detection near the point (minus 10 min) or the first polar-orbiter detection within 3 km (minus
     30 min) is earlier; never before ``origin_ms`` and always before the first snapshot. "observed" when a detection
     confirms the start within 2 h."""
     t_ign = int(started_ms)
-    why = "CAL FIRE start"
+    why = f"{issuer} start"
     conf = "estimated"
     tg, sat = first_persistent_goes(goes, ign_xz)
     if tg is not None:
         if tg - GOES_LAG_MS < t_ign:
             t_ign = tg - GOES_LAG_MS
-            why = f"10 min before the first persistent {SATELLITE_NAMES.get(sat, sat)} detection ({la_time(tg)})"
+            why = f"10 min before the first persistent {SATELLITE_NAMES.get(sat, sat)} detection ({la_time(tg, tz)})"
         if tg <= started_ms + 2 * HOUR_MS:
             conf = "observed"
     if spatial is not None and len(spatial):
@@ -1346,7 +1347,7 @@ def ignition_time(started_ms: int, origin_ms: int, ign_xz: tuple[float, float], 
             if tp - POLAR_LAG_MS < t_ign:
                 t_ign = tp - POLAR_LAG_MS
                 why = (f"30 min before the first {first['instrument']} detection near the point "
-                       f"({SATELLITE_NAMES.get(str(first['satellite']), first['satellite'])}, {la_time(tp)})")
+                       f"({SATELLITE_NAMES.get(str(first['satellite']), first['satellite'])}, {la_time(tp, tz)})")
                 conf = "observed"
     if first_snapshot_ms is not None and t_ign >= first_snapshot_ms:
         t_ign = int(first_snapshot_ms) - GOES_LAG_MS
@@ -1357,20 +1358,20 @@ def ignition_time(started_ms: int, origin_ms: int, ign_xz: tuple[float, float], 
     return int(t_ign), why, conf, tg, sat
 
 
-def place_ignition(grid: Grid, cal_xz: tuple[float, float], first_xz: np.ndarray | None, F: np.ndarray
-                   ) -> tuple[float, float, tuple[int, int], str, list[str]]:
+def place_ignition(grid: Grid, cal_xz: tuple[float, float], first_xz: np.ndarray | None, F: np.ndarray, *,
+                   issuer: str = "CAL FIRE") -> tuple[float, float, tuple[int, int], str, list[str]]:
     """Ignition location (SPEC 8.3 step 6): the CAL FIRE point, or the centroid of the earliest detections when the point
     is > 3 km from all of them; then moved to the nearest pixel of F when outside it.
     Returns (x, z, (row, col), description of the source, warnings)."""
     notes: list[str] = []
-    where = "CAL FIRE incident point"
+    where = f"{issuer} incident point"
     x, z = float(cal_xz[0]), float(cal_xz[1])
     if first_xz is not None and len(first_xz):
         d = np.hypot(first_xz[:, 0] - x, first_xz[:, 1] - z)
         if d.min() > IGN_MAX_OFFSET_M:
             x, z = float(first_xz[:, 0].mean()), float(first_xz[:, 1].mean())
             where = "centroid of the earliest FIRMS detections"
-            notes.append(f"CAL FIRE point is {d.min() / 1000:.1f} km from the earliest detections: ignition at their centroid")
+            notes.append(f"{issuer} point is {d.min() / 1000:.1f} km from the earliest detections: ignition at their centroid")
     h = grid.extent_m / 2.0
     x, z = float(np.clip(x, -h + 1e-3, h - 1e-3)), float(np.clip(z, -h + 1e-3, h - 1e-3))
     r, c = grid.local_to_rowcol(x, z)
@@ -1709,7 +1710,7 @@ def perimeter_events(steps: Sequence[PerimeterStep], start_ms: int, end_ms: int)
     return out
 
 
-def containment_time(perims: Sequence[dict], summary: Any) -> tuple[int | None, str]:
+def containment_time(perims: Sequence[dict], summary: Any, *, issuer: str | None = None) -> tuple[int | None, str]:
     """Containment time: WFIGS ``attr_ContainmentDateTime`` (latest record), else CAL FIRE at 100 %."""
     cands = [int(p["containment_ms"]) for p in perims if p.get("containment_ms")]
     started = int(summary.started_ms)
@@ -1718,7 +1719,7 @@ def containment_time(perims: Sequence[dict], summary: Any) -> tuple[int | None, 
         return max(cands), "NIFC WFIGS ContainmentDateTime"
     pc = getattr(summary, "percent_contained", None)
     if pc is not None and float(pc) >= 100.0 and getattr(summary, "contained_ms", None):
-        return int(summary.contained_ms), "CAL FIRE (100% contained)"
+        return int(summary.contained_ms), f"{issuer or record_issuer_of(summary)} (100% contained)"
     return None, ""
 
 
@@ -1798,8 +1799,18 @@ def fire_elevation(bdir: Path, grid: Grid, manifest: dict | None, allow_fetch: b
 # ==================================================================================================================
 # Main entry
 # ==================================================================================================================
+def perimeter_identity(summary: Any) -> dict[str, Any]:
+    """How ``perimeters.fetch_perimeters`` identifies the fire (CONTRACT 14.12.8): a NIFC WFIGS record by its IRWIN
+    id (else name + its state); a CAL FIRE record (every California row) takes today's path."""
+    get = summary.get if isinstance(summary, dict) else (lambda k, d=None: getattr(summary, k, d))
+    if get("record_source") == "wfigs":
+        return {"record_source": "wfigs", "state": get("state"), "irwin_id": get("irwin_id")}
+    return {}
+
+
 def _live_observation(raw: pd.DataFrame, goes: pd.DataFrame, sites: np.ndarray, T: np.ndarray, grid: Grid, summary: Any,
-                      last_det: int, wall: int) -> tuple["la_obs.LiveObservation", list[dict]]:
+                      last_det: int, wall: int, *, tz: str | None = None, issuer: str = "CAL FIRE"
+                      ) -> tuple["la_obs.LiveObservation", list[dict]]:
     """Live bundles: the latest observation (confirmed satellite passes after the last detection, see
     build/live_observation.py) and the activity markers after the last detection. Never raises."""
     from ..sources import firms
@@ -1819,7 +1830,7 @@ def _live_observation(raw: pd.DataFrame, goes: pd.DataFrame, sites: np.ndarray, 
     det_s = np.asarray([] if sp is None else sp["satellite"].astype(str), dtype=object)
     obs = la_obs.latest_observation(last_det, (float(lon), float(lat)), det_t, det_s, data_times, wall,
                                     official_acres=acres, official_updated_ms=updated,
-                                    mapped_acres=float(b.sum() * cell_acres(res)))
+                                    mapped_acres=float(b.sum() * cell_acres(res)), tz=tz, issuer=issuer)
     try:
         all_det = prepare_detections(raw, grid, quality=False)
         markers = la_obs.activity_markers(all_det, goes, b, res, last_det, wall, sites)
@@ -1888,6 +1899,8 @@ def build_observed_stats(ctx: BuildContext) -> dict[str, Any]:
     ca = cell_acres(res)
     wall = now_ms()
     started = int(s.started_ms)
+    tz = getattr(ctx, "time_zone", None) or zone_of(s)        # the fire's own zone for every label (CONTRACT 14.9.7)
+    issuer = record_issuer_of(s)                              # "CAL FIRE", "USFS via NIFC WFIGS", ... (14.12.5)
     warnings: list[str] = []
     stats: dict[str, Any] = {"id": s.id, "mode": mode}
 
@@ -1905,7 +1918,7 @@ def build_observed_stats(ctx: BuildContext) -> dict[str, Any]:
     perim_end = wall if mode == "live" else min(wall, started + PERIM_HORIZON_MS)
     try:
         perims = wfigs.fetch_perimeters(s.name, float(s.lat), float(s.lon), started, perim_end, acres=s.acres,
-                                        contained_ms=s.contained_ms)
+                                        contained_ms=s.contained_ms, **perimeter_identity(s))
         warnings += [f"WFIGS: {w}" for w in getattr(perims, "warnings", [])]
         perims = list(perims)
     except Exception as e:  # noqa: BLE001 - perimeters are optional
@@ -1963,7 +1976,7 @@ def build_observed_stats(ctx: BuildContext) -> dict[str, Any]:
         # latest detection (live); an older live number says nothing about the growth since
         latest = int(spatial["t_ms"].max()) if len(spatial) else None
         fresh = mode != "live" or (s.updated_ms is not None and latest is not None and s.updated_ms >= latest - HOUR_MS)
-        fm = final_mask(None, spatial, grid, target, allow_reduce=fresh)
+        fm = final_mask(None, spatial, grid, target, allow_reduce=fresh, issuer=issuer)
         viirs_s = fm.viirs_shrink
     # snapshot masks shrink harder than F: an intense small fire lights up a ring of neighbouring pixels, so the early
     # footprint unions overstate the burned area (Palisades: ~4x in the first hours with 2/3)
@@ -1986,7 +1999,8 @@ def build_observed_stats(ctx: BuildContext) -> dict[str, Any]:
         if untrusted:
             warnings.append(f"{len(untrusted)} WFIGS perimeter(s) dated after the fire stopped growing "
                             f"({', '.join(ms_to_iso(p.t_ms)[:10] for p in untrusted)}) used for the final extent only")
-        fm = final_mask(P_last, spatial, grid, target, after_ms=(last_trusted_ms + 3 * HOUR_MS) if mode == "live" and last_trusted_ms else None)
+        fm = final_mask(P_last, spatial, grid, target, after_ms=(last_trusted_ms + 3 * HOUR_MS) if mode == "live" and last_trusted_ms else None,
+                        issuer=issuer)
     F = fm.mask
     warnings += fm.notes
     stats.update({"F_method": fm.method, "viirs_shrink": round(fm.viirs_shrink, 3), "detection_acres": round(fm.detection_acres),
@@ -1998,7 +2012,7 @@ def build_observed_stats(ctx: BuildContext) -> dict[str, Any]:
     if groups:
         g0 = spatial.iloc[groups[0]]
         first_xz = g0[["x", "z"]].to_numpy(dtype=np.float64)
-    ign_x, ign_z, ign_rc, ign_where, ign_notes = place_ignition(grid, cal_xz, first_xz, F)
+    ign_x, ign_z, ign_rc, ign_where, ign_notes = place_ignition(grid, cal_xz, first_xz, F, issuer=issuer)
     warnings += ign_notes
 
     # --- snapshots + arrival --------------------------------------------------------------------------------------------
@@ -2006,7 +2020,7 @@ def build_observed_stats(ctx: BuildContext) -> dict[str, Any]:
     snaps = (build_snapshots(spatial, [groups[i] for i in snap_groups], [det_masks[i] for i in snap_groups], steps, F,
                              origin + 2 * 60_000) if F.any() else [])
     t_ign, ign_why, ign_conf, t_goes, goes_sat = ignition_time(started, origin, (ign_x, ign_z), goes, spatial,
-                                                               snaps[0].t_ms if snaps else None)
+                                                               snaps[0].t_ms if snaps else None, issuer=issuer, tz=tz)
     t_ign_h = float(to_hours(t_ign, origin))
     activity = Activity(goes, min(t_ign, det_t0), max(det_t1, t_ign + HOUR_MS))
     T = np.full(grid.shape, NEVER, dtype=np.float32)
@@ -2077,7 +2091,7 @@ def build_observed_stats(ctx: BuildContext) -> dict[str, Any]:
             last_det = max(min(max(obs), wall), t_ign)
             T = np.where(b & (T > to_hours(last_det, origin)), np.float32(to_hours(last_det, origin)), T).astype(np.float32)
             progress(0.78, "satellite passes since the last detection (NASA CMR)")
-            live_obs, markers = _live_observation(raw, goes, sites, T, grid, s, last_det, wall)
+            live_obs, markers = _live_observation(raw, goes, sites, T, grid, s, last_det, wall, tz=tz, issuer=issuer)
             end_ms = now_ms_ = int(live_obs.now_ms)
             warnings += live_obs.warnings
             stats.update({"last_detection_ms": last_det, "live_rule": live_obs.rule, "quiet_passes": live_obs.quiet_passes,
@@ -2092,7 +2106,7 @@ def build_observed_stats(ctx: BuildContext) -> dict[str, Any]:
         else:
             end_ms = int(min(max(t_ign + DAY_MS, origin + DAY_MS), started + MAX_SPAN_MS))
         end_ms = max(end_ms, t_ign + HOUR_MS)
-        t_cont, cont_src = containment_time(perims, s)
+        t_cont, cont_src = containment_time(perims, s, issuer=issuer)
         if t_cont is not None and end_ms < t_cont <= end_ms + CONTAIN_EXTEND_MS and t_cont <= started + MAX_SPAN_MS:
             end_ms = int(t_cont) + HOUR_MS
         now_ms_ = end_ms
@@ -2110,12 +2124,12 @@ def build_observed_stats(ctx: BuildContext) -> dict[str, Any]:
                          activity, spatial)
 
     events: list[dict] = []
-    ign_detail = f"Reported by CAL FIRE {la_time(started)}."
+    ign_detail = f"Reported by {issuer} {la_time(started, tz)}."
     if t_goes is not None:
-        ign_detail += f" First persistent GOES detection {la_time(t_goes)} ({SATELLITE_NAMES.get(goes_sat, goes_sat)})."
+        ign_detail += f" First persistent GOES detection {la_time(t_goes, tz)} ({SATELLITE_NAMES.get(goes_sat, goes_sat)})."
     if t_ign != started:
         ign_detail += f" Ignition estimated {ign_why}."
-    ign_src = "CAL FIRE" + (" + FIRMS GOES" if t_goes is not None else "")
+    ign_src = issuer + (" + FIRMS GOES" if t_goes is not None else "")
     events.append(_event("ignition", t_ign, "Ignition", ign_detail, ign_conf, ign_src, (ign_x, ign_z)))
     events += rapid_growth_events(ts, T, grid, origin, [sn.t_ms for sn in snaps])
     events += spot_fire_events(spots)
@@ -2130,7 +2144,7 @@ def build_observed_stats(ctx: BuildContext) -> dict[str, Any]:
     events += wind_shift_events(T, grid, origin, final_acres)
     events += perimeter_events(steps, origin, end_ms)
     if mode != "live":
-        t_cont, cont_src = containment_time(perims, s)
+        t_cont, cont_src = containment_time(perims, s, issuer=issuer)
         if t_cont is not None and origin <= t_cont <= end_ms:
             events.append(_event("containment", t_cont, "Containment", f"100% contained ({cont_src}).", "observed", cont_src))
     events = [e for e in events if origin <= e["t_ms"] <= end_ms]

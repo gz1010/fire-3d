@@ -42,7 +42,7 @@ const LAYERS: { key: MapLayerKey; label: string; desc: string }[] = [
 type SourceKey = Extract<MapLayerKey, 'evacuation' | 'cameras' | 'recentImagery'>
 
 const SOURCES: { key: SourceKey; label: string; desc: string }[] = [
-  { key: 'evacuation', label: 'Evacuation zones (official)', desc: 'Current orders and warnings from local officials via Cal OES, with the issuing authority and update time' },
+  { key: 'evacuation', label: 'Evacuation zones (official)', desc: 'Current orders and warnings from local officials, where a state publishes them (California: Cal OES; Oregon: Oregon OEM), with the issuing authority and update time; elsewhere not available in this state' },
   { key: 'cameras', label: 'Public cameras', desc: 'Wildfire and traffic cameras; an image loads only when you ask' },
   { key: 'recentImagery', label: 'Recent satellite imagery', desc: 'Recently acquired scenes with their acquisition time, cloud and resolution; not live' },
 ]

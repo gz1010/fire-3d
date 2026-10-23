@@ -1114,3 +1114,27 @@ button.ac-row:hover {
     padding-left: 10px;
   }
 }
+/* brief 3 (V-R13): skill bars carry no verdict colour */
+.sbar-fill.tone-neutral {
+  background: var(--text-3, rgba(255, 255, 255, 0.45));
+}
+/* brief 3 (§14.4): the model's accuracy in the fire's region (Analysis drawer, Forensic Analysis tab) */
+.region-accuracy {
+  margin: 8px 14px;
+  padding: 7px 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  font-size: var(--fs-xs, 12px);
+  line-height: 1.45;
+  color: var(--text, inherit);
+}
+.region-accuracy p {
+  margin: 0;
+}
+.region-accuracy-tag {
+  font-weight: 600;
+  margin-right: 4px;
+}
+.region-accuracy-sub {
+  color: var(--text-2, inherit);
+}

@@ -271,8 +271,8 @@ class FuelsFetch:
 
 
 def fetch_fuels(fire: Grid, edition: str, seasonal: str | None = None) -> FuelsFetch:
-    """Core LANDFIRE layers (required; the other edition is tried once before giving up) plus EVT, EVC and the
-    EVT attribute table (optional, fetched concurrently)."""
+    """Core LANDFIRE layers (required; the next OLDER edition is tried once before giving up, never a newer one:
+    CONTRACT 14.12.3) plus EVT, EVC and the EVT attribute table (optional, fetched concurrently)."""
     veg_pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix="landfire-veg")
     veg_futs = {name: veg_pool.submit(landfire.fetch_layer, fire, edition, name) for name in landfire.VEG_LAYERS}
     table_fut = veg_pool.submit(landfire.fetch_evt_physiognomy)
@@ -282,13 +282,19 @@ def fetch_fuels(fire: Grid, edition: str, seasonal: str | None = None) -> FuelsF
             raw, infos, n = landfire.fetch_landfire_info(fire, edition, landfire.CORE_LAYERS, seasonal)
             notes += n
         except RasterFetchError as e:
-            alt = "LF2024" if edition == "LF2025" else "LF2025"
+            alt = landfire.older_edition(edition)
+            if alt is None:
+                raise StaticLayerError(f"LANDFIRE fuels unavailable: {e}") from None
             try:
                 raw, infos, _ = landfire.fetch_landfire_info(fire, alt, landfire.CORE_LAYERS)
             except RasterFetchError:
                 raise StaticLayerError(f"LANDFIRE fuels unavailable: {e}") from None
-            notes.append(f"{edition} unavailable ({e}); used {alt} instead")
+            if isinstance(e, landfire.LandfireNoData):      # no data at all here (not a failure): CONTRACT 14.12.3
+                notes.append(landfire.switch_warning(edition, alt, 1.0))
+            else:
+                notes.append(f"{edition} unavailable ({e}); used {alt} instead")
             edition = alt
+            veg_futs = {name: veg_pool.submit(landfire.fetch_layer, fire, edition, name) for name in landfire.VEG_LAYERS}
         used_seasonal = seasonal if seasonal and "Seasonal_Fuels" in infos["FBFM40"].url else None
         out = FuelsFetch(raw, infos, edition, used_seasonal, notes=notes)
         for name, f in veg_futs.items():
@@ -304,6 +310,58 @@ def fetch_fuels(fire: Grid, edition: str, seasonal: str | None = None) -> FuelsF
         return out
     finally:
         veg_pool.shutdown(wait=False, cancel_futures=True)
+
+
+LAND_MIN_ELEV_M = 0.5            # 3DEP answers ~0 m over the sea: such cells are not land for the NoData rule
+LAND_STRIDE = 4                  # the state-polygon test runs on every 4th cell (then nearest-neighbour upsampled)
+
+
+def land_masks(fire: Grid, elev: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """``(land, abroad)`` on the fire grid (CONTRACT 14.12.3): ``land`` = inside the lower-48 + DC state polygons
+    with ground above sea level; ``abroad`` = ground above sea level outside them (Mexico, Canada). Without the
+    regions data every cell above sea level counts as land."""
+    above = np.asarray(elev) > LAND_MIN_ELEV_M
+    try:
+        from .. import regions
+
+        r = np.arange(0, fire.height, LAND_STRIDE)
+        c = np.arange(0, fire.width, LAND_STRIDE)
+        rr, cc = np.meshgrid(r, c, indexing="ij")
+        x, z = fire.pixel_center_local(rr.ravel(), cc.ravel())
+        lon, lat = fire.local_to_lonlat(np.asarray(x), np.asarray(z))
+        inside = np.asarray(regions.in_lower48(lon, lat), dtype=bool).reshape(rr.shape)
+        inside = np.repeat(np.repeat(inside, LAND_STRIDE, axis=0), LAND_STRIDE, axis=1)[: fire.height, : fire.width]
+    except Exception as e:  # noqa: BLE001 - no regions data: the NoData rule still runs on all ground
+        log.warning("land mask without state polygons: %s", e)
+        inside = np.ones(above.shape, dtype=bool)
+    return inside & above, ~inside & above
+
+
+def choose_fuels(fire: Grid, ff: "FuelsFetch", land: np.ndarray, progress: Any = None,
+                 fetch: Any = None) -> tuple["FuelsFetch", list[str]]:
+    """Switch the whole bundle to the next older edition while more than 2 % of the land cells have no fuel code
+    (LANDFIRE 2025 is not released in much of the South and East): CONTRACT 14.12.3. Returns the fetch used and the
+    "LANDFIRE:" notes (e.g. "LANDFIRE 2025 is not released here yet; LANDFIRE 2024 used")."""
+    fetch = fetch or fetch_fuels
+    notes: list[str] = []
+    frac = landfire.nodata_land_fraction(ff.raw["FBFM40"], land)
+    while frac > landfire.NODATA_SWITCH_FRAC:
+        older = landfire.older_edition(ff.edition)
+        if older is None:
+            notes.append(f"LANDFIRE {ff.edition[2:]} has no fuel data for {frac:.0%} of the land here and no older "
+                         "edition is available; those cells are simulated as non-burnable (unknown, not low)")
+            break
+        if progress is not None:
+            progress("fuels", 0.3, f"LANDFIRE {ff.edition} has no data for {frac:.0%} of the land; fetching {older}")
+        try:
+            nxt = fetch(fire, older, None)
+        except StaticLayerError as e:
+            notes.append(f"LANDFIRE {ff.edition[2:]} has no fuel data for {frac:.0%} of the land here; {older} "
+                         f"unavailable ({e})")
+            break
+        notes.append(landfire.switch_warning(ff.edition, older, frac))
+        ff, frac = nxt, landfire.nodata_land_fraction(nxt.raw["FBFM40"], land)
+    return ff, notes
 
 
 # ----------------------------------------------------------------------------------------------------------------
@@ -353,10 +411,13 @@ def build_static_layers_stats(ctx: BuildContext) -> dict[str, Any]:
     bdir = Path(ctx.bundle_dir)
     bdir.mkdir(parents=True, exist_ok=True)
     now = int(ctx.now_ms or now_ms())
-    edition = landfire.edition_for(ctx.mode)
+    started = getattr(ctx.summary, "started_ms", None)
+    edition = landfire.edition_for(ctx.mode, int(started) if started is not None else None)
     seasonal = landfire.seasonal_fbfm40(now) if ctx.mode == "live" else None
     progress = ctx.progress
     warnings: list[str] = []
+    if ctx.mode != "live" and started is not None and not landfire.has_prefire_edition(int(started)):
+        warnings.append(f"LANDFIRE: the fire began before October 2023; {edition} may already show its own burn scar")
     sources: list[dict] = []
     stats: dict[str, Any] = {"timings_s": {}}
     tim = stats["timings_s"]
@@ -400,6 +461,9 @@ def build_static_layers_stats(ctx: BuildContext) -> dict[str, Any]:
         progress("fuels", 0.0, f"Fetching LANDFIRE {edition} fuels and canopy ({fire.width}² at {fire.res_m:.1f} m)")
         t0 = time.monotonic()
         ff = f_fuels.result()
+        land, abroad = land_masks(fire, elev)
+        ff, switch_notes = choose_fuels(fire, ff, land, progress)
+        warnings += [f"LANDFIRE: {n}" for n in switch_notes]
         edition = ff.edition
         tim["landfire_fetch"] = round(time.monotonic() - t0, 2)
         progress("fuels", 0.6, "Scaling fuels and canopy")
@@ -416,6 +480,10 @@ def build_static_layers_stats(ctx: BuildContext) -> dict[str, Any]:
         warnings += [f"LANDFIRE: {n}" for n in ff.notes]
         if fuels.nodata_cells > 0.01 * fuels.fuel_code.size:
             warnings.append(f"LANDFIRE: {fuels.nodata_cells} fire-grid cells have no fuel code (simulated as non-burnable)")
+        outside = int(((fuels.fuel_code == 0) & abroad).sum())
+        if outside:
+            warnings.append(f"LANDFIRE: {outside} fire-grid cells ({outside / fuels.fuel_code.size:.1%}) outside the "
+                            f"United States are {landfire.OUTSIDE_COVERAGE}")
         layers_used = ", ".join(k for k in (*landfire.CORE_LAYERS, *landfire.VEG_LAYERS) if k in ff.raw)
         detail = f"{layers_used} exportImage, {fire.width}² at {fire.res_m:.2f} m (nearest)"
         if ff.seasonal:
@@ -423,6 +491,8 @@ def build_static_layers_stats(ctx: BuildContext) -> dict[str, Any]:
         sources.append(_source(f"LANDFIRE {edition}", detail, max(i.fetched_ms for i in ff.infos.values())))
         hist = landfire.fuel_histogram(fuels.fuel_code)
         stats["fuels"] = {"edition": edition, "seasonal": ff.seasonal, "histogram_top": dict(list(hist.items())[:10]),
+                          "nodata_land_frac": round(landfire.nodata_land_fraction(ff.raw["FBFM40"], land), 4),
+                          "outside_coverage_cells": outside,
                           "nodata_cells": fuels.nodata_cells, "burnable_frac": round(float((fuels.fuel_code > 100).mean()), 3),
                           "cc_mean_pct": round(float(fuels.cc_pct.mean()), 1), "ch_max_m": round(float(fuels.ch_m.max()), 1),
                           "cbd_max": round(float(fuels.cbd_kg_m3.max()), 3), "fixes": fuels.fixes}

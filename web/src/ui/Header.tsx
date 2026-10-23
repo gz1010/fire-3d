@@ -4,8 +4,9 @@
 import { Calendar, Map as MapIcon, MapPin, Maximize2, Minimize2, Pause, Play, Plane } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { fmtLatLon } from '../lib/format'
-import { fmtDate, fmtDateTimeTz } from '../lib/time'
+import { fmtDayDate, fmtAt } from '../lib/time'
 import { useStore } from '../state/store'
+import { useTimeFormat } from '../state/timeZone'
 import { IconButton } from './controls'
 import { IncidentPicker } from './IncidentPicker'
 import { AnalysisMenu, SettingsMenu, ShareButton, ViewMenu } from './Menus'
@@ -39,6 +40,7 @@ function Brand() {
 }
 
 function IncidentMeta() {
+  const tf = useTimeFormat()
   const { summary, manifest } = useStore(useShallow((s) => ({ summary: s.summary, manifest: s.manifest })))
   if (!summary) return null
   const loc = [summary.location, summary.county ? `${summary.county} County` : null].filter(Boolean).join(', ')
@@ -55,7 +57,7 @@ function IncidentMeta() {
       )}
       <span className="hdr-dates mono">
         <Calendar size={13} />
-        {fmtDate(start)} – {end ? fmtDate(end) : 'present'}
+        {fmtDayDate(start, tf.tz, { year: 'always' })} – {end ? fmtDayDate(end, tf.tz, { year: 'always' }) : 'present'}
       </span>
     </div>
   )
@@ -128,6 +130,7 @@ export function Header() {
 
 /** Minimal top bar while the panels are hidden (cinematic view). */
 function MiniBar() {
+  const tf = useTimeFormat()
   const { name, mode, year, timeMs, playing, hasManifest } = useStore(
     useShallow((s) => ({
       name: s.summary?.name ?? null,
@@ -152,7 +155,7 @@ function MiniBar() {
         ) : (
           <span className="chip chip-gold mono">{year}</span>
         ))}
-      {hasManifest && <span className="mono gold minibar-time">{fmtDateTimeTz(timeMs)}</span>}
+      {hasManifest && <span className="mono gold minibar-time">{fmtAt(timeMs, tf, { zone: true })}</span>}
       {hasManifest && (
         <IconButton icon={playing ? <Pause size={14} /> : <Play size={14} />} label={playing ? 'Pause (Space)' : 'Play (Space)'} onClick={() => useStore.getState().togglePlaying()} />
       )}

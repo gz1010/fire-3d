@@ -1,3 +1,4 @@
+import { timeFmt } from '../lib/time'
 import { describe, expect, it } from 'vitest'
 import type { Detection, Perimeter } from '../api/types'
 import { HOUR_MS } from '../data/rasters'
@@ -124,11 +125,15 @@ describe('forecast classes', () => {
 describe('vector features', () => {
   it('perimeters up to t, latest flagged and labelled with its time', () => {
     const p = (t: number): Perimeter => ({ t_ms: t, acres: 1234.4, source: 'NIFC', rings: [[[0, 0], [100, 0], [100, 100]]] })
-    const { fc, latest } = perimeterFeatures([p(3e12), p(1e12), p(2e12)], GRID, 2.5e12)
+    const { fc, latest } = perimeterFeatures([p(3e12), p(1e12), p(2e12)], GRID, 2.5e12, timeFmt('America/Denver', '24h'))
     expect(fc.features).toHaveLength(2)
     expect(latest?.t_ms).toBe(2e12)
     expect(fc.features.map((f) => f.properties.latest)).toEqual([false, true])
     expect(String(fc.features[1].properties.label)).toMatch(/^Perimeter .* · 1,234 ac$/)
+    // the fire's zone and the preset's clock (2e12 ms = May 18, 2033 03:33 UTC = May 17, 21:33 MDT)
+    expect(String(fc.features[1].properties.label)).toBe('Perimeter May 17, 21:33 MDT · 1,234 ac')
+    const p12 = perimeterFeatures([p(2e12)], GRID, 2.5e12, timeFmt('America/New_York', '12h')).fc.features[0].properties.label
+    expect(p12).toBe('Perimeter May 17, 11:33 PM EDT · 1,234 ac')
     const ring = (fc.features[0].geometry as { coordinates: [number, number][][] }).coordinates[0]
     expect(ring[0]).toEqual(ring[ring.length - 1]) // closed
   })

@@ -4,6 +4,7 @@
 // unmodified with the source credit and the image's own time, and video is never played automatically.
 import type { Feature, FeatureCollection } from 'geojson'
 import type { Map as MapLibreMap, MapLayerMouseEvent } from 'maplibre-gl'
+import type { TimeFmt } from '../lib/time'
 import type { FeedItem } from '../ui/feed/types'
 import { agoText, fmtWhen } from './format'
 import type { ExtrasLegendEntry } from './legend'
@@ -252,8 +253,9 @@ export function frameTimeText(frame: Pick<CameraFrameResponse, 'image_time_ms' |
   return `Image updated ${fmtWhen(frame.image_time_ms, nowMs)} (${agoText(frame.image_time_ms, nowMs)}) by the camera server's clock`
 }
 
-/** Plain description of a camera's direction / view. */
-export function cameraViewText(f: CameraFeature): string {
+/** Plain description of a camera's direction / view. `tf` (CONTRACT §14.9.6) is accepted for the shared signature;
+ *  the text has no time in it today. */
+export function cameraViewText(f: CameraFeature, _tf?: TimeFmt): string {
   const p = f.properties
   if (p.azimuth_deg != null) return `Pan-tilt-zoom; pointing ${compassWord(p.azimuth_deg)} (${Math.round(p.azimuth_deg)}°) as last reported`
   if (p.view && p.kind === 'traffic') return `Fixed view looking ${p.view.toLowerCase()}`

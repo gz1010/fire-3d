@@ -7,7 +7,7 @@
 import type { IncidentSummary, ManifestGrid, Perimeter } from '../api/types'
 import type { LonLatBox } from '../lib/fireBounds'
 import { localToLonLat, type LonLat, type UtmGrid } from '../lib/reproject'
-import { fmtDate } from '../lib/time'
+import { fmtDayDate, timeFmt } from '../lib/time'
 import { boxesIntersect, distanceToBoxKm } from './focus'
 import type { Feature, FeatureCollection, Geometry } from './overlayModel'
 
@@ -22,6 +22,8 @@ export interface NearbyFire {
   builtMs: number | null
   bbox: LonLatBox
   startedMs: number
+  /** The fire's own zone (brief 3, §14.9.1): its perimeter date is that fire's local day. */
+  timeZone?: string | null
 }
 
 export interface NearbyBundle {
@@ -31,7 +33,7 @@ export interface NearbyBundle {
 
 /** The prepared fires to outline: in view, not the open one, started by `startedBy` (replays), nearest first. */
 export function nearbyFires(
-  rows: readonly Pick<IncidentSummary, 'id' | 'name' | 'bundle_status' | 'bundle_built_ms' | 'bbox_lonlat' | 'started_ms'>[],
+  rows: readonly (Pick<IncidentSummary, 'id' | 'name' | 'bundle_status' | 'bundle_built_ms' | 'bbox_lonlat' | 'started_ms'> & { time_zone?: string | null })[],
   view: LonLatBox,
   center: [number, number],
   openId: string | null,
@@ -45,7 +47,7 @@ export function nearbyFires(
     if (r.bundle_status !== 'ready' || !b || r.id === openId || seen.has(r.id) || !boxesIntersect(b, view)) continue
     if (startedBy != null && r.started_ms > startedBy) continue
     seen.add(r.id)
-    out.push({ fire: { id: r.id, name: r.name, builtMs: r.bundle_built_ms, bbox: b, startedMs: r.started_ms }, d: distanceToBoxKm(center, b) })
+    out.push({ fire: { id: r.id, name: r.name, builtMs: r.bundle_built_ms, bbox: b, startedMs: r.started_ms, timeZone: r.time_zone ?? null }, d: distanceToBoxKm(center, b) })
   }
   out.sort((a, b) => a.d - b.d || a.fire.id.localeCompare(b.fire.id))
   return out.slice(0, max).map((x) => x.fire)
@@ -88,7 +90,7 @@ export function nearbyPerimeterFeatures(entries: readonly { fire: NearbyFire; bu
       type: 'Feature',
       id: features.length,
       geometry: { type: 'MultiLineString', coordinates: coords },
-      properties: { id: fire.id, name: fire.name, t: p.t_ms, label: `${fire.name} · perimeter ${fmtDate(p.t_ms)}` },
+      properties: { id: fire.id, name: fire.name, t: p.t_ms, label: `${fire.name} · perimeter ${fmtDayDate(p.t_ms, timeFmt(fire.timeZone, '24h').tz, { year: 'always' })}` },
     })
   }
   return { fc: { type: 'FeatureCollection', features }, key: keys.join('|') }

@@ -1,15 +1,16 @@
 // Plain-language time and status text for the optional sources (owner: optional-sources). Times show in
 // America/Los_Angeles with the zone label (lib/time.ts); every text says which clock it refers to (issuer update,
 // Fire-3d fetch, satellite acquisition, camera image).
-import { fmtDateTime, fmtDateTimeYear, tzLabel } from '../lib/time'
+import { fmtAt, fmtDateTime, fmtDateTimeYear, tzLabel, type TimeFmt } from '../lib/time'
 import type { ExtrasEnvelope } from './types'
 
 const MIN = 60_000
 const HOUR = 3_600_000
 const DAY = 86_400_000
 
-/** "Oct 17, 13:05 PDT" (the year is added when it differs from the reference year). */
-export function fmtWhen(ms: number, refMs?: number): string {
+/** "Oct 17, 13:05 PDT" (the year is added when it differs from the reference year), in `tf`'s zone and clock. */
+export function fmtWhen(ms: number, refMs?: number, tf?: TimeFmt): string {
+  if (tf) return fmtAt(ms, tf, { zone: true, year: refMs == null ? 'never' : 'auto', refMs })
   const sameYear = refMs == null || new Date(ms).getUTCFullYear() === new Date(refMs).getUTCFullYear()
   return `${sameYear ? fmtDateTime(ms) : fmtDateTimeYear(ms)} ${tzLabel(ms)}`
 }
@@ -49,9 +50,11 @@ export interface StatusLine {
 }
 
 /** Headline for an envelope's explicit status (past dates and outages are never shown as "none"). */
-export function envelopeStatusLine(env: Pick<ExtrasEnvelope, 'status' | 'reason'> | null, what: string, error?: string | null): StatusLine {
+export function envelopeStatusLine(env: (Pick<ExtrasEnvelope, 'status' | 'reason'> & Partial<Pick<ExtrasEnvelope, 'reason_code'>>) | null, what: string, error?: string | null): StatusLine {
   if (error) return { tone: 'error', title: `${what}: could not load`, detail: error }
   if (!env) return { tone: 'muted', title: `${what}: loading…`, detail: null }
+  // brief 3 (CONTRACT §14.8): no source in this state; never "none" and never an outage
+  if (env.reason_code === 'state_not_available') return { tone: 'muted', title: `${what}: not available in this state`, detail: env.reason }
   if (env.status === 'not_available_for_past_dates') return { tone: 'muted', title: `${what}: not available for past dates`, detail: env.reason }
   if (env.status === 'unavailable') return { tone: 'warn', title: `${what}: unavailable`, detail: env.reason }
   return { tone: 'ok', title: what, detail: null }

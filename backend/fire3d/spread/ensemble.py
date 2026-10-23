@@ -34,20 +34,18 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from concurrent.futures.process import BrokenProcessPool
 import dataclasses
 from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Sequence
-from zoneinfo import ZoneInfo
 
 import numpy as np
 
 from .. import bundle as fbundle
 from .. import config
 from ..contracts import ForecastManifest, validate_strict
-from ..timeutil import ms_to_dt, ms_to_iso, now_ms
-from ..types import MemberWeather, ProgressFn, SpreadSettings, StaticInputs, no_progress
+from ..timeutil import local_month, ms_to_dt, ms_to_iso, now_ms, zone_of
+from ..types import MemberWeather, ProgressFn, SpreadSettings, StaticInputs, no_progress, record_issuer_of
 from . import engine, moisture
-from .validate import skill_from_arrays
+from .validate import skill_entry, skill_from_arrays
 
 log = logging.getLogger(__name__)
 
@@ -67,7 +65,6 @@ ROS_PERCENTILE = 90.0            # front ROS = p90 of the fire-normal spread rat
 PERTURB_TAU_H = 8.0              # SPEC 8.4 perturbed ensemble (fallback implementation)
 PERTURB_SIGMA = {"wind_log": 0.25, "dir_deg": 20.0, "rh_pct": 6.0, "temp_c": 1.5}
 PERTURB_MEMBERS = 31
-LA_TZ = ZoneInfo("America/Los_Angeles")
 
 
 class ForecastError(RuntimeError):
@@ -304,12 +301,13 @@ def members_from_weather_json(bundle_dir: Path, start_ms: int, horizon_h: int, e
     temp = engine.fill_nan_time(temp if temp is not None else np.full(n, 25.0), 25.0)
     rh = engine.fill_nan_time(rh if rh is not None else np.full(n, 30.0), 30.0)
     precip = _hourly_series(af, "precip_mm", n)
-    month = datetime.fromtimestamp(start_ms / 1000.0, LA_TZ).month
+    man = fbundle.load_manifest(Path(bundle_dir)) or {}
+    month = local_month(start_ms, zone_of(man))            # the fire's own zone (CONTRACT 14.9.7)
     precip_wy = None
     try:   # drought-adjusted live fuel moisture when the bundle stores its water-year precipitation
         from ..build.weather_bundle import precip_to
 
-        precip_wy, _ = precip_to(Path(bundle_dir), fbundle.load_manifest(Path(bundle_dir)) or {}, int(start_ms), fetch=False)
+        precip_wy, _ = precip_to(Path(bundle_dir), man, int(start_ms), fetch=False)
     except Exception:  # noqa: BLE001 - the month table is a safe fallback
         precip_wy = None
     herb, woody = moisture.live_fuel_moisture(month, precip_wy)
@@ -436,7 +434,9 @@ class ForecastSetup:
     warnings: list[str] = field(default_factory=list)
     detections: np.ndarray | None = None   # (N, 3) x, z, t_ms of polar-orbiter detections (VIIRS/MODIS/Landsat)
     activity: dict | None = None           # live: sim/activity.json (last detection, passes, activity markers)
-    percent_contained: float | None = None  # live: CAL FIRE containment (manifest summary)
+    percent_contained: float | None = None  # live: the record's containment (manifest summary)
+    issuer: str = "CAL FIRE"               # who published that record (summary.record_issuer, CONTRACT 14.12.5)
+    time_zone: str | None = None           # the fire's zone, for the start note (CONTRACT 14.9.7)
 
     @property
     def start_h(self) -> float:
@@ -513,6 +513,8 @@ def prepare_forecast(
         detections=dets,
         activity=activity,
         percent_contained=float(contained) if contained is not None else None,
+        issuer=record_issuer_of(man.get("summary") or {}),
+        time_zone=zone_of(man),
     )
 
 
@@ -663,7 +665,7 @@ def adjustment_note(settings: SpreadSettings, start_ms: int | None = None) -> st
     return None
 
 
-def hold_note(stats: dict, settings: SpreadSettings) -> str:
+def hold_note(stats: dict, settings: SpreadSettings, issuer: str = "CAL FIRE") -> str:
     det = ("no satellite detection of new burning (hot pixels on ground that burned earlier are burnout)"
            if getattr(settings, "active_growth_only", False) else "no satellite detection")
     text = (f"observation-informed start: {stats.get('held_fraction', 0.0):.0%} of the perimeter showed no burning in the "
@@ -671,7 +673,7 @@ def hold_note(stats: dict, settings: SpreadSettings) -> str:
             f"{' or other sign of activity' if stats.get('markers') else ''} within {settings.active_radius_m / 1000:g} km, "
             "so it is held (treated as contained or burned out); spread starts from the active part (see docs/validation.md)")
     if "held_fraction_with_containment" in stats:
-        text += (f"; CAL FIRE reports {stats['contained_fraction']:.0%} containment, so "
+        text += (f"; {issuer} reports {stats['contained_fraction']:.0%} containment, so "
                  f"{stats['held_fraction_with_containment']:.0%} of the perimeter is held (the part farthest from recent "
                  "activity; where the contained lines are is not published)")
     if stats.get("held_fraction", 0.0) >= 0.999 or stats.get("held_fraction_with_containment", 0.0) >= 0.999:
@@ -1096,7 +1098,7 @@ def run_forecast(
     if setup.mode == "live":
         from ..build import live_observation
 
-        start_note = live_observation.describe_start(setup.activity, setup.start_ms)
+        start_note = live_observation.describe_start(setup.activity, setup.start_ms, setup.time_zone)
         if start_note:
             setup.warnings.append(start_note)
     adj_note = adjustment_note(settings, setup.sim_start_ms)
@@ -1104,7 +1106,7 @@ def run_forecast(
         setup.warnings.append(adj_note)
     _, hold_stats = setup_hold(setup, settings)
     if hold_stats.get("held_fraction") or hold_stats.get("held_fraction_with_containment"):
-        setup.warnings.append(hold_note(hold_stats, settings))
+        setup.warnings.append(hold_note(hold_stats, settings, setup.issuer))
     _put_entry(bdir, _summary_entry(run_id, "running", issued, setup, n), issued)
     rel_dir = f"{fbundle.FORECASTS_DIR}/{run_id}"
     fdir = fbundle.forecast_dir(bdir, run_id)
@@ -1130,8 +1132,9 @@ def run_forecast(
         skill = None
         if setup.observed is not None and setup.data_end_ms is not None:
             data_end_h = (setup.data_end_ms - setup.time_origin_ms) / config.MS_PER_H
-            skill = skill_from_arrays(agg["arrival_p50"], setup.observed, setup.start_h, setup.res_m, LEAD_HOURS,
-                                      horizon_h=setup.horizon_h, data_end_h=data_end_h) or None
+            rows = skill_from_arrays(agg["arrival_p50"], setup.observed, setup.start_h, setup.res_m, LEAD_HOURS,
+                                     horizon_h=setup.horizon_h, data_end_h=data_end_h, growth=True)
+            skill = [skill_entry(r) for r in rows] or None
         progress("write", 0.0, f"writing {rel_dir}")
         layers = {
             name: fbundle.write_layer(bdir, name, agg[name], "fire", units, desc, rel_dir=rel_dir, register=False)

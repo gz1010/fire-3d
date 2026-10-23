@@ -1,19 +1,28 @@
-// Fire card (owner: shell; brief 2 O-R6 / I3, CONTRACT §13 shell): opens when a fire is clicked on the overview map,
-// in the overview list, or on its own marker or label inside a fire (useWorkspace.fireCardId). It shows CAL FIRE's
-// official record (acres, containment, status, CAL FIRE's update time, incident page) and whether Fire-3d's analysis
-// exists. "Prepare analysis (1-3 min)" is the only thing that starts a build. Model output never appears here.
-import { Box, ExternalLink, Hammer, LocateFixed, Map as MapIcon, Play, X } from 'lucide-react'
-import { useRef } from 'react'
+// Fire card (owner: us-web; brief 2 O-R6 / I3, CONTRACT §13 shell; brief 3 §14.4, §14.5): opens when a fire is clicked
+// on the overview map, in the overview list, or on its own marker or label inside a fire (useWorkspace.fireCardId). It
+// shows the agency's official record from the list summary only (no official fetch): CAL FIRE in California, NIFC
+// WFIGS elsewhere, labelled by `recordIssuerLabel` and split into one block per agency when they disagree on whether the
+// fire is active (`recordBlocks`, round 3 item 2); a CAL FIRE complex keeps CAL FIRE's heading and numbers and names its
+// NIFC WFIGS member fires, each linked to its own record (round 3 item 3). Times are in the fire's own zone with the
+// preset's clock. Below the record, outside it (model information, never the agency's), the per-region accuracy label of
+// the experimental model (§14.4: words in Public with "How was it tested?", the score in Command) and the model note.
+// "Prepare analysis (1-3 min)" is the only thing that starts a build. Model output never appears in the record.
+import { Box, ChevronDown, ExternalLink, Hammer, LocateFixed, Map as MapIcon, Play, X } from 'lucide-react'
+import { useId, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
+import { recordBlocks, recordIssuerLabel } from '../../api/records'
 import type { IncidentSummary } from '../../api/types'
 import { fmtAcres, fmtNumber } from '../../lib/format'
-import { fmtDate, fmtRelative } from '../../lib/time'
-import { analysisState, findFire, fireStatus, isActiveFire, type AnalysisState } from '../../state/overview'
+import { accuracyLabel, type AccuracyLabel } from '../../lib/plainLanguage'
+import { agencyIdLine, complexMembers, isHttps as https, partOfComplex, recordBlockText } from '../../lib/recordText'
+import { fmtAt, fmtDayDate, fmtRelative, type TimeFmt } from '../../lib/time'
+import { findRegion, useAccuracyRegions } from '../../state/accuracy'
+import { analysisState, findFire, fireStatus, fireWhere, isActiveFire, type AnalysisState } from '../../state/overview'
 import { useStore } from '../../state/store'
+import { useTimeFormatFor } from '../../state/timeZone'
 import { useWorkspace } from '../../state/workspace'
 import { Spinner } from '../controls'
 import { useNow } from '../hooks'
-import { fmtStatusTime } from './dataStatus'
 import { openFire } from './fireActions'
 import { useDrawerFocus } from './hooks'
 
@@ -42,15 +51,23 @@ function modeChip(f: IncidentSummary): { label: string; cls: string } {
   return isActiveFire(f) ? { label: 'Active', cls: 'is-live' } : { label: String(f.year), cls: 'is-year' }
 }
 
-function OfficialRecord({ fire, nowMs }: { fire: IncidentSummary; nowMs: number }) {
+/** The agency's official record (§14.5): heading, numbers, update time in the fire's zone, link; one block per agency
+ *  when they disagree; a complex's members. Only the record's own values: nothing from the model. */
+export function OfficialRecord({ fire, nowMs, tf }: { fire: IncidentSummary; nowMs: number; tf: TimeFmt }) {
   const status = fireStatus(fire)
   const active = isActiveFire(fire)
+  const issuer = recordIssuerLabel(fire)
+  const blocks = recordBlocks(fire)
+  const disagree = blocks.length > 1
   const updated = fire.updated_ms
+  const members = complexMembers(fire)
+  const idLine = agencyIdLine(fire)
+  const wfigs = (fire.record_source ?? 'calfire') === 'wfigs'
   return (
-    <section className="fc-official" aria-label="CAL FIRE official record">
+    <section className="fc-official" aria-label={`${issuer} official record`}>
       <p className="fc-source">
         <span className="mw-tag is-official">Official</span>
-        <span>CAL FIRE incident record</span>
+        <span>{issuer} incident record</span>
       </p>
       <dl className="fc-facts">
         <div>
@@ -70,30 +87,113 @@ function OfficialRecord({ fire, nowMs }: { fire: IncidentSummary; nowMs: number 
         {updated != null ? (
           active ? (
             <>
-              Updated by CAL FIRE <span className="mw-mono">{fmtStatusTime(updated, nowMs)}</span> ({fmtRelative(updated, nowMs)})
+              Updated by {issuer} <span className="mw-mono">{fmtAt(updated, tf, { zone: true, year: 'auto', refMs: nowMs })}</span> ({fmtRelative(updated, nowMs)})
             </>
           ) : (
             <>
-              CAL FIRE record last edited <span className="mw-mono">{fmtStatusTime(updated, nowMs)}</span>
+              {issuer} record last edited <span className="mw-mono">{fmtAt(updated, tf, { zone: true, year: 'auto', refMs: nowMs })}</span>
               {fire.contained_ms != null && (
                 <>
                   {' '}
-                  · contained <span className="mw-mono">{fmtDate(fire.contained_ms)}</span>
+                  · contained <span className="mw-mono">{fmtDayDate(fire.contained_ms, tf.tz, { year: 'always' })}</span>
                 </>
               )}
             </>
           )
         ) : (
-          'CAL FIRE gives no update time for this record.'
+          `${issuer} gives no update time for this record.`
         )}
       </p>
-      {fire.url && /^https:\/\//.test(fire.url) && (
+      {disagree && (
+        <div className="fc-records">
+          <p className="fc-records-head">The agencies' records differ on whether the fire is active; each is shown as published:</p>
+          <ul>
+            {blocks.map((b, i) => (
+              <li key={`${b.source}-${i}`} className={b.is_active ? 'is-active' : undefined}>
+                {b.name && <span className="fc-record-name">{b.name}: </span>}
+                {recordBlockText(b, tf, nowMs)}
+                {https(b.url) && (
+                  <>
+                    {' '}
+                    <a className="fc-link is-inline" href={b.url} target="_blank" rel="noopener noreferrer">
+                      Record <ExternalLink size={11} aria-hidden="true" />
+                    </a>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {members.length > 0 && (
+        <p className="fc-members">
+          Includes (NIFC WFIGS names):{' '}
+          {members.map((m, i) => (
+            <span key={`${m.name}-${i}`}>
+              {i > 0 && ', '}
+              {m.url ? (
+                <a className="fc-link is-inline" href={m.url} target="_blank" rel="noopener noreferrer">
+                  {m.name}
+                </a>
+              ) : (
+                m.name
+              )}
+            </span>
+          ))}
+        </p>
+      )}
+      {https(fire.url) && (
         <a className="fc-link" href={fire.url} target="_blank" rel="noopener noreferrer">
-          CAL FIRE incident page <ExternalLink size={12} aria-hidden="true" />
+          {wfigs ? 'NIFC WFIGS record' : `${issuer} incident page`} <ExternalLink size={12} aria-hidden="true" />
         </a>
       )}
+      {idLine && <p className="fc-id mw-mono">{idLine}</p>}
     </section>
   )
+}
+
+/** The accuracy label (§14.4) of the card's fire: model information, outside the official record. Public: the words
+ *  and "How was it tested?"; Command: the score line. */
+export function AccuracyNote({ label, command, loadFailed }: { label: AccuracyLabel | null; command: boolean; loadFailed?: boolean }) {
+  const [open, setOpen] = useState(false)
+  const id = useId()
+  if (!label)
+    return (
+      <div className="fc-accuracy" aria-label="Model accuracy in this region">
+        <p className="fc-accuracy-line">{loadFailed ? 'The accuracy of the model in this region could not be loaded right now.' : 'Loading the accuracy of the model in this region…'}</p>
+        <p className="fc-accuracy-always">Outside the modeled area is unknown, not low.</p>
+      </div>
+    )
+  return (
+    <div className="fc-accuracy" aria-label="Model accuracy in this region">
+      <p className="fc-accuracy-line">
+        <span className="mw-tag is-model">Model</span> {command ? label.commandLine : label.publicLine}
+      </p>
+      {label.fuelCaveat && <p className="fc-accuracy-sub">{label.fuelCaveat}</p>}
+      {!command && label.publicDetail && (
+        <>
+          <button type="button" className="mw-link-btn fc-accuracy-more" aria-expanded={open} aria-controls={id} onClick={() => setOpen((v) => !v)}>
+            How was it tested? <ChevronDown size={12} aria-hidden="true" className={open ? 'is-open' : undefined} />
+          </button>
+          {open && (
+            <p id={id} className="fc-accuracy-sub">
+              {label.publicDetail}
+            </p>
+          )}
+        </>
+      )}
+      <p className="fc-accuracy-always">{label.always}</p>
+    </div>
+  )
+}
+
+/** The accuracy label of a fire, from the regional file (loaded once). */
+function useAccuracyLabel(fire: IncidentSummary | null): { label: AccuracyLabel | null; failed: boolean } {
+  const { status, data } = useAccuracyRegions()
+  if (!fire) return { label: null, failed: false }
+  if (status === 'error') return { label: null, failed: true }
+  if (status !== 'ok' || !data) return { label: null, failed: false }
+  return { label: accuracyLabel(findRegion(data, fire.accuracy_region ?? null), data.method), failed: false }
 }
 
 function AnalysisLine({ state, progress }: { state: AnalysisState; progress: number | null }) {
@@ -123,7 +223,11 @@ export function FireCard() {
   const catalogLoading = useStore((s) => s.catalog.loading)
   const currentId = useStore((s) => s.incidentId)
   const { state, progress } = useAnalysis(fire)
+  const command = useWorkspace((s) => s.preset === 'command')
+  const accuracy = useAccuracyLabel(fire)
   const nowMs = useNow(30_000)
+  // the card's fire may not be the open one: its times are in its own zone (§14.9.1)
+  const tf = useTimeFormatFor(fire?.time_zone)
   const heading = useRef<HTMLHeadingElement | null>(null)
   const close = () => useWorkspace.getState().setFireCard(null)
   // non-modal: focus moves to the heading when the card opens and back to its opener (a list row) when it closes, or to
@@ -142,13 +246,13 @@ export function FireCard() {
             <X size={15} />
           </button>
         </header>
-        {!catalogLoading && <p className="fc-empty">CAL FIRE's current lists do not include this fire.</p>}
+        {!catalogLoading && <p className="fc-empty">The current fire lists (CAL FIRE and NIFC) do not include this fire.</p>}
       </section>
     )
 
   const isCurrent = fire.id === currentId
   const chip = modeChip(fire)
-  const where = [fire.county ? `${fire.county} County` : null, fire.location].filter(Boolean).join(' · ')
+  const where = [fireWhere(fire), fire.county ? fire.location : null].filter(Boolean).join(' · ')
   const ready = state === 'ready'
   return (
     <section className="mw-panel fc-card" aria-labelledby="fc-title" data-fire={fire.id} data-drawer="firecard">
@@ -160,14 +264,15 @@ export function FireCard() {
           <p className="fc-sub">
             <span className={`fc-chip ${chip.cls}`}>{chip.label}</span>
             {where && <span className="fc-where">{where}</span>}
-            <span className="fc-started">Started {fmtDate(fire.started_ms)}</span>
+            <span className="fc-started">Started {fmtDayDate(fire.started_ms, tf.tz, { year: 'always' })}</span>
           </p>
+          {fire.complex_name && <p className="fc-complex">{partOfComplex(fire.complex_name)}</p>}
         </div>
         <button type="button" className="mw-icon-btn" aria-label="Close the fire card" data-tip="Close (Esc)" onClick={close}>
           <X size={15} />
         </button>
       </header>
-      <OfficialRecord fire={fire} nowMs={nowMs} />
+      <OfficialRecord fire={fire} nowMs={nowMs} tf={tf} />
       <AnalysisLine state={state} progress={progress} />
       <div className="fc-actions">
         {!isCurrent && ready && (
@@ -200,6 +305,7 @@ export function FireCard() {
         )}
       </div>
       {!ready && <p className="fc-hint">Play spread and the 3D view need the analysis. Official information and address checks work without it.</p>}
+      <AccuracyNote label={accuracy.label} command={command} loadFailed={accuracy.failed} />
       <p className="fc-note">Fire-3d's model output is experimental and is not an evacuation order. Follow local officials.</p>
     </section>
   )

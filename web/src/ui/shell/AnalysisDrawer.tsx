@@ -2,13 +2,15 @@
 // charts, closed by default and opened from the header. It is a detail view, so the charts keep their scientific
 // units (as in Forensic, where they stay visible in the dock). Charts load on first open (AnalysisCharts.tsx).
 // Drawing a new profile path needs the Forensic 3D terrain; the drawer says so instead of waiting for clicks the map
-// does not deliver. The incident's data sources and their credits sit under the charts.
+// does not deliver. The incident's data sources and their credits sit under the charts. Brief 3 (§14.4): the model's
+// accuracy in the fire's region (the Command line) above the charts.
 import { Box, PenLine, X } from 'lucide-react'
 import { lazy, Suspense, useEffect, useRef } from 'react'
 import { useStore } from '../../state/store'
 import { useWorkspace } from '../../state/workspace'
 import { Spinner } from '../controls'
 import { DataSourcesNote } from '../DataCredits'
+import { RegionAccuracy } from '../RegionAccuracy'
 import { switchWorkspace } from './handoff'
 import { useDrawerFocus } from './hooks'
 
@@ -59,6 +61,7 @@ export function AnalysisDrawer() {
         </button>
       </header>
       {drawing && <DrawPathNotice />}
+      <RegionAccuracy className="mw-drawer-accuracy" />
       <Suspense
         fallback={
           <div className="mw-drawer-loading">

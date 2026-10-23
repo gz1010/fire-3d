@@ -23,7 +23,6 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass, replace
-from datetime import timedelta
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
@@ -36,7 +35,7 @@ from ..grid import grids_from_manifest, weather_axes, weather_points
 from ..sources.weather import (BLEND_H, OpenMeteoSource, WeatherError, WeatherSource, blend_offsets, ceil_hour_ms, hourly_axis,
                                uv_to_wind, water_year_precip, water_year_start_ms, wind_to_uv)
 from ..spread.moisture import dead_fuel_moisture, ffwi, greenup_fraction, live_fuel_moisture
-from ..timeutil import DAY_MS, HOUR_MS, floor_hour_ms, ms_to_dt, ms_to_iso, now_ms
+from ..timeutil import DAY_MS, HOUR_MS, floor_hour_ms, local_month, ms_to_iso, now_ms, zone_of
 from ..types import BuildContext, MemberWeather
 
 log = logging.getLogger(__name__)
@@ -63,6 +62,11 @@ RH_MIN, RH_MAX = 1.0, 100.0
 MS_TO_KMH = 3.6
 DATA_SOURCE_NAME = "Weather"
 WARN_PREFIX = "Weather: "                 # manifest warnings written here (replaced on every rebuild)
+# CONTRACT 14.12.10: until a regional live fuel moisture method is tested, fires outside California use California's
+# seasonal values, and say so (an unprefixed manifest warning, replaced on every rebuild like the others).
+INTERIM_LFM_WARNING = ("Live fuel moisture outside California uses California's seasonal values until a regional "
+                       "method is tested; experimental.")
+INTERIM_LFM_NOTE = "Live fuel moisture: California's seasonal values (regional method not tested yet); experimental."
 
 _FIELDS = ("temp_c", "rh_pct", "dewpoint_c", "wind_speed_ms", "wind_dir_deg", "wind_gust_ms", "precip_mm")
 
@@ -287,9 +291,11 @@ def _fire_lonlat(manifest: dict) -> tuple[float, float]:
     return (w + e) / 2.0, (so + n) / 2.0
 
 
-def fetch_antecedent(bdir: Path, manifest: dict, start_ms: int | None = None) -> dict | None:
+def fetch_antecedent(bdir: Path, manifest: dict, start_ms: int | None = None, *,
+                     problems: list[str] | None = None) -> dict | None:
     """Fetch the water-year precipitation at the fire up to the fire start and store it as ``sim/antecedent.json``.
-    Returns the stored dict, or None when no precipitation could be fetched."""
+    Returns the stored dict, or None when no precipitation could be fetched; the reasons are appended to
+    ``problems`` when given (a refused request says so)."""
     start = int(start_ms if start_ms is not None else
                 ((manifest.get("ignition") or {}).get("t_ms") or (manifest.get("summary") or {}).get("started_ms")
                  or manifest.get("time_origin_ms") or now_ms()))
@@ -298,6 +304,8 @@ def fetch_antecedent(bdir: Path, manifest: dict, start_ms: int | None = None) ->
     for w in r.get("warnings") or []:
         log.warning("antecedent precipitation: %s", w)
     if r.get("precip_mm") is None:
+        if problems is not None:
+            problems.extend(str(w) for w in r.get("warnings") or [])
         return None
     doc = {"precip_wy_mm": float(r["precip_mm"]), "from": r["from"], "to": r["to"], "days": int(r["days"]),
            "to_ms": int(floor_hour_ms(start) - DAY_MS), "lat": round(lat, 5), "lon": round(lon, 5),
@@ -351,23 +359,37 @@ def precip_to(bdir: Path, manifest: dict, t_ms: int, gw: GridWeather | None = No
 def live_moisture_for(bdir: Path, manifest: dict, start_ms: int, gw: GridWeather | None = None, *, fetch: bool = True) -> tuple[float, float, str]:
     """``(herb, woody, note)``: the month's live fuel moisture with the drought adjustment for a forecast or hour
     starting at ``start_ms`` (plain month table when the water-year precipitation is unknown)."""
-    month = _local_month(int(start_ms))
+    month = _local_month(int(start_ms), zone_of(manifest))
     p, why = precip_to(bdir, manifest, int(start_ms), gw, fetch=fetch)
     herb, woody = live_fuel_moisture(month, p)
     base = live_fuel_moisture(month)
+    lead = "" if is_california(manifest.get("summary") or {}) else INTERIM_LFM_NOTE + " "
     if p is None:
-        return herb, woody, f"live fuel moisture: month table (herb {base[0]:.0%}, woody {base[1]:.0%}); {why}"
+        return herb, woody, f"{lead}live fuel moisture: month table (herb {base[0]:.0%}, woody {base[1]:.0%}); {why}"
     g = greenup_fraction(p)
     adj = "" if (herb, woody) == base else f" (month table {base[0]:.0%}/{base[1]:.0%}; green-up {g:.0%})"
-    return herb, woody, (f"live fuel moisture herb {herb:.0%}, woody {woody:.0%}{adj}: water-year precipitation "
+    return herb, woody, (f"{lead}live fuel moisture herb {herb:.0%}, woody {woody:.0%}{adj}: water-year precipitation "
                          f"{p:.0f} mm by {ms_to_iso(int(start_ms))[:10]} ({why})")
+
+
+def is_california(summary: Any) -> bool:
+    """The California rule switch (CONTRACT 14.12.10): ``summary.state == "CA"``; without a state (before the
+    regions data), a CAL FIRE record (``calfire_uid`` set)."""
+    state = getattr(summary, "state", None) if not isinstance(summary, dict) else summary.get("state")
+    if state:
+        return str(state).upper() == "CA"
+    uid = getattr(summary, "calfire_uid", None) if not isinstance(summary, dict) else summary.get("calfire_uid")
+    return bool(uid)
 
 
 def build_weather(ctx: BuildContext, source: WeatherSource | None = None) -> None:
     """Fetch hourly weather for the bundle's 4 x 4 points and write ``weather.json`` + ``sim/weather.npz``;
     records a "Weather" data source and any warnings in the manifest. Raises :class:`WeatherError` when no
-    weather could be obtained."""
-    src = source if source is not None else OpenMeteoSource()
+    weather could be obtained, :class:`~fire3d.sources.weather.WeatherQuotaExceeded` when Open-Meteo refused the
+    HRRR / forecast request (nothing is written then), and with ``ctx.require_hrrr`` a :class:`WeatherError` for any
+    ERA5-filled hour or, for a California fire, a missing water-year precipitation total."""
+    require = bool(getattr(ctx, "require_hrrr", False))
+    src = source if source is not None else OpenMeteoSource(allow_era5=not require)
     ctx.progress("weather", 0.0, "Fetching hourly weather")
     bdir = Path(ctx.bundle_dir)
     manifest = bundle.load_manifest(bdir) or {}
@@ -377,6 +399,8 @@ def build_weather(ctx: BuildContext, source: WeatherSource | None = None) -> Non
     a, b = weather_window(ctx.mode, start, end, now)
     grid = ctx.fire_grid
     res = src.deterministic(weather_points(grid), a, b)
+    if require and res.get("era5"):
+        raise WeatherError("ERA5 reanalysis filled hours where HRRR/GFS were unavailable; --require-hrrr refuses them")
     gw = GridWeather.from_source(res)
     ctx.progress("weather", 0.6, f"Fuel moisture and FFWI for {len(gw.t_ms)} h")
     xs, zs = weather_axes(grid)
@@ -389,23 +413,31 @@ def build_weather(ctx: BuildContext, source: WeatherSource | None = None) -> Non
     save_grid_weather(bdir, gw)
     warnings = [str(w) for w in res.get("warnings", [])]
     if not gw.synthetic:
+        problems: list[str] = []
         try:
-            if fetch_antecedent(bdir, bundle.load_manifest(bdir) or manifest) is None:
-                warnings.append("water-year precipitation unavailable: live fuel moisture uses the month table")
-        except Exception as e:   # never fail the build for the drought adjustment
-            warnings.append(f"water-year precipitation unavailable ({config.mask_secrets(e)[:120]})")
+            if fetch_antecedent(bdir, bundle.load_manifest(bdir) or manifest, problems=problems) is None:
+                why = f" ({problems[0][:160]})" if problems else ""
+                problems.insert(0, "water-year precipitation unavailable: live fuel moisture uses the month table" + why)
+        except Exception as e:   # never fail the build for the drought adjustment (except with --require-hrrr)
+            problems.insert(0, f"water-year precipitation unavailable ({config.mask_secrets(e)[:120]})")
+        if problems:
+            if require and is_california(ctx.summary):
+                raise WeatherError(f"{problems[0]}; --require-hrrr needs it for California's drought adjustment")
+            warnings.append(problems[0])
     fire_start = int((manifest.get("ignition") or {}).get("t_ms") or start)
     _, _, moist_note = live_moisture_for(bdir, bundle.load_manifest(bdir) or manifest, fire_start, gw, fetch=False)
     detail = (f"{gw.source}; 4x4 points, {len(gw.t_ms)} h {ms_to_iso(int(gw.t_ms[0]))} .. {ms_to_iso(int(gw.t_ms[-1]))}; "
               f"at_fire = {where}; {moist_note}")
     fetched = int(gw.fetched_ms or now)
 
+    interim = [] if is_california(ctx.summary) else [INTERIM_LFM_WARNING]
+
     def record(m: dict) -> None:
         ds = [d for d in m.get("data_sources", []) if not (isinstance(d, dict) and d.get("name") == DATA_SOURCE_NAME)]
         ds.append({"name": DATA_SOURCE_NAME, "detail": detail, "fetched_ms": fetched})
         m["data_sources"] = ds
-        ws = [w for w in m.get("warnings", []) if not str(w).startswith(WARN_PREFIX)]
-        m["warnings"] = ws + [WARN_PREFIX + w for w in warnings]
+        ws = [w for w in m.get("warnings", []) if not str(w).startswith(WARN_PREFIX) and w != INTERIM_LFM_WARNING]
+        m["warnings"] = ws + [WARN_PREFIX + w for w in warnings] + interim
 
     bundle.update_manifest(bdir, record)
     af = data["at_fire"]
@@ -497,6 +529,15 @@ def deterministic_grid(bdir: Path, manifest: dict, a_ms: int, b_ms: int, source:
     nearest hour held if the fetch fails. ``prefer_fresh`` (live) fetches even when the stored data cover it."""
     stored = load_grid_weather(bdir)
     covers = stored is not None and int(stored.t_ms[0]) <= a_ms and int(stored.t_ms[-1]) >= b_ms
+    if covers and prefer_fresh and stored is not None and not stored.synthetic:
+        from ..sources.weather import over_soft_cap
+
+        recent = bool(stored.fetched_ms) and now_ms() - int(stored.fetched_ms or 0) < config.LIVE_WEATHER_REFETCH_S * 1000
+        if over_soft_cap():
+            warnings.append("Weather not refreshed: daily request budget reached.")
+            prefer_fresh = False
+        elif recent:                      # live weather is refetched at most hourly (CONTRACT 14.12.2)
+            prefer_fresh = False
     if stored is not None and (stored.synthetic or (covers and not prefer_fresh)):
         gw, held = stored.window(a_ms, b_ms)
         if held:
@@ -517,13 +558,9 @@ def deterministic_grid(bdir: Path, manifest: dict, a_ms: int, b_ms: int, source:
         return gw
 
 
-def _local_month(ms: int) -> int:
-    try:
-        from zoneinfo import ZoneInfo
-
-        return ms_to_dt(ms).astimezone(ZoneInfo("America/Los_Angeles")).month
-    except Exception:   # no tz database: PST is close enough for a monthly table
-        return (ms_to_dt(ms) - timedelta(hours=8)).month
+def _local_month(ms: int, tz: str | None) -> int:
+    """The month of ``ms`` in the fire's own zone (CONTRACT 14.9.7; UTC when unknown)."""
+    return local_month(ms, tz)
 
 
 def resolve_ensemble(ensemble: str, mode: str) -> str:

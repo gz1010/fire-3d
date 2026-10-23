@@ -3,20 +3,26 @@
 // grids) and are worded by describeLocation in four short blocks: near here; official information (always present,
 // from useOfficialAtPoint, I5); the main reasons, each tagged, with the model as a dated sentence (Command keeps the
 // figure, the model run and the arrival quantiles); updated and reliability. The details disclosure (remembered per
-// preset) holds the sources, periods, explanations and, in Command, the original scientific values. On the California
+// preset) holds the sources, periods, explanations and, in Command, the original scientific values. On the national
 // overview (no fire open) the card shows the official line and the nearest fires (OverviewCard).
+// Brief 3 (§14.9): every time is in the fire's own zone with the preset's clock, and the reliability block names the
+// zone ("Times: Mountain Time (MDT), the fire's local time").
 import { ChevronDown } from 'lucide-react'
 import { useDeferredValue, useMemo, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useRasterSet, type RasterSlot } from '../data/rasters'
 import { useOfficialAtPoint, type OfficialInfo } from '../official/hooks'
+import { zoneLine } from '../lib/time'
 import { useStore } from '../state/store'
+import { useTimeFormat, useZoneSource } from '../state/timeZone'
 import { useWorkspace, type SelectedLocation } from '../state/workspace'
 import { useNow } from '../ui/hooks'
 import { detailsFor, useAddressDetails } from './addressStore'
 import { useCardPrefs } from './cardPrefs'
 import { describeLocation, type CardLine, type LocationCardModel } from './describe'
-import { CardFrame, KindTag, OfficialSection, StaleChip } from './CardParts'
+import { CardFrame, CoverageNotice, KindTag, OfficialSection, StaleChip } from './CardParts'
+import { coverageText, useGeoLookup } from './geoLookup'
+import { useOpenFireAccuracy } from '../state/accuracy'
 import { checkLocation } from './locationCheck'
 import { officialBlock, officialFireWeatherNote } from './official'
 import { OverviewCard } from './OverviewCard'
@@ -104,10 +110,15 @@ function LocationCardBody({ sel, official }: { sel: SelectedLocation; official: 
       address,
     })
   }, [sel, timeMs, nowMs, st.summary, st.manifest, st.perimeters, st.detections, st.weather, st.forecast, set, address])
-  const fireWeatherNote = officialFireWeatherNote(official.fireWeather)
-  const card = useMemo(() => describeLocation(report, { units, preset, mode: st.mode, nowMs, fireWeatherNote }), [report, units, preset, st.mode, nowMs, fireWeatherNote])
+  const tf = useTimeFormat()
+  const fireWeatherNote = officialFireWeatherNote(official.fireWeather, tf)
+  const zoneSource = useZoneSource()
+  // coverage at the point comes from the server's lookup only (a point searched far from the open fire)
+  const lookup = useGeoLookup(sel.lon, sel.lat)
+  const coverage = coverageText(lookup.status === 'ok' ? lookup.data : null)
+  const card = useMemo(() => describeLocation(report, { units, preset, mode: st.mode, nowMs, fireWeatherNote, tf }), [report, units, preset, st.mode, nowMs, fireWeatherNote, tf])
   const fireName = st.summary ? (/\bfire$/i.test(st.summary.name) ? `the ${st.summary.name}` : st.summary.name) : null
-  const block = useMemo(() => officialBlock(official, { nowMs, units, fireName, incidentUrl: st.summary?.url ?? null }), [official, nowMs, units, fireName, st.summary?.url])
+  const block = useMemo(() => officialBlock(official, { nowMs, units, fireName, incidentUrl: st.summary?.url ?? null, tf }), [official, nowMs, units, fireName, st.summary?.url, tf])
   const command = preset === 'command'
   const detailsOpen = useCardPrefs((s) => s.detailsOpen[preset])
   const narrow = useNarrow()
@@ -117,6 +128,7 @@ function LocationCardBody({ sel, official }: { sel: SelectedLocation; official: 
   const compact = narrow && expandedFor !== selKey
   return (
     <CardFrame sel={sel} title={card.title} titleIsCoords={card.titleIsCoords} type={card.locationType} approximate={card.approximate} command={command}>
+      {coverage && <CoverageNotice text={coverage} />}
       {loadingFire ? (
         // the selected point stays; its check waits for the fire's data instead of showing "no data"
         <div className="loc-headline is-muted" role="status">
@@ -134,7 +146,7 @@ function LocationCardBody({ sel, official }: { sel: SelectedLocation; official: 
         </button>
       ) : (
         <>
-          <ReliabilityBlock card={card} />
+          <ReliabilityBlock card={card} zone={zoneLine(tf, timeMs, zoneSource)} />
           <Details card={card} command={command} open={detailsOpen} onToggle={(open) => useCardPrefs.getState().setDetailsOpen(preset, open)} />
         </>
       )}
@@ -163,6 +175,7 @@ function NearBlock({ card }: { card: LocationCardModel }) {
 /** Block 3: up to three main reasons, each tagged, and the model (a dated sentence; Command adds the figure). */
 function ReasonsBlock({ card, compact, command }: { card: LocationCardModel; compact: boolean; command: boolean }) {
   const { reasons, model, run } = card.summary
+  const accuracy = useOpenFireAccuracy().label
   if (!reasons.length && !model) return null
   return (
     <section className="loc-block loc-reasons" aria-label="Main factors">
@@ -187,6 +200,12 @@ function ReasonsBlock({ card, compact, command }: { card: LocationCardModel; com
                 {run.quantiles && <p>{run.quantiles}</p>}
               </div>
             )}
+            {/* brief 3 (§14.4): the model's accuracy in the fire's region, one line (model information) */}
+            {accuracy && !compact && (
+              <p className="loc-model-accuracy">
+                {command ? accuracy.commandLine : accuracy.publicLine} {accuracy.always}
+              </p>
+            )}
           </li>
         )}
         {!compact &&
@@ -209,7 +228,7 @@ function ReasonsBlock({ card, compact, command }: { card: LocationCardModel; com
 }
 
 /** Block 4: updated and reliability. */
-function ReliabilityBlock({ card }: { card: LocationCardModel }) {
+function ReliabilityBlock({ card, zone }: { card: LocationCardModel; zone: string }) {
   return (
     <section className="loc-block loc-reliability" aria-label="Updated and reliability">
       <h3 className="loc-block-title">Updated and reliability</h3>
@@ -227,6 +246,7 @@ function ReliabilityBlock({ card }: { card: LocationCardModel }) {
           </span>
         ))}
       </p>
+      <p className="loc-zone">{zone}</p>
     </section>
   )
 }

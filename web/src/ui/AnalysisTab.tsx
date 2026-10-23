@@ -6,13 +6,15 @@ import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { EnsembleKind, EnsembleRequest, ForecastManifest, ForecastSummary, IncidentManifest, JobStatus } from '../api/types'
 import { fmtAcres, fmtNumber } from '../lib/format'
-import { HOUR_MS, fmtDateTime, fmtDuration, fmtRelative, fmtTPlus, tzLabel } from '../lib/time'
+import { HOUR_MS, fmtAt, fmtDuration, fmtRelative, fmtTPlus } from '../lib/time'
 import { forecastAtLead, observedAreaAt } from '../state/selectors'
 import { useStore } from '../state/store'
+import { useTimeFormat } from '../state/timeZone'
 import { EmptyNote, ProgressBar, Section, Segmented, Spinner } from './controls'
 import { useNow } from './hooks'
 import { ENSEMBLE_LABEL, ENSEMBLE_SHORT } from './options'
 import { toast } from './toast'
+import { RegionAccuracy } from './RegionAccuracy'
 
 const HORIZONS = [24, 48, 72]
 
@@ -35,6 +37,7 @@ export function AnalysisTab() {
       <RunList manifest={manifest} />
       {forecast && <RunSummary manifest={manifest} forecast={forecast} />}
       {forecast?.skill && forecast.skill.length > 0 && <SkillTable forecast={forecast} />}
+      <RegionAccuracy />
       <Disclaimer />
     </div>
   )
@@ -53,6 +56,7 @@ export function Disclaimer() {
 }
 
 function Runner({ manifest, job }: { manifest: IncidentManifest; job: JobStatus | null }) {
+  const tf = useTimeFormat()
   const live = manifest.mode === 'live'
   const [horizon, setHorizon] = useState(72)
   const [ensemble, setEnsemble] = useState<EnsembleRequest>('auto')
@@ -84,7 +88,7 @@ function Runner({ manifest, job }: { manifest: IncidentManifest; job: JobStatus 
           <span className="label">Start</span>
           <span className="runner-start">
             <span className="mono gold">
-              {fmtDateTime(startMs)} {tzLabel(startMs)}
+              {fmtAt(startMs, tf, { zone: true })}
             </span>
             {manifest.ignition && <span className="mono muted">{fmtTPlus((startMs - manifest.ignition.t_ms) / HOUR_MS)}</span>}
           </span>
@@ -159,6 +163,7 @@ function RunList({ manifest }: { manifest: IncidentManifest }) {
 }
 
 function RunRow({ run, selected, now, originIgn }: { run: ForecastSummary; selected: boolean; now: number; originIgn: number | null }) {
+  const tf = useTimeFormat()
   const ready = run.status === 'ready'
   return (
     <button
@@ -168,7 +173,7 @@ function RunRow({ run, selected, now, originIgn }: { run: ForecastSummary; selec
       className={`run ${selected ? 'is-selected' : ''}`}
       disabled={!ready}
       onClick={() => void useStore.getState().selectForecast(run.run_id)}
-      data-tip={`Issued ${fmtDateTime(run.issued_ms)} ${tzLabel(run.issued_ms)} (${fmtRelative(run.issued_ms, now)})`}
+      data-tip={`Issued ${fmtAt(run.issued_ms, tf, { zone: true })} (${fmtRelative(run.issued_ms, now)})`}
     >
       <span className="run-radio" />
       <span className="run-main">
@@ -180,7 +185,7 @@ function RunRow({ run, selected, now, originIgn }: { run: ForecastSummary; selec
           <span className="mono run-h">{run.horizon_h} h</span>
         </span>
         <span className="run-sub mono">
-          {fmtDateTime(run.start_ms)}
+          {fmtAt(run.start_ms, tf)}
           {originIgn != null && <span className="muted"> · {fmtTPlus((run.start_ms - originIgn) / HOUR_MS)}</span>}
         </span>
       </span>
@@ -193,6 +198,7 @@ function RunRow({ run, selected, now, originIgn }: { run: ForecastSummary; selec
 }
 
 function RunSummary({ manifest, forecast }: { manifest: IncidentManifest; forecast: ForecastManifest }) {
+  const tf = useTimeFormat()
   const timeseries = useStore((s) => s.timeseries)
   const base = observedAreaAt(timeseries, forecast.start_ms)
   const leads = HORIZONS.filter((h) => h <= forecast.horizon_h)
@@ -261,7 +267,7 @@ function RunSummary({ manifest, forecast }: { manifest: IncidentManifest; foreca
         </dd>
         <dt>Window</dt>
         <dd className="mono">
-          {fmtDateTime(forecast.start_ms)} → {fmtDateTime(forecast.start_ms + forecast.horizon_h * HOUR_MS)}
+          {fmtAt(forecast.start_ms, tf)} → {fmtAt(forecast.start_ms + forecast.horizon_h * HOUR_MS, tf)}
         </dd>
       </dl>
       {forecast.warnings.length > 0 && (
@@ -279,17 +285,20 @@ function RunSummary({ manifest, forecast }: { manifest: IncidentManifest; foreca
   )
 }
 
-function skillTone(s: number): string {
-  return s >= 0.7 ? 'ok' : s >= 0.5 ? 'warn' : 'danger'
-}
-
+/** The per-run skill table (brief 3, V-R13, CONTRACT §14.4): the growth score first when the run has it (the new spread
+ *  only), the total relabelled as total-area overlap (it includes the area already burned at the start), and no
+ *  green / amber / red tone (a colour would read as a verdict on the model). */
 function SkillTable({ forecast }: { forecast: ForecastManifest }) {
   const skill = forecast.skill ?? []
+  const growth = skill.some((k) => typeof k.growth_sorensen === 'number')
   return (
     <Section
       title="Hindcast skill"
       aside={
-        <span className="muted small" data-tip="Sørensen = 2|F∩O| / (|F|+|O|) between the forecast P50 burned area and the observed burned area at start + lead">
+        <span
+          className="muted small"
+          data-tip="Sørensen = 2|F∩O| / (|F|+|O|). Growth: the new spread after the start only (forecast P50 vs observed). Total-area overlap: the whole burned area, including what had already burned at the start."
+        >
           Sørensen <Info size={11} />
         </span>
       }
@@ -298,7 +307,8 @@ function SkillTable({ forecast }: { forecast: ForecastManifest }) {
         <thead>
           <tr>
             <th>Lead</th>
-            <th>Sørensen</th>
+            {growth && <th>Growth</th>}
+            <th>{growth ? 'Total-area overlap' : 'Total-area overlap (includes the area already burned at the start)'}</th>
             <th className="r">Observed</th>
             <th className="r">P50</th>
             <th className="r">Bias</th>
@@ -307,27 +317,41 @@ function SkillTable({ forecast }: { forecast: ForecastManifest }) {
         <tbody>
           {skill.map((k) => {
             const bias = k.observed_acres > 0 ? ((k.forecast_acres_p50 - k.observed_acres) / k.observed_acres) * 100 : null
+            const g = typeof k.growth_sorensen === 'number' && Number.isFinite(k.growth_sorensen) ? k.growth_sorensen : null
             return (
               <tr key={k.lead_h}>
                 <td className="mono">+{k.lead_h} h</td>
+                {growth && (
+                  <td>
+                    {g != null ? (
+                      <span className="sbar">
+                        <span className="sbar-track">
+                          <i className="sbar-fill tone-neutral" style={{ width: `${Math.max(0, Math.min(1, g)) * 100}%` }} />
+                        </span>
+                        <span className="mono">{g.toFixed(2)}</span>
+                      </span>
+                    ) : (
+                      <span className="muted mono">—</span>
+                    )}
+                  </td>
+                )}
                 <td>
                   <span className="sbar">
                     <span className="sbar-track">
-                      <i className={`sbar-fill tone-${skillTone(k.sorensen)}`} style={{ width: `${Math.max(0, Math.min(1, k.sorensen)) * 100}%` }} />
+                      <i className="sbar-fill tone-neutral" style={{ width: `${Math.max(0, Math.min(1, k.sorensen)) * 100}%` }} />
                     </span>
-                    <span className={`mono ${skillTone(k.sorensen)}`}>{k.sorensen.toFixed(2)}</span>
+                    <span className="mono secondary">{k.sorensen.toFixed(2)}</span>
                   </span>
                 </td>
                 <td className="mono r">{fmtNumber(k.observed_acres)}</td>
                 <td className="mono r">{fmtNumber(k.forecast_acres_p50)}</td>
-                <td className={`mono r ${bias == null ? 'muted' : Math.abs(bias) > 50 ? 'warn' : 'secondary'}`}>
-                  {bias == null ? '—' : `${bias > 0 ? '+' : bias < 0 ? '−' : '±'}${fmtNumber(Math.abs(bias))}%`}
-                </td>
+                <td className="mono r secondary">{bias == null ? '—' : `${bias > 0 ? '+' : bias < 0 ? '−' : '±'}${fmtNumber(Math.abs(bias))}%`}</td>
               </tr>
             )
           })}
         </tbody>
       </table>
+      {growth ? null : <p className="muted small">The growth score (new spread only) is not stored for this run.</p>}
       <p className="muted small">Scored against the reconstructed observed arrival time (acres).</p>
     </Section>
   )

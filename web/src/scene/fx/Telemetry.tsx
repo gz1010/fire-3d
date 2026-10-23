@@ -10,8 +10,9 @@ import * as THREE from 'three'
 import { cardinal, fmtDistance, fmtElev, fmtFrp, fmtMph, fmtNumber, fmtRos } from '../../lib/format'
 import { fuelInfo } from '../../lib/fuels'
 import { localToLonLat } from '../../lib/geo'
-import { fmtDateTime, fmtTPlus, tzLabel } from '../../lib/time'
+import { fmtAt, fmtTPlus } from '../../lib/time'
 import { useStore } from '../../state/store'
+import { useTimeFormat } from '../../state/timeZone'
 import type { IncidentAssets } from '../assets'
 import { useSceneStore, type Probe } from '../sceneStore'
 import { HOUR_MS, prefersReducedMotion, useLayer, useReducedMotion } from './common'
@@ -177,6 +178,7 @@ function Columns({ assets, opacity }: { assets: IncidentAssets; opacity: number 
   const fronts = fxStore((s) => s.fronts)
   const probe = useSceneStore((s) => s.probe)
   const interacting = useSceneStore((s) => s.interacting)
+  const tf = useTimeFormat()
 
   const specs = useMemo(() => {
     const tMs = useStore.getState().timeMs
@@ -184,10 +186,10 @@ function Columns({ assets, opacity }: { assets: IncidentAssets; opacity: number 
     if (ign) {
       const elev = assets.heightAt(ign.x, ign.z)
       const since = (tMs - ign.t_ms) / HOUR_MS
-      const src = /cal ?fire/i.test(ign.source) ? 'CAL FIRE' : /firms|viirs|modis|goes|detect/i.test(ign.source) ? 'FIRMS' : 'EST.'
+      const src = /cal ?fire/i.test(ign.source) ? 'CAL FIRE' : /nifc|wfigs|irwin/i.test(ign.source) ? 'NIFC' : /firms|viirs|modis|goes|detect/i.test(ign.source) ? 'FIRMS' : 'EST.'
       out.push({
         id: 'ignition',
-        lines: [`IGNITION · ${src}`, latLon(ign.lat, ign.lon), `${pad('ELEV')}${fmtElev(elev)}`, `${pad('T0')}${fmtDateTime(ign.t_ms)} ${tzLabel(ign.t_ms)}`, `${pad('NOW')}${fmtTPlus(since)}`],
+        lines: [`IGNITION · ${src}`, latLon(ign.lat, ign.lon), `${pad('ELEV')}${fmtElev(elev)}`, `${pad('T0')}${fmtAt(ign.t_ms, tf, { zone: true })}`, `${pad('NOW')}${fmtTPlus(since)}`],
         headColor: HEAD,
         x: ign.x,
         z: ign.z,
@@ -211,7 +213,7 @@ function Columns({ assets, opacity }: { assets: IncidentAssets; opacity: number 
     if (probe && !interacting) out.push(probeColumn(probe, t0, m.time_origin_ms, (tMs - m.time_origin_ms) / HOUR_MS, hasForecast))
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frontsVersion, fronts, probe, interacting, tenMin, hasForecast, ign, assets, t0, m])
+  }, [frontsVersion, fronts, probe, interacting, tenMin, hasForecast, ign, assets, t0, m, tf])
 
   const slots = useRef(new Map<string, ColumnSlot>())
   const slotFor = (id: string): ColumnSlot => {

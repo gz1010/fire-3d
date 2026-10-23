@@ -1,0 +1,41 @@
+{
+  "summary": "Recreated backend/tests/data/firedata (10 samples + PROVENANCE.md) from the same public sources, re-recorded 2026-10-22, plus a re-recording script. All 5 target test files pass unchanged (93 tests). The full backend suite goes from 503 passed / 13 failed / 4 errors / 4 collection errors to 562 passed / 2 failed / 0 errors / 1 collection error; the 3 remaining problems need other restore folders (tests/data/terrain, tests/data/official). No test was edited.",
+  "files": [
+    "backend/tests/data/firedata/calfire_live.json",
+    "backend/tests/data/firedata/calfire_2025.json",
+    "backend/tests/data/firedata/viirs_noaa20_sp.csv",
+    "backend/tests/data/firedata/modis_sp.csv",
+    "backend/tests/data/firedata/goes_nrt.csv",
+    "backend/tests/data/firedata/landsat_nrt.csv",
+    "backend/tests/data/firedata/viirs_snpp_feed.csv",
+    "backend/tests/data/firedata/modis_feed.csv",
+    "backend/tests/data/firedata/wfigs_attrs.json",
+    "backend/tests/data/firedata/wfigs_geoms.geojson",
+    "backend/tests/data/firedata/PROVENANCE.md",
+    "backend/scripts/record_test_samples_firedata.py",
+    "docs/redesign/progress/brief3-restore-firedata.md",
+    "docs/redesign/reports/brief3-restore-firedata.json"
+  ],
+  "verification": {
+    "target_tests": "cd backend && uv run pytest -q tests/test_firedata_calfire.py tests/test_firedata_catalog.py tests/test_official_calfire.py tests/test_firedata_firms.py tests/test_firedata_perimeters.py -> 93 passed",
+    "full_backend_suite": "cd backend && uv run pytest -q --continue-on-collection-errors -> 562 passed, 2 failed (test_terrain_sentinel: missing tests/data/terrain/stac_item_s2_11SLT_20250102.json), 1 collection error (test_official_nws: missing tests/data/official/nws_alerts_lox_rfw.json). Without --continue-on-collection-errors pytest stops at that collection error.",
+    "reproducibility": "A second run of the final script, written to a scratch folder, produced byte-identical files for all 10 samples.",
+    "requests": "About 10 requests per run through fire3d.http (2 CAL FIRE, 5 FIRMS area API, 2 FIRMS keyless feeds, 1 WFIGS layer description), with a descriptive User-Agent and the HTTP cache in a temporary folder (never data/).",
+    "key_scan": "Count-only scan: 0 of 13 files in backend/tests/data, the script and the progress file contain FIRMS_MAP_KEY; 0 of 70 scratch files.",
+    "sizes": "Largest sample is wfigs_attrs.json at 12.7 KB; the FIRMS CSVs are 0.3-0.9 KB each.",
+    "lint": "ruff check scripts/record_test_samples_firedata.py: all checks passed."
+  },
+  "screenshots": [],
+  "contract_deviations": [],
+  "known_issues": [
+    "calfire_live.json is a reconstruction. CAL FIRE's live list of 2026-10-16 cannot be fetched again, so the 6 records come from today's 2026 year list. They were set back to the live-list state (IsActive true, Final false, no ExtinguishedDate). Henderson's AcresBurned 2079.5, PercentContained 20, Updated 2026-10-17T02:25:15Z and AgencyNames '' were restored from the tests' assertions. The Updated and PercentContained of Timber, Blue, Gall and Scales (and Gall's AgencyNames) are today's values, newer than the original recording; no test reads them. Garden Grove HAZMAT is marked active because the tests treat it as an active non-fire incident on the live list. PROVENANCE.md lists every changed field.",
+    "viirs_noaa20_sp.csv has one edited value: the type of the 2025-01-11 08:52 row is set from 0 to 3 ('offshore'). test_fetch_area needs every kept row inside the land-only Eaton bbox, so no real offshore pixel can be used. The type-2 row (a static source near Glendale) and the type-1 row (Kilauea) are real.",
+    "wfigs_attrs.json / wfigs_geoms.geojson are synthetic, as the test docstring says; only the field names, types, aliases and lengths come from the live WFIGS layer.",
+    "Re-running the script later picks different feed rows and today's version of each CAL FIRE record (the selection rules stay the same). The script stops before writing if the new data no longer meets the tests' needs, for example if the MODIS feed loses Terra or Aqua."
+  ],
+  "notes_for_integrator": [
+    "The remaining backend failures belong to other restore tasks: tests/data/official/nws_alerts_lox_rfw.json (test_official_nws collection error) and tests/data/terrain/stac_item_s2_11SLT_20250102.json (2 test_terrain_sentinel failures).",
+    "The docstring of tests/test_official_calfire.py still says the CAL FIRE samples were 'recorded 2026-10-16'. They were re-recorded on 2026-10-22, with the original live-list state restored. PROVENANCE.md explains this. I did not edit the test; updating the docstring is optional.",
+    "To re-record the samples: cd backend && uv run python scripts/record_test_samples_firedata.py [--dry-run] [--out DIR]. It needs FIRMS_MAP_KEY in the environment or .env for the 5 area-API samples."
+  ]
+}

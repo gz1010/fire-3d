@@ -7,7 +7,7 @@
 // Rules here:
 //   - null -> id is a first load: a view restored at mount (deep link ?view=, workspace hand-off) is kept;
 //   - one flight per target, issued when its goal is ready (goalFor: the ready bundle's fire bounds once the fire
-//     rasters are in, a building bundle's grid, or CAL FIRE's point and acreage for a fire without a bundle);
+//     rasters are in, a building bundle's grid, or the agency's point and acreage for a fire without a bundle);
 //   - a target counts as framed only when its fit completes (the camera reached the fit's camera);
 //   - a fit that a non-user call interrupts is issued again (at most MAX_REISSUES times); a user gesture or an
 //     explicit navigation request (search, feed item, fire card, "Incident") ends the opening framing;
@@ -18,8 +18,11 @@
 import type { IncidentManifest, IncidentSummary, Perimeter } from '../api/types'
 import { fireBounds, type FireRaster, type LonLatBox } from '../lib/fireBounds'
 
-/** California, [w, s, e, n] (audit-2 opening-map R2). */
-export const CALIFORNIA_BOUNDS: LonLatBox = [-124.48, 32.53, -114.13, 42.01]
+/** The lower 48 states, [w, s, e, n] (brief 3, CONTRACT §14.11): the overview's frame. Alaska, Hawaii and the
+ *  territories are not supported yet. */
+export const LOWER48_BOUNDS: LonLatBox = [-124.85, 24.4, -66.89, 49.38]
+/** Where the map starts before anything is framed: the middle of the lower 48, about z3 (§14.11). */
+export const LOWER48_START = { lon: -98.6, lat: 39.8, zoom: 3 } as const
 
 /** Re-issue an interrupted fit at most this many times (guards against a camera that can never match exactly). */
 export const MAX_REISSUES = 4
@@ -85,6 +88,16 @@ export function poseMatches(a: CameraPose, b: CameraPose): boolean {
   return Math.hypot(dx, dy) <= 24 && Math.abs(a.zoom - b.zoom) <= 0.15 && db <= 2 && Math.abs(a.pitch - b.pitch) <= 2
 }
 
+/** Below this many px of map between the chrome (a phone's bottom sheet open over most of it), framing stops
+ *  following the safe area (W15). */
+export const MIN_MAP_PX = 160
+
+/** True when the chrome leaves less than `minPx` of map height or width: fitting into that sliver would put the fires
+ *  behind the sheet, so the camera keeps the last usable padding (what the user saw) until the sheet closes. */
+export function mapCovered(insets: { top: number; right: number; bottom: number; left: number }, width: number, height: number, minPx = MIN_MAP_PX): boolean {
+  return height - insets.top - insets.bottom < minPx || width - insets.left - insets.right < minPx
+}
+
 /** Zoom that fits `bounds` into a width x height px viewport with `margin` px on each side (MapLibre's 512 px world);
  *  the fallback when MapLibre's cameraForBounds cannot fit (it returns undefined when padding leaves no room). */
 export function zoomForBounds(bounds: LonLatBox, width: number, height: number, margin = 0, maxZoom = 22): number {
@@ -107,7 +120,7 @@ export function boundsCenter(b: LonLatBox): [number, number] {
 
 // ------------------------------------------------------------------------------------------------- goals
 export interface GoalInput {
-  /** The framing target: an incident id, or null for the California overview. */
+  /** The framing target: an incident id, or null for the national overview. */
   target: string | null
   incidentId: string | null
   /** selectIncident is still fetching the incident or its bundle files. */
@@ -119,7 +132,7 @@ export interface GoalInput {
   burned: FireRaster | null
   p90: FireRaster | null
   perimeters: readonly Pick<Perimeter, 't_ms' | 'rings'>[] | null
-  /** The overview as the user last left it (restored by "← All fires"), else California. */
+  /** The overview as the user last left it (restored by "← All fires"), else the lower 48. */
   overviewView: { lon: number; lat: number; zoom: number } | null
 }
 
@@ -135,7 +148,7 @@ export function goalFor(i: GoalInput): FrameGoal | null {
   if (i.target == null) {
     return i.overviewView
       ? { key: `overview:${i.overviewView.lon.toFixed(4)},${i.overviewView.lat.toFixed(4)},${i.overviewView.zoom.toFixed(2)}`, kind: 'overview', provisional: false, view: i.overviewView }
-      : { key: 'overview', kind: 'overview', provisional: false, bounds: CALIFORNIA_BOUNDS }
+      : { key: 'overview', kind: 'overview', provisional: false, bounds: LOWER48_BOUNDS }
   }
   const id = i.target
   if (i.incidentId !== id) return null
@@ -156,7 +169,7 @@ export function goalFor(i: GoalInput): FrameGoal | null {
   if (!sum) return null
   // the ready bundle's manifest and files are on their way: one flight when they are in
   if (i.incidentLoading && (sum.bundle_status === 'ready' || sum.bundle_status === 'building')) return null
-  // no bundle (or it failed, or its files did not load): CAL FIRE's reported point and acreage
+  // no bundle (or it failed, or its files did not load): the agency's reported point and acreage
   const bounds = fireBounds({ point, acres: sum.acres })
   return bounds ? { key: `fire:${id}:point`, kind: 'fire', provisional: true, bounds } : null
 }
@@ -240,7 +253,7 @@ export class Framing {
     this.userTook()
   }
 
-  /** "Incident" / "California" controls: frame this goal now, tracked like an opening fit (interruptions re-issue
+  /** "Incident" / "All states" controls: frame this goal now, tracked like an opening fit (interruptions re-issue
    *  it; data arriving later never replaces it). */
   request(goal: FrameGoal): FitCommand {
     this.held = null

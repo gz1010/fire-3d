@@ -1,0 +1,85 @@
+{
+ "summary": "Audit A4 (validation outside California) in docs/redesign/audit-3/validation.md, revised after an independent review. Fires outside California cannot be built today: the CLI, catalog and pipeline know CAL FIRE incidents only (the year is not the blocker). Four more blockers would make the scores wrong: perimeters filtered to US-CA; UTM zone only 10 or 11 (Table Rock SC: scale 1.127, 21.4 degree rotation; the standard zone formula leaves California unchanged); fires of federal FY2024 get LF2024 fuels that already hold their own burn (Horse Gulch, Windy Deuce need LF2023; Rush, a FY2025 fire, correctly gets LF2024), and a failed fetch can fall forward to a newer edition; and the California live-fuel-moisture table makes February Texas grass and March Appalachian fuels green. New in the revision: Open-Meteo's daily 10,000-call cap on the shared cloud IP is the main schedule risk for validation (R7 now P0: stop, do not fill with ERA5); Madre is missing, so stage D starts by rebuilding it and re-measuring the California baseline; LF2025 is NoData in the South and East until November 2026. Test set: the 12 fires of user decision round 2 (two per region), with ids, IrwinIDs, points, expected fuels edition and UTM zone, and pre-registered UTC starts; Windy Deuce's starts move to its first perimeter (65 % of its area burned in the first 6 h). Accuracy label: GACC regions (Southern Area split TX/OK vs the rest), the mean of per-fire mean growth Sorensen (OSCC 0.43), a score only with at least 2 fires and 16 leads; Public shows words with the score one tap away, Command the score; in-sample, fuel and start caveats; JSON data file shape with per-region method fields.",
+ "files": [
+  "docs/redesign/audit-3/validation.md",
+  "docs/redesign/progress/brief3-audit-validation.md",
+  "docs/redesign/reports/brief3-audit-validation.json"
+ ],
+ "verification": [
+  "Gates not run: this role changes no code (orchestrator instruction).",
+  "WFIGS_Daily_Perimeters_Public: lists via outStatistics grouped by attr_IrwinID/poly_IncidentName/attr_POOState for 2024 and 2025, by state and by attr_GACC. Per-fire detail by attr_IrwinID gave records / distinct polygon times / days, e.g. Emigrant 46/26/24, Island Creek 53/35/35, Windy Deuce 17/12/8, Table Rock 23/22/10, Windmill 26/1/1, Johnson FL 26/1/1 (2026-10-22 21:05-21:20Z).",
+  "WFIGS_Incident_Locations: IrwinID IN (17 ids) returned 17 records (UFI, discovery, containment, size, GACC, point).",
+  "FIRMS fetch_area VIIRS_NOAA20_SP, one 5-day request per fire (counts only; key never printed), 21:24-21:35Z: Emigrant 1,955/16 scan times, Lower Sugarloaf 1,048/16, Island Creek 1,205/16, Horse Gulch 280/11, France Canyon 1,034/13, Cottonwood Peak 1,203/16, Trout 1,097/12, Greer 611/12, Windy Deuce 309/8, Table Rock 375/9, Rush 416/10, Black Cove 156/9, Johnson FL 0/0.",
+  "Open-Meteo historical-forecast gfs_hrrr+gfs_seamless, one point and 5 days per fire: 120/120 complete HRRR hours for all 18 fires checked. Daly failed twice with 429 and once with a cached HTTP-200 error body, which I evicted.",
+  "ERA5 water-year precipitation through sources.weather.water_year_precip plus moisture.live_fuel_moisture: Windy Deuce P=206 mm gives herb/woody 1.20/1.20; Table Rock P=459 mm gives 1.20/1.20; Trout, Greer and France Canyon give 0.60/1.00; the PNW/NR/GB fires give 0.30/0.70.",
+  "LANDFIRE getSamples at 40 interior points: Horse Gulch FBFM40 LF2023 vs LF2024 differs at 38/40 (canopy 8% to 3%); Windy Deuce differs at 39/40; Emigrant LF2024 vs LF2025 differs at 39/40 (canopy 52% to 38%). All LF2023 *_CONUS services exist.",
+  "pyproj get_factors in EPSG:32611 (what grid.utm_epsg_for picks): Trout 1.008/4.8 deg, Windy Deuce 1.023/9.0 deg, Table Rock 1.127/21.4 deg, Black Cove 1.129/21.8 deg.",
+  "GACC: the 3 California validation fires are all OSCC (WFIGS attr_GACC); DMP_NationalGACCBoundaries_Public lists 10 GACCs and has no licence text.",
+  "No bundle builds, no servers, no non-GET requests.",
+  "Revision (22:00-22:15Z): per-polygon-time WFIGS growth for the 12 fires from the cache: Windy Deuce first polygon 02-27 06:23Z = 93,622 of 144,207 ac (65 %), 2 times up to 90 % of final; Rush 46 %, 3 times; Lower Sugarloaf no perimeter 09-17 16:00Z to 09-21 17:48Z.",
+  "Windy Deuce vs Smokehouse Creek final WFIGS perimeters in EPSG:32614: 9.92 km apart, no overlap (2 requests).",
+  "LANDFIRE Rush, exportImage sampled at 40 interior points: LF2023 vs LF2024 unchanged 24/40 (GR1 to GR2, more load); LF2025 NoData. LF2025 16x16 exports: NoData at Rush OK, Table Rock SC, Windy Deuce TX; data at Emigrant OR, Trout NM, Island Creek ID, Horse Gulch MT, Eaton and Redding CA. LF2025 getSamples answers HTTP 200 with an error body (cache entry evicted).",
+  "Open-Meteo: terms/pricing pages (10,000/day, 5,000/h, 600/min by IP; >10 variables or >2 weeks counts as several calls); historical-forecast probe timed out and then SSL_ERROR_SYSCALL at 22:02-22:03Z, api.open-meteo.com 200; daily-limit 429 body seen in the reviewer's saved 21:50Z answer.",
+  "Bundles: Eaton, Palisades, fixture-demo zone 11 and fixture-live zone 10 match floor((lon+180)/6)+1; Eaton and Palisades weather open-meteo:historical-forecast:gfs_hrrr with no ERA5 warning; Madre absent from data/incidents.",
+  "Code re-checked: catalog.py:332-342 (year lookup), aoi.py:285 (edition fallback to LF2025), aoi.py:329/356, pipeline.py:568, observed.py:769-772/916/1989 (truth clipped to a complete perimeter; late detections only live), http.py 429 retries, weather.py:395-424 and :545, AnalysisTab.tsx:282-283, contracts.py:336 SkillEntry."
+ ],
+ "screenshots": [],
+ "contract_deviations": [],
+ "known_issues": [
+  "Open-Meteo's daily cap is shared with other tenants of this cloud egress; at 21:50Z it answered 'Daily API request limit exceeded' and at 22:02-22:03Z the historical-forecast host did not connect. Stage D may have to wait for the reset (user question in section 7, recommended answer A).",
+  "Windy Deuce and Rush give thin Southern Plains timing (2 and 3 perimeter times during growth); there is no better-mapped TX/OK fire in 2024-2025.",
+  "Daly (reserve): HRRR availability not confirmed because of the 429s.",
+  "The GACC boundary layer states no licence; its NIFC Open Data item must be checked before bundling it. Without it, fires with no WFIGS GACC show the untested wording.",
+  "R5 (NFDRS 2016 GSI) parameters and the Open-Meteo daily VPD variable name must be confirmed by the implementing role from the official documentation and pre-registered before any score.",
+  "Two-fire regional values are rough (about +-0.05); the label rounds in Public and always shows the range."
+ ],
+ "notes_for_integrator": [
+  "P0 R1 (backend pipeline role): build a past national fire by IRWIN id. Take the summary from WFIGS_Incident_Locations (IrwinID, IncidentName, POOState, FireDiscoveryDateTime, ContainmentDateTime, IncidentSize, geometry). Use the id {UTC year}-{slug(IncidentName)}-{IrwinID hex[:6]} with the SPEC 4.4 regex. Change catalog.get_summary (catalog.py:317-354), cli.resolve_incident (cli.py:75-109), pipeline.build_incident (pipeline.py:466-469) and is_catalog_incident/spec_incident_id (pipeline.py:71-91). The year is not the blocker: catalog.py:332-342 already resolves CAL FIRE ids of other years; the blocker is the CAL FIRE-only record source.",
+  "P0 R2: sources/perimeters.py:80 STATE='US-CA' (used at :181,:326,:538). Query by attr_IrwinID='{...}' OR poly_IRWINID when the IRWIN id is known; otherwise use the fire's own POOState. Keep the oversize check.",
+  "P0 R3: grid.py:59-61 utm_epsg_for. Use the zone floor((lon+180)/6)+1 and EPSG 32600+zone; update SPEC 4.1 (SPEC.md:119-120). The web reads manifest.grid.utm_zone generically, but its tests cover only zones 10 and 11.",
+  "P0 R4: sources/landfire.py:34 EDITIONS add 'LF2023'. edition_for(mode, started_ms): historical = LF{federal FY of ignition - 1} (FY starts Oct 1: Jul 2024 -> LF2023, Oct 2024 (Rush) -> LF2024, Aug 2025 -> LF2024, Oct 2025+ -> LF2025), live = LF2025. Change the caller build/aoi.py:356 (pass ctx.summary.started_ms) and the fallback at aoi.py:285, which today tries LF2025 for any other edition: a historical build must fall back only to an older edition, with a warning, also where the edition is NoData (LF2025 outside SW/NW until Nov 2026; audit A1 R8). Refuse fires before Oct 2023 unless forced. Update pipeline.py:568, tests test_terrain.py:213-283,438, test_pipeline.py:42, test_pipeline_support.py:145, and SPEC.md:63,494. California behaviour change: historical FY2026 CA fires move to LF2025; Eaton, Palisades, Madre stay LF2024.",
+  "P0 R5: outside California, replace the CA month table (config.py:163-180, moisture.py:109-125, ensemble.py:307-315, behavior.py:246) with NFDRS 2016 GSI (21-day mean of daily Tmin, VPD and day-length indices). This needs a new daily request per fire (start - 28 d to start: temperature_2m_min/max, daylight_duration, VPD or dew point), about 2 Open-Meteo call units, replacing the water-year request outside CA; store the series in the bundle so hindcasts read it with fetch=False; live fires use the forecast API's past days. Keep the CA table and drought rule for ONCC/OSCC. Pre-register method and parameters in docs/validation.md before the first non-CA hindcast.",
+  "P0 R9 (validation role): add 'validate regional' (per-fire and per-region aggregation, JSON writer, tests). Accept UTC start lists, or convert the pre-registered UTC starts in audit-3/validation.md section 3 to offsets from manifest ignition.t_ms.",
+  "Planner, CONTRACT section 14: define backend/fire3d/data/regional_accuracy.json (shape in audit-3/validation.md section 5), an endpoint such as GET /api/accuracy-regions, and IncidentSummary fields irwin_id, unique_fire_id, state, gacc, accuracy_region and time_zone (SPEC, contracts.py and web/src/api/types.ts together). Region ids: NWCC, NRCC, GBCC, SWCC, SACC-SP (TX, OK), SACC-SE, RMCC, EACC, ONCC, OSCC. Keep the wording templates in web/src/lib/plainLanguage.ts.",
+  "P1 R6: one shared local-time helper (IANA zone from the location) replacing America/Los_Angeles in ensemble.py:70,307, behavior.py:32,246, weather_bundle.py:520-525, observed.py:89,200-201 and overpass.py:50,115. Time-zone source: audit A1's offline lookup (USDOT BTS NTAD Time Zones, public domain, plus Census AIANNH for Navajo/Hopi) in fire3d/regions.py; no new dependency.",
+  "P0 R7 (was P1): sources/weather.py and http.py. Recognise Open-Meteo's daily-limit 429 body ({\"reason\":\"Daily API request limit exceeded...\",\"error\":true}) and raise a distinct error without the four retries; historical/validation builds then fail instead of filling with ERA5 (same provider and quota). Add a --require-hrrr build option (on for validation). On an unparsable or error body call http.evict_cache(GET, url, params) as firms.py does.",
+  "P1 R8: build/observed.py issuer text 'CAL FIRE point/start/acres' (:21-25,122,742,785,1326-1373,2113-2118) must name the real issuer for WFIGS fires.",
+  "P2 R11: firms.py:632-716 keyless fallback is cut to CA_BBOX. Outside California, warn clearly that the key is required (or use a national bbox).",
+  "User questions (audit section 7): round 2 answered the earlier three. One conditional question remains for stage D: if Open-Meteo's daily limit blocks validation weather, A wait for the reset (recommended), B accept labelled ERA5 weather, or C drop the affected fires.",
+  "Commit messages for this role ended with the requested Co-Authored-By and Claude-Session lines; nothing was pushed.",
+  "P0 R14 (validation role): first rebuild Madre (2025-madre-fire-01e7e8, a CA regression build outside the 12) and re-measure Eaton, Madre and Palisades 31-member p50 at the docs/validation.md starts (expect 0.438 / 0.395 / 0.467); explain differences over 0.02 before any comparison.",
+  "Validation role: Windy Deuce starts are now 02-27 06:30Z, 12:30Z and 18:30Z (first perimeter holds 65 %); also score ignition + 6/12/24 h for every fire as a secondary value outside the label; fail any bundle with ERA5 hours; check that no observed pixel lies over 2 km outside the fire's own final perimeter.",
+  "P1 R13 (web + contract): SkillEntry gains optional growth_sorensen; AnalysisTab shows it first, relabels total Sorensen as total-area overlap and drops the green >= 0.7 tone (AnalysisTab.tsx:282-283).",
+  "Planner, CONTRACT section 14 data file additions: per region in_sample, lfm_method, fuels_editions, fuel_groups_tested, pooled_leads, ignition_relative; per fire fuels_edition, lfm_method, era5_hours. Aggregate is the mean of fire means everywhere (OSCC 0.43). No accuracy label for searched places without model output; unknown GACC gives the untested wording."
+ ],
+ "revision": {
+  "date": "2026-10-22",
+  "trigger": "independent critic review (verdict needs-revision)",
+  "accepted": [
+   "Open-Meteo daily quota: G10 now BLOCKER, R7 now P0 (stop, never ERA5-fill validation bundles), protocol step 1 weather budget.",
+   "No California baseline: G14, R14, protocol step 0 (rebuild Madre, re-measure all 3 CA fires).",
+   "R4 real caller aoi.py:356, signature change, tests, California FY2026 behaviour change, refuse pre-Oct-2023 fires; also found the forward fallback at aoi.py:285.",
+   "Rush gets LF2024 (FY2025 fire); the edition check is by federal fiscal year.",
+   "R5 needs a new daily request (about 2 call units) and must be pre-registered.",
+   "UTM formula leaves California unchanged (stated in G3 and R3, checked on the 4 local bundles).",
+   "In-sample caveat and in_sample flag for OSCC; OSCC value 0.43 by the mean-of-fire-means rule.",
+   "Per-region lfm_method, fuels_editions, fuel_groups_tested; fuel caveat in the wording.",
+   "R6 names the time-zone source (audit A1 lookup; no new dependency).",
+   "Perimeter timing table (section 3.1); Windy Deuce starts moved to its first perimeter; Rush and Lower Sugarloaf flagged.",
+   "G1 framing corrected (CAL FIRE-only source, not HISTORICAL_YEAR).",
+   "Wording: limited text fixed; Public words + score one tap away (round 2 item 7); one-decimal rounding with range; start caveat; ignition-relative secondary score.",
+   "Per-run skill table conflict: G15, R13.",
+   "GACC fallback decided (polygons only if terms verified, else untested; no state table; no label without model output).",
+   "User questions replaced (round 2 answered the old three; one conditional question with options and a recommendation)."
+  ],
+  "rejected": [
+   "Smokehouse Creek needs no code change and Windy Deuce need not be demoted: the perimeters are 9.92 km apart (beyond the 1.5 km clustering) and a complete perimeter clips the historical truth (observed.py:769-772, :916); outside detections are added only for live builds (:1989). The bundle check stays.",
+   "The R5 request is not a quota problem: about 2 call units, replacing the larger water-year request outside California."
+  ],
+  "new_findings": [
+   "LF2025 is NoData in the South and East until its November 2026 release (G13; also audit A1 B6); LF2025 getSamples returns an error body.",
+   "aoi.py:285 falls a failed historical LF2024 fetch forward to LF2025 (post-fire fuels for 2025 fires).",
+   "The historical-forecast Open-Meteo host did not connect at 22:02-22:03Z while the forecast host did."
+  ]
+ }
+}

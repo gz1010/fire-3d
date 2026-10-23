@@ -1,0 +1,33 @@
+{
+ "summary": "Restored backend/tests/data/official/ (9 samples) and backend/tests/data/terrain/ (1 sample) from real public data, recorded 2026-10-22. No test was changed. api.weather.gov still serves the two real NWS Los Angeles/Oxnard Red Flag Warning messages (FW.W #5 CON, Oct 17 2026 09:11 PDT; CAP ids ...c784049.002.1 and .001.1), so nothing was rebuilt from the IEM archive. Today's real California answer (/alerts/active?area=CA&event=Red Flag Warning,Fire Weather Watch) was empty. Only two values were set by hand, both collection 'updated' stamps: 2026-10-17T16:20:00+00:00 in the LOX file (as if fetched while both messages were in effect) and 2026-10-18T16:09:10+00:00 in the empty file (the original recording's value, which a test asserts). The five fire weather zones (CAZ243, CAZ288, CAZ362, CAZ369, CAZ370) are real NWS zones, simplified to about 20 m. IEM samples: the real Eaton bypoint answer for Jan 5-12 2025, unchanged; LOX FW.W #1, FW.A #1, FW.W #2 and FW.A #2 of 2025, with per-zone rows unchanged and 'svs' cut to the event-changing products plus the statement in force on Jan 8 2025; FW.W #1's 28 zone polygons, simplified to about 100 m with IEM's MultiPolygon type kept. Terrain: the real Earth Search STAC item S2A_11SLT_20250102_0_L2A, unchanged. A new script, backend/scripts/record_test_samples_official.py, re-records everything with about 15 polite requests through fire3d.http (cache outside data/). It checks each sample against what the tests need before writing.",
+ "files": [
+  "backend/scripts/record_test_samples_official.py (new)",
+  "backend/tests/data/official/nws_alerts_lox_rfw.json (new)",
+  "backend/tests/data/official/nws_alerts_ca_empty.json (new)",
+  "backend/tests/data/official/nws_zones_fire.json (new)",
+  "backend/tests/data/official/iem_bypoint_eaton.json (new)",
+  "backend/tests/data/official/iem_event_lox_fw_w_1.json (new)",
+  "backend/tests/data/official/iem_event_lox_fw_a_1.json (new)",
+  "backend/tests/data/official/iem_event_lox_fw_w_2.json (new)",
+  "backend/tests/data/official/iem_event_lox_fw_a_2.json (new)",
+  "backend/tests/data/official/iem_geojson_lox_fw_w_1.json (new)",
+  "backend/tests/data/official/PROVENANCE.md (new)",
+  "backend/tests/data/terrain/stac_item_s2_11SLT_20250102.json (new)",
+  "backend/tests/data/terrain/PROVENANCE.md (new)",
+  "docs/redesign/progress/brief3-restore-official.md (new)",
+  "docs/redesign/reports/brief3-restore-official.json (new)"
+ ],
+ "verification": "Run with the test files unchanged. test_official_nws.py: 21 passed. test_terrain_sentinel.py: 15 passed. test_official_real_bundles.py: 4 passed (it reads no recorded samples; it is parametrized over the ready bundles in data/incidents, read-only). Full backend suite (cd backend && uv run pytest -q): 585 passed, 0 failed, 0 errors, 0 collection errors (baseline was 503 passed, 13 failed, 4 errors, 4 collection errors; the restore-firedata agent's samples were already committed). Before writing, the recording script checks: the VTEC, zones and times of both LOX messages; that Palisades lies in CAZ370, not CAZ362, and 0-10 km from it; that Henderson lies in CAZ243, also after the app's own simplification; that the recorded outline is finer than the 100 m one; that bypoint lists FW.W/A #1-#2 with Eaton in CAZ380; that FW.W #1's statements are chosen at Jan 7 12Z, Jan 8 20Z and Jan 11 00Z; that only CAZ380 covers Eaton after simplification; and the STAC scene's parse, coverage, cloud cover, time and offsets. A second run from its cache gave byte-identical files. ruff check on the script: all checks passed. Count-only key scan of backend/tests/data/** and the script: 22 files scanned, 0 contain FIRMS_MAP_KEY. Upstream requests: about 15 in the script run plus about 10 exploratory ones earlier (NWS, IEM, Earth Search), one at a time. No server was started, no port used, data/ not touched, no fire build started.",
+ "screenshots": [],
+ "contract_deviations": [
+  "None. No test or source file was edited. Two wrapper timestamps were set by hand to match test assertions about the original recording (documented in PROVENANCE.md): nws_alerts_lox_rfw.json 'updated' = 2026-10-17T16:20:00+00:00 and nws_alerts_ca_empty.json 'updated' = 2026-10-18T16:09:10+00:00."
+ ],
+ "known_issues": [
+  "The LOX messages are kept as NWS serves them today. That includes 'replacedBy' and 'replacedAt', which NWS added when it replaced them at 17:56 PDT; a live /alerts/active fetch at 16:20 UTC would not have shown these fields. The parser ignores them.",
+  "FW.W #1's routine Jan 6 2025 statements are left out of iem_event_lox_fw_w_1.json on purpose: test_segment_at_follows_the_requested_time expects the first product to be the latest one with a CAZ380 segment by Jan 7 12:00 UTC. The full IEM record has two more statements before then.",
+  "The official samples total about 207 KB (the 2026-10-18 originals were about 160 KB). Indented JSON and a few more kept products account for the difference.",
+  "Re-recording depends on api.weather.gov still serving the two Oct 17 2026 CAP messages by id. If NWS stops serving them, the script stops before writing and the committed files stay. Rebuilding them from IEM's archive of the same VTEC event is not implemented.",
+  "The test docstring of test_official_nws.py still says the samples were recorded on 2026-10-18 by a scratchpad make_fixtures.py. The test was left unchanged, as required."
+ ],
+ "notes_for_integrator": "Nothing blocks. Commits: the orchestrator's checkpoint 910fe45 already holds the final sample files, both PROVENANCE.md files and the recording script (identical to the final versions; git diff HEAD is empty for them). 630f9eb adds the progress note and this report. Optional: update line 3 of backend/tests/test_official_nws.py's docstring to say the samples were re-recorded on 2026-10-22 by backend/scripts/record_test_samples_official.py (see tests/data/official/PROVENANCE.md). The backend total here (585) is below the user's local ~605. test_official_real_bundles (and other real-bundle tests) are parametrized per ready bundle in data/incidents, and this cloud clone has fewer ready bundles; this is likely part of the gap but was not checked."
+}

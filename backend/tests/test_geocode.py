@@ -293,16 +293,22 @@ def local(client: TestClient, q: str) -> dict:
     return body
 
 
-def test_the_built_index_covers_california_places_and_zip_areas() -> None:
+def test_the_built_index_covers_us_places_counties_and_zip_areas() -> None:
     raw = orjson.loads(geocode.GAZETTEER_PATH.read_bytes())
+    assert geocode.GAZETTEER_PATH.name == "gazetteer_us.json"
+    assert not (geocode.GAZETTEER_PATH.parent / "gazetteer_ca.json").exists()          # replaced (brief 3)
     assert raw["source"] == "U.S. Census Bureau Gazetteer Files" and raw["vintage"] >= 2026
     assert raw["counts"] == {"places": len(raw["places"]), "zips": len(raw["zips"])}
-    kinds = {k: sum(1 for p in raw["places"] if p[1] == k) for k in ("city", "town", "cdp")}
-    assert kinds == {"city": 462, "town": 21, "cdp": 1139}        # 2026 vintage: every California place
-    assert len(raw["zips"]) == 1802
-    for _, _, lat, lon, area in raw["places"]:
-        assert 32.4 <= lat <= 42.1 and -124.6 <= lon <= -113.9 and area >= 0
-    assert all(z[0][:3] >= "900" and z[0][:3] <= "961" for z in raw["zips"])
+    kinds = {k: sum(1 for p in raw["places"] if p[1] == k) for k in ("city", "town", "village", "borough", "cdp", "county")}
+    assert kinds["city"] > 10000 and kinds["town"] > 4000 and kinds["village"] > 3000 and kinds["cdp"] > 12000
+    assert kinds["county"] == 3222                                    # counties and equivalents, 2026 vintage
+    assert len(raw["zips"]) > 33000
+    states = {p[2] for p in raw["places"]}
+    assert {"CA", "ID", "IL", "NY", "DC", "AK", "HI", "PR"} <= states
+    ca = [p for p in raw["places"] if p[2] == "CA" and p[1] in ("city", "town", "cdp")]
+    assert len(ca) == 462 + 21 + 1139                                 # every California place, as in brief 2
+    for _, _, _, lat, lon, area, *_ in raw["places"]:
+        assert -15 <= lat <= 72 and -180 <= lon <= 180 and area >= 0
 
 
 @pytest.mark.parametrize("q", ["91001", "CA 91001", "91001 CA", "91001-1234", "91001, California"])
@@ -311,15 +317,27 @@ def test_zip_codes_are_matched_locally(client: TestClient, upstream: Upstream, q
     assert body["kind"] == "zip" and body["total_matches"] == 1
     (m,) = body["matches"]
     assert m["kind"] == "zip" and m["zip"] == "91001" and m["matched_address"] == "ZIP 91001, CA" and m["exact"] is True
+    assert m["name"] == "ZIP 91001, CA" and m["state"] == "CA" and m["state_name"] == "California" and m["supported"] is True
+    assert m["county"] == "Los Angeles County"
     assert m["lat"] == pytest.approx(34.1945, abs=1e-3) and m["lon"] == pytest.approx(-118.1383, abs=1e-3)
     assert m["near"] == "Altadena" and m["near_km"] < 2 and m["land_km2"] > 10
     assert "ZIP Code Tabulation Areas" in body["note"] and "PO-box" in body["note"]
     assert upstream.calls == []
 
 
-def test_a_zip_outside_california_is_an_explained_empty_list(client: TestClient, upstream: Upstream) -> None:
-    body = local(client, "10001")
-    assert body["kind"] == "zip" and body["matches"] == [] and "California only" in body["note"]
+@pytest.mark.parametrize("q", ["83702", "83702 ID", "ID 83702", "83702, Idaho"])
+def test_zip_codes_nationally(client: TestClient, upstream: Upstream, q: str) -> None:
+    (m,) = local(client, q)["matches"]
+    assert m["matched_address"] == "ZIP 83702, ID" and m["state"] == "ID" and m["county"] == "Ada County"
+    assert m["near"] in ("Boise City", "Garden City") and m["supported"] is True
+    assert upstream.calls == []
+
+
+def test_a_zip_nobody_has_is_an_explained_empty_list(client: TestClient, upstream: Upstream) -> None:
+    body = local(client, "00000")
+    assert body["kind"] == "zip" and body["matches"] == []
+    assert body["note"].startswith("No US city, town, county or ZIP code matches '00000'.")
+    assert "e.g. 600 E Mariposa St, Altadena; Boise, ID; 83702" in body["note"]
     assert upstream.calls == []
 
 
@@ -328,35 +346,65 @@ def test_town_names_are_matched_locally(client: TestClient, upstream: Upstream, 
     body = local(client, q)
     assert body["kind"] == "place"
     (m,) = body["matches"]
-    assert m["kind"] == "place" and m["name"] == "Altadena" and m["place_type"] == "cdp"
+    assert m["kind"] == "place" and m["name"] == "Altadena, CA" and m["place_type"] == "cdp"
     assert m["place_type_label"] == "census-designated place" and m["matched_address"] == "Altadena, CA"
-    assert m["exact"] is True and m["near"] is None
+    assert m["exact"] is True and m["near"] is None and m["state"] == "CA" and m["county"] == "Los Angeles County"
     assert m["lat"] == pytest.approx(34.1922, abs=1e-3) and m["lon"] == pytest.approx(-118.1356, abs=1e-3)
     assert "internal point" in body["note"] and "house number" in body["note"]
     assert upstream.calls == []
 
 
 def test_place_matching_folds_accents_synonyms_and_alternate_names(client: TestClient, upstream: Upstream) -> None:
-    assert [m["name"] for m in local(client, "La Canada")["matches"]] == ["La Cañada Flintridge"]
-    v = local(client, "Ventura")["matches"]
-    assert v[0]["name"] == "San Buenaventura (Ventura)" and v[0]["exact"] is True        # the name in parentheses
-    assert local(client, "Paso Robles")["matches"][0]["name"] == "El Paso de Robles (Paso Robles)"
-    assert [m["name"] for m in local(client, "Mt Shasta")["matches"]] == ["Mount Shasta"]
-    assert [m["name"] for m in local(client, "Saint Helena")["matches"]] == ["St. Helena"]
-    assert [m["name"] for m in local(client, "California City")["matches"]] == ["California City"]
+    assert [m["name"] for m in local(client, "La Canada, CA")["matches"]] == ["La Cañada Flintridge, CA"]
+    v = local(client, "Ventura, CA")["matches"]
+    assert v[0]["name"] == "San Buenaventura (Ventura), CA" and v[0]["exact"] is True     # the name in parentheses
+    assert local(client, "Paso Robles")["matches"][0]["name"] == "El Paso de Robles (Paso Robles), CA"
+    assert [m["name"] for m in local(client, "Mt Shasta, CA")["matches"]] == ["Mount Shasta, CA"]
+    assert [m["name"] for m in local(client, "Saint Helena, CA")["matches"]] == ["St. Helena, CA"]
+    assert local(client, "California City")["matches"][0]["name"] == "California City, CA"
     assert upstream.calls == []
 
 
 def test_place_ranking_and_same_named_places(client: TestClient) -> None:
     la = local(client, "Los Angeles")["matches"]
-    assert la[0]["name"] == "Los Angeles" and la[0]["place_type"] == "city" and la[0]["exact"] is True
-    assert all(not m["exact"] for m in la[1:])
-    # two places named Paradise (the Butte County town and a Mono County CDP): both exact, told apart by "near"
-    para = [m for m in local(client, "Paradise")["matches"] if m["exact"]]
+    assert la[0]["name"] == "Los Angeles, CA" and la[0]["place_type"] == "city" and la[0]["exact"] is True
+    # two places named Paradise in California (the Butte County town and a Mono County CDP): told apart by "near"
+    para = [m for m in local(client, "Paradise, CA")["matches"] if m["exact"]]
     assert [(m["place_type"], m["near"]) for m in para] == [("town", "Chico"), ("cdp", "Bishop")]
-    # prefixes are found on submit too (no autocomplete): exact first, then by type and area
-    alta = local(client, "Alta")["matches"]
-    assert alta[0]["name"] == "Alta" and alta[0]["exact"] and "Altadena" in [m["name"] for m in alta]
+    alta = local(client, "Alta, CA")["matches"]
+    assert alta[0]["name"] == "Alta, CA" and alta[0]["exact"] and "Altadena, CA" in [m["name"] for m in alta]
+
+
+@pytest.mark.parametrize("q", ["Springfield, IL", "Springfield IL", "Springfield, Illinois", "springfield il usa"])
+def test_town_and_state(client: TestClient, upstream: Upstream, q: str) -> None:
+    m = local(client, q)["matches"][0]
+    assert m["name"] == "Springfield, IL" and m["state"] == "IL" and m["place_type"] == "city" and m["exact"]
+    assert m["county"] == "Sangamon County" and m["supported"] is True
+    assert upstream.calls == []
+
+
+def test_bare_name_lists_the_largest_matches_across_states(client: TestClient) -> None:
+    body = local(client, "Springfield")
+    states = [m["state"] for m in body["matches"]]
+    assert len(states) == geocode.PLACE_LIMIT and len(set(states)) >= 6 and body["total_matches"] > 8
+    assert all(m["name"] == f"Springfield, {m['state']}" for m in body["matches"] if m["exact"])
+    assert body["matches"][0]["place_type"] == "city"
+
+
+def test_boise_county_and_alaska(client: TestClient, upstream: Upstream) -> None:
+    b = local(client, "Boise, ID")["matches"][0]
+    assert b["name"] == "Boise City, ID" and b["exact"] is True and b["state"] == "ID"     # Census's name; "Boise" alias
+    assert b["lat"] == pytest.approx(43.598, abs=0.01) and b["lon"] == pytest.approx(-116.232, abs=0.01)
+    ada = local(client, "Ada County, ID")["matches"][0]
+    assert ada["name"] == "Ada County, ID" and ada["place_type"] == "county" and ada["county"] == "Ada County"
+    ak = local(client, "Anchorage, AK")
+    a = ak["matches"][0]
+    assert a["state"] == "AK" and a["supported"] is False
+    assert a["note"] == "Fire-3d does not support Alaska, Hawaii or US territories yet."
+    assert "Fire-3d does not support Alaska, Hawaii or US territories yet." in ak["note"]
+    nash = local(client, "Nashville, TN")["matches"][0]
+    assert nash["name"] == "Nashville-Davidson, TN" and nash["exact"]
+    assert upstream.calls == []
 
 
 def test_a_town_with_its_zip_lists_both(client: TestClient) -> None:
@@ -368,6 +416,7 @@ def test_a_town_with_its_zip_lists_both(client: TestClient) -> None:
 def test_landmarks_and_streets_without_numbers_are_not_searched(client: TestClient, upstream: Upstream, q: str) -> None:
     body = local(client, q)
     assert body["matches"] == [] and body["total_matches"] == 0
+    assert body["note"].startswith(f"No US city, town, county or ZIP code matches '{q}'.")
     assert "Landmarks, businesses and street names without a house number are not searched" in body["note"]
     assert upstream.calls == []
 
@@ -401,6 +450,14 @@ def test_split_local() -> None:
     assert geocode.split_local("California") == (("california",), None)     # a state word alone is kept
     assert geocode.split_local("CA 91001") == ((), "91001")
     assert geocode.split_local("Mount Shasta, Calif.") == (("mt", "shasta"), None)
+    assert geocode.split_query("Springfield, IL") == (("springfield",), None, "IL")
+    assert geocode.split_query("Springfield IL") == (("springfield",), None, "IL")
+    assert geocode.split_query("83702 ID") == ((), "83702", "ID")
+    assert geocode.split_query("ID 83702") == ((), "83702", "ID")
+    assert geocode.split_query("New York, New York") == (("new", "york"), None, "NY")
+    assert geocode.split_query("Washington, DC") == (("washington",), None, "DC")
+    assert geocode.split_query("Washington") == (("washington",), None, None)
+    assert geocode.split_query("Kansas City, Kansas") == (("kansas", "city"), None, "KS")
 
 
 # ------------------------------------------------------------------------------------------------------------------
@@ -418,24 +475,31 @@ def _build_module():
     return mod
 
 
-def test_build_gazetteer_parses_places_and_california_zctas(tmp_path) -> None:
+def test_build_gazetteer_parses_places_counties_and_zctas(tmp_path) -> None:
     b = _build_module()
     places = ("USPS|GEOID|GEOIDFQ|ANSICODE|NAME|LSAD|FUNCSTAT|ALAND|AWATER|ALAND_SQMI|AWATER_SQMI|INTPTLAT|INTPTLONG\n"
               "CA|0600884|x|y|Altadena CDP|57|S|21900000|0|8.4|0|34.192212|-118.135589\n"
               "CA|0656000|x|y|Pasadena city|25|A|59470000|0|22.9|0|34.160602|-118.137954\n"
-              "CA|0655520|x|y|Paradise town|43|A|47400000|0|18.3|0|39.754200|-121.606400\n"
-              "CA|0612345|x|y|La Cañada Flintridge city|25|A|22350000|0|8.6|0|34.211223|-118.200129\n")
+              "ID|1608830|x|y|Boise City city|25|A|225000000|0|86.9|0|43.598100|-116.231600\n"
+              "TN|4752006|x|y|Nashville-Davidson metropolitan government (balance)|00|C|1232000000|0|475|0|36.172200|-86.784600\n"
+              "AK|0203000|x|y|Anchorage municipality|37|A|4415000000|0|1704|0|61.174900|-149.284300\n")
+    counties = ("USPS\tGEOID\tANSICODE\tNAME\tALAND\tAWATER\tALAND_SQMI\tAWATER_SQMI\tINTPTLAT\tINTPTLONG\n"
+                "ID\t16001\tx\tAda County\t2725000000\t0\t1052\t0\t43.451500\t-116.244400\n")
     zctas = ("GEOID\tALAND\tAWATER\tALAND_SQMI\tAWATER_SQMI\tINTPTLAT\tINTPTLONG\n"      # tab style (older vintages)
              "91001\t21400000\t0\t8.3\t0\t34.194500\t-118.138300\n"
-             "10001\t1600000\t0\t0.6\t0\t40.750000\t-73.997000\n"                      # New York: not California
-             "96201\t1000\t0\t0\t0\t34.0\t-118.0\n")                                    # outside 900-961 (APO)
-    p, z = b.build(places, zctas)
-    assert [r[:2] for r in p] == [["Altadena", "cdp"], ["La Cañada Flintridge", "city"], ["Paradise", "town"], ["Pasadena", "city"]]
-    assert p[0][2:] == [34.1922, -118.1356, 21.9] and p[3][4] == 59.5
-    assert z == [["91001", 34.1945, -118.1383, 21.4]]
+             "10001\t1600000\t0\t0.6\t0\t40.750000\t-73.997000\n"
+             "99501\t1000\t0\t0\t0\t61.21\t-149.87\n"                                # Alaska: by its ZIP prefix
+             "96201\t1000\t0\t0\t0\t10.0\t-150.0\n")                                  # nowhere: dropped
+    p, z = b.build(places, counties, zctas)
+    assert [r[:3] for r in p] == [["Ada County", "county", "ID"], ["Altadena", "cdp", "CA"], ["Anchorage", "municipality", "AK"],
+                                  ["Boise City", "city", "ID"], ["Nashville-Davidson", "city", "TN"], ["Pasadena", "city", "CA"]]
+    assert p[1][3:] == [34.1922, -118.1356, 21.9, "Los Angeles County", None] and p[5][5] == 59.5
+    assert p[3][7] == "Boise" and p[4][7] == "Nashville" and p[2][6] is None          # aliases; no county outside L48
+    assert z == [["10001", "NY", 40.75, -73.997, 1.6], ["91001", "CA", 34.1945, -118.1383, 21.4], ["99501", "AK", 61.21, -149.87, 0.0]]
     out = tmp_path / "g.json"
     b.write(out, 2026, p, z)
     raw = orjson.loads(out.read_bytes())
-    assert raw["vintage"] == 2026 and raw["counts"] == {"places": 4, "zips": 1} and raw["source"] == "U.S. Census Bureau Gazetteer Files"
-    assert geocode.Gazetteer(raw).zips["91001"].lat == 34.1945
+    assert raw["vintage"] == 2026 and raw["counts"] == {"places": 6, "zips": 3} and raw["source"] == "U.S. Census Bureau Gazetteer Files"
+    g = geocode.Gazetteer(raw)
+    assert g.zips["91001"].lat == 34.1945 and g.zips["99501"].state == "AK"
     assert b._decode("Pi\xf1on".encode("latin-1")) == "Piñon"                      # Latin-1 fallback

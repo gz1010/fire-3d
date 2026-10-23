@@ -7,7 +7,7 @@
 import { DEFAULT_MARGIN_KM } from '../../extras/client'
 import { fmtWhen } from '../../extras/format'
 import { distanceText } from '../../official/geo'
-import { groupZones, type CalFireOfficial, type EvacuationOfficial, type FireWeatherOfficial } from '../../official/model'
+import { evacuationWho, groupZones, type CalFireOfficial, type EvacuationOfficial, type FireWeatherOfficial } from '../../official/model'
 import { fmtAcres, fmtNumber } from '../../lib/format'
 
 export type SummaryTone = 'order' | 'warning' | 'alert' | 'quiet' | 'muted'
@@ -25,7 +25,7 @@ export interface SummaryLine {
 export const SUMMARY_NOT_AN_ORDER = "Fire-3d's modeled spread is experimental and is not an evacuation order. Follow local officials."
 
 export function evacuationLine(e: EvacuationOfficial, metric: boolean): SummaryLine {
-  const base = { key: 'evacuation' as const, label: 'Evacuations', source: 'Cal OES' }
+  const base = { key: 'evacuation' as const, label: 'Evacuations', source: evacuationWho(e) }
   switch (e.state) {
     case 'loading':
       return { ...base, text: 'Checking…', tone: 'muted' }
@@ -35,6 +35,8 @@ export function evacuationLine(e: EvacuationOfficial, metric: boolean): SummaryL
       return { ...base, text: 'Unavailable right now.', tone: 'muted' }
     case 'not-checked':
       return { ...base, text: 'Not checked.', tone: 'muted' }
+    case 'not-available':
+      return { ...base, source: null, text: 'Not available in this state.', tone: 'muted' }
     case 'none-listed':
       return { ...base, text: `None listed within ${DEFAULT_MARGIN_KM.evacuations} km. Not an all-clear.`, tone: 'quiet' }
     default: {

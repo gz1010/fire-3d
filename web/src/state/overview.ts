@@ -1,23 +1,35 @@
-// The California overview (brief 2, decision 1; CONTRACT §13 shell): which fires the overview list and the map's
-// overview markers show, how a fire's CAL FIRE status reads, and where a click on a fire flies. Pure (overview.test.ts).
-// The overview is the map workspace with no incident open (useStore.incidentId === null). Every value shown here is
-// CAL FIRE's official record; nothing in the overview is model output.
-import type { IncidentSummary } from '../api/types'
+// The national overview (brief 2, decision 1; brief 3, CONTRACT §14.11): which fires the overview list and the map's
+// overview markers show, how a fire's agency status reads, where a click on a fire flies, and the list's "in this view"
+// counts. Pure (overview.test.ts). The overview is the map workspace with no incident open (useStore.incidentId ===
+// null). Every value shown here is an agency's official record (CAL FIRE in California, NIFC WFIGS elsewhere);
+// nothing in the overview is model output, and a place without a marker is never an all-clear.
+import type { IncidentSummary, ListSource } from '../api/types'
+import type { LonLatBox } from '../lib/fireBounds'
+import { stateName } from '../lib/usStates'
 import type { MapFlyTo } from './workspace'
 
 /** "This year's large fires" (PLAN-2 defaults): the 2026 season, with 2025 behind a filter. */
 export const SEASON_YEAR = 2026
 export const PAST_YEAR = 2025
-/** Size threshold of the season list (CAL FIRE fires of at least this many acres, whatever their status). */
+/** Size threshold of the season list (fires of at least this many acres, whatever their status). */
 export const SEASON_MIN_ACRES = 300
 
 export type OverviewFilter = 'active' | 'season' | 'past'
 
 export const OVERVIEW_FILTERS: { value: OverviewFilter; label: string; tip: string }[] = [
-  { value: 'active', label: 'Active', tip: 'Fires CAL FIRE lists as active right now' },
+  { value: 'active', label: 'Active', tip: 'Every fire CAL FIRE or NIFC lists as active right now, whatever its size' },
   { value: 'season', label: `${SEASON_YEAR} season`, tip: `Active fires and ${SEASON_YEAR} fires of ${SEASON_MIN_ACRES} acres or more` },
   { value: 'past', label: String(PAST_YEAR), tip: `${PAST_YEAR} fires of ${SEASON_MIN_ACRES} acres or more (100 with the picker's switch)` },
 ]
+
+/** CONTRACT §14.14 list absence: the legend, the list footer and the empty view; the phone peek has the short form. */
+export const LIST_ABSENCE = 'Only fires reported to CAL FIRE or NIFC are listed; a place with no marker is not an all-clear. Follow local officials.'
+export const LIST_ABSENCE_SHORT = 'Only reported fires are listed · not an all-clear'
+/** CONTRACT §14.14: a list source is down. */
+export const NIFC_LIST_DOWN = 'The national fire list (NIFC) is unavailable right now; only California fires (CAL FIRE) are listed.'
+export const CALFIRE_LIST_DOWN = "CAL FIRE's list is unavailable right now; California fires are listed from NIFC WFIGS."
+/** The empty view (§14.11): never "no fires". */
+export const EMPTY_VIEW = 'No listed fires in this view.'
 
 export interface OverviewCatalog {
   live: readonly IncidentSummary[]
@@ -25,7 +37,7 @@ export interface OverviewCatalog {
   historical: readonly IncidentSummary[]
 }
 
-/** CAL FIRE lists the fire as active (the live list holds only active fires). */
+/** An agency lists the fire as active (the live list holds only active fires). */
 export function isActiveFire(s: Pick<IncidentSummary, 'mode' | 'is_active'>): boolean {
   return s.mode === 'live' || s.is_active
 }
@@ -48,7 +60,7 @@ export function overviewFires(catalog: OverviewCatalog, filter: OverviewFilter):
   return out.sort((a, b) => Number(isActiveFire(b)) - Number(isActiveFire(a)) || byAcres(a, b))
 }
 
-/** Newest CAL FIRE record update among the rows: CAL FIRE's own time, not when Fire-3d fetched the list (the list's
+/** Newest record update among the rows: the agencies' own times, not when Fire-3d fetched the list (the list's
  *  `updated_ms` is Fire-3d's check time). */
 export function newestRecordMs(rows: readonly Pick<IncidentSummary, 'updated_ms'>[]): number | null {
   let best: number | null = null
@@ -70,7 +82,7 @@ export function preparedFires(catalog: OverviewCatalog): IncidentSummary[] {
   return out
 }
 
-/** Number of active fires (the phone peek line "N active fires · CAL FIRE, updated hh:mm"). */
+/** Number of active fires (the phone peek line "N active fires · records updated 5 min ago"). */
 export function activeCount(catalog: Pick<OverviewCatalog, 'live'>): number {
   return catalog.live.length
 }
@@ -84,7 +96,7 @@ export function findFire(id: string | null | undefined, summary: IncidentSummary
 
 export type FireStatusKey = 'active' | 'contained' | 'out'
 
-/** CAL FIRE's status in plain words (the record's own flags; never inferred from model output). */
+/** The agency's status in plain words (the record's own flags; never inferred from model output). */
 export function fireStatus(s: Pick<IncidentSummary, 'mode' | 'is_active' | 'percent_contained' | 'contained_ms'>): { key: FireStatusKey; label: string } {
   if (s.mode === 'live' && s.is_active) return { key: 'active', label: 'Active' }
   if ((s.percent_contained ?? 0) >= 100 || s.contained_ms != null) return { key: 'contained', label: 'Contained' }
@@ -113,7 +125,7 @@ export function fireViewRadiusM(acres: number | null | undefined): number {
 const validLonLat = (lon: number, lat: number) => Number.isFinite(lon) && Number.isFinite(lat) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180
 
 /** Where a click on a fire (list row or marker) flies: the built bundle's area when the row has one, else a box
- *  around CAL FIRE's reported point sized by the acreage. */
+ *  around the agency's reported point sized by the acreage. */
 export function fireFlyTo(s: Pick<IncidentSummary, 'lat' | 'lon' | 'acres' | 'bbox_lonlat'>): Omit<MapFlyTo, 'nonce'> | null {
   const b = s.bbox_lonlat
   if (b && b.length === 4 && b.every(Number.isFinite) && b[2] > b[0] && b[3] > b[1] && validLonLat(b[0], b[1]) && validLonLat(b[2], b[3]))
@@ -123,4 +135,102 @@ export function fireFlyTo(s: Pick<IncidentSummary, 'lat' | 'lon' | 'acres' | 'bb
   const dLat = r / M_PER_DEG_LAT
   const dLon = r / (M_PER_DEG_LAT * Math.max(0.05, Math.cos((s.lat * Math.PI) / 180)))
   return { lon: s.lon, lat: s.lat, bounds: [s.lon - dLon, s.lat - dLat, s.lon + dLon, s.lat + dLat] }
+}
+
+// ------------------------------------------------------------------------------------------------- brief 3 (§14.11)
+/** County words: "Garfield Co.", Louisiana "Calcasieu Parish"; names that already say what they are stay verbatim. */
+export function countyWords(county: string, state: string | null | undefined): string {
+  const c = county.trim()
+  if (/\b(county|parish|borough|census area|municipality|city)\b/i.test(c)) return c
+  return state === 'LA' ? `${c} Parish` : `${c} Co.`
+}
+
+/** Where a fire is, for rows, cards, hovers and the picker: "Garfield Co., CO"; without a county the record's
+ *  location or unit, then the state ("CO"). */
+export function fireWhere(s: Pick<IncidentSummary, 'county' | 'location' | 'admin_unit'> & { state?: string | null }): string {
+  const st = s.state?.trim() || null
+  const place = s.county?.trim() ? countyWords(s.county, st) : (s.location?.trim() || s.admin_unit?.trim() || '')
+  if (!place) return st ?? ''
+  return st && !new RegExp(`(,|\\s)${st}$`).test(place) ? `${place}, ${st}` : place
+}
+
+/** Is the fire's reported point inside a lon/lat box ([w, s, e, n]; a box crossing the antimeridian has w > e)? */
+export function inBox(s: Pick<IncidentSummary, 'lon' | 'lat'>, box: LonLatBox): boolean {
+  if (!Number.isFinite(s.lon) || !Number.isFinite(s.lat)) return false
+  const [w, so, e, n] = box
+  if (s.lat < so || s.lat > n) return false
+  return w <= e ? s.lon >= w && s.lon <= e : s.lon >= w || s.lon <= e
+}
+
+/** The rows whose point is inside the map view (the list "in this view"); every row when there is no view yet. */
+export function firesInView<T extends Pick<IncidentSummary, 'lon' | 'lat'>>(rows: readonly T[], view: LonLatBox | null): T[] {
+  return view ? rows.filter((r) => inBox(r, view)) : [...rows]
+}
+
+/** "312 fires in this view · Show all 1,334" (the counts of §14.11). */
+export function inViewLabel(inView: number, total: number): { inView: string; all: string } {
+  return { inView: `${inView.toLocaleString('en-US')} fire${inView === 1 ? '' : 's'} in this view`, all: `Show all ${total.toLocaleString('en-US')}` }
+}
+
+/** W11: above this many rows the overview list renders only the rows near the visible part of its scroller. */
+export const LIST_WINDOW_MIN = 150
+/** Rows rendered above and below the visible ones (keyboard steps and fast scrolls stay smooth). */
+export const LIST_OVERSCAN = 10
+
+/** The rows [start, end) a windowed list renders: the rows between `scrollTop` and `scrollTop + viewH` (px, in the
+ *  list's own coordinates) plus the overscan. Lists of LIST_WINDOW_MIN rows or fewer render every row. */
+export function listWindow(n: number, scrollTop: number, viewH: number, rowH: number, overscan = LIST_OVERSCAN): { start: number; end: number } {
+  if (n <= LIST_WINDOW_MIN) return { start: 0, end: n }
+  const h = Math.max(1, rowH)
+  const y = Math.max(0, scrollTop)
+  const start = Math.max(0, Math.min(n, Math.floor(y / h) - overscan))
+  const end = Math.max(start, Math.min(n, Math.ceil((y + Math.max(0, viewH)) / h) + overscan))
+  return { start, end }
+}
+
+/** The scroll position (list coordinates) that shows row `i` whole: unchanged when it already shows, else the
+ *  nearest edge (a keyboard step scrolls by one row, Home and End jump). */
+export function scrollToRow(i: number, rowH: number, scrollTop: number, viewH: number): number {
+  const top = i * rowH
+  const bottom = top + rowH
+  if (top < scrollTop) return top
+  if (bottom > scrollTop + viewH) return Math.max(0, bottom - viewH)
+  return scrollTop
+}
+
+/** The §14.14 notices for list sources reported unavailable (deduplicated over the lists shown). */
+export function listSourceNotices(sources: readonly (readonly ListSource[] | null | undefined)[]): string[] {
+  const down = new Set<string>()
+  for (const list of sources) for (const src of list ?? []) if (src.status === 'unavailable') down.add(src.id)
+  const out: string[] = []
+  if (down.has('wfigs')) out.push(NIFC_LIST_DOWN)
+  if (down.has('calfire')) out.push(CALFIRE_LIST_DOWN)
+  return out
+}
+
+/** The overview filter's empty text when no fire at all is listed (the in-view empty text is EMPTY_VIEW). */
+export function emptyListText(filter: OverviewFilter, minAcres: number): string {
+  if (filter === 'active') return 'CAL FIRE and NIFC list no active fires right now.'
+  if (filter === 'season') return `CAL FIRE and NIFC list no active fires and no ${SEASON_YEAR} fires of ${SEASON_MIN_ACRES} acres or more.`
+  return `No ${PAST_YEAR} fires of ${minAcres} acres or more are listed.`
+}
+
+/** The overview counts per filter (memoised by the caller on the catalog lists). */
+export function overviewCounts(catalog: OverviewCatalog): Record<OverviewFilter, number> {
+  return { active: overviewFires(catalog, 'active').length, season: overviewFires(catalog, 'season').length, past: catalog.historical.length }
+}
+
+/** A picker row's place: "Los Angeles Co., CA · Altadena", "Garfield Co., CO", or '—'. */
+export function pickerWhere(s: IncidentSummary): string {
+  const where = fireWhere(s)
+  return (s.county?.trim() && s.location?.trim() ? `${where} · ${s.location.trim()}` : where) || '—'
+}
+
+/** Does a row match a search (lowercase)? Name (and the record's own name), county, place, unit, id, the state code
+ *  and its name ("idaho", "id"), and the "Garfield Co., CO" line. */
+export function pickerMatches(s: IncidentSummary, q: string): boolean {
+  if (!q) return true
+  const st = s.state ?? null
+  const words = [s.name, s.source_name, s.county, s.location, s.admin_unit, s.id, st, stateName(st), fireWhere(s)]
+  return words.some((v) => v?.toLowerCase().includes(q))
 }

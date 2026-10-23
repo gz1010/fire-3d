@@ -88,7 +88,7 @@ function OpenFireFirst() {
             <h2 id="fx-empty-title">Zoom in on a fire or pick one</h2>
           </header>
           <p className="fx-empty-text">
-            The 3D analysis shows one fire at a time. Zoom in on a fire on the map, or pick one here to see its CAL FIRE record, then open it in 3D.
+            The 3D analysis shows one fire at a time. Zoom in on a fire on the map, or pick one here to see its agency record, then open it in 3D.
           </p>
           <div className="fx-empty-actions">
             <button type="button" className="mw-btn" onClick={() => switchWorkspace('map')}>

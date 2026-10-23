@@ -18,6 +18,18 @@ def no_progress(step: str, fraction: float, message: str) -> None:
     """A ProgressFn that ignores updates."""
 
 
+def record_issuer_of(summary: object) -> str:
+    """Who published the fire's record, for bundle text (CONTRACT 14.2 / 14.12.5): ``summary.record_issuer``
+    ("CAL FIRE", "USFS via NIFC WFIGS", "NIFC WFIGS (IRWIN)"); without it, "NIFC WFIGS (IRWIN)" for a WFIGS record
+    and "CAL FIRE" otherwise (an absent ``record_source`` means CAL FIRE, as the 14.1 validator reads old
+    manifests). Works on a model or a dict."""
+    get = summary.get if isinstance(summary, dict) else (lambda k, d=None: getattr(summary, k, d))
+    v = get("record_issuer")
+    if isinstance(v, str) and v.strip():
+        return v.strip()
+    return "NIFC WFIGS (IRWIN)" if get("record_source") == "wfigs" else "CAL FIRE"
+
+
 @dataclass
 class BuildContext:
     summary: IncidentSummary            # pydantic model from contracts.py
@@ -30,6 +42,9 @@ class BuildContext:
     fire_bbox_lonlat: tuple[float, float, float, float] | None = None
     end_ms: int | None = None           # time_range.end_ms once known
     now_ms: int | None = None
+    time_zone: str | None = None        # IANA zone of the fire (summary.time_zone, CONTRACT 14.9.7); None = UTC labels
+    require_hrrr: bool = False          # ``build --require-hrrr``: fail on an ERA5-filled hour or, for a California
+                                        # fire, a refused water-year precipitation total (CONTRACT 14.12.2)
 
 
 @dataclass

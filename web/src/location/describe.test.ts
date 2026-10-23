@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { NEVER } from '../api/types'
 import { distance } from '../lib/plainLanguage'
-import { fmtDateTime, tzLabel } from '../lib/time'
+import { fmtAt, timeFmt } from '../lib/time'
 import { describeLocation, span, windRelation, type DescribeOptions, type LocationCardModel } from './describe'
 import {
   HOUR,
@@ -26,9 +26,11 @@ import type { LocationCheckInput } from './types'
 const m = makeManifest(ZONE11)
 const f = makeForecast(m) // ORIGIN + 24 h, 72 h, 31 members (hindcast: the manifest is historical)
 const n = ZONE11.n
-const at = (ms: number) => `${fmtDateTime(ms)} ${tzLabel(ms)}`
+// Public reads 12-hour in the fire's zone (brief 3, §14.9): the fixture fire is in California
+const TF = timeFmt('America/Los_Angeles', '12h') // tz-ok: test
+const at = (ms: number) => fmtAt(ms, TF, { zone: true })
 const END = f.start_ms + 72 * HOUR
-const US: DescribeOptions = { units: 'us', preset: 'public', mode: 'historical', nowMs: ORIGIN + 400 * HOUR }
+const US: DescribeOptions = { units: 'us', preset: 'public', mode: 'historical', nowMs: ORIGIN + 400 * HOUR, tf: TF }
 
 function fc(bp: number, p10: number, p50: number, p90: number) {
   return {
@@ -59,7 +61,15 @@ describe('burn chance is stated for the full horizon only', () => {
     expect(c.sections.find((x) => x.key === 'forecast')!.title).toBe('Model re-run on past weather')
     expect(line(c, 'period')!.detail).not.toMatch(/hindcast/i)
     expect(line(c, 'burn-chance')!.label).toBe('Burn chance over 72 h')
-    expect(line(c, 'period')!.text).toBe(`${fmtDateTime(f.start_ms)} – ${fmtDateTime(END)} ${tzLabel(END)} (72 h)`)
+    expect(line(c, 'period')!.text).toBe(`${fmtAt(f.start_ms, TF)} – ${fmtAt(END, TF, { zone: true })} (72 h)`)
+    // Public is 12-hour (round 2 item 8): "Jan 8, 12:18 AM – Jan 11, 12:18 AM PST (72 h)"
+    expect(line(c, 'period')!.text).toMatch(/^\w{3} \d{1,2}, \d{1,2}:\d\d [AP]M – \w{3} \d{1,2}, \d{1,2}:\d\d [AP]M P[SD]T \(72 h\)$/)
+    // Command reads 24-hour in the same zone
+    const cmd24 = card({ forecast: f, rasters: makeRasters(fc(7 / 31, 29, 44, NEVER)), timeMs: ORIGIN + 30 * HOUR }, { ...US, preset: 'command', tf: timeFmt(TF.tz, '24h') })
+    expect(line(cmd24, 'period')!.text).toMatch(/^\w{3} \d{1,2}, \d\d:\d\d – \w{3} \d{1,2}, \d\d:\d\d P[SD]T \(72 h\)$/)
+    // an Eastern fire's card reads Eastern time
+    const east = card({ forecast: f, rasters: makeRasters(fc(7 / 31, 29, 44, NEVER)), timeMs: ORIGIN + 30 * HOUR }, { ...US, tf: timeFmt('America/New_York', '12h') })
+    expect(line(east, 'period')!.text).toMatch(/E[SD]T \(72 h\)$/)
     expect(line(c, 'burn-chance')!.technical).toMatch(/burn_probability 0\.226 \(fraction of 31 members burned by start \+ 72 h\)/)
   })
   it('never relabels it as a shorter period or a category', () => {

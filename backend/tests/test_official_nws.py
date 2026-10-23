@@ -427,7 +427,7 @@ def test_endpoint_live_alert_near_a_fire(upstream: Upstream, client: TestClient,
     assert {f["id"] for f in d["zones"]["features"]} >= {"CAZ369", "CAZ370", "CAZ362"}
     upstream.fail = {"alerts"}
     nws.reset_state()
-    fhttp.evict_cache("GET", f"{nws.NWS_API}/alerts/active?area=CA&event=Red%20Flag%20Warning,Fire%20Weather%20Watch")
+    fhttp.evict_cache("GET", nws.national_url())
     down = client.get("/api/official/fire-weather", params={"incident": "2026-test-fire-abcdef"}).json()
     assert down["status"] == "unavailable" and down["reason_code"] == "upstream_error" and down["alerts"] == []
     assert "could not be reached" in down["reason"]

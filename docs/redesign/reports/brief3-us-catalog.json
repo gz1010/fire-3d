@@ -1,0 +1,125 @@
+{
+ "role": "us-catalog",
+ "summary": "Built the brief-3 national catalog backend and the shared contracts. M1: every §14.1-14.7/14.12 pydantic model (all additions defaulted), web/src/api types, getGeoLookup/getAccuracyRegions/state option, records.ts (recordIssuerLabel, recordBlocks) with tests, summaryFixture, SPEC §5.1/§6 rows, contracts<->types.ts parity test. M2: fire3d/regions.py with public-domain TIGERweb states/counties and BTS NTAD time zones (+ Navajo Nation/Hopi), GET /api/geo/lookup, standard UTM zones 10-19 (California unchanged), check_bundle, fixture-east (NC, UTM 17, America/New_York). M3: sources/wfigs.py and the national list in catalog.py (CAL FIRE the record in California, CA_ACTIVE_RULE 'either', CA_COMPLEX_ROWS 'calfire', duplicates, POOState rule, RX/CX/AK/HI excluded, ids from IRWIN + UFI year, resolve_listed/get_summary/find_by_irwin/is_supported/record_issuer, sources[], WFIGS-down and CAL FIRE-down fallbacks, default year = current UTC year, state= filter, gzip, build-gate texts), national FIRMS loaders (load_live_us/load_year_us with pyarrow filters, firms_us_{year}.parquet; CA wrappers deprecated) with every caller in my files switched, national live loop and LiveStatus.detections_24h; recorded WFIGS/CAL FIRE/FIRMS samples and the merge regression set. M4: GET /api/official/incident-record (api/records.py) and GET /api/accuracy-regions with the OSCC seed. M5: national gazetteer (places, counties, ZIP areas) and national geocode parsing/fields. Cut line: (a) ZCTA+county rows, (b) ca_county_gacc.json, (d) SPEC prose, (e) nwcg_agency_codes.json (PMS 931, public domain), (f) id pinning are done; (c) KD-tree not done (dense matching 0.57 s on a 235 x 11,792 national case). Live check on API 8711: 235 active fires in 23 states, 2026 list 1,192, 2025 list 856, gzip 13.5 %, detections_24h 10,816 (CA 199).",
+ "files": {
+  "backend_source": [
+   "backend/fire3d/contracts.py",
+   "backend/fire3d/catalog.py",
+   "backend/fire3d/regions.py (new)",
+   "backend/fire3d/grid.py",
+   "backend/fire3d/sources/wfigs.py (new)",
+   "backend/fire3d/sources/firms.py",
+   "backend/fire3d/api/app.py",
+   "backend/fire3d/api/live.py",
+   "backend/fire3d/api/records.py (new)",
+   "backend/fire3d/api/geocode.py"
+  ],
+  "backend_data": [
+   "backend/fire3d/data/us_states.geojson",
+   "backend/fire3d/data/us_counties.geojson",
+   "backend/fire3d/data/us_timezones.geojson",
+   "backend/fire3d/data/gazetteer_us.json (replaces gazetteer_ca.json, removed)",
+   "backend/fire3d/data/regional_accuracy.json",
+   "backend/fire3d/data/ca_county_gacc.json",
+   "backend/fire3d/data/nwcg_agency_codes.json"
+  ],
+  "backend_scripts": [
+   "backend/scripts/build_us_regions.py (new)",
+   "backend/scripts/build_gazetteer.py",
+   "backend/scripts/build_ca_county_gacc.py (new)",
+   "backend/scripts/check_bundle.py",
+   "backend/scripts/make_fixture.py (--only east)",
+   "backend/scripts/record_test_samples_firedata.py (--brief3)"
+  ],
+  "backend_tests": [
+   "backend/tests/test_us_catalog_contracts.py",
+   "backend/tests/test_us_catalog_regions.py",
+   "backend/tests/test_us_catalog_fixture_east.py",
+   "backend/tests/test_us_catalog_list.py",
+   "backend/tests/test_us_catalog_firms.py",
+   "backend/tests/test_us_catalog_samples.py",
+   "backend/tests/test_us_catalog_records.py",
+   "backend/tests/test_us_catalog_mock.py (helpers)",
+   "backend/tests/test_grid.py",
+   "backend/tests/test_geocode.py",
+   "backend/tests/test_firedata_catalog.py",
+   "backend/tests/test_firedata_firms.py",
+   "backend/tests/test_api.py",
+   "backend/tests/data/firedata/us_* (10 samples) + PROVENANCE.md section 'Brief 3'"
+  ],
+  "web": [
+   "web/src/api/types.ts",
+   "web/src/api/client.ts",
+   "web/src/api/client.test.ts",
+   "web/src/api/records.ts (new)",
+   "web/src/api/records.test.ts (new)",
+   "web/src/api/fixtures.testutil.ts (new)"
+  ],
+  "docs": [
+   "SPEC.md (§0, §2, §4.1, §4.2, §4.4, §5.1, §6, §8.7)",
+   "docs/redesign/contract3/us-catalog.md",
+   "docs/redesign/progress/brief3-us-catalog.md",
+   "docs/redesign/reports/brief3-us-catalog.json"
+  ],
+  "commits": [
+   "3059999 M1 contracts",
+   "947d333 M2 regions, geo lookup, UTM, fixture-east",
+   "0acc032 M3 national list",
+   "44a4ef5 M3 samples",
+   "2d5b978 M4 incident records and accuracy regions",
+   "fb72e3f M5 national search",
+   "8239100 cut-line items",
+   "(this report)"
+  ]
+ },
+ "verification": [
+  "cd backend && uv run pytest -q -> 829 passed (shared tree, 2026-10-23 ~01:35 UTC); clean worktree of HEAD + my cut-line changes -> 790 passed, 32 skipped (fixtures skipped there).",
+  "My new tests: test_us_catalog_*.py -> 88 passed; with test_grid, test_geocode, test_firedata_catalog, test_firedata_firms, test_api, test_api_live -> 299 passed.",
+  "M1 defaulted additions: git worktree at 3059999, uv run pytest -q tests/test_official_nws.py tests/test_official_real_bundles.py tests/test_extras.py -> 60 passed, 1 skipped (real bundles absent in that worktree; they passed in the shared tree at M1 time).",
+  "cd web && npm run typecheck (0 errors) && npm run lint (55 warnings, 0 outside src/scene) && npm test (64 files, 835 passed, 2 skipped) && npm run build (ok). web/src/api: 16 tests.",
+  "API on 8711 (FIRE3D_LIVE=0, data/ of the main checkout): /api/incidents?mode=live -> 235 rows, 23 distinct states, 0 outside the 48+DC, 0 rows missing time_zone/record_source/record_issuer/uid; CAL FIRE rows: Norte, Timber (active_sources ['wfigs']), Cooley, Lost, Soda, Rocky; sources both available.",
+  "?mode=historical&year=2026 -> 1,192 rows, ids unique, year 2026 (default year also 2026); year=2025 -> 856; year=2026&state=OR -> 85 rows all OR.",
+  "gzip: plain 1,298,914 B vs 175,889 B with Accept-Encoding: gzip (13.5 %), content-encoding: gzip, vary: Accept-Encoding.",
+  "/api/incidents/2026-columbia-325-093156 (a WFIGS id) -> 200, manifest null, AR, America/Chicago; /api/incidents/2025-eaton-fire-dbfa57 -> state CA, America/Los_Angeles, id unchanged, irwin_id 72660ADC-...; POST /api/incidents/fixture-demo/build?force=true -> 409 \"'fixture-demo' is a local or synthetic bundle; it cannot be rebuilt.\"",
+  "/api/live/status -> detections_24h 10,816, detections_24h_ca 199, active_incidents 235.",
+  "/api/geo/lookup?lon=-116.2&lat=43.615 -> ID, America/Denver, Ada County, supported; Anchorage -> coverage alaska, supported false, the §14.14 note; Tijuana (-117.0333, 32.525) -> outside_us.",
+  "/api/accuracy-regions -> 10 regions; OSCC tested, in_sample true, seed true; the other 9 untested.",
+  "/api/official/incident-record?incident=2026-columbia-325-093156 -> available, publisher NIFC WFIGS (IRWIN), agency_code FC, current.updated_ms set, https incident_url; fixture-east -> unavailable/not_covered 'This is synthetic or local data; it has no agency record.'; unknown id -> 404.",
+  "uv run python scripts/make_fixture.py --only east (38 s) then /api/incidents/fixture-east -> America/New_York, NC, irwin_id null, manifest grid.utm_zone 17.",
+  "/api/geocode: 'Boise, ID' -> Boise City, ID (Ada County); 'Springfield, IL' -> Springfield, IL (Sangamon County); 'Anchorage, AK' -> supported false + note; '83702' -> ZIP 83702, ID; 'Nowhereville' -> \"No US city, town, county or ZIP code matches 'Nowhereville'.\"",
+  "Non-GET requests in the API access log: 1 (my curl POST for the build-gate check, answered 409; no browser run was made).",
+  "Ownership: every file of my 7 commits matches my 'owns' globs (appendix-B regex check: 0 outside).",
+  "Key scan (count-only, grep -c -F of the key value): 0 in my scratch logs, samples, notes and in the diffs of my commits.",
+  "Wording scan (git diff 02a4e00 of my non-test sources incl. SPEC.md and web/src/api | grep '^+' | grep -inE '\\bsafe\\b|low risk|all[- ]clear|Fire[T]race'): 5 hits, all justified: app.py docstring 'traversal-safe' (path safety), records.py docstring 'its absence is never an all-clear' (negation), records.py CAVEAT_NOT_ALL_CLEAR 'No record or no change is not an all-clear: follow local officials.' (contract §14.5 text, negation), regions.py docstring 'thread-safe', wfigs.py quote(..., safe=\"\") (a Python argument)."
+ ],
+ "screenshots": [],
+ "screenshots_note": "My role has no required screenshots (its acceptance checks are API and test checks); none were taken, so no browser was run.",
+ "contract_deviations": [
+  "§14.1 before-validator is a model_validator(mode='after') using model_fields_set (same effect): a mode='before' validator makes strict JSON validation reject every JSON array as a tuple (bbox_lonlat), which broke contract_problems(IncidentListResponse, ...).",
+  "§14.3 coverage_at uses a 1 km tolerance, not 5 km: the TIGERweb state polygons already include near-shore water, and 5 km would put central Tijuana (2.0 km from the border; required outside_us) and Windsor, ON (2.8 km) in the US. state_at keeps max_km=5 and time_zone_at the 5 km nearest-zone rule.",
+  "§14.2 duplicates: sizes must both be reported and over 1 ac (two different tiny same-named fires are never merged, so no active fire is hidden); duplicates are removed before the California merge (TCU then has 5 members).",
+  "§14.2 a CAL FIRE fire matched by two WFIGS records (Dale: DALE and BRADFORD BRANCH) keeps both in other_records and takes the irwin_id of the same-name record (null when there is no single one).",
+  "§14.2 id pinning tested with a synthetic before/after pair (no recorded pair exists).",
+  "§14.4 seed has no 'fires' and no 'fuels_editions' (per-fire era5_hours unknown; never guessed); OSCC growth_sorensen stored as 0.433 (renders 0.43).",
+  "Alaska/Hawaii/territory WFIGS ids resolve through resolve_listed (with their own state and zone, e.g. America/Anchorage) although never listed, so the build gate answers 422 instead of 404.",
+  "WFIGS year lists are never fetched below 100 ac (WFIGS_YEAR_FLOOR_ACRES); min_acres below that lists CAL FIRE of every size plus WFIGS >= 100 ac.",
+  "geocode: Census names are kept ('Boise, ID' -> 'Boise City, ID', exact through the alias 'Boise'); local match 'name' carries ', ST' as §14.10 says."
+ ],
+ "known_issues": [
+  "fixture-east (like fixture-demo and fixture-live) gets one pre-existing check_bundle.py problem 'forecast fx-001: arrival before the start' from the synthetic forecast.",
+  "A California WFIGS id that the merge folds into a CAL FIRE fire is not resolvable by resolve_listed unless a bundle exists under it (then id pinning applies); otherwise an old link is served read-only from its manifest.",
+  "HISTORICAL_YEAR is kept as an import-time alias; callers should use catalog.default_year().",
+  "Codes PMS 931 does not name (INTER, SHP, TRIBE, USMC) stay verbatim in labels; 'C&L' reads 'County and Local'.",
+  "The live list matches California rows against CAL FIRE's year lists of the WFIGS rows' years and the year before (cached 30 min / 24 h by fire3d.http).",
+  "gazetteer_us.json is 3.7 MB (1.1 MB gzipped) in git."
+ ],
+ "notes_for_integrator": [
+  "Cut-line item not done: (c) scipy KD-tree in catalog.assign_detections. Fallback in place: dense matching (cut first to the fires' combined box) takes 0.57 s on a national-sized case (235 fires x 11,792 detections); _live_base logs each run's time.",
+  "CONTRACT §14 fold-in: docs/redesign/contract3/us-catalog.md (as built per milestone, deviations, cut-line results).",
+  "Make the (R) fields required at the integration: IncidentSummary uid/record_source/record_issuer/state/time_zone in web/src/api/types.ts (fixtures through summaryFixture()), IncidentListResponse.sources, LiveStatus.detections_24h; in contracts.py the same plus FireWeatherResponse.states_checked/alert_states, FireWeatherAlert.time_zone, SkillEntry.growth_sorensen once producers send them. Extend test_us_catalog_contracts.py's parity test to web/src/official/types.ts (IncidentRecordResponse, LocalAlertsResponse/LocalAlert, FireWeather additions).",
+  "us-pipeline: pipeline.is_catalog_incident can use catalog.resolve_listed + catalog.is_supported (§14.2); refresh_live (pipeline.py) should call firms.load_live_us(days=2) (load_live_ca is a deprecated wrapper now).",
+  "us-web: local geocode match 'name' now reads 'Altadena, CA' / 'ZIP 91001, CA'; complex_name usually already ends in 'Complex' ('Montana Lightning Complex'), so the card should not add 'Complex' again; WFIGS rows now carry agency (plain NWCG name) so recordIssuerLabel shows 'USFS (USDA Forest Service) via NIFC WFIGS'.",
+  "README (final verification): credits for NIFC WFIGS (IRWIN), NWCG unit identifiers (PMS 931), USDOT BTS NTAD Time Zones, Census TIGERweb, Census Gazetteer Files (national); search covers every state; geocode row no longer 'California town'.",
+  "Validation (wave 2) replaces backend/fire3d/data/regional_accuracy.json; /api/accuracy-regions recomputes each status from n_fires/n_leads and adds missing regions as untested."
+ ]
+}

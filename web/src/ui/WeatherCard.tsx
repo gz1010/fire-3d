@@ -8,9 +8,10 @@ import type { WeatherFile } from '../api/types'
 import { cardinal, fmtNumber, msToMph } from '../lib/format'
 import { isOpenMeteo } from '../lib/dataCredits'
 import { fireWeatherSeverity } from '../lib/plainLanguage'
-import { fmtDateTime, fmtTime, tzLabel } from '../lib/time'
+import { fmtAt, fmtClock, zoneAbbr } from '../lib/time'
 import { weatherAt, weatherIndex, type WeatherNow } from '../state/selectors'
 import { useStore } from '../state/store'
+import { useTimeFormat } from '../state/timeZone'
 import { Card, EmptyNote } from './controls'
 import { OpenMeteoCredit } from './DataCredits'
 
@@ -44,6 +45,7 @@ const toneOf = (v: number | null, warn: number, danger: number, lowerIsWorse = f
 }
 
 export function WeatherCard() {
+  const tf = useTimeFormat()
   const weather = useStore((s) => s.weather)
   const idx = useStore((s) => weatherIndex(s.weather, s.timeMs))
   const hasManifest = useStore((s) => s.manifest?.status === 'ready')
@@ -54,7 +56,7 @@ export function WeatherCard() {
         <EmptyNote icon={<CloudSun size={15} />} title="No weather in this bundle" />
       ) : idx == null ? (
         <EmptyNote icon={<CloudSun size={15} />} title="Outside the weather record">
-          {fmtDateTime(weather.t_ms[0])} → {fmtDateTime(weather.t_ms[weather.t_ms.length - 1])}
+          {fmtAt(weather.t_ms[0], tf)} → {fmtAt(weather.t_ms[weather.t_ms.length - 1], tf)}
         </EmptyNote>
       ) : (
         <>
@@ -67,12 +69,13 @@ export function WeatherCard() {
 }
 
 function WxStamp({ w, i }: { w: WeatherFile; i: number }) {
+  const tf = useTimeFormat()
   const t = w.t_ms[i]
   const fc = w.forecast_from_ms != null && t >= w.forecast_from_ms
   return (
-    <span className="wx-stamp" data-tip={`${fc ? 'Weather forecast hour' : 'Analysis / archived-forecast hour'} · ${fmtTime(t)} ${tzLabel(t)} · ${w.source}`}>
+    <span className="wx-stamp" data-tip={`${fc ? 'Weather forecast hour' : 'Analysis / archived-forecast hour'} · ${fmtClock(t, tf)} ${zoneAbbr(t, tf.tz)} · ${w.source}`}>
       <span className={`chip ${fc ? 'chip-gold' : 'chip-muted'}`}>{fc ? 'FCST' : 'ANL'}</span>
-      <span className="mono secondary">{fmtTime(t)}</span>
+      <span className="mono secondary">{fmtClock(t, tf)}</span>
     </span>
   )
 }

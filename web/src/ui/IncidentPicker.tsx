@@ -1,19 +1,23 @@
 // Incident picker (SPEC 9.4; brief 2): Active / 2026 season / 2025 lists (the overview's filters, state/overview.ts),
-// search, >= 100 ac toggle (2025), and rows with name, acres, containment, start date, CAL FIRE status and whether
-// Fire-3d's analysis is prepared. Picking a fire never starts a build by itself: in the map workspace an unprepared fire
+// search (name, county, state, place, id), >= 100 ac toggle (2025), and rows with name, county and state, acres,
+// containment, start date (in the fire's own zone), the agency's status and whether Fire-3d's analysis is prepared. Picking a fire never starts a build by itself: in the map workspace an unprepared fire
 // opens its fire card ("Prepare analysis (1-3 min)"); in Forensic it opens with the Build button (or builds when the
 // Forensic setting "Prepare analysis when I pick an unprepared fire" is on). Keyboard: arrows + Enter, Esc closes.
 import { ChevronDown, RefreshCw, Search } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { IncidentSummary } from '../api/types'
 import { fmtAcresShort, fmtNumber } from '../lib/format'
-import { fmtDate, fmtRelative } from '../lib/time'
-import { analysisState, fireStatus, isActiveFire, OVERVIEW_FILTERS, overviewFires, PAST_YEAR, SEASON_MIN_ACRES, SEASON_YEAR, type OverviewFilter } from '../state/overview'
+import { fmtDayDate, fmtRelative, timeFmt } from '../lib/time'
+import { analysisState, emptyListText, fireStatus, isActiveFire, pickerMatches, pickerWhere, OVERVIEW_FILTERS, overviewFires, PAST_YEAR, SEASON_MIN_ACRES, SEASON_YEAR, type OverviewFilter } from '../state/overview'
 import { useStore } from '../state/store'
 import { useWorkspace } from '../state/workspace'
 import { Popover, Segmented, Spinner, Switch } from './controls'
 import { useNow } from './hooks'
 import { showFireCard } from './shell/fireActions'
+import { useListWindow } from './useListWindow'
+
+/** The list's own top and bottom padding (styles/header.css .picker-list). */
+const LIST_PAD_PX = 4
 
 const STATUS_CLS = { active: 'chip-live', contained: 'chip-ok', out: 'chip-muted' } as const
 
@@ -31,7 +35,7 @@ function bundleChip(s: IncidentSummary): { label: string; cls: string; tip: stri
     case 'error':
       return { label: 'Failed', cls: 'chip-danger', tip: 'The last preparation failed; pick the fire to prepare it again' }
     default:
-      return { label: 'Not prepared', cls: 'chip-muted', tip: 'No analysis yet: pick the fire to see its CAL FIRE record and prepare the analysis (1-3 min)' }
+      return { label: 'Not prepared', cls: 'chip-muted', tip: "No analysis yet: pick the fire to see its agency record and prepare the analysis (1-3 min)" }
   }
 }
 
@@ -112,12 +116,22 @@ function PickerBody({ initial, onPicked }: { initial: OverviewFilter; onPicked: 
     const list = overviewFires(catalog, tab)
     const q = query.trim().toLowerCase()
     if (!q) return list
-    return list.filter((s) => [s.name, s.county, s.location, s.admin_unit, s.id].some((v) => v?.toLowerCase().includes(q)))
+    return list.filter((s) => pickerMatches(s, q))
   }, [catalog, tab, query])
 
-  useEffect(() => {
-    listRef.current?.querySelector<HTMLElement>(`[data-row="${cursor}"]`)?.scrollIntoView({ block: 'nearest' })
-  }, [cursor])
+  // long lists render only the rows near the view (W11: 1,300 national rows)
+  const win = useListWindow(rows.length, listRef, listRef, { padPx: LIST_PAD_PX, rowSelector: ':scope > [data-row]' })
+  /** Move the cursor by the keyboard and keep its row in view (an unrendered row is scrolled in first). */
+  const step = (d: number) => {
+    const next = Math.max(0, Math.min(rows.length - 1, cursor + d))
+    setCursor(next)
+    if (win.reveal(next)) listRef.current?.querySelector<HTMLElement>(`[data-row="${next}"]`)?.scrollIntoView({ block: 'nearest' })
+  }
+  /** A new tab or query starts at the top of its list. */
+  const restart = () => {
+    setCursor(0)
+    listRef.current?.scrollTo({ top: 0 })
+  }
 
   const pick = (s: IncidentSummary) => {
     onPicked()
@@ -129,10 +143,10 @@ function PickerBody({ initial, onPicked }: { initial: OverviewFilter; onPicked: 
 
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
-      setCursor((c) => Math.min(rows.length - 1, c + 1))
+      step(1)
       e.preventDefault()
     } else if (e.key === 'ArrowUp') {
-      setCursor((c) => Math.max(0, c - 1))
+      step(-1)
       e.preventDefault()
     } else if (e.key === 'Enter' && rows[cursor]) {
       pick(rows[cursor])
@@ -150,7 +164,7 @@ function PickerBody({ initial, onPicked }: { initial: OverviewFilter; onPicked: 
           value={tab}
           onChange={(v) => {
             setTab(v)
-            setCursor(0)
+            restart()
           }}
           ariaLabel="Incident list"
           options={OVERVIEW_FILTERS.map((o) => ({
@@ -172,7 +186,7 @@ function PickerBody({ initial, onPicked }: { initial: OverviewFilter; onPicked: 
             value={query}
             onChange={(e) => {
               setQuery(e.target.value)
-              setCursor(0)
+              restart()
             }}
             aria-label="Search incidents"
           />
@@ -192,10 +206,10 @@ function PickerBody({ initial, onPicked }: { initial: OverviewFilter; onPicked: 
         <span>Status</span>
         <span>Analysis</span>
       </div>
-      <div className="picker-list" ref={listRef} role="listbox" aria-label="Incidents">
+      <div className="picker-list" ref={listRef} role="listbox" aria-label="Incidents" data-size={rows.length}>
         {catalog.loading && rows.length === 0 && (
           <div className="picker-empty">
-            <Spinner /> Loading CAL FIRE's list…
+            <Spinner /> Loading the fire lists…
           </div>
         )}
         {!catalog.loading && rows.length === 0 && (
@@ -204,26 +218,28 @@ function PickerBody({ initial, onPicked }: { initial: OverviewFilter; onPicked: 
               <>No incidents match “{query}”.</>
             ) : tab === 'active' ? (
               <>
-                <strong>CAL FIRE lists no active fires right now. That is not an all-clear: follow local officials.</strong>
+                <strong>{emptyListText('active', minAcres)} That is not an all-clear: follow local officials.</strong>
                 <button
                   type="button"
                   className="btn btn-sm btn-gold"
                   onClick={() => {
                     setTab('season')
-                    setCursor(0)
+                    restart()
                   }}
                 >
                   Browse {SEASON_YEAR} fires
                 </button>
               </>
             ) : tab === 'season' ? (
-              <>No {SEASON_YEAR} fires of {SEASON_MIN_ACRES} acres or more in CAL FIRE's list.</>
+              <>{emptyListText('season', minAcres)} That is not an all-clear: follow local officials.</>
             ) : (
-              <>No {PAST_YEAR} fires ≥ {minAcres} acres in CAL FIRE's list.</>
+              <>{emptyListText('past', minAcres)}</>
             )}
           </div>
         )}
-        {rows.map((s, i) => {
+        {win.before > 0 && <div className="picker-spacer" aria-hidden="true" style={{ height: win.before }} />}
+        {(win.windowed ? rows.slice(win.start, win.end) : rows).map((s, k) => {
+          const i = win.start + k
           const st = statusChip(s)
           const b = bundleChip(s)
           return (
@@ -232,6 +248,8 @@ function PickerBody({ initial, onPicked }: { initial: OverviewFilter; onPicked: 
               type="button"
               role="option"
               aria-selected={s.id === currentId}
+              aria-setsize={rows.length}
+              aria-posinset={i + 1}
               data-row={i}
               className={`picker-row ${i === cursor ? 'is-cursor' : ''} ${s.id === currentId ? 'is-current' : ''}`}
               onMouseEnter={() => setCursor(i)}
@@ -240,13 +258,13 @@ function PickerBody({ initial, onPicked }: { initial: OverviewFilter; onPicked: 
               <span className="pr-name">
                 <span className="ellipsis pr-title">{s.name}</span>
                 <span className="ellipsis pr-sub">
-                  {[s.county ? `${s.county} Co.` : null, s.location].filter(Boolean).join(' · ') || s.admin_unit || '—'}
+                  {pickerWhere(s)}
                   {s.mode === 'live' && s.detections_24h != null && <span className="pr-det mono"> · {fmtNumber(s.detections_24h)} det/24 h</span>}
                 </span>
               </span>
               <span className="mono r">{fmtAcresShort(s.acres).replace(' ac', '')}</span>
               <ContainmentBar pct={s.percent_contained} />
-              <span className="mono secondary">{fmtDate(s.started_ms).replace(/, \d{4}$/, '')}</span>
+              <span className="mono secondary">{fmtDayDate(s.started_ms, timeFmt(s.time_zone, '24h').tz)}</span>
               <span>
                 <span className={`chip ${st.cls}`}>{st.label}</span>
               </span>
@@ -259,10 +277,15 @@ function PickerBody({ initial, onPicked }: { initial: OverviewFilter; onPicked: 
             </button>
           )
         })}
+        {win.after > 0 && <div className="picker-spacer" aria-hidden="true" style={{ height: win.after }} />}
       </div>
       <div className="picker-foot">
         <span className="muted">
-          {tab === 'active' ? 'CAL FIRE active fires' : tab === 'season' ? `Active and ${SEASON_YEAR} fires ≥ ${SEASON_MIN_ACRES} ac (CAL FIRE)` : `CAL FIRE ${PAST_YEAR} fires ≥ ${minAcres} ac, by size`}
+          {tab === 'active'
+            ? 'Active fires (CAL FIRE, NIFC WFIGS)'
+            : tab === 'season'
+              ? `Active and ${SEASON_YEAR} fires ≥ ${SEASON_MIN_ACRES} ac (CAL FIRE, NIFC WFIGS)`
+              : `${PAST_YEAR} fires ≥ ${minAcres} ac, by size (CAL FIRE, NIFC WFIGS)`}
           {checked ? <span className="mono"> · list checked {fmtRelative(checked, now)}</span> : null}
           {tab === 'active' && liveStatus?.next_refresh_ms ? <span className="mono"> · next refresh {fmtRelative(liveStatus.next_refresh_ms, now)}</span> : null}
         </span>

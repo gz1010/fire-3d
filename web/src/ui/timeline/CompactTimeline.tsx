@@ -10,9 +10,10 @@ import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent as RKeyb
 import { useShallow } from 'zustand/react/shallow'
 import type { ForecastManifest } from '../../api/types'
 import { forecastDescription, modeledArea } from '../../lib/plainLanguage'
-import { HOUR_MS, fmtDate, fmtDateTime, fmtDateTimeYear, fmtDay, fmtRelative, fmtTime, laDayTicks, tzLabel } from '../../lib/time'
+import { HOUR_MS, fmtAt, fmtClock, fmtDayDate, fmtRelative, localDayTicks, zoneLine, type TimeFmt } from '../../lib/time'
 import { useIncidentAnnotations } from '../../state/annotations'
 import { useStore } from '../../state/store'
+import { useTimeFormat, useZoneSource } from '../../state/timeZone'
 import { useWorkspace } from '../../state/workspace'
 import { Popover } from '../controls'
 import { EVENT_STYLE, type EventKind } from '../eventMeta'
@@ -53,13 +54,14 @@ export function CompactTimeline() {
     })),
   )
   const command = useWorkspace((s) => s.preset === 'command')
+  const tf = useTimeFormat()
   const wall = useNow(30_000)
   const notes = useIncidentAnnotations(st.incidentId)
   const model = useMemo(
     () => (st.manifest ? buildCompactTimeline(st.manifest, st.forecast, st.manifest.time_range.now_ms, wall, { forecastRunId: st.forecastRunId }) : null),
     [st.manifest, st.forecast, st.forecastRunId, wall],
   )
-  const markers = useMemo(() => (st.manifest ? buildFeedItems({ manifest: st.manifest, events: st.events?.events ?? [], annotations: notes }) : []), [st.manifest, st.events, notes])
+  const markers = useMemo(() => (st.manifest ? buildFeedItems({ manifest: st.manifest, events: st.events?.events ?? [], annotations: notes, tf }) : []), [st.manifest, st.events, notes, tf])
 
   if (!model)
     return (
@@ -135,9 +137,9 @@ interface TrackProps {
   command: boolean
 }
 
-function valueText(model: CompactTimelineModel, t: number, command: boolean): string {
+function valueText(model: CompactTimelineModel, t: number, command: boolean, tf: TimeFmt): string {
   const d = describeTime(model, t)
-  const when = `${fmtDateTime(t)} ${tzLabel(t)}`
+  const when = fmtAt(t, tf, { zone: true })
   const fcWord = forecastWord(model.mode, command)
   if (d.currentKind === 'forecast') return `${when}, ${fcWord} +${Math.round(d.leadH ?? 0)} h`
   if (d.currentKind === 'observation') return `${when}, observed${d.inForecastPeriod ? `, ${fcWord} +${Math.round(d.leadH ?? 0)} h` : ''}`
@@ -145,6 +147,7 @@ function valueText(model: CompactTimelineModel, t: number, command: boolean): st
 }
 
 function Track({ model, scale, w, markers, command }: TrackProps) {
+  const tf = useTimeFormat()
   const ref = useRef<HTMLDivElement | null>(null)
   const dragging = useRef<{ wasPlaying: boolean } | null>(null)
   const [hoverX, setHoverX] = useState<number | null>(null)
@@ -231,7 +234,7 @@ function Track({ model, scale, w, markers, command }: TrackProps) {
       <Thumb model={model} scale={scale} w={w} />
       {hoverX != null && hoverT != null && (
         <span className={`ctl-ghost ${hoverX < 50 ? 'is-left' : hoverX > w - 50 ? 'is-right' : ''}`} style={{ left: hoverX }} aria-hidden="true">
-          {fmtDateTime(hoverT)}
+          {fmtAt(hoverT, tf)}
         </span>
       )}
     </div>
@@ -258,14 +261,15 @@ const Lanes = memo(function Lanes({ model, scale, w }: { model: CompactTimelineM
 /** Bright copy of the lanes up to the timeline time (a clipped box; the lanes themselves are memoised). */
 function Played({ model, scale, w, trackRef, command }: { model: CompactTimelineModel; scale: TrackScale; w: number; trackRef: RefObject<HTMLDivElement | null>; command: boolean }) {
   const t = useStore((s) => s.timeMs)
+  const tf = useTimeFormat()
   const x = xAt(scale, w, t)
   // keep the slider's ARIA value current without re-rendering the track
   useEffect(() => {
     const el = trackRef.current
     if (!el) return
     el.setAttribute('aria-valuenow', String(Math.round(t)))
-    el.setAttribute('aria-valuetext', valueText(model, t, command))
-  }, [t, model, trackRef, command])
+    el.setAttribute('aria-valuetext', valueText(model, t, command, tf))
+  }, [t, model, trackRef, command, tf])
   return (
     <div className="ctl-lanes is-played" style={{ width: Math.max(0, x) }}>
       <Lanes model={model} scale={scale} w={w} />
@@ -275,8 +279,9 @@ function Played({ model, scale, w, trackRef, command }: { model: CompactTimeline
 
 /** Day ticks, stop ticks, the NOW / forecast-start marker and the actual current time. */
 const Decor = memo(function Decor({ model, scale, w }: { model: CompactTimelineModel; scale: TrackScale; w: number }) {
+  const tf = useTimeFormat()
   const x = (t: number) => xAt(scale, w, t)
-  const days = laDayTicks(model.startMs, model.trackEndMs, 1).filter((t) => t > model.startMs && t < model.trackEndMs)
+  const days = localDayTicks(model.startMs, model.trackEndMs, tf.tz, 1).filter((t) => t > model.startMs && t < model.trackEndMs)
   const wall = model.wallClockMs
   const showWall = model.mode === 'live' && wall >= model.startMs && wall <= model.trackEndMs && Math.abs(x(wall) - x(model.latestObservationMs)) > 3
   return (
@@ -323,6 +328,7 @@ function spreadPositions(xs: number[], minGap: number): number[] {
 
 function Markers({ markers, scale, w, model }: { markers: FeedItem[]; scale: TrackScale; w: number; model: CompactTimelineModel }) {
   const selected = useStore((s) => s.selectedEventId)
+  const tf = useTimeFormat()
   const visible = markers.filter((m) => m.tMs >= model.startMs && m.tMs <= model.trackEndMs)
   const xs = spreadPositions(
     visible.map((m) => xAt(scale, w, m.tMs)),
@@ -340,8 +346,8 @@ function Markers({ markers, scale, w, model }: { markers: FeedItem[]; scale: Tra
             tabIndex={-1}
             className={`ctl-marker ${sel ? 'is-selected' : ''}`}
             style={{ left: xs[i], color: style?.color ?? 'var(--m-event)' }}
-            aria-label={`${m.title}, ${fmtDateTime(m.tMs)}`}
-            data-tip={`${m.title} · ${fmtDateTime(m.tMs)} ${tzLabel(m.tMs)}`}
+            aria-label={`${m.title}, ${fmtAt(m.tMs, tf)}`}
+            data-tip={`${m.title} · ${fmtAt(m.tMs, tf, { zone: true })}`}
             onClick={() => selectFeedItem(m)}
           />
         )
@@ -354,9 +360,9 @@ function Markers({ markers, scale, w, model }: { markers: FeedItem[]; scale: Tra
 const SHORT: Partial<Record<string, string>> = { 'Forecast start': 'Start', 'Latest data': 'Latest' }
 const labelWidth = (s: string) => s.length * 6.4 + 14
 
-function stopTip(s: TimelineStop): string {
+function stopTip(s: TimelineStop, tf: TimeFmt): string {
   if (!s.available || s.tMs == null) return `${s.label}: not available. ${s.reason ?? ''}`.trim()
-  return `${s.description}: ${fmtDateTime(s.tMs)} ${tzLabel(s.tMs)}`
+  return `${s.description}: ${fmtAt(s.tMs, tf, { zone: true })}`
 }
 
 /** Stop labels spread under the track: the full labels while each still covers its point, else the short ones. */
@@ -377,6 +383,7 @@ function layoutStops(model: CompactTimelineModel, scale: TrackScale, w: number) 
 
 function Stops({ model, scale, w }: { model: CompactTimelineModel; scale: TrackScale; w: number }) {
   const activeId = useStore((s) => activeStop(model, s.timeMs)?.id ?? null)
+  const tf = useTimeFormat()
   const { placed, grouped, label, centers } = useMemo(() => layoutStops(model, scale, w), [model, scale, w])
   const jump = (s: TimelineStop) => {
     if (!s.available || s.tMs == null) return
@@ -392,8 +399,8 @@ function Stops({ model, scale, w }: { model: CompactTimelineModel; scale: TrackS
       style={style}
       aria-disabled={!s.available}
       aria-current={activeId === s.id ? 'time' : undefined}
-      aria-label={s.available && s.tMs != null ? `${s.label}: ${s.description}, ${fmtDateTime(s.tMs)} ${tzLabel(s.tMs)}` : `${s.label}: not available, ${s.reason ?? ''}`}
-      data-tip={stopTip(s)}
+      aria-label={s.available && s.tMs != null ? `${s.label}: ${s.description}, ${fmtAt(s.tMs, tf, { zone: true })}` : `${s.label}: not available, ${s.reason ?? ''}`}
+      data-tip={stopTip(s, tf)}
       onClick={() => jump(s)}
     >
       {label(s)}
@@ -430,6 +437,8 @@ const FORECAST_STATE: Record<string, string> = {
 
 function Status({ model, forecast, command }: { model: CompactTimelineModel; forecast: ForecastManifest | null; command: boolean }) {
   const minute = useStore((s) => Math.floor(s.timeMs / 60_000))
+  const tf = useTimeFormat()
+  const zoneSource = useZoneSource()
   const t = minute * 60_000
   const d = describeTime(model, t)
   const live = model.mode === 'live'
@@ -447,9 +456,9 @@ function Status({ model, forecast, command }: { model: CompactTimelineModel; for
         <time
           className="ctl-time"
           dateTime={new Date(t).toISOString()}
-          data-tip={`Time shown on the map${fc && d.inForecastPeriod ? ' (the forecast valid time)' : ''}${command ? ` · ${new Date(t).toISOString().slice(0, 16).replace('T', ' ')} UTC` : ''}`}
+          data-tip={`Time shown on the map${fc && d.inForecastPeriod ? ' (the forecast valid time)' : ''}. ${zoneLine(tf, t, zoneSource)}${command ? ` · ${new Date(t).toISOString().slice(0, 16).replace('T', ' ')} UTC` : ''}`}
         >
-          {fmtDateTime(t)} {tzLabel(t)}
+          {fmtAt(t, tf, { zone: true })}
         </time>
         <span className={`ctl-kind is-${d.currentKind}`}>
           <KindGlyph kind={d.currentKind} />
@@ -461,7 +470,7 @@ function Status({ model, forecast, command }: { model: CompactTimelineModel; for
       ) : (
         <span className="ctl-fcinfo is-missing">{model.forecastStatus === 'none' && !live ? (command ? 'No hindcast run for this fire' : 'No model re-run for this fire') : (FORECAST_STATE[model.forecastStatus] ?? '')}</span>
       )}
-      {live ? <Freshness model={model} /> : <span className="ctl-replay">Historical replay · {fmtDate(model.startMs)} – {fmtDate(model.latestObservationMs)}</span>}
+      {live ? <Freshness model={model} /> : <span className="ctl-replay">Historical replay · {fmtDayDate(model.startMs, tf.tz, { year: 'always' })} – {fmtDayDate(model.latestObservationMs, tf.tz, { year: 'always' })}</span>}
     </div>
   )
 }
@@ -470,11 +479,12 @@ function ForecastInfo({ model, forecast, t, command }: { model: CompactTimelineM
   const [open, setOpen] = useState(false)
   const anchor = useRef<HTMLButtonElement | null>(null)
   const units = useWorkspace((s) => s.units)
+  const tf = useTimeFormat()
   const live = model.mode === 'live'
   const fc = model.forecast
   if (!fc) return null
-  const issued = live ? `Issued ${fmtDateTime(fc.issuedMs)} ${tzLabel(fc.issuedMs)}` : command ? `Hindcast run ${fmtDate(fc.issuedMs)}` : `Model re-run on past weather · ${fmtDate(fc.issuedMs)}`
-  const desc = forecastDescription(forecast, model.mode, { plain: !command })
+  const issued = live ? `Issued ${fmtAt(fc.issuedMs, tf, { zone: true })}` : command ? `Hindcast run ${fmtDayDate(fc.issuedMs, tf.tz, { year: 'always' })}` : `Model re-run on past weather · ${fmtDayDate(fc.issuedMs, tf.tz, { year: 'always' })}`
+  const desc = forecastDescription(forecast, model.mode, { plain: !command, tf })
   const title = desc.title
   const areaNow = modeledArea(forecast, t, units)
   const warn = model.forecastNotes.length > 0
@@ -501,12 +511,12 @@ function ForecastInfo({ model, forecast, t, command }: { model: CompactTimelineM
           <dl>
             <dt>Map shows</dt>
             <dd>
-              {fmtDateTime(t)} {tzLabel(t)} ({validWhere})
+              {fmtAt(t, tf, { zone: true })} ({validWhere})
             </dd>
             <dt>Period</dt>
             <dd>{desc.period}</dd>
             <dt>{live ? 'Issued' : 'Run'}</dt>
-            <dd>{live ? `${fmtDateTime(fc.issuedMs)} ${tzLabel(fc.issuedMs)}` : `${fmtDateTimeYear(fc.issuedMs)} ${tzLabel(fc.issuedMs)}, after the fire`}</dd>
+            <dd>{live ? `${fmtAt(fc.issuedMs, tf, { zone: true })}` : `${fmtAt(fc.issuedMs, tf, { year: 'always', zone: true })}, after the fire`}</dd>
             <dt>Model runs</dt>
             <dd>{desc.runs}</dd>
             {command && (
@@ -521,7 +531,7 @@ function ForecastInfo({ model, forecast, t, command }: { model: CompactTimelineM
               <>
                 <dt>Modeled area</dt>
                 <dd>
-                  {areaNow.text} by {fmtDateTime(areaNow.tMs)} {tzLabel(areaNow.tMs)}
+                  {areaNow.text} by {fmtAt(areaNow.tMs, tf, { zone: true })}
                 </dd>
               </>
             )}
@@ -554,8 +564,9 @@ function Freshness({ model }: { model: CompactTimelineModel }) {
   const latest = model.latestObservationMs
   const wall = model.wallClockMs
   const stale = model.stale.isStale
-  // the date only when it is not the current day (Pacific)
-  const fmt = (ms: number) => (fmtDay(ms) !== fmtDay(wall) ? `${fmtDateTime(ms)} ${tzLabel(ms)}` : `${fmtTime(ms)} ${tzLabel(ms)}`)
+  const tf = useTimeFormat()
+  // the date only when it is not the current day (in the fire's zone)
+  const fmt = (ms: number) => (fmtDayDate(ms, tf.tz) !== fmtDayDate(wall, tf.tz) ? fmtAt(ms, tf, { zone: true }) : fmtClock(ms, tf, { zone: true }))
   const tip = `Latest observation = the newest satellite detection, mapped perimeter or confirmed satellite pass over the fire that saw no new fire. Fire-3d flags live data as stale when that is more than ${STALE_AFTER_MS / HOUR_MS} h older than the current time. Satellites pass over only a few times a day, so gaps can be normal; it means "check the time", not "the fire is out". Data last refreshed ${fmtRelative(model.checkedMs, wall)}.`
   return (
     <span className="ctl-fresh">

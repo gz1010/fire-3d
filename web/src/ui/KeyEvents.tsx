@@ -7,11 +7,12 @@
 import { Plus, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { fmtDateTime, tzLabel } from '../lib/time'
+import { fmtAt } from '../lib/time'
 import { useSceneStore } from '../scene/sceneStore'
 import { useAnnotations, useIncidentAnnotations } from '../state/annotations'
 import { lastIndexAtOrBefore } from '../state/selectors'
 import { useStore } from '../state/store'
+import { useTimeFormat } from '../state/timeZone'
 import { Popover } from './controls'
 import { CONFIDENCE_LABEL, EVENT_STYLE } from './eventMeta'
 import { buildFeedItems, selectFeedItem } from './feed/feedModel'
@@ -20,13 +21,14 @@ import './feed/keyEvents.css'
 import { goToItem, mergeEvents, type TimelineItem } from './timelineModel'
 
 export function KeyEvents() {
+  const tf = useTimeFormat()
   const { events, incidentId, selected, manifest } = useStore(
     useShallow((s) => ({ events: s.events, incidentId: s.incidentId, selected: s.selectedEventId, manifest: s.manifest?.status === 'ready' ? s.manifest : null })),
   )
   const ready = manifest != null
   const notes = useIncidentAnnotations(incidentId)
   const items = useMemo(() => mergeEvents(events?.events, notes), [events, notes])
-  const feed = useMemo(() => new Map(buildFeedItems({ manifest, events: events?.events ?? [], annotations: notes }).map((f) => [f.id, f])), [manifest, events, notes])
+  const feed = useMemo(() => new Map(buildFeedItems({ manifest, events: events?.events ?? [], annotations: notes, tf }).map((f) => [f.id, f])), [manifest, events, notes, tf])
   const times = useMemo(() => items.map((i) => i.t), [items])
   const current = useStore((s) => lastIndexAtOrBefore(times, s.timeMs))
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -77,7 +79,7 @@ export function KeyEvents() {
                       <KindIcon size={11} aria-hidden="true" />
                     </span>
                   )}
-                  <span className="ke-time mono">{fmtDateTime(it.t)}</span>
+                  <span className="ke-time mono">{fmtAt(it.t, tf)}</span>
                 </span>
               </button>
               {it.kind === 'annotation' && incidentId && (
@@ -94,6 +96,7 @@ export function KeyEvents() {
 }
 
 function AddAnnotation({ incidentId, disabled }: { incidentId: string | null; disabled: boolean }) {
+  const tf = useTimeFormat()
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState('')
   const anchor = useRef<HTMLButtonElement | null>(null)
@@ -129,7 +132,7 @@ function AddAnnotation({ incidentId, disabled }: { incidentId: string | null; di
           <input autoFocus className="text-input" placeholder="e.g. Spot fire across the river" value={title} maxLength={80} onChange={(e) => setTitle(e.target.value)} />
           <div className="add-row">
             <span className="mono muted small">
-              {fmtDateTime(timeMs)} {tzLabel(timeMs)}
+              {fmtAt(timeMs, tf, { zone: true })}
             </span>
             <button type="submit" className="btn btn-sm btn-gold">
               Add

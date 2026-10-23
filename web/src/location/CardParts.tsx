@@ -66,6 +66,15 @@ export function CardFrame(props: { sel: SelectedLocation; title: string; titleIs
   )
 }
 
+/** Brief 3 (§14.14): the point is not covered (Alaska, Hawaii, territories, outside the US), from /api/geo/lookup. */
+export function CoverageNotice({ text }: { text: string }) {
+  return (
+    <p className="loc-coverage" role="note">
+      {text}
+    </p>
+  )
+}
+
 /** Block 2: official information. Always at least one evacuation line; NWS only while an alert applies here. */
 export function OfficialSection({ block, compact }: { block: OfficialBlock; compact: boolean }) {
   const evac = compact ? block.evacuation.slice(0, 1) : block.evacuation

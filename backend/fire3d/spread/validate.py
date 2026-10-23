@@ -110,6 +110,15 @@ def skill_from_arrays(
     return out
 
 
+def skill_entry(row: dict) -> dict:
+    """A ``SkillEntry`` from a :func:`skill_from_arrays` row made with ``growth=True``: the total-area Sørensen and
+    ``growth_sorensen`` (the new growth only, the area burned at the start excluded; CONTRACT 14.12.7, V-R13)."""
+    out = {k: row[k] for k in ("lead_h", "sorensen", "observed_acres", "forecast_acres_p50")}
+    if row.get("sorensen_growth") is not None:
+        out["growth_sorensen"] = row["sorensen_growth"]
+    return out
+
+
 def hindcast_skill(
     forecast_dir: Path,
     observed_arrival: np.ndarray,
@@ -117,8 +126,9 @@ def hindcast_skill(
     lead_hours: Sequence[float] = LEAD_HOURS,
     data_end_ms: int | None = None,
 ) -> list[dict]:
-    """``[{lead_h, sorensen, observed_acres, forecast_acres_p50}]`` comparing a written forecast's p50 with the
-    observed arrival at each lead time inside the horizon and the data range.
+    """``[{lead_h, sorensen, observed_acres, forecast_acres_p50, growth_sorensen}]`` (the forecast manifest's
+    ``skill`` shape) comparing a written forecast's p50 with the observed arrival at each lead time inside the horizon
+    and the data range.
 
     ``forecast_dir`` is ``<bundle>/forecasts/<run_id>``. ``observed_arrival`` is in hours since ``time_origin_ms``
     (default: the forecast's own origin; a different origin is shifted). ``data_end_ms`` limits the leads to
@@ -141,7 +151,9 @@ def hindcast_skill(
         res = float(doc["model"]["grid_res_m"])
     start_h = (int(doc["start_ms"]) - origin) / config.MS_PER_H
     end_h = None if data_end_ms is None else (int(data_end_ms) - origin) / config.MS_PER_H
-    return skill_from_arrays(p50, obs, start_h, res, lead_hours, horizon_h=float(doc["horizon_h"]), data_end_h=end_h)
+    rows = skill_from_arrays(p50, obs, start_h, res, lead_hours, horizon_h=float(doc["horizon_h"]), data_end_h=end_h,
+                             growth=True)
+    return [skill_entry(r) for r in rows]
 
 
 # ----------------------------------------------------------------------------------------------------------------

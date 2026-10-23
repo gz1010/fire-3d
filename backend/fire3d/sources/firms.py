@@ -31,8 +31,14 @@ contaminated, 13/33 high, 14/34 medium, 15/35 low probability). It is mapped to 
 
 Network: everything goes through :mod:`fire3d.http` (the area API is rate limited there; cache hits are free).
 The MAP_KEY only ever appears inside request URLs; messages are passed through ``config.mask_secrets``.
-DataFrames returned by :func:`detections_for` / :func:`fetch_area` / :func:`load_live_ca` carry
+DataFrames returned by :func:`detections_for` / :func:`fetch_area` / :func:`load_live_us` carry
 ``df.attrs["sources"]`` (what was fetched, how) and ``df.attrs["warnings"]``.
+
+Brief 3 (CONTRACT 14.12.1): the keyless loaders are national. :func:`load_live_us` and :func:`load_year_us` keep the
+lower-48 box with a 0.5-degree margin (:data:`L48_FIRMS_BOX`; border fires keep their Canadian and Mexican
+detections; Hawaii and Alaska rows are dropped); the yearly archive is cached as ``firms_us_{year}.parquet`` (sorted
+by longitude) and read with pyarrow ``filters=`` on lon/lat. ``load_live_ca`` / ``load_year_ca`` remain as deprecated
+wrappers (the California box cut of the national loaders).
 """
 
 from __future__ import annotations
@@ -609,7 +615,7 @@ def fetch_area(source: str, bbox: Sequence[float], start_ms: int, end_ms: int, *
     if source not in SOURCES:
         raise ValueError(f"unknown FIRMS source {source!r} (one of {sorted(SOURCES)})")
     if not config.FIRMS_MAP_KEY:
-        raise FirmsKeyMissing("FIRMS_MAP_KEY is not set; use load_live_ca / load_year_ca")
+        raise FirmsKeyMissing("FIRMS_MAP_KEY is not set; use load_live_us / load_year_us")
     if availability is None:
         availability = data_availability()
     chunks = area_chunks(source, bbox, start_ms, end_ms, availability)
@@ -629,11 +635,25 @@ def _live_window(days: float) -> str:
     return "24h" if days <= 1 else "48h" if days <= 2 else "7d"
 
 
+# The lower 48 with a 0.5-degree margin (w, s, e, n): Hawaii (lat < 23) and Alaska (lat > 51) fall outside.
+L48_FIRMS_BOX: tuple[float, float, float, float] = (-125.4, 23.9, -66.4, 49.9)
+YEARLY_ROW_GROUP = 50_000
+
+
+def load_live_us(days: float = 7, *, refresh: bool = False) -> pd.DataFrame:
+    """Lower-48 detections (:data:`L48_FIRMS_BOX`) from the keyless live CSV feeds (Suomi NPP, NOAA-20, NOAA-21
+    VIIRS and MODIS "USA_contiguous_and_Hawaii"; one request per feed, cached 10 min): the 24h feed for ``days <= 1``,
+    48h for ``<= 2``, else 7d (feeds hold at most 7 days; other ``days`` values are trimmed to the last ``days * 24``
+    h). Raises :class:`FirmsError` only when every feed failed."""
+    return _load_live(days, L48_FIRMS_BOX, refresh)
+
+
 def load_live_ca(days: float = 7, *, refresh: bool = False) -> pd.DataFrame:
-    """California detections from the keyless live CSV feeds (Suomi NPP, NOAA-20, NOAA-21 VIIRS and MODIS; one
-    request per feed, cached 10 min): the 24h feed for ``days <= 1``, 48h for ``<= 2``, else 7d (feeds hold at most
-    7 days; other ``days`` values are trimmed to the last ``days * 24`` h). Raises :class:`FirmsError` only when every
-    feed failed."""
+    """DEPRECATED (brief 3; use :func:`load_live_us`): the same feeds cut to the SPEC's California box."""
+    return _load_live(days, config.CA_BBOX, refresh)
+
+
+def _load_live(days: float, bbox: Sequence[float], refresh: bool) -> pd.DataFrame:
     window = _live_window(days)
     frames, sources, warnings = [], [], []
     for dir_, prefix, source in LIVE_FEEDS:
@@ -649,7 +669,7 @@ def load_live_ca(days: float = 7, *, refresh: bool = False) -> pd.DataFrame:
         except fhttp.HttpError as e:
             warnings.append(f"FIRMS live feed {prefix}_{window}: {e}")
             continue
-        df = filter_bbox_time(df, config.CA_BBOX)
+        df = filter_bbox_time(df, bbox)
         frames.append(df)
         sources.append({"source": source, "via": f"csv_feed_{window}", "requests": 1, "failed": 0, "rows": int(len(df)), "fetched_ms": fetched})
     if not frames:
@@ -661,37 +681,48 @@ def load_live_ca(days: float = 7, *, refresh: bool = False) -> pd.DataFrame:
 
 
 def _yearly_parquet(year: int) -> Path:
-    return Path(config.CACHE_DIR) / "firms" / f"firms_ca_{int(year)}.parquet"
+    return Path(config.CACHE_DIR) / "firms" / f"firms_us_{int(year)}.parquet"
 
 
-def load_year_ca(year: int = 2025) -> pd.DataFrame:
-    """All California detections of ``year`` from the keyless yearly archives (Suomi NPP VIIRS + MODIS only; SPEC 2).
+def _year_frame(path: Path, year: int, bbox: Sequence[float] | None) -> pd.DataFrame:
+    """Read the yearly parquet, keeping only ``bbox`` rows (pyarrow ``filters=``: row groups outside are skipped)."""
+    filters = None
+    if bbox is not None:
+        w, s, e, n = (float(v) for v in bbox)
+        filters = [("lon", ">=", w), ("lon", "<=", e), ("lat", ">=", s), ("lat", "<=", n)]
+    df = pd.read_parquet(path, engine="pyarrow", filters=filters).reset_index(drop=True)
+    return _with_attrs(df, [{"source": s_, "via": "yearly_archive", "rows": int(n_), "year": year}
+                            for s_, n_ in df["source"].value_counts().items()], [])
 
-    The two CSVs (~46 MB for 2025) are downloaded once, filtered to the California bbox and cached as
-    ``CACHE_DIR/firms/firms_ca_{year}.parquet`` (the raw CSVs are then deleted). ``source`` is "VIIRS_SNPP_SP" /
-    "MODIS_SP" for standard-processing rows and ``*_NRT`` for rows the archive still holds as NRT. Only completed
-    years exist (raises :class:`FirmsError` otherwise, or when the download fails)."""
+
+def load_year_us(year: int, bbox: tuple | None = None) -> pd.DataFrame:
+    """Lower-48 detections of ``year`` from the keyless yearly archives (Suomi NPP VIIRS + MODIS only; SPEC 2),
+    optionally only those inside ``bbox`` (w, s, e, n).
+
+    The two national CSVs (~46 MB for 2025) are downloaded once, cut to :data:`L48_FIRMS_BOX`, sorted by longitude
+    and cached as ``CACHE_DIR/firms/firms_us_{year}.parquet`` (row groups of 50,000; the raw CSVs are then deleted).
+    Reads use pyarrow ``filters=`` on lon/lat, so a fire's bbox never loads the whole year. ``source`` is
+    "VIIRS_SNPP_SP" / "MODIS_SP" for standard-processing rows and ``*_NRT`` for rows the archive still holds as NRT.
+    Only completed years exist (raises :class:`FirmsError` otherwise, or when the download fails)."""
     year = int(year)
     if year >= _utc_date(now_ms()).year:
         raise FirmsError(f"FIRMS yearly archive {year}: only completed years are published")
     path = _yearly_parquet(year)
     with _year_lock:
         if path.is_file():
-            df = pd.read_parquet(path)
-            return _with_attrs(df.reset_index(drop=True), [{"source": s, "via": "yearly_archive", "rows": int(n), "year": year}
-                                                           for s, n in df["source"].value_counts().items()], [])
+            return _year_frame(path, year, bbox)
         raw_dir = path.parent / "raw"
         raw_dir.mkdir(parents=True, exist_ok=True)
         frames: list[pd.DataFrame] = []
         downloaded: list[Path] = []
-        w, s, e, n = config.CA_BBOX
+        w, s, e, n = L48_FIRMS_BOX
         for product, prefix in YEARLY_PRODUCTS:
             url = YEARLY_URL.format(product=product, year=year)
             dest = raw_dir / f"{product}_{year}_United_States.csv"
             try:
                 fhttp.stream_download(url, dest, timeout=600.0)
-            except fhttp.HttpError as e:
-                raise FirmsError(f"FIRMS yearly archive {product} {year} unavailable: {e}") from None
+            except fhttp.HttpError as e_:
+                raise FirmsError(f"FIRMS yearly archive {product} {year} unavailable: {e_}") from None
             downloaded.append(dest)
             t0 = time.time()
             for part in pd.read_csv(dest, dtype=str, keep_default_na=False, chunksize=250_000):
@@ -706,17 +737,24 @@ def load_year_ca(year: int = 2025) -> pd.DataFrame:
                     frames.append(normalize_frame(part[nrt], f"{prefix}_NRT"))
                 else:
                     frames.append(normalize_frame(part, f"{prefix}_SP"))
-            log.info("FIRMS yearly %s %d: California rows parsed in %.1f s", product, year, time.time() - t0)
+            log.info("FIRMS yearly %s %d: lower-48 rows parsed in %.1f s", product, year, time.time() - t0)
         df = concat_frames(frames)
+        df = df.sort_values(["lon", "t_ms"], kind="stable").reset_index(drop=True)
         tmp = path.with_suffix(".parquet.tmp")
-        df.to_parquet(tmp, index=False)
+        df.to_parquet(tmp, index=False, engine="pyarrow", row_group_size=YEARLY_ROW_GROUP)
         os.replace(tmp, path)
-        for p in downloaded:                      # keep data/ small: the parquet holds everything we use
+        for p_ in downloaded:                     # keep data/ small: the parquet holds everything we use
             try:
-                p.unlink()
+                p_.unlink()
             except FileNotFoundError:
                 pass
-    return _with_attrs(df, [{"source": s, "via": "yearly_archive", "rows": int(c), "year": year} for s, c in df["source"].value_counts().items()], [])
+    return _year_frame(path, year, bbox)
+
+
+def load_year_ca(year: int = 2025) -> pd.DataFrame:
+    """DEPRECATED (brief 3; use :func:`load_year_us`): the yearly archive's rows inside the SPEC's California box,
+    read from ``firms_us_{year}.parquet``."""
+    return load_year_us(year, config.CA_BBOX)
 
 
 # ------------------------------------------------------------------------------------------------------------------
@@ -733,7 +771,7 @@ def _keyless(bbox: Sequence[float], start_ms: int, end_ms: int, mode: str, instr
     if want_archive:
         for year in range(_utc_date(start_ms).year, _utc_date(min(end_ms, now)).year + 1):
             try:
-                df = load_year_ca(year)
+                df = load_year_us(year, tuple(bbox))
             except FirmsError as e:
                 warnings.append(f"keyless yearly archive {year} unavailable ({e})")
                 continue
@@ -741,7 +779,7 @@ def _keyless(bbox: Sequence[float], start_ms: int, end_ms: int, mode: str, instr
             sources += df.attrs.get("sources", [])
     if end_ms >= live_covered_from:
         try:
-            df = load_live_ca(7)
+            df = load_live_us(7)
             frames.append(filter_bbox_time(df, bbox, start_ms, end_ms))
             sources += df.attrs.get("sources", [])
             warnings += df.attrs.get("warnings", [])

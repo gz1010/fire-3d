@@ -126,6 +126,7 @@ def hist(tmp_data_dir: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[BuildCont
 @pytest.fixture
 def live(tmp_data_dir: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[BuildContext, FakeSource]:
     monkeypatch.setattr(WB, "now_ms", lambda: NOW)
+    monkeypatch.setattr(WB.config, "LIVE_WEATHER_REFETCH_S", 0.0)     # these tests exercise the live fetch path
     monkeypatch.setattr(WB, "water_year_precip", _fake_water_year_precip)
     ctx, _ = make_ctx(tmp_data_dir, "live", NOW - 2 * DAY_MS)
     src = FakeSource(ctx.fire_grid, hrrr_until=floor_hour_ms(NOW) + 40 * HOUR_MS, forecast_from=floor_hour_ms(NOW) + HOUR_MS)

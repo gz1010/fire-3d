@@ -26,13 +26,12 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable, Sequence
-from zoneinfo import ZoneInfo
 
 import numpy as np
 
 from .. import config
 from .. import http as fhttp
-from ..timeutil import HOUR_MS, now_ms
+from ..timeutil import HOUR_MS, fmt_local_short, now_ms
 
 log = logging.getLogger(__name__)
 
@@ -47,7 +46,6 @@ REQUEST_TIMEOUT_S = 20.0
 INGEST_MARGIN_MS = 30 * 60_000       # a granule published this long before the FIRMS fetch is in FIRMS (FIRMS is LANCE)
 UNPUBLISHED_LATENCY_MS = 3 * HOUR_MS  # no publish time: FIRMS' documented NRT latency ("within 3 hours")
 MATCH_SLACK_MS = 60_000              # FIRMS acq_time has minute precision
-LA_TZ = ZoneInfo("America/Los_Angeles")
 
 _limiter = fhttp.RateLimiter(MAX_REQUESTS_PER_MIN, 60.0, "NASA CMR (satellite passes)")
 
@@ -90,9 +88,9 @@ class Pass:
         return {"t_ms": self.t_ms, "t_end_ms": self.t_end_ms, "satellite": self.satellite, "instrument": self.instrument,
                 "label": self.label, "daynight": self.daynight, "published_ms": self.published_ms, "product": self.product}
 
-    def describe(self) -> str:
-        """``"NOAA-21 VIIRS, Oct 17 14:24 PDT (day)"``."""
-        return f"{self.label}, {la_time(self.t_ms)} ({'day' if self.daynight == 'D' else 'night'})"
+    def describe(self, tz: str | None = None) -> str:
+        """``"NOAA-21 VIIRS, Oct 17 14:24 PDT (day)"`` in the fire's zone ``tz`` (UTC when None)."""
+        return f"{self.label}, {pass_time(self.t_ms, tz)} ({'day' if self.daynight == 'D' else 'night'})"
 
 
 class PassList(list):
@@ -110,10 +108,14 @@ class PassList(list):
         return not self.errors
 
 
-def la_time(ms: int) -> str:
-    """``"Oct 17 14:24 PDT"``."""
-    d = datetime.fromtimestamp(ms / 1000.0, LA_TZ)
-    return f"{d.strftime('%b')} {d.day} {d.strftime('%H:%M %Z')}"
+def pass_time(ms: int, tz: str | None = None) -> str:
+    """``"Oct 17 14:24 PDT"`` in the fire's zone ``tz`` (UTC when None; never an assumed Pacific time)."""
+    return fmt_local_short(int(ms), tz)
+
+
+def la_time(ms: int, tz: str | None = None) -> str:
+    """Deprecated alias of :func:`pass_time` (brief 3)."""
+    return pass_time(ms, tz)
 
 
 def iso_to_ms(value: object) -> int | None:

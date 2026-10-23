@@ -256,13 +256,15 @@ export interface LocationReport {
 /** What a geocode match is: a Census street address (interpolated), or a local Gazetteer town / ZIP area (the
  *  area's internal point). Brief 2 addition; replies without `kind` are street addresses. */
 export type GeocodeKind = 'address' | 'place' | 'zip'
-export type PlaceType = 'city' | 'town' | 'cdp' | 'place'
+/** Census LSAD in plain words (brief 3, §14.10: every LSAD of the national Gazetteer, plus counties). */
+export type PlaceType = 'city' | 'town' | 'village' | 'borough' | 'cdp' | 'county' | 'place' | (string & {})
 
-/** GET /api/geocode?q=<street address | California town | ZIP code> (CONTRACT §6). JSON mirrors the backend. */
+/** GET /api/geocode?q=<street address | US town ("Boise, ID") | ZIP code ("83702 ID")> (CONTRACT §6, §14.10). JSON
+ *  mirrors the backend. */
 export interface GeocodeMatch {
   /** Addition (brief 2): absent on older replies = 'address'. */
   kind?: GeocodeKind
-  /** Street addresses: Census matchedAddress; towns "Altadena, CA"; ZIP areas "ZIP 91001, CA". */
+  /** Street addresses: Census matchedAddress; towns "Boise, ID"; ZIP areas "ZIP 83702, ID". */
   matched_address: string
   lat: number
   lon: number
@@ -285,6 +287,12 @@ export interface GeocodeMatch {
   /** Nearest other place (same-named towns; the place a ZIP area lies in or near). */
   near?: string | null
   near_km?: number | null
+  /** Brief 3 (§14.10, local matches): USPS state code, its name, the county (name or null). */
+  state?: string | null
+  state_name?: string | null
+  county?: string | null
+  /** False in Alaska, Hawaii and the territories: the row stays, with the "not supported yet" note. */
+  supported?: boolean
 }
 
 export interface GeocodeResponse {

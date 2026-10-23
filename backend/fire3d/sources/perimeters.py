@@ -16,6 +16,11 @@
   ``object_id``       OBJECTID in the source layer; ``date_current_ms``: ``poly_DateCurrent`` (last edit) or None
   ``discovery_ms``    IRWIN ``attr_FireDiscoveryDateTime`` (int) or None; can be earlier than CAL FIRE "Started"
 
+Brief 3 (CONTRACT 14.12.8): a fire whose record is NIFC WFIGS's (``record_source="wfigs"``) is matched by its IRWIN id
+(``attr_IrwinID`` / ``poly_IRWINID``) when known, else by name and its own state (``attr_POOState``); there is no
+CAL FIRE hint for it, and the size check stays. California rows (``record_source="calfire"``, the default, complexes
+included) take exactly the path below.
+
 Matching (the layers are messy: names recur across years and states, many duplicate edits):
   * name: "Fire"/"Complex" suffixes stripped, ``LIKE`` on ``poly_IncidentName`` OR ``attr_IncidentName`` (plus
     ``attr_CpxName`` for CAL FIRE complexes), then whole-token matching client-side ("KEATON" is not "EATON");
@@ -169,17 +174,44 @@ def _ts(ms: int) -> str:
     return datetime.fromtimestamp(ms / 1000.0, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
-def build_where(name: str, start_ms: int, *, include_complex: bool = False) -> str:
-    """Server-side filter: state, name ``LIKE`` (tokens joined by ``%``) and a coarse discovery-time window."""
+def build_where(name: str, start_ms: int, *, include_complex: bool = False, state: str = STATE) -> str:
+    """Server-side filter: state (``US-CA`` unless given), name ``LIKE`` (tokens joined by ``%``) and a coarse
+    discovery-time window."""
     toks = name_tokens(name)
     if not toks:
         raise ValueError(f"cannot match an empty fire name: {name!r}")
+    if not re.fullmatch(r"US-[A-Z]{2}", state):
+        raise ValueError(f"invalid WFIGS state code {state!r}")
     pat = "%" + "%".join(toks) + "%"          # tokens are [A-Z0-9]+: nothing to escape
     fields = ["poly_IncidentName", "attr_IncidentName"] + (["attr_CpxName"] if include_complex else [])
     like = " OR ".join(f"UPPER({f}) LIKE '{pat}'" for f in fields)
     a, b = _ts(start_ms - SERVER_DISCOVERY_SLACK_MS), _ts(start_ms + SERVER_DISCOVERY_SLACK_MS)
-    return (f"attr_POOState='{STATE}' AND ({like}) AND (attr_FireDiscoveryDateTime IS NULL OR "
+    return (f"attr_POOState='{state}' AND ({like}) AND (attr_FireDiscoveryDateTime IS NULL OR "
             f"(attr_FireDiscoveryDateTime >= TIMESTAMP '{a}' AND attr_FireDiscoveryDateTime <= TIMESTAMP '{b}'))")
+
+
+_IRWIN_RE = re.compile(r"[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}")
+
+
+def norm_irwin(v: Any) -> str | None:
+    """An IRWIN id upper case without braces, or None when it is not one."""
+    s = str(v or "").strip().strip("{}").upper()
+    return s if _IRWIN_RE.fullmatch(s) else None
+
+
+def irwin_where(irwin_id: str) -> str:
+    """Server-side filter on the IRWIN id in either field, with or without braces (WFIGS stores both forms)."""
+    x = norm_irwin(irwin_id)
+    if x is None:
+        raise ValueError(f"not an IRWIN id: {irwin_id!r}")
+    forms = f"('{{{x}}}', '{x}')"
+    return f"(UPPER(attr_IrwinID) IN {forms} OR UPPER(poly_IRWINID) IN {forms})"
+
+
+def wfigs_state(state: str | None) -> str | None:
+    """``"MT"`` -> ``"US-MT"`` (WFIGS ``attr_POOState``); None for anything else."""
+    st = str(state or "").strip().upper()
+    return f"US-{st}" if re.fullmatch(r"[A-Z]{2}", st) else None
 
 
 # ------------------------------------------------------------------------------------------------------------------
@@ -315,21 +347,31 @@ def _key(a: dict) -> str:
     return irwin or "name:" + name_core(a.get("poly_IncidentName") or a.get("attr_IncidentName"))
 
 
-def identity_filter(records: list[dict], name: str, lat: float, lon: float, start_ms: int, *, complex_: bool | None = None) -> list[dict]:
-    """Records that belong to this fire by state, category, name tokens, discovery time and (coarse) origin."""
+def identity_filter(records: list[dict], name: str, lat: float, lon: float, start_ms: int, *, complex_: bool | None = None,
+                    state: str = STATE, irwin_id: str | None = None) -> list[dict]:
+    """Records that belong to this fire by state, category, name tokens, discovery time and (coarse) origin. With
+    ``irwin_id`` (a WFIGS fire) the IRWIN id replaces the name and state tests."""
     core = name_tokens(name)
     if complex_ is None:
         complex_ = "COMPLEX" in str(name).upper()
     lo, hi = start_ms - DISCOVERY_BEFORE_MS, start_ms + DISCOVERY_AFTER_MS
+    want = norm_irwin(irwin_id) if irwin_id else None
     out = []
     for a in records:
-        if (a.get("attr_POOState") or "").strip().upper() != STATE:
-            continue
         cat = (a.get("poly_FeatureCategory") or "").lower()
+        if want is not None:
+            if want not in (norm_irwin(a.get("attr_IrwinID")), norm_irwin(a.get("poly_IRWINID"))):
+                continue
+            own, via_cpx = True, False
+        else:
+            if (a.get("attr_POOState") or "").strip().upper() != state:
+                continue
+            own = via_cpx = False
         if "prescribed" in cat or (a.get("attr_IncidentTypeCategory") or "").strip().upper() == "RX":
             continue
-        own = any(name_matches(core, n) for n in (a.get("poly_IncidentName"), a.get("attr_IncidentName")) if n)
-        via_cpx = bool(complex_ and not own and a.get("attr_CpxName") and name_matches(core, a.get("attr_CpxName")))
+        if want is None:
+            own = any(name_matches(core, n) for n in (a.get("poly_IncidentName"), a.get("attr_IncidentName")) if n)
+            via_cpx = bool(complex_ and not own and a.get("attr_CpxName") and name_matches(core, a.get("attr_CpxName")))
         if not (own or via_cpx):
             continue
         disc = _int(a.get("attr_FireDiscoveryDateTime"))
@@ -533,9 +575,9 @@ def _ttl_for(start_ms: int) -> float:
     return TTL_OLD_S if now_ms() - start_ms > OLD_FIRE_MS else TTL_RECENT_S
 
 
-def _spatial_candidates(lat: float, lon: float, start_ms: int, ttl: float) -> list[dict]:
+def _spatial_candidates(lat: float, lon: float, start_ms: int, ttl: float, state: str = STATE) -> list[dict]:
     a, b = _ts(start_ms - SPATIAL_FALLBACK_DISCOVERY_MS), _ts(start_ms + SPATIAL_FALLBACK_DISCOVERY_MS)
-    where = (f"attr_POOState='{STATE}' AND attr_FireDiscoveryDateTime >= TIMESTAMP '{a}' AND "
+    where = (f"attr_POOState='{state}' AND attr_FireDiscoveryDateTime >= TIMESTAMP '{a}' AND "
              f"attr_FireDiscoveryDateTime <= TIMESTAMP '{b}'")
     extra = {"geometry": f"{lon:.6f},{lat:.6f}", "geometryType": "esriGeometryPoint", "inSR": 4326,
              "spatialRel": "esriSpatialRelIntersects", "distance": SPATIAL_FALLBACK_KM, "units": "esriSRUnit_Kilometer"}
@@ -568,20 +610,33 @@ def _calfire_hint(name: str, start_ms: int) -> tuple[float | None, int | None]:
 
 
 def fetch_perimeters(name: str, lat: float, lon: float, start_ms: int, end_ms: int, *, acres: float | None = None,
-                     contained_ms: int | None = None) -> PerimeterList:
-    """Perimeters of the CAL FIRE incident ``name`` at (``lat``, ``lon``) that started at ``start_ms``, with polygon
-    times up to ``end_ms`` (+2 d). See the module doc for the dict schema, matching rules and timestamp fixes.
+                     contained_ms: int | None = None, record_source: str = "calfire", state: str | None = None,
+                     irwin_id: str | None = None) -> PerimeterList:
+    """Perimeters of the incident ``name`` at (``lat``, ``lon``) that started at ``start_ms``, with polygon times up
+    to ``end_ms`` (+2 d). See the module doc for the dict schema, matching rules and timestamp fixes.
 
-    ``acres`` / ``contained_ms`` (CAL FIRE size and containment, e.g. ``summary.acres`` / ``summary.contained_ms``)
-    enable the oversize check and re-dating finals that WFIGS dates later; when both are None they are looked up in
-    the CAL FIRE list of the start year. Never raises for service problems: returns what it could get, with
+    ``acres`` / ``contained_ms`` (the record's size and containment, e.g. ``summary.acres`` /
+    ``summary.contained_ms``) enable the oversize check and re-dating finals that WFIGS dates later; for a CAL FIRE
+    record, when both are None they are looked up in the CAL FIRE list of the start year. ``record_source="wfigs"``
+    (CONTRACT 14.12.8): matched by ``irwin_id`` when given, else by name in ``state`` (USPS); California records
+    ignore ``state`` and ``irwin_id``. Never raises for service problems: returns what it could get, with
     ``.warnings`` explaining gaps."""
     start_ms, end_ms = int(start_ms), int(end_ms)
     warnings: list[str] = []
-    if acres is None and contained_ms is None:
+    wfigs_row = record_source == "wfigs"
+    st = (wfigs_state(state) or "") if wfigs_row else STATE
+    by_irwin = norm_irwin(irwin_id) if wfigs_row else None
+    if wfigs_row and by_irwin is None and not st:
+        return PerimeterList([], ["no IRWIN id and no state for this NIFC WFIGS fire: perimeters not matched"])
+    if acres is None and contained_ms is None and not wfigs_row:
         acres, contained_ms = _calfire_hint(name, start_ms)
     try:
-        where = build_where(name, start_ms, include_complex="COMPLEX" in str(name).upper())
+        if by_irwin is not None:
+            where = irwin_where(by_irwin)
+        elif wfigs_row:
+            where = build_where(name, start_ms, state=st)
+        else:
+            where = build_where(name, start_ms, include_complex="COMPLEX" in str(name).upper())
     except ValueError as e:
         return PerimeterList([], [str(e)])
     ttl = _ttl_for(start_ms)
@@ -596,16 +651,20 @@ def fetch_perimeters(name: str, lat: float, lon: float, start_ms: int, end_ms: i
             warnings.append(f"{SOURCE_LABELS[url]} unavailable: {e}")
     if failed == len(layers):
         return PerimeterList([], warnings)
-    cands = identity_filter(records, name, lat, lon, start_ms)
+    if wfigs_row:
+        cands = identity_filter(records, name, lat, lon, start_ms, complex_=False, state=st, irwin_id=by_irwin)
+    else:
+        cands = identity_filter(records, name, lat, lon, start_ms)
     if not cands:
         try:
-            spatial = _spatial_candidates(lat, lon, start_ms, ttl)
+            spatial = _spatial_candidates(lat, lon, start_ms, ttl, st)
         except PerimeterError as e:
             spatial = []
             warnings.append(f"WFIGS spatial fallback failed: {e}")
         if spatial:
             names = sorted({str(r.get("poly_IncidentName") or r.get("attr_IncidentName")) for r in spatial})
-            warnings.append(f"no WFIGS perimeter named like {name!r}; matched by place and discovery time: {', '.join(names)}")
+            how = f"with IRWIN id {by_irwin}" if by_irwin else f"named like {name!r}"
+            warnings.append(f"no WFIGS perimeter {how}; matched by place and discovery time: {', '.join(names)}")
             cands = spatial
     discs = [d for d in (_int(a.get("attr_FireDiscoveryDateTime")) for a in cands) if d is not None and d >= start_ms - DISCOVERY_BEFORE_MS]
     earliest = min([start_ms] + discs)

@@ -1,7 +1,7 @@
 // Official map layers (owner: official-web; CONTRACT §13 I6; mounted by map in mapController next to the extras
 // layers): NWS fire weather zone outlines (Red Flag Warnings and Fire Weather Watches in effect at the reference time,
-// outline only, with the NWS wording as a label; the open fire's alerts, or California's on the overview) and the
-// highlight of a selected official item (its Cal OES zones or its NWS zones). Data comes from the stores (useOfficialRuntime, useExtrasRuntime, useStore): the module subscribes
+// outline only, with the NWS wording as a label; the open fire's alerts, or every checked state's on the overview) and the
+// highlight of a selected official item (its evacuation zones, from Cal OES or Oregon OEM, or its NWS zones). Data comes from the stores (useOfficialRuntime, useExtrasRuntime, useStore): the module subscribes
 // itself, re-adds its layers after basemap swaps (LayerGroupHandle) and never handles clicks.
 // Stacking: NWS outlines, their labels and a selected NWS alert's outline below map-core's draped fire layers
 // (`beforeId`); a selected evacuation zone's outline above the basemap labels but below map-core's top layers
@@ -37,7 +37,7 @@ export const OFFICIAL_LAYERS = {
 
 const FONT = ['Noto Sans Regular']
 
-/** The highlighted official area: Cal OES zones (by id) or NWS zones (by UGC / alert id). `kind` says how it is drawn:
+/** The highlighted official area: evacuation zones (by id) or NWS zones (by UGC / alert id). `kind` says how it is drawn:
  *  'evacuation' (white outline), 'warning' / 'watch' (an NWS alert: its own colour and a faint fill). */
 export function highlightDisplayData(h: OfficialHighlight | null, evac: EvacuationsResponse | null, fw: FireWeatherResponse | null): FeatureCollection {
   const features: Feature[] = []

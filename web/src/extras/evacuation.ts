@@ -9,10 +9,13 @@ import type { Feature, FeatureCollection, Geometry } from 'geojson'
 import type { DataDrivenPropertyValueSpecification, LayerSpecification, Map as MapLibreMap } from 'maplibre-gl'
 import type { IncidentManifest } from '../api/types'
 import { lonLatToLocal } from '../lib/reproject'
+import { fmtDayDate, type TimeFmt } from '../lib/time'
+import { stateName } from '../lib/usStates'
 import { fireReferenceText, type FireReference } from '../official/fire'
 import { bboxContains, distanceText, geometriesBounds, geometryContains, polygonFireDistanceKm, polygonOverlapsRing } from '../official/geo'
 import type { GeoPolygon } from '../official/types'
 import { httpsUrl } from '../official/url'
+import { getTimeFormat } from '../state/timeZone'
 import type { FeedItem } from '../ui/feed/types'
 import { fmtWhen } from './format'
 import type { ExtrasLegendEntry } from './legend'
@@ -27,7 +30,7 @@ import {
   EXTRAS_COLORS,
   type EvacStyleGroup,
 } from './style'
-import type { EvacStatusKey, EvacuationsResponse, EvacZoneFeature, EvacZoneProps } from './types'
+import type { EvacStatusKey, EvacuationsResponse, EvacZoneFeature, EvacZoneProps, ExtrasSource } from './types'
 
 export const EVAC_SOURCE = 'fx-extras-evac'
 export const EVAC_LAYERS = {
@@ -46,9 +49,76 @@ export const EVAC_PATTERN_IDS: Record<Exclude<EvacStyleGroup, 'hidden'>, string>
 const FONT = ['Noto Sans Regular']
 const PIXEL_RATIO = 2
 
-/** Official wording, or an explicit placeholder when the source gives none (never invented). */
+/** Official wording, or an explicit placeholder when the source gives none (never invented). For Oregon this is
+ *  Fire-3d's rendering of OEM's level number ("Level 3", `status_verbatim: false`). */
 export function statusText(p: Pick<EvacZoneProps, 'status'>): string {
   return p.status?.trim() || 'Status not stated by the source'
+}
+
+// ---- sources (brief 3: Cal OES in California, Oregon OEM in Oregon; CONTRACT §14.8) ------------------------------
+const AGGREGATOR_BY_ID: Readonly<Record<string, string>> = { caloes_evacuations: 'Cal OES', caloes_evacuation_inventory: 'Cal OES', or_oem_evacuations: 'Oregon OEM' }
+const HOME_STATE_BY_ID: Readonly<Record<string, string>> = { caloes_evacuations: 'CA', caloes_evacuation_inventory: 'CA', or_oem_evacuations: 'OR' }
+const ZONE_LAYERS = new Set(['caloes_evacuations', 'or_oem_evacuations'])
+
+/** The source that listed a zone (brief-2 answers: Cal OES). */
+export function zoneSourceId(p: Pick<EvacZoneProps, 'source_id'>): string {
+  return p.source_id || 'caloes_evacuations'
+}
+
+/** Short name of a source in sentences ("Cal OES", "Oregon OEM"): the backend's `aggregator`, else a known id, else
+ *  the publisher. */
+export function aggregatorOf(data: Pick<EvacuationsResponse, 'sources'> | null, sourceId: string): string {
+  const s = data?.sources.find((x) => x.id === sourceId)
+  return s?.aggregator || AGGREGATOR_BY_ID[sourceId] || s?.publisher || 'the state source'
+}
+
+/** The source's home state (USPS code). */
+export function sourceHomeState(data: Pick<EvacuationsResponse, 'sources'> | null, sourceId: string): string | null {
+  return data?.sources.find((x) => x.id === sourceId)?.home_state || HOME_STATE_BY_ID[sourceId] || null
+}
+
+/** The zone layers that answered for this area (the inventory is not a zone layer). An older backend without
+ *  per-source status: every listed zone layer of an available answer. */
+export function answeredSources(data: Pick<EvacuationsResponse, 'sources' | 'status'> | null): ExtrasSource[] {
+  if (!data) return []
+  return data.sources.filter((s) => ZONE_LAYERS.has(s.id) && (s.status ?? (data.status === 'available' ? 'available' : 'unavailable')) === 'available')
+}
+
+/** "Cal OES" / "Oregon OEM" / "Cal OES and Oregon OEM": the sources that answered. */
+export function answeredNames(data: Pick<EvacuationsResponse, 'sources' | 'status'> | null): string | null {
+  const names = [...new Set(answeredSources(data).map((s) => aggregatorOf(data as EvacuationsResponse, s.id)))]
+  return names.length ? names.join(' and ') : null
+}
+
+/** "<aggregator> does not say which fire this is for." (zones are listed by place, not by fire). */
+export function notFireSpecific(aggregator: string): string {
+  return `${aggregator} does not say which fire this is for.`
+}
+
+/** Fire-3d's wording of a level that is not the source's own text (Oregon), with the source's definition, else null. */
+export function statusLabel(p: Pick<EvacZoneProps, 'status_verbatim' | 'status_label'>): string | null {
+  return p.status_verbatim === false && p.status_label ? p.status_label : null
+}
+
+/** "Level 3 is Oregon OEM's level number; the words are OEM's definition of that level." for non-verbatim levels. */
+export function statusLevelNote(p: Pick<EvacZoneProps, 'status_verbatim' | 'status_label' | 'source_id' | 'status'>): string | null {
+  if (p.status_verbatim !== false) return null
+  const agg = AGGREGATOR_BY_ID[zoneSourceId(p)] ?? 'the source'
+  return `"${statusText(p)}" is Fire-3d's wording of ${agg}'s level number${p.status_label ? `; ${agg} defines it as "${p.status_label}"` : ''}.`
+}
+
+/** "Evacuation for: Other, as recorded by Oregon OEM" for a hazard that is not a fire, else null. */
+export function hazardNote(p: Pick<EvacZoneProps, 'hazard_type' | 'source_id'>): string | null {
+  const h = p.hazard_type?.trim()
+  if (!h || /fire/i.test(h)) return null
+  return `Evacuation for: ${h}, as recorded by ${AGGREGATOR_BY_ID[zoneSourceId(p)] ?? 'the source'}`
+}
+
+/** "Fire name as recorded by Oregon OEM: Fielders Mountain; a name match is not proof it is this fire", else null. */
+export function incidentNameNote(p: Pick<EvacZoneProps, 'incident_name' | 'source_id'>): string | null {
+  const n = p.incident_name?.trim()
+  if (!n) return null
+  return `Fire name as recorded by ${AGGREGATOR_BY_ID[zoneSourceId(p)] ?? 'the source'}: ${n}; a name match is not proof it is this fire`
 }
 
 export interface EvacStatusCount {
@@ -211,7 +281,7 @@ export function evacuationLegend(data: EvacuationsResponse | null): ExtrasLegend
 // ---- geometry --------------------------------------------------------------------------------------------------
 
 /**
- * Whether the response checked this point, and the official zones (any status) containing it. Cal OES is queried only
+ * Whether the response checked this point, and the official zones (any status) containing it. The sources are queried only
  * for the response's `bbox` (the fire's area plus a margin): outside it nothing was checked, so the answer is "not
  * checked here", never "none listed" (also when the status is not `available`).
  */
@@ -229,10 +299,30 @@ export function zonesAtPoint(data: EvacuationsResponse | null, lon: number, lat:
   return evacuationAtPoint(data, lon, lat).zones
 }
 
-/** The issuer's last edit of a zone and Cal OES's copy time. Fire-3d's fetch time is never a zone's time. */
-export function zoneTimes(p: Pick<EvacZoneProps, 'status_updated_ms' | 'aggregated_ms'>): { issuerMs: number | null; aggregatedMs: number | null } {
+export type ZoneTimeBasis = NonNullable<EvacZoneProps['time_basis']>
+
+/** The issuer's last edit of a zone and when the state layer listed it (Cal OES's copy time; when the zone was added to
+ *  the Oregon state layer). Fire-3d's fetch time is never a zone's time. */
+export function zoneTimes(p: Pick<EvacZoneProps, 'status_updated_ms' | 'aggregated_ms'> & Partial<Pick<EvacZoneProps, 'listed_ms' | 'time_basis'>>): {
+  issuerMs: number | null
+  aggregatedMs: number | null
+  /** When the state layer listed it (`listed_ms`, else Cal OES's `aggregated_ms`). */
+  listedMs: number | null
+  basis: ZoneTimeBasis
+} {
   const ok = (v: number | null | undefined) => (v != null && Number.isFinite(v) && v > 0 ? v : null)
-  return { issuerMs: ok(p.status_updated_ms), aggregatedMs: ok(p.aggregated_ms) }
+  const issuerMs = ok(p.status_updated_ms)
+  const listedMs = ok(p.listed_ms) ?? ok(p.aggregated_ms)
+  const basis: ZoneTimeBasis = p.time_basis ?? (issuerMs != null ? 'issuer' : listedMs != null ? 'state_layer_edit' : 'none')
+  return { issuerMs, aggregatedMs: ok(p.aggregated_ms), listedMs, basis }
+}
+
+/** What the state layer's time of a zone means: "listed by Cal OES", "added to the Oregon state layer", "added". */
+export function zoneListedPhrase(p: Pick<EvacZoneProps, 'source_id'> & Partial<Pick<EvacZoneProps, 'time_basis' | 'state'>>): string {
+  const id = zoneSourceId(p)
+  if (p.time_basis === 'state_layer_added') return `added to the ${stateName(HOME_STATE_BY_ID[id] ?? p.state ?? null) ?? 'state'} state layer`
+  if (p.time_basis === 'date_only') return 'added'
+  return `listed by ${AGGREGATOR_BY_ID[id] ?? 'the state layer'}`
 }
 
 /** How a shown zone relates to the fire. */
@@ -240,7 +330,7 @@ export interface ZoneNearFire {
   zone: EvacZoneFeature
   /** Distance from the zone to the fire (km, 0 = touching); null when the fire's position is not known. */
   distanceKm: number | null
-  /** The zone does not touch the fire's analysis area: Cal OES lists zones by place, not by fire. */
+  /** The zone does not touch the fire's analysis area: the state sources list zones by place, not by fire. */
   outsideAnalysisArea: boolean
 }
 
@@ -259,8 +349,9 @@ export function zoneNearFire(zone: EvacZoneFeature, fire: FireReference | null):
   return { zone, distanceKm: d, outsideAnalysisArea: outside }
 }
 
-/** "Cal OES does not say which fire this is for": shown for zones outside the fire's analysis area. */
-export const NOT_FIRE_SPECIFIC = 'Cal OES does not say which fire this is for.'
+/** "Cal OES does not say which fire this is for": shown for zones outside the fire's analysis area.
+ *  @deprecated California-only wording: use `notFireSpecific(aggregatorOf(data, zoneSourceId(p)))`. */
+export const NOT_FIRE_SPECIFIC = notFireSpecific('Cal OES')
 
 /** [w, s, e, n] around a set of zones (outer rings), for "Show on map" (fitBounds); null when empty. */
 export function zonesBounds(features: EvacZoneFeature[]): [number, number, number, number] | null {
@@ -298,34 +389,37 @@ export interface ZoneDetail {
   extra: string[]
 }
 
-/** "Updated by the issuer Oct 17, 18:01 PDT", else Cal OES's copy time with "issuer time not given". */
-export function zoneTimeText(p: Pick<EvacZoneProps, 'status_updated_ms' | 'aggregated_ms'>, nowMs: number): string {
+/** "Updated by the issuer Oct 17, 18:01 PDT", else the state layer's time with "issuer time not given" ("listed by Cal
+ *  OES …", "added to the Oregon state layer …"). */
+export function zoneTimeText(p: Pick<EvacZoneProps, 'status_updated_ms' | 'aggregated_ms'> & Partial<Pick<EvacZoneProps, 'listed_ms' | 'time_basis' | 'source_id' | 'state'>>, nowMs: number, tf?: TimeFmt): string {
   const t = zoneTimes(p)
-  if (t.issuerMs != null) return `Updated by the issuer ${fmtWhen(t.issuerMs, nowMs)}`
-  if (t.aggregatedMs != null) return `Issuer time not given; listed by Cal OES ${fmtWhen(t.aggregatedMs, nowMs)}`
+  if (t.issuerMs != null) return `Updated by the issuer ${fmtWhen(t.issuerMs, nowMs, tf)}`
+  if (t.listedMs != null) return `Issuer time not given; ${zoneListedPhrase(p)} ${t.basis === 'date_only' ? fmtDayDate(t.listedMs, (tf ?? getTimeFormat()).tz) : fmtWhen(t.listedMs, nowMs, tf)}`
   return 'Update time not given by the issuer'
 }
 
-/** Text for one zone in the panel (official wording verbatim; times labelled by who set them). */
-export function zoneDetail(f: EvacZoneFeature, nowMs: number): ZoneDetail {
+/** Text for one zone in the panel (official wording verbatim; times labelled by who set them). `tf` (CONTRACT
+ *  §14.9.6): the zone and clock of the times, default `getTimeFormat()`. */
+export function zoneDetail(f: EvacZoneFeature, nowMs: number, tf: TimeFmt = getTimeFormat()): ZoneDetail {
   const p = f.properties
   const extra: string[] = []
   if (p.critical_info) extra.push(p.critical_info)
   if (p.public_info) extra.push(p.public_info)
   if (p.event_type) extra.push(`Event type: ${p.event_type}`)
+  for (const n of [statusLevelNote(p), hazardNote(p), incidentNameNote(p)]) if (n) extra.push(n)
   return {
     id: f.id,
-    status: statusText(p),
+    status: statusLabel(p) ?? statusText(p),
     group: evacStyleGroup(p.status_key),
     title: p.zone_name ? `${p.zone_name} (${p.zone_id})` : p.zone_id,
     jurisdiction: p.jurisdiction ?? 'Jurisdiction not stated',
-    updatedText: zoneTimeText(p, nowMs),
+    updatedText: zoneTimeText(p, nowMs, tf),
     message: p.notes,
     extra,
   }
 }
 
-/** The issuing jurisdiction as Cal OES names it, else the county, else "Local officials". */
+/** The issuing jurisdiction as the source names it, else the county, else "Local officials". */
 export function zoneIssuer(p: Pick<EvacZoneProps, 'jurisdiction' | 'county'>): string {
   const j = p.jurisdiction?.trim()
   if (j) return j
@@ -342,9 +436,12 @@ function countyMapUrl(data: EvacuationsResponse, p: EvacZoneProps): string | nul
   return httpsUrl(c?.reference_url)
 }
 
-/** Cal OES's data page for the evacuation layer (https). */
-export function evacuationSourceUrl(data: Pick<EvacuationsResponse, 'sources'> | null): string | null {
-  return httpsUrl(data?.sources.find((s) => s.id === 'caloes_evacuations')?.url)
+/** The data page of the evacuation layer (https): the first zone source that answered (Cal OES first in California),
+ *  else the first one listed. */
+export function evacuationSourceUrl(data: Pick<EvacuationsResponse, 'sources'> & Partial<Pick<EvacuationsResponse, 'status'>> | null): string | null {
+  if (!data) return null
+  const answered = answeredSources({ sources: data.sources, status: data.status ?? 'available' })
+  return httpsUrl((answered[0] ?? data.sources.find((s) => ZONE_LAYERS.has(s.id)))?.url)
 }
 
 export interface EvacuationFeedOptions {
@@ -352,13 +449,16 @@ export interface EvacuationFeedOptions {
   fire?: FireReference | null
   /** Distances in km (else miles). */
   metric?: boolean
+  /** Zone and clock of the times (CONTRACT §14.9.5); default `getTimeFormat()`. */
+  tf?: TimeFmt
 }
 
 /**
  * Feed items: one per (official status, issuer), kind 'official', not seekable (current status, never a point on the
- * replay timeline). The time is the issuer's latest edit, else Cal OES's copy time, else the layer's own update time;
+ * replay timeline). The time is the issuer's latest edit, else the state layer's time for the zone (Cal OES's copy time;
+ * when it was added to the Oregon state layer), else the layer's own update time;
  * never Fire-3d's fetch time (`timeNotGiven` when none exists). Each item names the issuer, its distance to the fire
- * and, for zones outside the fire's analysis area, that Cal OES does not say which fire it is for. Selecting it fits
+ * and, for zones outside the fire's analysis area, that the source (Cal OES, Oregon OEM) does not say which fire it is for. Selecting it fits
  * the zones and highlights them (`bounds`, `highlight`). Key only for orders / shelter-in-place touching the area.
  */
 export function evacuationFeedItems(data: EvacuationsResponse | null, manifest: Pick<IncidentManifest, 'grid'> | null, opts: EvacuationFeedOptions = {}): FeedItem[] {
@@ -367,16 +467,19 @@ export function evacuationFeedItems(data: EvacuationsResponse | null, manifest: 
   const groups = new Map<string, ZoneNearFire[]>()
   for (const z of zonesNearFire(data, fire)) {
     const p = z.zone.properties
-    const k = `${statusText(p)}|${zoneIssuer(p)}`
+    const k = `${statusText(p)}|${zoneIssuer(p)}|${zoneSourceId(p)}`
     groups.set(k, [...(groups.get(k) ?? []), z])
   }
-  const sourceUrl = evacuationSourceUrl(data)
+  const tf = opts.tf ?? getTimeFormat()
   const items: FeedItem[] = []
   for (const [k, near] of groups) {
-    const [status, issuer] = k.split('|')
+    const [status, issuer, sourceId] = k.split('|')
+    const aggregator = aggregatorOf(data, sourceId)
+    const sourceUrl = httpsUrl(data.sources.find((s) => s.id === sourceId)?.url) ?? evacuationSourceUrl(data)
     const zones = near.map((n) => n.zone)
+    const p0 = zones[0].properties
     const issuerTimes = zones.map((z) => zoneTimes(z.properties).issuerMs).filter((t): t is number => t != null)
-    const aggTimes = zones.map((z) => zoneTimes(z.properties).aggregatedMs).filter((t): t is number => t != null)
+    const aggTimes = zones.map((z) => zoneTimes(z.properties).listedMs).filter((t): t is number => t != null)
     const updatedMs = issuerTimes.length ? Math.max(...issuerTimes) : null
     const listedMs = aggTimes.length ? Math.max(...aggTimes) : null
     const ownMs = updatedMs ?? listedMs ?? data.source_updated_ms ?? null
@@ -392,22 +495,26 @@ export function evacuationFeedItems(data: EvacuationsResponse | null, manifest: 
     const key = zones[0].properties.status_key
     const dist = distanceKm == null ? null : distanceKm === 0 ? 'touches the fire area' : `${distanceText(distanceKm, !!opts.metric)} from the fire`
     const notes: string[] = []
-    if (outside) notes.push(NOT_FIRE_SPECIFIC)
-    if (updatedMs == null) notes.push(listedMs != null ? `The issuer gives no time; Cal OES listed it ${fmtWhen(listedMs)}.` : 'The issuer gives no time for this status.')
+    const notFire = notFireSpecific(aggregator)
+    if (outside) notes.push(notFire)
+    // brief-2 wording in California ("Cal OES listed it …"); Oregon: "it was added to the Oregon state layer …"
+    const listedNote = p0.time_basis === 'state_layer_added' || p0.time_basis === 'date_only' ? `it was ${zoneListedPhrase(p0)}` : `${aggregator} listed it`
+    if (updatedMs == null) notes.push(listedMs != null ? `The issuer gives no time; ${listedNote} ${fmtWhen(listedMs, undefined, tf)}.` : 'The issuer gives no time for this status.')
+    for (const n of [statusLevelNote(p0), hazardNote(p0)]) if (n) notes.push(n.endsWith('.') ? n : `${n}.`)
     if (fire && distanceKm != null) notes.push(fireReferenceText(fire))
     const links: { label: string; url: string }[] = []
     const county = countyMapUrl(data, zones[0].properties)
     if (county) links.push({ label: 'County evacuation map', url: county })
     const ids = zones.map((z) => z.id)
-    const id = `evacuation:${key}:${issuer}:${status}`
+    const id = sourceId === 'caloes_evacuations' ? `evacuation:${key}:${issuer}:${status}` : `evacuation:${sourceId}:${key}:${issuer}:${status}`
     items.push({
       id,
       topic: 'evacuation',
       kind: 'official',
       tMs: ownMs ?? data.retrieved_ms ?? data.now_ms,
       title: `${status}: ${zones.length} zone${zones.length === 1 ? '' : 's'} (${issuer})`,
-      detail: `${dist ? `${dist[0].toUpperCase()}${dist.slice(1)}. ` : ''}${outside ? `${NOT_FIRE_SPECIFIC} ` : ''}Issued by local officials; listed by Cal OES. Fire-3d's modeled spread is not an evacuation instruction.`,
-      source: `${issuer} via Cal OES`,
+      detail: `${dist ? `${dist[0].toUpperCase()}${dist.slice(1)}. ` : ''}${outside ? `${notFire} ` : ''}Issued by local officials; listed by ${aggregator}. Fire-3d's modeled spread is not an evacuation instruction.`,
+      source: `${issuer} via ${aggregator}`,
       automated: false,
       key: (key === 'order' || key === 'shelter') && !outside,
       confidence: null,
@@ -417,7 +524,7 @@ export function evacuationFeedItems(data: EvacuationsResponse | null, manifest: 
       approximate: location != null,
       locationLabel: location ? 'Center of the zones' : null,
       facts: [
-        { label: 'Official wording', text: status, scientific: null },
+        statusLabel(p0) ? { label: `${aggregator}'s level`, text: `${status} (${statusLabel(p0)})`, scientific: null } : { label: 'Official wording', text: status, scientific: null },
         { label: 'Zones', text: zones.map((z) => z.properties.zone_name || z.properties.zone_id).join(', '), scientific: null },
         ...(dist ? [{ label: 'Distance to the fire', text: dist, scientific: null }] : []),
       ],

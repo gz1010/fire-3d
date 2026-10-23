@@ -4,22 +4,26 @@
 // classes and the forecast display choice, and the optional official sources (evacuation zones, cameras, satellite
 // image) with their entries or an explicit status when they cannot be shown. Rendered in the bottom legend slot
 // (details open upward) or inline in the Layers panel (details shown in place).
-// Brief 2: the California overview's fire markers (CAL FIRE's official record), the aerial photos' date line ("June
+// Brief 2: the overview's fire markers (the agencies' official records), the aerial photos' date line ("June
 // 2024 or earlier: taken before this fire"; decision 8) and, while 3D buildings are drawn, their caveat ("today's
 // OpenStreetMap; buildings destroyed by this fire may be missing; not a damage assessment").
+// Brief 3 (§14.11): the national overview's groups and small dots, the record sources (CAL FIRE in California, NIFC
+// WFIGS elsewhere) and the list-absence line of §14.14; times in the open fire's zone and the preset's clock.
 import { ChevronDown, Info } from 'lucide-react'
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { ExtrasLegend, ExtrasNotice, LegendSwatch } from '../extras/ExtrasCommon'
 import { compactExtrasLegend, EXTRAS_LAYER_KEYS, useExtrasLegend, useExtrasStatus } from '../extras/runtime'
-import { fmtDateTimeTz } from '../lib/time'
+import { fmtAt } from '../lib/time'
+import { LIST_ABSENCE, LIST_ABSENCE_SHORT, PAST_YEAR, SEASON_YEAR } from '../state/overview'
 import { useStore } from '../state/store'
+import { useTimeFormat } from '../state/timeZone'
 import { useWorkspace } from '../state/workspace'
 import { Segmented } from '../ui/controls'
 import { useDismiss, useNow } from '../ui/hooks'
 import { BUILDINGS_MINZOOM, buildingsCaveat } from './basemapStyle'
 import { useMapRuntime } from './mapStore'
 import { DETECTION_RECENT_H, DETECTION_WINDOW_H, GOES_WINDOW_H, RECENT_H, type ForecastView } from './overlayModel'
-import { LABEL_MIN_ACRES } from './overviewLayers'
+import { LABEL_ACTIVE_Z5_ACRES, LABEL_MIN_ACRES, PINNED_MIN_ACRES } from './overviewLayers'
 import { aerialPhotoLine, USGS_PHOTOS_DATE_TEXT } from './providers'
 
 /** 3D buildings are drawn from half a zoom level before BUILDINGS_MINZOOM (they fade in). */
@@ -61,6 +65,8 @@ export function MapLegend({ inline }: { inline?: boolean } = {}) {
   const forecast = useStore((s) => s.forecast)
   const ready = useStore((s) => s.manifest?.status === 'ready')
   const now = useNow(60_000)
+  const tf = useTimeFormat()
+  const at = (ms: number) => fmtAt(ms, tf, { zone: true })
   const extras = useExtrasLegend(now)
   const extrasStatus = useExtrasStatus()
   const extrasCompact = compactExtrasLegend(extras)
@@ -86,21 +92,37 @@ export function MapLegend({ inline }: { inline?: boolean } = {}) {
   const aerial = basemap === 'aerial'
   const showBuildings = perspective === '3d' && closeZoom && vectorOk
   const overview = !hasIncident
-  const otherFires = overviewFilter === 'past' ? '2025 fire' : overviewFilter === 'active' ? '' : 'Other 2026 fire'
+  const otherFires = overviewFilter === 'past' ? `${PAST_YEAR} fire` : overviewFilter === 'active' ? '' : `Other ${SEASON_YEAR} fire`
+  const otherGroup = overviewFilter === 'past' ? `Group of ${PAST_YEAR} fires` : `Group of other ${SEASON_YEAR} fires`
 
   let fcShort = 'No forecast'
   if (fc.status === 'loading') fcShort = 'Forecast loading…'
   else if (fc.status === 'error') fcShort = 'Forecast unavailable'
   else if (fc.status === 'ready' && frame) {
-    if (frame.kind === 'before-start') fcShort = `Forecast starts ${fmtDateTimeTz(frame.startMs)}`
-    else fcShort = `Modeled spread by ${fmtDateTimeTz(frame.byMs)}`
+    if (frame.kind === 'before-start') fcShort = `Forecast starts ${at(frame.startMs)}`
+    else fcShort = `Modeled spread by ${at(frame.byMs)}`
   }
   const fcOff = fc.status !== 'ready' || !frame || frame.kind === 'before-start'
 
   const compact = (
     <ul className="fxm-legend-row" aria-label="Legend">
       {overview && overviewFilter !== 'past' && <Row sw="fire-active">Active fire</Row>}
+      {overview && overviewFilter !== 'past' && (
+        <Row sw="group-active" title="Group of active fires (number = how many)">
+          Group of active fires
+        </Row>
+      )}
+      {overview && overviewFilter !== 'past' && (
+        <Row sw="small-active" title="Small active fire (under 10 acres or size not reported)">
+          Small active fire
+        </Row>
+      )}
       {overview && otherFires && <Row sw="fire-past">{otherFires}</Row>}
+      {overview && otherFires && (
+        <Row sw="group-past" title={`${otherGroup} (number = how many)`}>
+          {overviewFilter === 'past' ? `Group of ${PAST_YEAR} fires` : 'Group of other fires'}
+        </Row>
+      )}
       {showObserved && <Row sw="observed">Observed fire</Row>}
       {showForecast && <Row sw={fcOff ? 'forecast-off' : 'forecast'}>{fcShort}</Row>}
       {showDet && <Row sw="detection">Heat detections</Row>}
@@ -127,6 +149,11 @@ export function MapLegend({ inline }: { inline?: boolean } = {}) {
       {!overview && !showObserved && !showForecast && !showDet && !showPer && !showSel && !showNearby && extrasCompact.length === 0 && (
         <li className="fxm-legend-empty">No wildfire layers shown</li>
       )}
+      {overview && (
+        <li className="fxm-legend-absence" title={LIST_ABSENCE}>
+          <span>{LIST_ABSENCE_SHORT}</span>
+        </li>
+      )}
     </ul>
   )
 
@@ -134,15 +161,24 @@ export function MapLegend({ inline }: { inline?: boolean } = {}) {
     <div className="fxm-legend-details" id="fxm-legend-details">
       <section>
         <h3>
-          <Swatch kind="fire-active" /> {overview ? 'Fires (CAL FIRE, official)' : 'Other fires (CAL FIRE, official)'}
+          <Swatch kind="fire-active" /> {overview ? 'Fires (CAL FIRE in California, NIFC WFIGS elsewhere; official records)' : 'Other fires (CAL FIRE in California, NIFC WFIGS elsewhere; official records)'}
         </h3>
         <p>
-          One marker per fire at CAL FIRE's reported location, sized by its reported acreage. Filled orange: CAL FIRE lists the fire as active. Hollow:
-          contained or out. Names show for active fires and fires of {LABEL_MIN_ACRES.toLocaleString('en-US')} acres or more.{' '}
+          One marker per fire at the agency's reported location, sized by its reported acreage. Filled orange: an agency lists the fire as active. Hollow:
+          contained or out. Close fires are grouped; active fires are never grouped with other fires, and active fires of{' '}
+          {PINNED_MIN_ACRES.toLocaleString('en-US')} acres or more are never grouped. Names show for the largest fires first: zoomed out, active fires of{' '}
+          {PINNED_MIN_ACRES.toLocaleString('en-US')} acres or more; closer in, active fires of {LABEL_ACTIVE_Z5_ACRES} acres or more and fires of{' '}
+          {LABEL_MIN_ACRES.toLocaleString('en-US')} acres or more, then smaller ones.{' '}
           {overview ? 'Zoom in on a fire with a prepared analysis to see its spread, or click a fire for its card.' : 'Lighter while a fire is open; zoom in on one to switch to it, or click it for its card.'}
         </p>
+        <ul>
+          <Row sw="group-active">Group of active fires (number = how many)</Row>
+          <Row sw="small-active">Small active fire (under 10 acres or size not reported)</Row>
+          <Row sw="group-past">{otherGroup}</Row>
+        </ul>
+        <p>A group's circle is sized by the largest fire in it; click a group to zoom in. Alaska, Hawaii and US territories are not supported yet.</p>
         <p>"Spread not prepared yet": Fire-3d has not prepared that fire's analysis. Its card can prepare it (1-3 min); Fire-3d never does so on its own.</p>
-        <p className="fxm-legend-note">No fire listed nearby is not an all-clear. Follow local officials.</p>
+        <p className="fxm-legend-note">{LIST_ABSENCE}</p>
       </section>
       {showObserved && (
         <section>
@@ -150,7 +186,7 @@ export function MapLegend({ inline }: { inline?: boolean } = {}) {
             <Swatch kind="observed" /> Observed fire
           </h3>
           <p>
-            Area burned by the timeline time{obs.asOfMs ? ` (${fmtDateTimeTz(obs.asOfMs)})` : ''}, reconstructed from agency perimeters and satellite heat detections: an
+            Area burned by the timeline time{obs.asOfMs ? ` (${at(obs.asOfMs)})` : ''}, reconstructed from agency perimeters and satellite heat detections: an
             estimate between observations. Solid glowing edge.
           </p>
           <ul>
@@ -168,11 +204,11 @@ export function MapLegend({ inline }: { inline?: boolean } = {}) {
             <>
               <p>
                 {frame.kind === 'horizon'
-                  ? `Share of the ${fc.members ?? ''} model runs that burned each spot by ${fmtDateTimeTz(frame.byMs)}, the end of the forecast (${forecast.horizon_h} h after ${fmtDateTimeTz(frame.startMs)}).`
+                  ? `Share of the ${fc.members ?? ''} model runs that burned each spot by ${at(frame.byMs)}, the end of the forecast (${forecast.horizon_h} h after ${at(frame.startMs)}).`
                   : frame.kind === 'time'
-                    ? `Share of the ${fc.members ?? ''} model runs that had reached each spot by ${fmtDateTimeTz(frame.byMs)}${frame.clamped ? ' (the end of the forecast)' : ''}.`
-                    : `The forecast period starts ${fmtDateTimeTz(frame.startMs)}. Move the timeline into it, or show the chance by the end of the forecast.`}{' '}
-                Forecast issued {fmtDateTimeTz(forecast.issued_ms)}.
+                    ? `Share of the ${fc.members ?? ''} model runs that had reached each spot by ${at(frame.byMs)}${frame.clamped ? ' (the end of the forecast)' : ''}.`
+                    : `The forecast period starts ${at(frame.startMs)}. Move the timeline into it, or show the chance by the end of the forecast.`}{' '}
+                Forecast issued {at(forecast.issued_ms)}.
               </p>
               <ul>
                 <Row sw="fc90">At least 90 % of runs (hatched)</Row>
@@ -221,7 +257,7 @@ export function MapLegend({ inline }: { inline?: boolean } = {}) {
             <Swatch kind="perimeter" /> Agency perimeter
           </h3>
           <p>
-            Latest published by the timeline time{per.latestMs ? `: ${fmtDateTimeTz(per.latestMs)}` : ''} (solid line, labelled). Earlier perimeters are dashed.
+            Latest published by the timeline time{per.latestMs ? `: ${at(per.latestMs)}` : ''} (solid line, labelled). Earlier perimeters are dashed.
           </p>
         </section>
       )}

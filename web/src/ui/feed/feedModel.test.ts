@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Detection, FireEvent, ForecastManifest, IncidentManifest, Perimeter, TimeseriesFile, WeatherFile } from '../../api/types'
 import { localToLonLat } from '../../lib/reproject'
+import { timeFmt } from '../../lib/time'
 import type { Annotation } from '../../state/annotations'
 import { useStore } from '../../state/store'
 import {
@@ -104,7 +105,7 @@ function forecast(mode: 'live' | 'historical', incidentId = '2025-eaton-fire-dbf
 }
 
 const full = (extra: Partial<Parameters<typeof buildFeedItems>[0]> = {}) =>
-  buildFeedItems({ manifest: manifest(), events: EVENTS, annotations: [NOTE], timeseries: TS, weather: WEATHER, perimeters: PERIMETERS, detections: DETECTIONS, forecast: forecast('historical'), units: 'us', ...extra })
+  buildFeedItems({ manifest: manifest(), events: EVENTS, annotations: [NOTE], timeseries: TS, weather: WEATHER, perimeters: PERIMETERS, detections: DETECTIONS, forecast: forecast('historical'), units: 'us', tf: timeFmt('America/Los_Angeles', '24h'), ...extra })
 
 const byId = (items: FeedItem[], id: string) => items.find((i) => i.id === id)!
 
@@ -253,7 +254,7 @@ describe('feed items: perimeters, satellite passes, forecast', () => {
   it('keeps Key Events to events.json + annotations; the rest only when asked for', () => {
     const items = full()
     expect(filterFeed(items, 'key').map((i) => i.id)).toEqual(items.filter((i) => i.eventId != null).map((i) => i.id))
-    const minimal = buildFeedItems({ manifest: manifest(), events: EVENTS, annotations: [] })
+    const minimal = buildFeedItems({ manifest: manifest(), events: EVENTS, annotations: [], tf: timeFmt('America/Los_Angeles', '24h') })
     expect(minimal.every((i) => i.key)).toBe(true)
     expect(minimal).toHaveLength(EVENTS.length)
   })

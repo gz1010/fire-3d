@@ -43,3 +43,48 @@ Process: the user said "go for it". Audit, plan and build straight through, stop
 - Port 8000 belongs to another app. 8710, 5173 and 5180 are the user's own local servers.
 - No git commands that change the repository; the user commits.
 - Fires now span several US time zones: never assume Pacific time.
+
+## Decisions round 2 (answered Oct 22, 2026, after the audits)
+
+Asked in the cloud session after the four audits in `docs/redesign/audit-3/`. These refine decisions 1-4 above.
+
+1. **Active fires on the national map: all of them.** Every currently active wildfire in the lower 48 is listed,
+   whatever its size (241 on Oct 22, 2026, 109 of them 1 acre or less). The 2026 list (and 2025 behind a filter)
+   stays at 300 acres or more. The overview must stay readable with many tiny fires (grouping, size-aware markers).
+2. **California source: CAL FIRE plus WFIGS gaps.** CAL FIRE stays the record for California fires; WFIGS (NIFC)
+   adds only the California fires CAL FIRE does not list (for example federal fires such as the Timber Fire).
+3. **Accuracy test: 12 fires outside California**, two per region, so all six regions can show a result (the
+   audit's 10 primary fires plus Rush, OK and Black Cove, NC, or replacements from its reserve list).
+4. **Auto-built live fires: keep 4, as today**, chosen from the whole country. Other fires use "Prepare analysis".
+5. **FEMA IPAWS: no registration.** Live, show the official local-officials' messages that the NWS relays
+   (Fire Warning, Evacuation Immediate and similar). For past days, use FEMA's public OpenFEMA archive (about a day
+   late), clearly labelled as archived, with issuer, its own times, verbatim wording and a link.
+6. **Partial state evacuation data: Washington only**, labelled "updated daily, may be out of date", and only if it
+   loads reliably. Florida is not shown ("not available in this state").
+7. **Accuracy label: words in Public, score in Command.** Public says, for example, "Tested on 2 past fires in this
+   region", with the score one tap away; Command shows the score directly. Untested: "accuracy not yet tested here".
+8. **Clock: mixed.** 12-hour in Public ("3:40 PM MDT"), 24-hour in Command and Forensic ("15:40 MDT"). Every time
+   shows the fire's own time zone.
+
+Defaults taken without asking (the user can override):
+- A fire that is part of a complex is listed on its own, with "part of the X Complex".
+- Active fires group only with other active fires on the overview, never hidden among contained ones.
+- The national list shows the fires in the current map view, with "Show all".
+- On phones the overview opens on the whole lower 48 with grouped markers.
+- Cameras stay California only; elsewhere "not available in this state".
+- County evacuation feeds are out of scope (state feeds only, as decision 4 says); a later brief may research them.
+- Areas outside the six tested regions (Rocky Mountain, Eastern, Northern California) say "accuracy not yet tested
+  here".
+
+## Decisions round 3 (answered Oct 22, 2026, after the audit revisions)
+
+1. **Washington: don't build it.** Its layer's terms require the user of the data to "hold harmless, defend, and
+   indemnify the State of Washington"; the user declined. Washington says "not available in this state"; the
+   local officials' messages relayed by the NWS still show there. (This replaces round 2, decision 6: no partial
+   state evacuation source is shown; Florida stays "not available in this state" too.)
+2. **California fire active per one agency only: active if either agency says so.** The card shows each agency's
+   record with its own issuer, status and time (for example the Timber Fire, active in NIFC, not in CAL FIRE).
+3. **California complexes: CAL FIRE's one row.** One marker for the complex in California, with its member fires
+   named on the card. Other states list member fires on their own (round 2 default).
+4. **Oregon past zones: not now.** Evacuation zones stay current-only; past days show the archived official FEMA
+   messages, labelled archived.

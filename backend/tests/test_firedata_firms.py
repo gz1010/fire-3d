@@ -330,13 +330,16 @@ def test_load_year_ca_downloads_once_to_parquet(route, monkeypatch: pytest.Monke
     viirs = viirs.replace("2025-01-08,949,N,VIIRS,n,2,", "2025-01-08,949,N,VIIRS,n,2.0NRT,", 1)
     far = "\n45.0,-73.0,300,0.4,0.4,2025-01-08,1000,N,VIIRS,n,2,290,1.0,N,0\n"
     r = route([(r"/data/country/viirs-snpp/2025/", viirs.rstrip("\n") + far), (r"/data/country/modis/2025/", sample("modis_sp.csv"))])
-    df = firms.load_year_ca(2025)
-    assert len(r.calls) == 2 and len(df) == 7 + 5                    # Quebec row filtered out, volcano dropped
+    df = firms.load_year_ca(2025)                                     # deprecated wrapper: the national file, CA box
+    assert len(r.calls) == 2 and len(df) == 7 + 5                    # Quebec row outside the CA box, volcano dropped
     assert set(df["source"]) == {"VIIRS_SNPP_SP", "VIIRS_SNPP_NRT", "MODIS_SP"}
-    pq = Path(config.CACHE_DIR) / "firms" / "firms_ca_2025.parquet"
+    pq = Path(config.CACHE_DIR) / "firms" / "firms_us_2025.parquet"   # brief 3: one national file per year
     assert pq.is_file() and not list((pq.parent / "raw").glob("*.csv"))
+    assert not list(pq.parent.glob("firms_ca_*"))
     again = firms.load_year_ca(2025)
     assert len(r.calls) == 2 and len(again) == len(df)
+    national = firms.load_year_us(2025)
+    assert len(national) == len(df) + 1                                # the Quebec-border row (45.0, -73.0) is kept
 
 
 def test_keyless_detections_use_yearly_archive(route, monkeypatch: pytest.MonkeyPatch) -> None:

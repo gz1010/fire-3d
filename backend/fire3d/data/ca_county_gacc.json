@@ -1,0 +1,483 @@
+{
+ "meta": {
+  "source": "NIFC WFIGS Incident Locations (all years), statistics by POOCounty and GACC",
+  "url": "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Incident_Locations/FeatureServer/0/query",
+  "credit": "NIFC WFIGS (IRWIN)",
+  "retrieved": "2026-10-23",
+  "rule": "California wildfires of 10 ac or more; a county whose fires are >= 80% one GACC gets it, any other county null (accuracy not yet tested here); no polygons, no neighbours",
+  "key": "county name, lower case, without 'County'"
+ },
+ "counties": {
+  "alameda": {
+   "name": "Alameda",
+   "gacc": "ONCC",
+   "fires": 36,
+   "counts": {
+    "ONCC": 36
+   }
+  },
+  "alpine": {
+   "name": "Alpine",
+   "gacc": null,
+   "fires": 20,
+   "counts": {
+    "GBCC": 12,
+    "OSCC": 6,
+    "ONCC": 2
+   }
+  },
+  "amador": {
+   "name": "Amador",
+   "gacc": "ONCC",
+   "fires": 17,
+   "counts": {
+    "ONCC": 17
+   }
+  },
+  "butte": {
+   "name": "Butte",
+   "gacc": "ONCC",
+   "fires": 70,
+   "counts": {
+    "ONCC": 70
+   }
+  },
+  "calaveras": {
+   "name": "Calaveras",
+   "gacc": "OSCC",
+   "fires": 37,
+   "counts": {
+    "OSCC": 37
+   }
+  },
+  "colusa": {
+   "name": "Colusa",
+   "gacc": "ONCC",
+   "fires": 8,
+   "counts": {
+    "ONCC": 8
+   }
+  },
+  "contra costa": {
+   "name": "Contra Costa",
+   "gacc": "ONCC",
+   "fires": 28,
+   "counts": {
+    "ONCC": 28
+   }
+  },
+  "del norte": {
+   "name": "Del Norte",
+   "gacc": "ONCC",
+   "fires": 27,
+   "counts": {
+    "ONCC": 26,
+    "NWCC": 1
+   }
+  },
+  "el dorado": {
+   "name": "El Dorado",
+   "gacc": "ONCC",
+   "fires": 34,
+   "counts": {
+    "ONCC": 34
+   }
+  },
+  "fresno": {
+   "name": "Fresno",
+   "gacc": "OSCC",
+   "fires": 203,
+   "counts": {
+    "OSCC": 203
+   }
+  },
+  "glenn": {
+   "name": "Glenn",
+   "gacc": "ONCC",
+   "fires": 11,
+   "counts": {
+    "ONCC": 11
+   }
+  },
+  "humboldt": {
+   "name": "Humboldt",
+   "gacc": "ONCC",
+   "fires": 64,
+   "counts": {
+    "ONCC": 64
+   }
+  },
+  "imperial": {
+   "name": "Imperial",
+   "gacc": null,
+   "fires": 32,
+   "counts": {
+    "SWCC": 18,
+    "OSCC": 14
+   }
+  },
+  "inyo": {
+   "name": "Inyo",
+   "gacc": "OSCC",
+   "fires": 34,
+   "counts": {
+    "OSCC": 34
+   }
+  },
+  "kern": {
+   "name": "Kern",
+   "gacc": "OSCC",
+   "fires": 117,
+   "counts": {
+    "OSCC": 117
+   }
+  },
+  "kings": {
+   "name": "Kings",
+   "gacc": "OSCC",
+   "fires": 14,
+   "counts": {
+    "OSCC": 14
+   }
+  },
+  "lake": {
+   "name": "Lake",
+   "gacc": "ONCC",
+   "fires": 45,
+   "counts": {
+    "ONCC": 45
+   }
+  },
+  "lassen": {
+   "name": "Lassen",
+   "gacc": "ONCC",
+   "fires": 83,
+   "counts": {
+    "ONCC": 67,
+    "GBCC": 16
+   }
+  },
+  "los angeles": {
+   "name": "Los Angeles",
+   "gacc": "OSCC",
+   "fires": 114,
+   "counts": {
+    "OSCC": 114
+   }
+  },
+  "madera": {
+   "name": "Madera",
+   "gacc": "OSCC",
+   "fires": 81,
+   "counts": {
+    "OSCC": 81
+   }
+  },
+  "marin": {
+   "name": "Marin",
+   "gacc": "ONCC",
+   "fires": 3,
+   "counts": {
+    "ONCC": 3
+   }
+  },
+  "mariposa": {
+   "name": "Mariposa",
+   "gacc": "OSCC",
+   "fires": 78,
+   "counts": {
+    "OSCC": 78
+   }
+  },
+  "mendocino": {
+   "name": "Mendocino",
+   "gacc": "ONCC",
+   "fires": 37,
+   "counts": {
+    "ONCC": 37
+   }
+  },
+  "merced": {
+   "name": "Merced",
+   "gacc": "OSCC",
+   "fires": 83,
+   "counts": {
+    "OSCC": 83
+   }
+  },
+  "modoc": {
+   "name": "Modoc",
+   "gacc": "ONCC",
+   "fires": 107,
+   "counts": {
+    "ONCC": 107
+   }
+  },
+  "mono": {
+   "name": "Mono",
+   "gacc": null,
+   "fires": 45,
+   "counts": {
+    "OSCC": 24,
+    "GBCC": 17,
+    "WBCC": 4
+   }
+  },
+  "monterey": {
+   "name": "Monterey",
+   "gacc": "OSCC",
+   "fires": 73,
+   "counts": {
+    "OSCC": 73
+   }
+  },
+  "napa": {
+   "name": "Napa",
+   "gacc": "ONCC",
+   "fires": 27,
+   "counts": {
+    "ONCC": 27
+   }
+  },
+  "nevada": {
+   "name": "Nevada",
+   "gacc": "ONCC",
+   "fires": 26,
+   "counts": {
+    "ONCC": 24,
+    "GBCC": 2
+   }
+  },
+  "orange": {
+   "name": "Orange",
+   "gacc": "OSCC",
+   "fires": 16,
+   "counts": {
+    "OSCC": 16
+   }
+  },
+  "placer": {
+   "name": "Placer",
+   "gacc": "ONCC",
+   "fires": 37,
+   "counts": {
+    "ONCC": 37
+   }
+  },
+  "plumas": {
+   "name": "Plumas",
+   "gacc": "ONCC",
+   "fires": 44,
+   "counts": {
+    "ONCC": 44
+   }
+  },
+  "riverside": {
+   "name": "Riverside",
+   "gacc": "OSCC",
+   "fires": 311,
+   "counts": {
+    "OSCC": 303,
+    "SWCC": 8
+   }
+  },
+  "sacramento": {
+   "name": "Sacramento",
+   "gacc": "ONCC",
+   "fires": 24,
+   "counts": {
+    "ONCC": 24
+   }
+  },
+  "san benito": {
+   "name": "San Benito",
+   "gacc": "OSCC",
+   "fires": 33,
+   "counts": {
+    "OSCC": 33
+   }
+  },
+  "san bernardino": {
+   "name": "San Bernardino",
+   "gacc": "OSCC",
+   "fires": 178,
+   "counts": {
+    "OSCC": 170,
+    "SWCC": 8
+   }
+  },
+  "san diego": {
+   "name": "San Diego",
+   "gacc": "OSCC",
+   "fires": 141,
+   "counts": {
+    "OSCC": 141
+   }
+  },
+  "san joaquin": {
+   "name": "San Joaquin",
+   "gacc": null,
+   "fires": 20,
+   "counts": {
+    "OSCC": 12,
+    "ONCC": 8
+   }
+  },
+  "san luis obispo": {
+   "name": "San Luis Obispo",
+   "gacc": "OSCC",
+   "fires": 103,
+   "counts": {
+    "OSCC": 103
+   }
+  },
+  "san mateo": {
+   "name": "San Mateo",
+   "gacc": "ONCC",
+   "fires": 4,
+   "counts": {
+    "ONCC": 4
+   }
+  },
+  "santa barbara": {
+   "name": "Santa Barbara",
+   "gacc": "OSCC",
+   "fires": 36,
+   "counts": {
+    "OSCC": 36
+   }
+  },
+  "santa clara": {
+   "name": "Santa Clara",
+   "gacc": "ONCC",
+   "fires": 24,
+   "counts": {
+    "ONCC": 24
+   }
+  },
+  "santa cruz": {
+   "name": "Santa Cruz",
+   "gacc": "ONCC",
+   "fires": 4,
+   "counts": {
+    "ONCC": 4
+   }
+  },
+  "shasta": {
+   "name": "Shasta",
+   "gacc": "ONCC",
+   "fires": 79,
+   "counts": {
+    "ONCC": 79
+   }
+  },
+  "sierra": {
+   "name": "Sierra",
+   "gacc": null,
+   "fires": 12,
+   "counts": {
+    "ONCC": 6,
+    "GBCC": 5,
+    "WBCC": 1
+   }
+  },
+  "siskiyou": {
+   "name": "Siskiyou",
+   "gacc": "ONCC",
+   "fires": 179,
+   "counts": {
+    "ONCC": 174,
+    "NWCC": 5
+   }
+  },
+  "solano": {
+   "name": "Solano",
+   "gacc": "ONCC",
+   "fires": 27,
+   "counts": {
+    "ONCC": 27
+   }
+  },
+  "sonoma": {
+   "name": "Sonoma",
+   "gacc": "ONCC",
+   "fires": 20,
+   "counts": {
+    "ONCC": 20
+   }
+  },
+  "stanislaus": {
+   "name": "Stanislaus",
+   "gacc": null,
+   "fires": 37,
+   "counts": {
+    "OSCC": 22,
+    "ONCC": 15
+   }
+  },
+  "sutter": {
+   "name": "Sutter",
+   "gacc": "ONCC",
+   "fires": 2,
+   "counts": {
+    "ONCC": 2
+   }
+  },
+  "tehama": {
+   "name": "Tehama",
+   "gacc": "ONCC",
+   "fires": 63,
+   "counts": {
+    "ONCC": 63
+   }
+  },
+  "trinity": {
+   "name": "Trinity",
+   "gacc": "ONCC",
+   "fires": 88,
+   "counts": {
+    "ONCC": 88
+   }
+  },
+  "tulare": {
+   "name": "Tulare",
+   "gacc": "OSCC",
+   "fires": 121,
+   "counts": {
+    "OSCC": 121
+   }
+  },
+  "tuolumne": {
+   "name": "Tuolumne",
+   "gacc": "OSCC",
+   "fires": 67,
+   "counts": {
+    "OSCC": 67
+   }
+  },
+  "ventura": {
+   "name": "Ventura",
+   "gacc": "OSCC",
+   "fires": 44,
+   "counts": {
+    "OSCC": 44
+   }
+  },
+  "yolo": {
+   "name": "Yolo",
+   "gacc": "ONCC",
+   "fires": 15,
+   "counts": {
+    "ONCC": 15
+   }
+  },
+  "yuba": {
+   "name": "Yuba",
+   "gacc": "ONCC",
+   "fires": 33,
+   "counts": {
+    "ONCC": 33
+   }
+  }
+ }
+}

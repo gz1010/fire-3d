@@ -17,7 +17,9 @@ import numpy as np
 from fire3d import bundle, config
 from fire3d.contracts import ForecastManifest, IncidentSummary
 from fire3d.grid import weather_axes
+from fire3d.sources import landfire
 from fire3d.timeutil import HOUR_MS, floor_hour_ms, now_ms
+from fire3d.types import record_issuer_of
 
 STARTED_MS = 1755181560000          # 2025-08-14T14:26:00Z
 FAKE_KEY = "0123456789abcdef0123456789abcdef"   # FIRMS-key-shaped test value (never a real key)
@@ -68,6 +70,7 @@ class FakeBuild:
         self.forecast_args: list[dict] = []
         self.ctx_end_ms: list[int | None] = []
         self.ctx_now_ms: list[int | None] = []
+        self.bundle_only: set[str] = set()          # ids get_summary answers but no source list knows
 
     # ------------------------------------------------------------------ install
     def install(self, monkeypatch: Any) -> "FakeBuild":
@@ -79,6 +82,7 @@ class FakeBuild:
         import fire3d.spread.ensemble as ensemble
 
         monkeypatch.setattr(catalog, "get_summary", self.get_summary)
+        monkeypatch.setattr(catalog, "resolve_listed", self.resolve_listed)
         monkeypatch.setattr(catalog, "get_catalog", self.get_catalog)
         monkeypatch.setattr(catalog, "estimate_fire_bbox", self.estimate_fire_bbox)
         monkeypatch.setattr(catalog, "live_detections_24h_total", lambda refresh=False: 1234, raising=False)
@@ -96,6 +100,15 @@ class FakeBuild:
     # ------------------------------------------------------------------ catalog
     def get_summary(self, incident_id: str) -> IncidentSummary | None:
         self.calls["get_summary"] += 1
+        return self.summaries.get(incident_id)
+
+    def resolve_listed(self, incident_id: str) -> IncidentSummary | None:
+        """Like catalog.resolve_listed: a listed id (of the catalog's form, not bundle-only), never a manifest."""
+        import fire3d.catalog as catalog
+
+        self.calls["resolve_listed"] += 1
+        if incident_id in self.bundle_only or catalog.parse_incident_id(incident_id) is None:
+            return None
         return self.summaries.get(incident_id)
 
     def get_catalog(self, mode: str, min_acres: float | None = None, refresh: bool = False,
@@ -142,7 +155,7 @@ class FakeBuild:
 
         def fn(m: dict) -> None:
             m["grid"]["elev_min_m"], m["grid"]["elev_max_m"] = float(elev.min()), float(elev.max())
-            m["fuels_edition"] = "LF2025" if ctx.mode == "live" else "LF2024"
+            m["fuels_edition"] = landfire.edition_for(ctx.mode, int(ctx.summary.started_ms))
             m.setdefault("data_sources", []).append({"name": "Terrain (fake)", "detail": "test", "fetched_ms": now_ms()})
 
         bundle.update_manifest(b, fn)
@@ -191,7 +204,7 @@ class FakeBuild:
 
         def fn(m: dict) -> None:
             m["time_range"] = {"start_ms": origin, "end_ms": end_ms, "now_ms": now_ms_}
-            m["ignition"] = {"x": 0.0, "z": 0.0, "lat": lat, "lon": lon, "t_ms": ctx.summary.started_ms, "source": "CAL FIRE (fake)"}
+            m["ignition"] = {"x": 0.0, "z": 0.0, "lat": lat, "lon": lon, "t_ms": ctx.summary.started_ms, "source": f"{record_issuer_of(ctx.summary)} (fake)"}
             m["default_profile_path"] = [[0.0, 0.0], [self.radius_m, 0.0]]
             m["stats"] = {"final_acres_observed": area[-1], "detections": 1, "perimeters": 0}
 

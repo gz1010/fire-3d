@@ -1,0 +1,81 @@
+{
+  "role": "audit-backend-us",
+  "stage": "A (read-only audit)",
+  "summary": "Audited every California-specific assumption in backend/ and SPEC.md that blocks lower-48 coverage and designed the generalization (docs/redesign/audit-3/backend.md, revised after an independent review). NIFC WFIGS works as the national list: 1,178 lower-48 wildfires >= 300 ac in 2026, 861 in 2025, 241 active now (all listed per round-2 decision 1). POOState decides listing (point-in-polygon missed 3 real fires). California merge measured with the revised rule (complex names, lagged starts, all CAL FIRE sizes): 2025 WFIGS-CA >= 300 ac -> 69 same fire, 8 complex members, 2 gaps (Alpaugh; Big Cliff likely inside the Orleans Complex); today 64 of 70 active WFIGS-CA fires are not on CAL FIRE's lists. Correction: Timber is on CAL FIRE's 2026 list (IsActive false at 97 %), not missing. Eleven BLOCKERs: CAL FIRE-only catalog; FIRMS cut to the CA box; NWS area=CA; UTM 10/11; Pacific time in bundles; LANDFIRE LF2025 NoData outside SW/NW; perimeters US-CA; ids tied to calfire_uid; CAL FIRE named as issuer in bundle and forecast text; official lookups 404 for non-CAL FIRE fires; NWS zone placement that would show other states' alerts once alerts are national; plus the CA fuel-moisture table (validation G5). Open-Meteo counts weighted calls (a live weather refresh is ~22 calls). 25 recommended changes (14 P0) and 2 open user questions (Q-A California active status, Q-B California complexes); Q1-Q5 are answered by round 2.",
+  "files": [
+    "docs/redesign/audit-3/backend.md",
+    "docs/screenshots/audit3-backend-geocode-bozeman.png",
+    "docs/screenshots/audit3-backend-fireweather-ca-only.png",
+    "docs/redesign/progress/brief3-audit-backend-us.md",
+    "docs/redesign/reports/brief3-audit-backend-us.json"
+  ],
+  "verification": [
+    "Gates skipped: stage A changes no code (orchestrator note).",
+    "45 polite GETs through fire3d.http (2026-10-22 21:30-21:45 UTC), all HTTP 200; summarized with URL, time, size and result in audit section 7. Sources: WFIGS Incident Locations Current/YTD/all-years, WFIGS Interagency Perimeters YTD, AGOL item 4181a117dc9e43db8598533e29972015 (terms, active rule), CAL FIRE 2025 and live lists, NWS alerts (no area and 49-code area) and /zones batch, IEM bypoint (OK, AZ), FIRMS 7d SNPP feed and area API (Oregon, key masked), NAIP identify (MT, FL), LANDFIRE LF2024/LF2025/FA26 identify (OK, FL) and metadata, 3DEP identify (OK), Open-Meteo historical-forecast (OK, FL) and ensemble (MT), BTS NTAD Time Zones, Census TIGERweb states, Census 2026 Gazetteer national place/ZCTA/county files. Web pages: landfire.gov/node/6129 (LF2025 schedule), open-meteo.com/en/terms and /en/pricing.",
+    "Counts: 2026 WF >= 300 ac lower 48 = 1,178 (CA 69); 2025 = 861 (CA 79); active (Current, WF, lower 48, % < 100 or null) = 241, > 10 ac = 63, > 100 ac = 44, >= 300 ac = 34, unknown size = 45; Aug 1 2026 open estimate 180 (>= 10 ac) / 68 (>= 300 ac); perimeters for 822/1,178 (SACC 48 %, Southeast 30 %).",
+    "CA dedupe: CAL FIRE 2025 >= 300 = 78 vs WFIGS-CA 79; 68 matched (62 by name, median 0.6 km); 0 IRWIN ids equal CAL FIRE UniqueId.",
+    "UTM scale error in zone 11 (pyproj get_factors): Colorado 1.013, Oklahoma 1.040, Florida 1.160, Maine 1.175.",
+    "Local API: FIRE3D_LIVE=0 uv run uvicorn fire3d.api.app:app --port 8711; 11 GETs (geocode x3, health x2, incidents, live/status, official/fire-weather x2, favicon x2), 0 non-GET; stopped, port 8711 free afterwards. Browser runs: 2 shot.mjs runs on JSON URLs, 0 non-GET, no Prepare analysis.",
+    "Secret check (count-only): FIRMS key set, 0 occurrences in the audit and progress files.",
+    "Revision (22:45-22:56 UTC): 16 polite GETs through fire3d.http (15 x 200, 1 x 400 then retried), logged in audit section 7: WFIGS county->GACC stats, WFIGS per-record f=html (Timber), CAL FIRE 2026 list, TIGERweb AIANNHA meta + Navajo/Hopi polygons (55 KB), weather.gov FireZones page, NWS reference map MapServer, cdn.proj.org files.geojson, GIBS GOES-East DescribeDomains + one tile, CMR VNP14IMG_NRT FL point, Earth Search GET /search (FL summer), WFIGS CA 2025 >= 1 ac (1,673 rows). Web: open-meteo.com/en/pricing and /en/docs/ensemble-api, PROJ-data us_nga_README.txt; 1 web search. 0 non-GET; no API started; no browser run.",
+    "Revised dedupe (scratchpad audit-backend-us/rev/scripts/dedupe2.py, cf_gacc.py): 2025 -> 69 same fire / 8 complex members / 2 gaps; CAL FIRE side 73 of 78 matched, 5 without a WFIGS record (all OSCC-only counties); today 70 active WFIGS-CA -> 6 matched, 64 gaps.",
+    "Point-in-polygon (rev/scripts/pip_states.py, TIGERweb states at 0.005 deg): 2026 WF >= 300: 1 outside (Paradise OR, 20 m), 2 POOState != polygon (Low Gap Hollow, Sharpe); Current WF: 2 outside (Zamora Bend TX 77 m, Paradise).",
+    "Offline checks (FIRE3D_DATA_DIR in scratchpad): fire_weather_payload for a non-CAL FIRE id -> HTTPException 404 'unknown incident'; nws.place_live with a Montana alert whose zones raise SourceBusy -> listed for a Florida area as unplaced.",
+    "Secret check (count-only): FIRMS key set, 0 occurrences in the audit, progress, report and 18 revision evidence files."
+  ],
+  "screenshots": [
+    "docs/screenshots/audit3-backend-geocode-bozeman.png",
+    "docs/screenshots/audit3-backend-fireweather-ca-only.png"
+  ],
+  "contract_deviations": [],
+  "known_issues": [
+    "Big Cliff (USFS, 973 ac, 2025) is probably counted inside CAL FIRE's Orleans Complex but WFIGS does not mark it as a member; R1's rule would list it separately (one known double listing).",
+    "Open-Meteo does not say whether ensemble members add to the weighted cost; the R13 budget should be checked against 429 answers in practice. The cloud egress IP is shared, so the daily cap can be reached by others.",
+    "The NWCG agency code -> plain name table for R10 must be checked against NWCG's code list (UnitIDx); its terms were not verified.",
+    "Off-reservation trust lands of the Navajo Nation and Hopi (TIGERweb AIANNHA layer 3) are left out of the time-zone file; small areas.",
+    "LF2025 remaining GeoAreas are scheduled for November 2026 by landfire.gov; the date may move.",
+    "FIRMS national archive parquet size not measured (no 46 MB download in an audit); estimate up to ~10-15x the CA file.",
+    "The audit is 400 lines, over the 150-250 guide, because the revision adds measured evidence and three BLOCKERs."
+  ],
+  "notes_for_integrator": [
+    "Planner: P0 set is R1-R10, R12, R14 (= validation R5), R22 (issuer text) and R24 (README/SPEC credits) in audit-3/backend.md section 4; P1: R11, R13, R15-R18, R23, R25.",
+    "BRIEF-3 round-2 decision 2 cites the Timber Fire as a fire CAL FIRE does not list; that came from this audit's first pass and is wrong: Timber is on CAL FIRE's 2026 list with IsActive=false at 97 %. True examples: Alpaugh (BLM, 2025) and today's 64 small active WFIGS-CA fires. The orchestrator may want to correct the example and put Q-A (whose 'active' decides in CA) and Q-B (CA complexes) to the user.",
+    "R9 (backend NWS) and evacuations EV-R7 must have one owner and one national request (fire events + local officials' events), with the UGC state-prefix filter before any zone is loaded.",
+    "R13 keeps AUTO_BUILD_MAX=4, 100 ac and 48 h (round-2 decision 4); it only adds national candidates, an hourly weather cap and a weighted Open-Meteo budget.",
+    "Contract names for CONTRACT section 14 match web.md 3.7 and validation section 5: state, time_zone, uid (calfire_uid deprecated alias), record_source, record_agency (plain name with code), record_agency_code, record_url (WFIGS all-years query by IrwinID, f=html), irwin_id, gacc, accuracy_region, source_name; LiveStatus.detections_24h; GET /api/geo/lookup; GET /api/official/incident-record.",
+    "Shipped data goes in backend/fire3d/data/ (tracked via !backend/fire3d/data/), never the root data/ (gitignored): gazetteer_us.json, us_states.geojson, us_timezones.geojson, nws_fire_zones.geojson, ca_county_gacc.json, nwcg_agency_codes.json, egm96_l48.json.",
+    "FIRMS yearly cache must be renamed (firms_ca_{year}.parquet -> firms_us_{year}.parquet) so a CA-only cache is never reused; loaders keep a lower-48 box with a 0.5 deg margin.",
+    "Existing CA ids and bundles (2025-eaton-fire-dbfa57, 2025-palisades-fire-abfed7, fixtures) keep resolving because CAL FIRE stays the CA record and CAL FIRE ids keep the UTC-year rule."
+  ],
+  "revision": {
+    "date": "2026-10-22",
+    "critic_verdict": "needs-revision",
+    "verified_and_adopted": [
+      "Missing 1: CAL FIRE issuer text in bundle/forecast text (observed.py:742,:785,:1331,:1366,:1373,:1721,:2113,:2118; ensemble.py:674; live_observation.py:138) -> B9 + R22 (P0).",
+      "Missing 2: fire weather 404 for non-CAL FIRE fires without a bundle (official.py:147-184,:323-324), confirmed offline -> B10 + fill_from_catalog in R10.",
+      "Missing 3: national NWS list loads every alert's zones before the area test; other states' alerts listed as unplaced (confirmed offline) -> B11, R9 UGC-prefix filter, R18 raised to P1.",
+      "Missing 4: GACC for CAL FIRE-only CA fires -> measured county->GACC table (27 ONCC-only, 17 OSCC-only, 6 ambiguous) -> R23.",
+      "Missing 5: no WFIGS URL field, agency codes -> R10 issuer 'NIFC WFIGS (IRWIN)' + code gloss + per-record f=html link on the all-years layer (verified).",
+      "Missing 6: Open-Meteo weighted counting (verified on the pricing and ensemble docs pages) -> section 2.5 cost model, R13 weighted budget.",
+      "Missing 7: CA-only test recorders -> section 1 row, R25.",
+      "Missing 8: README credits -> R24 (P0).",
+      "Missing 9: unchecked sources now checked live: AIANNH (55 KB), NWS fire zones (fz16ap26.zip, reference map layer 9), EGM96 (2.7 MB, public domain), GOES-East GIBS, CMR FL, Sentinel-2 FL summer (2 of 23 scenes under 20 % cloud).",
+      "Missing 10: geocode ', CA' strings and examples, UTC-year rule, HISTORICAL_YEAR default -> R1 (default 2026, UFI year) and R12.",
+      "Wrong 1: dedupe rerun confirms complex members and lagged duplicates (8 of 11); added the McCovey/Marshall case showing the any-name arm needs a +-3 day bound.",
+      "Wrong 2: gazetteer path -> backend/fire3d/data/gazetteer_us.json.",
+      "Wrong 3: Open-Meteo known issue replaced by the documented weighted rule.",
+      "Wrong 4: POOState is the authority; polygons only for points without a state; mismatches logged (rerun: 1+2 and 2 cases).",
+      "Wrong 5: FIRMS loaders keep a box with margin; growth 'up to ~10-15x'; pyarrow filters= instead of whole-file reads.",
+      "Weak: R13 rewritten to keep 4 / 100 ac / 48 h; R14 adopts validation R5 and I6 is a BLOCKER; R8 defines land and labels outside-coverage cells as unknown; R10 shape defined; R9 shares one owner with EV-R7; R1 states the CA complex exception; R18 is P1.",
+      "Questions: Q1-Q5 marked as answered by round 2; the '> 10 ac' recommendation withdrawn; Q5 noted as never a real choice; two new questions Q-A and Q-B."
+    ],
+    "not_adopted_or_adjusted": [
+      "R17 'reuse _gzip_cache': GzipCache is keyed by file path, mtime and size, so it cannot hold a computed JSON body; recommend gzip in the /api/incidents handler (as bundle_file does) instead.",
+      "'10 of 78 CA fires have no GACC': matched against WFIGS fires of any size it is 5 of 78, all in OSCC-only counties; the county table resolves them.",
+      "Timber: the critic's framing (and round-2 decision 2) treats Timber as a CAL FIRE gap; the CAL FIRE 2026 list shows it is listed (IsActive false), so it is a status question (Q-A), not a gap."
+    ],
+    "new_requests": 16,
+    "new_offline_checks": 2,
+    "non_get_requests": 0
+  }
+}

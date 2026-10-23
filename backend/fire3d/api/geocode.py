@@ -1,8 +1,8 @@
 """Address lookup for the map-first UI: a caching proxy for the US Census Geocoder (docs/redesign/BRIEF.md section 8,
-docs/redesign/CONTRACT.md section 6), plus local California town and ZIP matches (brief 2, C-R5). Owned by the
-location agent; app.py mounts ``router``.
+docs/redesign/CONTRACT.md section 6), plus local US town, county and ZIP matches (brief 2 C-R5; national since brief 3,
+CONTRACT 14.10). Owned by us-catalog in brief 3; app.py mounts ``router``.
 
-``GET /api/geocode?q=<one-line US street address | California city, town or CDP | ZIP code>``
+``GET /api/geocode?q=<one-line US street address | US city, town, CDP or county ("Boise, ID") | ZIP code ("83702")>``
 
 * Street addresses (text that starts with a house number) go upstream to the Census Geocoder
   ``locations/onelineaddress`` search (no geographies lookup), ``format=json``, with the current documented benchmark
@@ -11,9 +11,13 @@ location agent; app.py mounts ``router``.
   ``FIRE3D_GEOCODER_BENCHMARK`` override the endpoint and benchmark.
 * Census positions are calculated along TIGER/Line address ranges, not rooftops: every response says so, and the
   matched range (``from_address``..``to_address``) and street side are passed on.
-* Town names and ZIP codes are matched locally in ``fire3d/data/gazetteer_ca.json`` (built by
-  ``scripts/build_gazetteer.py`` from the public-domain U.S. Census Bureau Gazetteer Files: California places and ZIP
-  Code Tabulation Areas). No upstream call is made for them. Positions are each area's Census internal point
+* Town, county names and ZIP codes are matched locally in ``fire3d/data/gazetteer_us.json`` (built by
+  ``scripts/build_gazetteer.py`` from the public-domain U.S. Census Bureau Gazetteer Files: the places, counties and ZIP
+  Code Tabulation Areas of every state; Alaska, Hawaii and territory rows are kept and flagged ``supported: false`` with
+  "Fire-3d does not support Alaska, Hawaii or US territories yet."). A trailing state ("Springfield, IL",
+  "Springfield IL", "83702 ID", "ID 83702") narrows the search; a bare name lists the largest matches across states.
+  Each local match carries ``state``, ``state_name``, ``county``, ``supported`` and ``"<Name>, <ST>"`` names. No
+  upstream call is made for them. Positions are each area's Census internal point
   (approximate: "town center", "ZIP area"); ZCTAs approximate USPS ZIP codes and PO-box-only ZIP codes are missing.
 * Only explicitly submitted queries: no autocomplete, no POI search, no Nominatim. Coordinate-like queries are
   refused (the browser resolves coordinates itself; they are never sent upstream).
@@ -119,7 +123,7 @@ def looks_like_coordinates(normalized: str) -> bool:
 def validate_query(raw: str | None) -> str:
     q = normalize_query(raw)
     if not q:
-        raise GeocodeError(400, "Enter a US street address, for example \"600 E Mariposa St, Altadena, CA 91001\".")
+        raise GeocodeError(400, f"Enter a US street address, town, county or ZIP code ({EXAMPLES}).")
     if len(q) > MAX_QUERY_CHARS:
         raise GeocodeError(400, f"The address is too long (at most {MAX_QUERY_CHARS} characters).")
     if looks_like_coordinates(q):
@@ -139,22 +143,30 @@ def looks_like_street_address(q: str) -> bool:
 # ------------------------------------------------------------------------------------------------------------------
 # Towns, cities and ZIP areas: the local Census Gazetteer index (no upstream calls)
 # ------------------------------------------------------------------------------------------------------------------
-GAZETTEER_PATH = Path(__file__).resolve().parents[1] / "data" / "gazetteer_ca.json"
+GAZETTEER_PATH = Path(__file__).resolve().parents[1] / "data" / "gazetteer_us.json"
 GAZETTEER_SOURCE = "U.S. Census Bureau Gazetteer Files"
 PLACE_LIMIT = 8                      # place candidates returned (total_matches gives the full count)
 NEAR_MAX_KM = 25.0                   # "near <place>" only within this distance
-PLACE_TYPE_LABEL = {"city": "city", "town": "town", "cdp": "census-designated place", "place": "place"}
-_TYPE_RANK = {"city": 0, "town": 1, "cdp": 2, "place": 3}
-_STATE_WORDS = {"ca", "calif", "california", "usa", "us"}
+PLACE_TYPE_LABEL = {"city": "city", "town": "town", "village": "village", "borough": "borough",
+                    "municipality": "municipality", "government": "consolidated city-county", "county": "county",
+                    "cdp": "census-designated place", "comunidad": "comunidad (Puerto Rico)",
+                    "zona_urbana": "zona urbana (Puerto Rico)", "place": "place"}
+_TYPE_RANK = {"city": 0, "government": 0, "town": 1, "village": 2, "borough": 2, "municipality": 2, "county": 3,
+              "cdp": 4, "comunidad": 5, "zona_urbana": 5, "place": 6}
 _SYNONYMS = {"mount": "mt", "saint": "st", "fort": "ft"}
+_COUNTRY_WORDS = {"usa", "us"}
+EXAMPLES = "e.g. 600 E Mariposa St, Altadena; Boise, ID; 83702"
+NOT_SUPPORTED_NOTE = "Fire-3d does not support Alaska, Hawaii or US territories yet."
 PLACE_NOTE = ("Town positions are the Census Bureau's internal point of the area (approximate), not a street address. "
               "To check a spot, enter a street address with a house number or click the map.")
 ZIP_NOTE = ("ZIP areas are Census ZIP Code Tabulation Areas, which approximate USPS ZIP codes (PO-box-only ZIP codes "
             "are not included). The position is the area's internal point (approximate).")
-NO_PLACE_NOTE = ("No California city, town or census-designated place matches. Landmarks, businesses and street names "
-                 "without a house number are not searched.")
-NO_ZIP_NOTE = ("This ZIP code is not a California ZIP area in the Census index (Fire-3d covers California only; "
-               "PO-box-only ZIP codes have no area).")
+NO_MATCH_TAIL = (" Landmarks, businesses and street names without a house number are not searched (" + EXAMPLES + ").")
+
+
+def no_match_note(q: str) -> str:
+    """CONTRACT 14.10: "No US city, town, county or ZIP code matches '<q>'." plus what is searched."""
+    return f"No US city, town, county or ZIP code matches '{q}'." + NO_MATCH_TAIL
 
 
 def fold(s: str) -> str:
@@ -168,21 +180,47 @@ def words(s: str) -> tuple[str, ...]:
     return tuple(_SYNONYMS.get(w, w) for w in fold(s).split())
 
 
+def _state_names() -> dict[tuple[str, ...], str]:
+    from .. import regions
+
+    out: dict[tuple[str, ...], str] = {}
+    for code, name in regions.STATE_NAMES.items():
+        out[(code.lower(),)] = code
+        out[tuple(fold(name).split())] = code
+    out[("calif",)] = "CA"
+    out[("d", "c")] = "DC"
+    out[("washington", "d", "c")] = "DC"
+    return out
+
+
+_STATE_WORDS = _state_names()
+_STATE_MAX_WORDS = max(len(k) for k in _STATE_WORDS)
+
+
+def _state_supported(state: str | None) -> bool:
+    from .. import regions
+
+    return regions.is_supported_state(state)
+
+
 @dataclass(frozen=True)
 class Place:
     name: str
     type: str
+    state: str
     lat: float
     lon: float
     land_km2: float
+    county: str | None
     words: tuple[str, ...]
-    alt: tuple[str, ...] | None       # the name in parentheses ("San Buenaventura (Ventura)" -> ventura)
+    alt: tuple[str, ...] | None       # the name in parentheses ("San Buenaventura (Ventura)" -> ventura) or the alias
     main: tuple[str, ...] | None      # the name without it ("san buenaventura")
 
 
 @dataclass(frozen=True)
 class ZipArea:
     zip: str
+    state: str
     lat: float
     lon: float
     land_km2: float
@@ -193,20 +231,27 @@ class Gazetteer:
         self.vintage = int(raw["vintage"])
         self.retrieved_ms = _date_ms(raw.get("retrieved"))
         self.places: list[Place] = []
-        for name, kind, lat, lon, area in raw["places"]:
+        for row in raw["places"]:
+            name, kind, state, lat, lon, area, county = row[:7]
+            alias = row[7] if len(row) > 7 else None
             m = re.match(r"^(.*?)\s*\(([^)]+)\)\s*$", name)
-            self.places.append(Place(name, kind, float(lat), float(lon), float(area), words(name),
-                                     words(m.group(2)) if m else None, words(m.group(1)) if m else None))
-        self.zips: dict[str, ZipArea] = {z: ZipArea(z, float(lat), float(lon), float(area)) for z, lat, lon, area in raw["zips"]}
-        counts: dict[tuple[str, ...], int] = {}
+            alt = words(m.group(2)) if m else (words(alias) if alias else None)
+            self.places.append(Place(name, kind, state, float(lat), float(lon), float(area), county, words(name), alt,
+                                     words(m.group(1)) if m else None))
+        self.zips: dict[str, ZipArea] = {z: ZipArea(z, st, float(lat), float(lon), float(area)) for z, st, lat, lon, area in raw["zips"]}
+        self.by_state: dict[str, list[Place]] = {}
+        counts: dict[tuple[str, tuple[str, ...]], int] = {}
         for p in self.places:
-            counts[p.words] = counts.get(p.words, 0) + 1
+            self.by_state.setdefault(p.state, []).append(p)
+            counts[(p.state, p.words)] = counts.get((p.state, p.words), 0) + 1
         self.shared_names = {k for k, n in counts.items() if n > 1}
 
-    def nearest_place(self, lat: float, lon: float, exclude: Place | None = None, incorporated: bool = False) -> tuple[Place, float] | None:
+    def nearest_place(self, lat: float, lon: float, state: str, exclude: Place | None = None,
+                      incorporated: bool = False) -> tuple[Place, float] | None:
+        """The nearest place of ``state`` (cities and towns only with ``incorporated``; never a county)."""
         best: tuple[Place, float] | None = None
-        for p in self.places:
-            if p is exclude or (incorporated and p.type not in ("city", "town")):
+        for p in self.by_state.get(state, []):
+            if p is exclude or p.type == "county" or (incorporated and p.type not in ("city", "town", "village", "borough", "government")):
                 continue
             d = _km(lat, lon, p.lat, p.lon)
             if best is None or d < best[1]:
@@ -253,85 +298,128 @@ def reset_gazetteer() -> None:
         _gazetteer, _gazetteer_error = None, None
 
 
+def _take_state(t: list[str]) -> str | None:
+    """Pop trailing state words ("ID", "Idaho", "New Mexico") from ``t`` when a name stays in front of them."""
+    for n in range(min(_STATE_MAX_WORDS, len(t) - 1), 0, -1):
+        code = _STATE_WORDS.get(tuple(t[-n:]))
+        if code:
+            del t[-n:]
+            return code
+    return None
+
+
 def split_local(q: str) -> tuple[tuple[str, ...], str | None]:
-    """(place words, ZIP) of a query that is not a street address: a trailing 5-digit ZIP (or ZIP+4) and trailing
-    state words ("CA", "California", "USA") are taken off; a name that is only a state word is kept ("California"
-    still finds California City)."""
+    """(place words, ZIP) of a query that is not a street address (see :func:`split_query` for the state)."""
+    name, zip5, _ = split_query(q)
+    return name, zip5
+
+
+def split_query(q: str) -> tuple[tuple[str, ...], str | None, str | None]:
+    """(place words, ZIP, state) of a query that is not a street address: a trailing 5-digit ZIP (or ZIP+4), a state
+    ("Springfield, IL", "Springfield IL", "Springfield, Illinois", "83702 ID", "ID 83702") and "USA" are taken off; a
+    name that is only a state word is kept ("California" still finds California City; "Washington" finds the towns)."""
     t = list(words(q))
-    while len(t) > 1 and t[-1] in _STATE_WORDS:     # "91001 CA", "Altadena CA USA"
+    while len(t) > 1 and t[-1] in _COUNTRY_WORDS:
         t.pop()
     zip5 = None
+    state = None
     if t and re.fullmatch(r"\d{5}", t[-1]):
         zip5 = t.pop()
     elif len(t) >= 2 and re.fullmatch(r"\d{4}", t[-1]) and re.fullmatch(r"\d{5}", t[-2]):
         zip5 = t[-2]
         del t[-2:]
-    while t and t[-1] in _STATE_WORDS and (len(t) > 1 or zip5):
+    if t and zip5 and _STATE_WORDS.get(tuple(t)):         # "ID 83702", "Idaho 83702"
+        state, t = _STATE_WORDS[tuple(t)], []
+    elif zip5 is None and len(t) >= 2 and re.fullmatch(r"\d{5}", t[-2]) and _STATE_WORDS.get((t[-1],)):   # "83702 ID"
+        zip5, state = t[-2], _STATE_WORDS[(t[-1],)]
+        del t[-2:]
+    while len(t) > 1 and t[-1] in _COUNTRY_WORDS:
         t.pop()
-    if zip5 and t and all(w in _STATE_WORDS for w in t):     # "CA 91001"
+    if state is None and t:
+        state = _take_state(t)
+    if zip5 and t and len(t) <= _STATE_MAX_WORDS and _STATE_WORDS.get(tuple(t)):   # "CA 91001"
+        state = state or _STATE_WORDS[tuple(t)]
         t = []
-    return tuple(t), zip5
+    return tuple(t), zip5, state
 
 
 def _place_score(p: Place, q: tuple[str, ...]) -> int:
+    """The best of: exact name 100 (the name in parentheses or a known common name 96, the name without it 94), name
+    prefix 80 / 76 / 74, every query word starting a word of the name 60; 0 when nothing matches."""
+    best = 0
     for name, exact, prefix in ((p.words, 100, 80), (p.alt, 96, 76), (p.main, 94, 74)):
         if not name:
             continue
         if name == q:
-            return exact
-        if len(q) <= len(name) and name[: len(q) - 1] == q[:-1] and name[len(q) - 1].startswith(q[-1]):
-            return prefix
-    if all(any(w.startswith(x) for w in p.words) for x in q):
-        return 60
-    return 0
+            best = max(best, exact)
+        elif len(q) <= len(name) and name[: len(q) - 1] == q[:-1] and name[len(q) - 1].startswith(q[-1]):
+            best = max(best, prefix)
+    if not best and all(any(w.startswith(x) for w in p.words) for x in q):
+        best = 60
+    return best
 
 
-def search_places(g: Gazetteer, q: tuple[str, ...]) -> list[tuple[Place, int]]:
-    """Places whose name matches every query word (each starts a word of the name), best first: exact name (also
-    the name in parentheses), then name prefix, then all words; ties by city > town > CDP, then larger area."""
+def search_places(g: Gazetteer, q: tuple[str, ...], state: str | None = None) -> list[tuple[Place, int]]:
+    """Places (and counties) whose name matches every query word (each starts a word of the name), best first: exact
+    name (also the name in parentheses or a known common name), then name prefix, then all words; ties by city >
+    town > village > county > CDP, then larger area. ``state`` keeps one state's places."""
     if not q:
         return []
-    hits = [(p, s) for p in g.places if (s := _place_score(p, q)) > 0]
-    hits.sort(key=lambda h: (-h[1], _TYPE_RANK.get(h[0].type, 9), -h[0].land_km2, h[0].name))
+    pool = g.by_state.get(state, []) if state else g.places
+    hits = [(p, s) for p in pool if (s := _place_score(p, q)) > 0]
+    hits.sort(key=lambda h: (-h[1], _TYPE_RANK.get(h[0].type, 9), -h[0].land_km2, h[0].state, h[0].name))
     return hits
+
+
+def _state_fields(state: str) -> dict[str, Any]:
+    from .. import regions
+
+    supported = _state_supported(state)
+    return {"state": state, "state_name": regions.STATE_NAMES.get(state), "supported": supported,
+            "note": None if supported else NOT_SUPPORTED_NOTE}
 
 
 def _place_match(g: Gazetteer, p: Place, score: int) -> dict[str, Any]:
     near = None
-    if p.words in g.shared_names:          # tell same-named places apart: the nearest city or town
-        near = g.nearest_place(p.lat, p.lon, exclude=p, incorporated=True) or g.nearest_place(p.lat, p.lon, exclude=p)
+    if (p.state, p.words) in g.shared_names and p.type != "county":   # same-named places of one state: the nearest town
+        near = g.nearest_place(p.lat, p.lon, p.state, exclude=p, incorporated=True) or g.nearest_place(p.lat, p.lon, p.state, exclude=p)
     return {
-        "kind": "place", "matched_address": f"{p.name}, CA", "name": p.name, "place_type": p.type,
+        "kind": "place", "matched_address": f"{p.name}, {p.state}", "name": f"{p.name}, {p.state}", "place_type": p.type,
         "place_type_label": PLACE_TYPE_LABEL.get(p.type, "place"), "lat": p.lat, "lon": p.lon, "land_km2": p.land_km2,
         "exact": score >= 94, "near": near[0].name if near else None, "near_km": round(near[1], 1) if near else None,
+        "county": p.county if p.type != "county" else p.name, **_state_fields(p.state),
         "tiger_line_id": None, "side": None, "from_address": None, "to_address": None,
     }
 
 
 def _zip_match(g: Gazetteer, z: ZipArea) -> dict[str, Any]:
-    near = g.nearest_place(z.lat, z.lon)
+    from .. import regions
+
+    near = g.nearest_place(z.lat, z.lon, z.state)
     near = near if near and near[1] <= NEAR_MAX_KM else None
+    c = regions.county_at(z.lon, z.lat) if _state_supported(z.state) else None
     return {
-        "kind": "zip", "matched_address": f"ZIP {z.zip}, CA", "name": z.zip, "zip": z.zip, "lat": z.lat, "lon": z.lon,
-        "land_km2": z.land_km2, "exact": True, "near": near[0].name if near else None,
-        "near_km": round(near[1], 1) if near else None,
+        "kind": "zip", "matched_address": f"ZIP {z.zip}, {z.state}", "name": f"ZIP {z.zip}, {z.state}", "zip": z.zip,
+        "lat": z.lat, "lon": z.lon, "land_km2": z.land_km2, "exact": True, "near": near[0].name if near else None,
+        "near_km": round(near[1], 1) if near else None, "place_type": "zip", "place_type_label": "ZIP area",
+        "county": c.name if c is not None and c.state == z.state else None, **_state_fields(z.state),
         "tiger_line_id": None, "side": None, "from_address": None, "to_address": None,
     }
 
 
 def local_lookup(q: str, zip_only: bool) -> dict[str, Any]:
-    """The reply for a town or ZIP query (no upstream call); raises GeocodeError 503 without the index."""
+    """The reply for a town, county or ZIP query (no upstream call); raises GeocodeError 503 without the index."""
     g = gazetteer()
     if g is None:
         raise GeocodeError(503, "Town and ZIP search is not available on this server. Enter a street address with a "
                                 "house number, or click the map.")
-    name, zip5 = split_local(q)
+    name, zip5, state = split_query(q)
     matches: list[dict[str, Any]] = []
     place_total = 0
     if name and not zip_only:
-        hits = search_places(g, name)
+        hits = search_places(g, name, state)
         place_total = len(hits)
-        matches = [_place_match(g, p, s) for p, s in hits[:PLACE_LIMIT]]
+        matches = [_place_match(g, p, sc) for p, sc in hits[:PLACE_LIMIT]]
     z = g.zips.get(zip5) if zip5 else None
     if z:
         matches.append(_zip_match(g, z))          # "Altadena, CA 91001": the town first, then its ZIP area
@@ -339,12 +427,14 @@ def local_lookup(q: str, zip_only: bool) -> dict[str, Any]:
     kind = "zip" if zip_only or (z and not place_total) else "place"
     if matches:
         note = ZIP_NOTE if kind == "zip" else PLACE_NOTE
+        if any(not m["supported"] for m in matches):
+            note = f"{note} {NOT_SUPPORTED_NOTE}"
     else:
-        note = NO_ZIP_NOTE if zip5 and not name else NO_PLACE_NOTE
+        note = no_match_note(q)
     return {
         "query": q, "kind": kind, "local": True, "matches": matches, "total_matches": total, "benchmark": None,
         "vintage": g.vintage, "source": GAZETTEER_SOURCE,
-        "attribution": f"Towns and ZIP areas: {GAZETTEER_SOURCE} ({g.vintage}, public domain)",
+        "attribution": f"Towns, counties and ZIP areas: {GAZETTEER_SOURCE} ({g.vintage}, public domain)",
         "note": note, "cached": False, "fetched_ms": g.retrieved_ms,
     }
 
@@ -428,13 +518,12 @@ def lookup(raw_query: str | None) -> dict[str, Any]:
     """The /api/geocode reply for a raw query; raises GeocodeError. ZIP codes and text without a house number are
     matched locally (towns and ZIP areas); street addresses go to the Census Geocoder."""
     q = validate_query(raw_query)
-    name, zip5 = split_local(q)
+    name, zip5, _state = split_query(q)
     if zip5 and not name:
         return local_lookup(q, zip_only=True)
     if not looks_like_street_address(q):
         if not re.search(r"[^\W\d_]", q):
-            raise GeocodeError(400, "Enter a street address with a house number, a California town or a ZIP code, for "
-                                    "example \"600 E Mariposa St, Altadena, CA\" or \"91001\".")
+            raise GeocodeError(400, f"Enter a street address with a house number, a US town, county or ZIP code ({EXAMPLES}).")
         return local_lookup(q, zip_only=False)
     key = cache_key(q)
     now = time.monotonic()
@@ -496,9 +585,9 @@ def _json(obj: Any, status: int, headers: dict[str, str]) -> Response:
 
 @router.get("/api/geocode")
 def geocode(q: str = Query("", description="One-line US street address (house number, street, city/state or ZIP), "
-                                           "or a California city, town or ZIP code")) -> Response:
+                                           "or a US city, town, county or ZIP code ('Boise, ID', 'Springfield IL', '83702')")) -> Response:
     """Census Geocoder lookup of an explicitly submitted US street address (approximate, interpolated positions), or
-    local California town and ZIP-area matches from the Census Gazetteer (approximate internal points)."""
+    local US town, county and ZIP-area matches from the Census Gazetteer (approximate internal points)."""
     try:
         return _json(lookup(q), 200, {"Cache-Control": CACHE_CONTROL_OK})
     except GeocodeError as e:

@@ -539,6 +539,13 @@
   color: var(--m-text);
   font-weight: 500;
 }
+/* brief 3 (§14.9.1): whose clock the card's times use */
+.loc-zone {
+  margin: 4px 0 0;
+  font-size: var(--m-fs-sm);
+  line-height: 1.4;
+  color: var(--m-text-2);
+}
 /* overview card */
 .loc-open-analysis {
   display: flex;
@@ -972,4 +979,24 @@
   .loc-search-label-sub {
     display: none;
   }
+}
+
+/* brief 3 (§14.14): a point Fire-3d does not cover */
+.loc-coverage {
+  margin: 0 0 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--m-border-strong);
+  border-radius: var(--m-radius-sm);
+  background: rgba(255, 255, 255, 0.05);
+  font-size: var(--m-fs-md);
+  line-height: 1.4;
+  color: var(--m-text);
+}
+
+/* brief 3 (§14.4): the model's accuracy in the fire's region, under the model sentence */
+.loc-model-accuracy {
+  margin: 4px 0 0;
+  font-size: var(--m-fs-sm);
+  line-height: 1.4;
+  color: var(--m-text-2);
 }

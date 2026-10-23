@@ -36,6 +36,7 @@ import numpy as np
 from .. import bundle, config
 from ..contracts import ForecastManifest, IncidentManifest, IncidentSummary, contract_problems, dump
 from ..grid import grids_from_manifest, make_aoi, manifest_grid
+from ..sources.weather import WeatherQuotaExceeded
 from ..timeutil import DAY_MS, HOUR_MS, now_ms, time_origin_for
 from ..types import BuildContext, ProgressFn
 
@@ -66,34 +67,81 @@ _STATIC_SYNONYMS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 REFRESH_STAGES = {"observations": 0.6, "weather": 0.3, "behavior": 0.1}
 REFRESH_FAILED_PREFIX = "Live refresh failed"
+WEATHER_NOT_REFRESHED_PREFIX = "Weather not refreshed: "
+
+
+UNSUPPORTED_TEXT = "Fire-3d does not support Alaska, Hawaii or US territories yet."     # CONTRACT 14.14
+
+
+class BuildRefused(LookupError):
+    """The build gate refused an id (CONTRACT 14.2): ``status`` is the HTTP answer the API gives for it (404 unknown,
+    409 a local or synthetic bundle or an alias, 422 Alaska / Hawaii / territories or a pre-LF2023 fire)."""
+
+    def __init__(self, status: int, message: str):
+        super().__init__(message)
+        self.status = status
 
 
 def spec_incident_id(summary: IncidentSummary) -> str:
-    """SPEC 4.4 id of a summary: ``f"{year}-{slug(name)}-{calfire_uid[:6].lower()}"``."""
+    """Deprecated (brief 3): the CAL FIRE form of a SPEC 4.4 id, ``f"{year}-{slug(name)}-{calfire_uid[:6].lower()}"``.
+    The build gate now asks the source lists (:func:`is_catalog_incident`)."""
     slug = re.sub(r"[^a-z0-9]+", "-", str(summary.name or "").strip().lower()).strip("-") or "incident"
     return f"{int(summary.year)}-{slug}-{str(summary.calfire_uid).strip().lower()[:6]}"
 
 
-def is_catalog_incident(incident_id: str, summary: IncidentSummary | dict | None) -> bool:
-    """True when ``summary`` describes a real CAL FIRE incident with this id (its SPEC 4.4 id matches).
+def _listed(incident_id: str) -> IncidentSummary | None:
+    """``catalog.resolve_listed`` (a CAL FIRE or NIFC WFIGS list knows the id; never a manifest); None on failure."""
+    from .. import catalog
 
-    ``catalog.get_summary`` also answers from bundle manifests on disk (e.g. ``fixture-demo``); such bundles are
-    served read-only and must never be (re)built or refreshed from their own manifest.
+    try:
+        s = catalog.resolve_listed(incident_id)
+    except Exception as e:  # noqa: BLE001 - an unreachable list: not buildable now, never a 500
+        log.warning("build gate: resolve_listed(%s) failed: %s", incident_id, config.mask_secrets(e))
+        return None
+    if isinstance(s, dict):
+        s = IncidentSummary.model_validate(s)
+    return s
+
+
+def is_catalog_incident(incident_id: str, summary: IncidentSummary | dict | None) -> bool:
+    """True when ``incident_id`` may be built: ``summary`` is this id's, a source list knows it
+    (``catalog.resolve_listed``: CAL FIRE or NIFC WFIGS, never a bundle manifest alone) under this same id, and its
+    state is in the lower 48 + DC (``catalog.is_supported``). CONTRACT 14.2.
+
+    ``catalog.get_summary`` also answers from bundle manifests on disk (``fixture-demo``, ``fixture-east``); such
+    bundles are served read-only and are never (re)built or refreshed from their own manifest.
     """
+    from .. import catalog
+
     if summary is None:
         return False
-    if isinstance(summary, dict):
-        try:
-            summary = IncidentSummary.model_validate(summary)
-        except ValueError:
-            return False
-    return summary.id == incident_id and spec_incident_id(summary) == incident_id
+    sid = summary.get("id") if isinstance(summary, dict) else getattr(summary, "id", None)
+    if sid != incident_id:
+        return False
+    listed = _listed(incident_id)
+    return listed is not None and listed.id == incident_id and catalog.is_supported(listed)
+
+
+def gate_refusal(incident_id: str, summary: IncidentSummary | dict | None) -> BuildRefused:
+    """The error for an id :func:`is_catalog_incident` refuses (same texts as ``api/app.py``, CONTRACT 14.2)."""
+    from .. import regions
+
+    if summary is None:
+        return BuildRefused(404, f"unknown incident {incident_id!r}")
+    listed = _listed(incident_id)
+    if listed is not None and not regions.is_supported_state(listed.state):
+        return BuildRefused(422, UNSUPPORTED_TEXT)
+    if listed is None:
+        return BuildRefused(409, f"'{incident_id}' is a local or synthetic bundle; it cannot be rebuilt.")
+    if listed.id != incident_id:
+        return BuildRefused(409, f"'{incident_id}' is listed as '{listed.id}'.")
+    return BuildRefused(409, f"'{incident_id}' cannot be built in this version yet.")
 
 
 def short_error(exc: BaseException) -> str:
     """One-line, secret-masked description of an exception (for job errors and manifest warnings)."""
     msg = " ".join(str(exc).split()) or type(exc).__name__
-    text = msg if isinstance(exc, (LookupError, BundleBusy)) else f"{type(exc).__name__}: {msg}"
+    text = msg if isinstance(exc, (LookupError, BundleBusy, WeatherQuotaExceeded, BuildRefused)) else f"{type(exc).__name__}: {msg}"
     text = config.mask_secrets(text)
     return text if len(text) <= ERROR_MAX_CHARS else text[: ERROR_MAX_CHARS - 1] + "…"
 
@@ -440,12 +488,17 @@ def _validate(m: dict) -> IncidentManifest:
 # ----------------------------------------------------------------------------------------------------------------
 # Build
 # ----------------------------------------------------------------------------------------------------------------
-def build_incident(incident_id: str, progress: ProgressFn | None = None, force: bool = False) -> IncidentManifest:
+def build_incident(incident_id: str, progress: ProgressFn | None = None, force: bool = False, *,
+                   require_hrrr: bool = False) -> IncidentManifest:
     """Build (or with ``force`` rebuild) the bundle of ``incident_id``; returns the final manifest.
 
     Without ``force`` an already "ready" bundle is returned untouched. Raises ``LookupError`` for an incident the
     catalog does not know, :class:`BundleBusy` when another process keeps building it, and re-raises any build
-    failure after marking the manifest "error".
+    failure after marking the manifest "error". :class:`~fire3d.sources.weather.WeatherQuotaExceeded` is raised
+    before anything is written when a weather host this build needs is already known to be refused (CONTRACT
+    14.12.2), and a refused HRRR / forecast request during the build fails it (never filled with ERA5).
+    ``require_hrrr`` (``build --require-hrrr``) also fails on any ERA5-filled hour and, for a California fire, on a
+    missing water-year precipitation total.
     """
     bdir = bundle.bundle_dir(incident_id)
     prog = BuildProgress(progress, STAGE_WEIGHTS)
@@ -459,10 +512,9 @@ def build_incident(incident_id: str, progress: ProgressFn | None = None, force: 
     summary = catalog.get_summary(incident_id)
     if isinstance(summary, dict):
         summary = IncidentSummary.model_validate(summary)
-    if summary is None:
-        raise LookupError(f"unknown incident {incident_id!r}: not in the CAL FIRE catalog")
-    if not is_catalog_incident(incident_id, summary):
-        raise LookupError(f"incident {incident_id!r} is not a CAL FIRE catalog incident (bundle-only), so it cannot be (re)built")
+    if summary is None or not is_catalog_incident(incident_id, summary):
+        raise gate_refusal(incident_id, summary)
+    landfire_gate(summary, force)
     with ExitStack() as stack:
         try:
             stack.enter_context(bundle_lock(bdir, timeout=0))
@@ -473,7 +525,7 @@ def build_incident(incident_id: str, progress: ProgressFn | None = None, force: 
         if existing and existing.get("status") == "ready" and not force:     # built by someone else meanwhile
             prog.finish("catalog", "bundle already built")
             return IncidentManifest.model_validate(existing)
-        return _build_locked(bdir, summary, BuildProgress(progress, _stage_weights(summary.mode)))
+        return _build_locked(bdir, summary, BuildProgress(progress, _stage_weights(summary.mode)), require_hrrr=require_hrrr)
 
 
 def _read_manifest(bdir: Path) -> dict | None:
@@ -485,7 +537,48 @@ def _read_manifest(bdir: Path) -> dict | None:
     return m if isinstance(m, dict) else None
 
 
-def _build_locked(bdir: Path, summary: IncidentSummary, prog: BuildProgress) -> IncidentManifest:
+def _default_edition(mode: str, summary: IncidentSummary) -> str:
+    from ..sources import landfire
+
+    return landfire.edition_for(mode, int(summary.started_ms))
+
+
+def landfire_gate(summary: IncidentSummary, force: bool) -> None:
+    """A historical fire that began before Oct 2023 (federal FY2023 or earlier) has no pre-fire LANDFIRE edition here
+    (LF2023 is the oldest): refused unless ``force`` (CONTRACT 14.12.3); with ``force`` it is built on LF2023 with a
+    warning."""
+    from ..sources import landfire
+
+    if summary.mode == "historical" and not landfire.has_prefire_edition(int(summary.started_ms)) and not force:
+        raise BuildRefused(422, landfire.too_old_text(int(summary.started_ms)))
+
+
+def incident_record_source(summary: IncidentSummary, fetched_ms: int) -> dict:
+    """The manifest's data source for the fire's own record (CONTRACT 14.12.6, read by the web's dataCredits): CAL
+    FIRE rows keep brief 2's "CAL FIRE incidents"; NIFC WFIGS rows "NIFC WFIGS incident record (IRWIN)"."""
+    if getattr(summary, "record_source", None) == "wfigs":
+        issuer = getattr(summary, "record_issuer", None) or "NIFC WFIGS (IRWIN)"
+        return {"name": "NIFC WFIGS incident record (IRWIN)",
+                "detail": f"WFIGS Incident Locations, IRWIN {getattr(summary, 'irwin_id', None) or 'id unknown'} "
+                          f"({issuer}; incident point, acres, dates)", "fetched_ms": int(fetched_ms)}
+    return {"name": "CAL FIRE incidents", "detail": "incidents.fire.ca.gov IncidentApi/List (incident point, acres, dates)",
+            "fetched_ms": int(fetched_ms)}
+
+
+def weather_preflight(summary: IncidentSummary, now: int | None = None) -> None:
+    """Raise :class:`~fire3d.sources.weather.WeatherQuotaExceeded` (no network call) when a weather host this
+    build needs is blocked in this process after a request-limit answer, so a refused build fails before it
+    clears an existing bundle or spends requests on terrain and fuels (the live loop's remaining candidates)."""
+    from ..build.weather_bundle import weather_window
+    from ..sources.weather import deterministic_hosts, raise_if_blocked
+
+    t = now_ms() if now is None else int(now)
+    end = None if summary.mode == "live" else _preliminary_end(summary, t)
+    a, b = weather_window(summary.mode, int(summary.started_ms), end, t)
+    raise_if_blocked(deterministic_hosts(a, b, t), t)
+
+
+def _build_locked(bdir: Path, summary: IncidentSummary, prog: BuildProgress, *, require_hrrr: bool = False) -> IncidentManifest:
     from .. import catalog
     from ..build.aoi import build_static_layers
     from ..build.observed import build_observed
@@ -493,6 +586,7 @@ def _build_locked(bdir: Path, summary: IncidentSummary, prog: BuildProgress) -> 
 
     mode = summary.mode
     t_start = now_ms()
+    weather_preflight(summary, t_start)
     warnings: list[str] = []
     prog.report("catalog", 0.3, "estimating the fire extent")
     bbox = None
@@ -511,9 +605,7 @@ def _build_locked(bdir: Path, summary: IncidentSummary, prog: BuildProgress) -> 
         "schema_version": 1, "id": summary.id, "name": summary.name, "mode": mode, "status": "building",
         "summary": dump(building_summary), "time_origin_ms": time_origin,
         "grid": manifest_grid(render, fire, 0.0, 0.0),
-        "layers": {}, "data_sources": [
-            {"name": "CAL FIRE incidents", "detail": "incidents.fire.ca.gov IncidentApi/List (incident point, acres, dates)", "fetched_ms": t_start},
-        ],
+        "layers": {}, "data_sources": [incident_record_source(summary, t_start)],
         "forecasts": [], "warnings": warnings,
     }
     bundle.update_manifest(bdir, lambda m: initial)
@@ -524,6 +616,7 @@ def _build_locked(bdir: Path, summary: IncidentSummary, prog: BuildProgress) -> 
         summary=building_summary, bundle_dir=bdir, render_grid=render, fire_grid=fire, time_origin_ms=time_origin,
         mode=mode, progress=prog.static_fn(), fire_bbox_lonlat=tuple(bbox) if bbox else None,
         end_ms=prelim_end, now_ms=t_start if mode == "live" else None,
+        time_zone=getattr(summary, "time_zone", None), require_hrrr=require_hrrr,
     )
     prog.report("catalog", 1.0, "bundle initialised")
     try:
@@ -565,7 +658,7 @@ def _build_locked(bdir: Path, summary: IncidentSummary, prog: BuildProgress) -> 
             m.setdefault("data_sources", [])
             m.setdefault("forecasts", [])
             m.setdefault("warnings", [])
-            m.setdefault("fuels_edition", "LF2025" if mode == "live" else "LF2024")
+            m.setdefault("fuels_edition", _default_edition(mode, summary))
             if not isinstance(m.get("stats"), dict):
                 m["stats"] = _stats_from_files(bdir, m)
 
@@ -574,8 +667,23 @@ def _build_locked(bdir: Path, summary: IncidentSummary, prog: BuildProgress) -> 
     except BaseException as e:
         _set_status_error(bdir, e)
         raise
+    archive_prefetch(summary, model)
     prog.finish("forecast" if mode == "live" else "behavior", f"bundle ready in {(now_ms() - t_start) / 1000:.0f} s")
     return model
+
+
+def archive_prefetch(summary: IncidentSummary, manifest: IncidentManifest) -> bool:
+    """After a successful build: fetch the incident's FEMA IPAWS archive (OpenFEMA) so the local-alerts endpoint
+    answers past days at once (CONTRACT 14.7). Best effort; never fails the build."""
+    try:
+        from ..sources import openfema
+
+        tr = manifest.time_range
+        end = int(tr.end_ms) if summary.mode == "historical" and tr is not None else None
+        return openfema.prefetch(int(summary.started_ms), end)
+    except Exception as e:  # noqa: BLE001
+        log.info("%s: archive prefetch skipped: %s", summary.id, config.mask_secrets(e))
+        return False
 
 
 def _optional_steps(bdir: Path, prog: BuildProgress, mode: str, *, forecast: bool = True) -> None:
@@ -652,7 +760,7 @@ def refresh_live(incident_id: str, progress: ProgressFn | None = None, *, detect
             try:
                 from ..sources import firms
 
-                detections = firms.load_live_ca(days=2)
+                detections = firms.load_live_us(days=2)        # the national feed (CONTRACT 14.12.1)
             except Exception as e:
                 log.warning("refresh_live(%s): FIRMS live feeds unavailable: %s", incident_id, config.mask_secrets(e))
                 return False
@@ -687,7 +795,7 @@ def _refresh_locked(incident_id: str, bdir: Path, progress: ProgressFn | None) -
         return False
     summary = summary or IncidentSummary.model_validate(m["summary"])
     if not is_catalog_incident(incident_id, summary):
-        log.info("refresh_live(%s): not a CAL FIRE catalog incident (bundle-only); not refreshed", incident_id)
+        log.info("refresh_live(%s): not a listed incident (bundle-only, or a list is unreachable); not refreshed", incident_id)
         return False
     prog = BuildProgress(progress, REFRESH_STAGES)
     render, fire = grids_from_manifest(m)
@@ -701,7 +809,9 @@ def _refresh_locked(incident_id: str, bdir: Path, progress: ProgressFn | None) -
         summary=IncidentSummary.model_validate(_summary_with(summary, "ready", m.get("built_ms"))), bundle_dir=bdir,
         render_grid=render, fire_grid=fire, time_origin_ms=int(m["time_origin_ms"]), mode="live",
         progress=prog.stage_fn("observations"), fire_bbox_lonlat=tuple(bbox) if bbox else None, end_ms=t_now, now_ms=t_now,
+        time_zone=getattr(summary, "time_zone", None),
     )
+    weather_note: str | None = None
     try:
         prog.report("observations", 0.0, "new detections: rebuilding the observed spread")
         build_observed(ctx)
@@ -709,7 +819,18 @@ def _refresh_locked(incident_id: str, bdir: Path, progress: ProgressFn | None) -
         ctx.end_ms, ctx.now_ms = int(tr.get("end_ms", t_now)), int(tr.get("now_ms", t_now))
         ctx.progress = prog.stage_fn("weather")
         prog.report("weather", 0.0, "refreshing weather")
-        build_weather(ctx)
+        skip = live_weather_skip(bdir, t_now)
+        if skip == "budget":
+            weather_note = WEATHER_BUDGET_NOTE
+            log.warning("refresh_live(%s): %s", incident_id, weather_note)
+        elif skip == "recent":
+            log.info("refresh_live(%s): weather fetched less than an hour ago; kept", incident_id)
+        else:
+            try:
+                build_weather(ctx)
+            except WeatherQuotaExceeded as e:     # keep the bundle's last weather (nothing was written), say so
+                weather_note = weather_not_refreshed(e)
+                log.warning("refresh_live(%s): %s", incident_id, weather_note)
     except BaseException as e:
         try:
             add_warning(bdir, f"{REFRESH_FAILED_PREFIX} at {time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime())}: {short_error(e)}")
@@ -723,12 +844,44 @@ def _refresh_locked(incident_id: str, bdir: Path, progress: ProgressFn | None) -
         m2["status"] = "ready"
         m2["built_ms"] = built
         m2["summary"] = _summary_with(summary, "ready", built)
-        m2["warnings"] = [w for w in m2.get("warnings") or [] if not str(w).startswith(REFRESH_FAILED_PREFIX)]
+        m2["warnings"] = [w for w in m2.get("warnings") or []
+                          if not str(w).startswith((REFRESH_FAILED_PREFIX, WEATHER_NOT_REFRESHED_PREFIX))]
+        if weather_note:
+            m2["warnings"].append(weather_note)
 
     final = bundle.update_manifest(bdir, finalize)
     _validate(final)
     prog.finish("behavior", "live bundle refreshed")
     return True
+
+
+WEATHER_BUDGET_NOTE = WEATHER_NOT_REFRESHED_PREFIX + "daily request budget reached."
+
+
+def live_weather_skip(bdir: Path, now: int) -> str | None:
+    """Why a live refresh keeps the bundle's weather (CONTRACT 14.12.2, cut-line item b): ``"budget"`` when today's
+    weighted Open-Meteo calls exceed ``config.OPEN_METEO_DAILY_SOFT_CAP``, ``"recent"`` when the stored weather was
+    fetched less than ``config.LIVE_WEATHER_REFETCH_S`` ago (hourly at most), else None (fetch)."""
+    from ..build.weather_bundle import load_grid_weather
+    from ..sources import weather
+
+    stored = load_grid_weather(bdir)
+    if stored is None or stored.synthetic:
+        return None
+    if weather.over_soft_cap(now):
+        return "budget"
+    if stored.fetched_ms and now - int(stored.fetched_ms) < config.LIVE_WEATHER_REFETCH_S * 1000:
+        return "recent"
+    return None
+
+
+def weather_not_refreshed(exc: WeatherQuotaExceeded) -> str:
+    """The live-refresh warning for a refused weather request (CONTRACT 14.12.2)."""
+    if exc.period == "hourly":
+        return WEATHER_NOT_REFRESHED_PREFIX + "Open-Meteo hourly request limit reached."
+    if exc.period == "minutely":
+        return WEATHER_NOT_REFRESHED_PREFIX + "Open-Meteo per-minute request limit reached."
+    return WEATHER_NOT_REFRESHED_PREFIX + "Open-Meteo daily request limit reached."
 
 
 def run_forecast_locked(

@@ -1,0 +1,4109 @@
+{
+ "metadata": {
+  "skip": 0,
+  "select": "identifier, sent, msgType, status, info, originalMessage",
+  "top": 1000,
+  "filter": "status eq 'Actual' and sent ge '2026-10-09T21%3A00%3A00.000Z' and sent lt '2026-10-10T03%3A00%3A00.000Z'",
+  "format": "json",
+  "metadata": true,
+  "orderby": "sent ASC",
+  "entityname": "IpawsArchivedAlerts",
+  "version": "v1",
+  "url": "/api/open/v1/IpawsArchivedAlerts?%24filter=status+eq+%27Actual%27+and+sent+ge+%272026-10-09T21%3A00%3A00.000Z%27+and+sent+lt+%272026-10-10T03%3A00%3A00.000Z%27&%24select=identifier%2Csent%2CmsgType%2Cstatus%2Cinfo%2CoriginalMessage&%24orderby=sent&%24top=1000&%24skip=0&%24inlinecount=allpages",
+  "count": 16
+ },
+ "IpawsArchivedAlerts": [
+  {
+   "identifier": "2780357279770323",
+   "sent": "2026-10-09T21:28:45.000Z",
+   "msgType": "Alert",
+   "status": "Actual",
+   "info": [
+    {
+     "area": [
+      {
+       "geocode": [
+        {
+         "id": 268,
+         "name": "SAME",
+         "value": "006029"
+        }
+       ],
+       "polygon": {
+        "type": "Polygon",
+        "coordinates": [
+         [
+          [
+           -118.4193,
+           35.712
+          ],
+          [
+           -118.4168,
+           35.7207
+          ],
+          [
+           -118.417,
+           35.7314
+          ],
+          [
+           -118.4136,
+           35.7315
+          ],
+          [
+           -118.4121,
+           35.732
+          ],
+          [
+           -118.4098,
+           35.734
+          ],
+          [
+           -118.4064,
+           35.7336
+          ],
+          [
+           -118.4041,
+           35.732
+          ],
+          [
+           -118.4,
+           35.7312
+          ],
+          [
+           -118.3983,
+           35.7313
+          ],
+          [
+           -118.3953,
+           35.7301
+          ],
+          [
+           -118.3906,
+           35.7283
+          ],
+          [
+           -118.3877,
+           35.7279
+          ],
+          [
+           -118.3875,
+           35.7247
+          ],
+          [
+           -118.3847,
+           35.723
+          ],
+          [
+           -118.3819,
+           35.7197
+          ],
+          [
+           -118.377,
+           35.7151
+          ],
+          [
+           -118.3778,
+           35.7117
+          ],
+          [
+           -118.3784,
+           35.7099
+          ],
+          [
+           -118.3767,
+           35.7072
+          ],
+          [
+           -118.3763,
+           35.7042
+          ],
+          [
+           -118.38,
+           35.6977
+          ],
+          [
+           -118.3823,
+           35.6935
+          ],
+          [
+           -118.3908,
+           35.695
+          ],
+          [
+           -118.3931,
+           35.6948
+          ],
+          [
+           -118.3985,
+           35.6897
+          ],
+          [
+           -118.4008,
+           35.6878
+          ],
+          [
+           -118.4052,
+           35.6926
+          ],
+          [
+           -118.406,
+           35.6936
+          ],
+          [
+           -118.4086,
+           35.6929
+          ],
+          [
+           -118.4122,
+           35.6936
+          ],
+          [
+           -118.4151,
+           35.6952
+          ],
+          [
+           -118.417,
+           35.6953
+          ],
+          [
+           -118.4179,
+           35.6957
+          ],
+          [
+           -118.4199,
+           35.6974
+          ],
+          [
+           -118.4208,
+           35.6984
+          ],
+          [
+           -118.4215,
+           35.6997
+          ],
+          [
+           -118.4219,
+           35.7012
+          ],
+          [
+           -118.422,
+           35.702
+          ],
+          [
+           -118.423,
+           35.7022
+          ],
+          [
+           -118.4232,
+           35.7066
+          ],
+          [
+           -118.4193,
+           35.712
+          ]
+         ]
+        ]
+       },
+       "areaDesc": "Kern County Fire - OES"
+      }
+     ],
+     "event": "Fire Warning",
+     "expires": "2026-10-09T18:28:45-07:00",
+     "urgency": "Immediate",
+     "category": [
+      "Safety"
+     ],
+     "language": "en-US",
+     "severity": "Extreme",
+     "certainty": "Observed",
+     "eventCode": [
+      {
+       "id": 2427,
+       "name": "SAME",
+       "value": "FRW"
+      }
+     ],
+     "parameter": [
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "CAPEXCH"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "NWEM"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "EAS"
+      },
+      {
+       "name": "EAS-ORG",
+       "value": "CIV"
+      },
+      {
+       "name": "CMAMtext",
+       "value": "Kern County Sheriff: PREPARE to leave. Wildfire in area. Facebook.com/ReadyKern for update"
+      },
+      {
+       "name": "CMAMlongtext",
+       "value": "Kern County Sheriff: WILDFIRE. Evacuation WARNING Zone(s) KRN-761 near Northeast of Lake Isabella. Visibility in area will be reduced and roads can become blocked; PREPARE to leave. CALL 9-1-1 if you or others have an emergency CHECK Facebook.com/ReadyKern for updates."
+      },
+      {
+       "name": "WEAHandling",
+       "value": "Imminent Threat"
+      },
+      {
+       "name": "timezone",
+       "value": "PST"
+      }
+     ],
+     "senderName": "201703,ReadyKern,Kern County OES"
+    }
+   ],
+   "originalMessage": ""
+  },
+  {
+   "identifier": "urn:oid:2.49.0.1.840.0.54c1bb169cf8bc7bba27857f49f3bfe1358e95d3.001.1.IPAWS",
+   "sent": "2026-10-09T21:35:00.000Z",
+   "msgType": "Alert",
+   "status": "Actual",
+   "info": [
+    {
+     "web": "http://www.weather.gov",
+     "area": [
+      {
+       "geocode": [
+        {
+         "id": 13524,
+         "name": "SAME",
+         "value": "012005"
+        },
+        {
+         "id": 11345,
+         "name": "UGC",
+         "value": "FLC005"
+        }
+       ],
+       "polygon": {
+        "type": "Polygon",
+        "coordinates": [
+         [
+          [
+           -85.82,
+           30.27
+          ],
+          [
+           -85.71,
+           30.23
+          ],
+          [
+           -85.65,
+           30.27
+          ],
+          [
+           -85.55,
+           30.24
+          ],
+          [
+           -85.55,
+           30.11
+          ],
+          [
+           -85.51,
+           30.07
+          ],
+          [
+           -85.55,
+           29.98
+          ],
+          [
+           -85.91,
+           30.23
+          ],
+          [
+           -85.82,
+           30.27
+          ]
+         ]
+        ]
+       },
+       "areaDesc": "Bay, FL"
+      }
+     ],
+     "event": "Flash Flood Warning",
+     "onset": "2026-10-09T17:35:00-04:00",
+     "expires": "2026-10-09T21:30:00-04:00",
+     "urgency": "Immediate",
+     "category": [
+      "Met"
+     ],
+     "headline": "Flash Flood Warning issued October 9 at 5:35PM EDT until October 9 at 9:30PM EDT by NWS Tallahassee FL",
+     "language": "en-US",
+     "severity": "Severe",
+     "certainty": "Likely",
+     "effective": "2026-10-09T17:35:00-04:00",
+     "eventCode": [
+      {
+       "id": 38,
+       "name": "SAME",
+       "value": "FFW"
+      },
+      {
+       "id": 1595,
+       "name": "NationalWeatherService",
+       "value": "FFW"
+      }
+     ],
+     "parameter": [
+      {
+       "name": "AWIPSidentifier",
+       "value": "FFWTAE"
+      },
+      {
+       "name": "WMOidentifier",
+       "value": "WGUS52 KTAE 092135"
+      },
+      {
+       "name": "flashFloodDetection",
+       "value": "OBSERVED"
+      },
+      {
+       "name": "flashFloodDamageThreat",
+       "value": "CONSIDERABLE"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "EAS"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "NWEM"
+      },
+      {
+       "name": "EAS-ORG",
+       "value": "WXR"
+      },
+      {
+       "name": "VTEC",
+       "value": "/O.NEW.KTAE.FF.W.0040.261009T2135Z-261010T0130Z/"
+      },
+      {
+       "name": "eventEndingTime",
+       "value": "2026-10-09T21:30:00-04:00"
+      },
+      {
+       "name": "WEAHandling",
+       "value": "Imminent Threat"
+      },
+      {
+       "name": "CMAMtext",
+       "value": "NWS: FLASH FLOOD WARNING this area til 9:30 PM EDT. Avoid flooded areas."
+      },
+      {
+       "name": "CMAMlongtext",
+       "value": "National Weather Service: A FLASH FLOOD WARNING is in effect for this area until 9:30 PM EDT. This is a dangerous and life-threatening situation. Do not attempt to travel unless you are fleeing an area subject to flooding or under an evacuation order."
+      }
+     ],
+     "senderName": "NWS Tallahassee FL",
+     "description": "FFWTAE\n\nThe National Weather Service in Tallahassee has issued a\n\n* Flash Flood Warning for...\nCentral Bay County in the panhandle of Florida...\n\n* Until 830 PM CDT.\n\n* At 435 PM CDT, local law enforcement reported flooded roads across\nLynn Haven and Panama City. Flash flooding is already occurring.\nAdditional rainfall is on the way.\n\nHAZARD...Life threatening flash flooding. Heavy rain producing\nflash flooding.\n\nSOURCE...Law enforcement reported.\n\nIMPACT...Life threatening flash flooding of creeks and streams,\nurban areas, highways, streets and underpasses.\n\n* Some locations that will experience flash flooding include...\nPanama City, Lynn Haven, Panama City Beach, Callaway, Springfield,\nHiland Park, Tyndall Air Force Base, Parker, Millville, Dirego\nPark, Cedar Grove, Magnolia Beach, Bay Harbor, Beacon Beach, St\nAndrews State Park, Biltmore Beach, Brannonville, Gulf Lagoon\nBeach, College Station and West Panama City.\n",
+     "instruction": "Turn around, don't drown when encountering flooded roads. Most flood\ndeaths occur in vehicles.\n\nBe aware of your surroundings and do not drive on flooded roads.\n\nPlease report observed flooding to local emergency services or law\nenforcement and request they pass this information to the National\nWeather Service when you can do so safely.",
+     "responseType": [
+      "Avoid"
+     ]
+    },
+    {
+     "web": "http://www.weather.gov",
+     "area": [
+      {
+       "geocode": [
+        {
+         "id": 13524,
+         "name": "SAME",
+         "value": "012005"
+        },
+        {
+         "id": 11345,
+         "name": "UGC",
+         "value": "FLC005"
+        }
+       ],
+       "polygon": {
+        "type": "Polygon",
+        "coordinates": [
+         [
+          [
+           -85.82,
+           30.27
+          ],
+          [
+           -85.71,
+           30.23
+          ],
+          [
+           -85.65,
+           30.27
+          ],
+          [
+           -85.55,
+           30.24
+          ],
+          [
+           -85.55,
+           30.11
+          ],
+          [
+           -85.51,
+           30.07
+          ],
+          [
+           -85.55,
+           29.98
+          ],
+          [
+           -85.91,
+           30.23
+          ],
+          [
+           -85.82,
+           30.27
+          ]
+         ]
+        ]
+       },
+       "areaDesc": "Bay, FL"
+      }
+     ],
+     "event": "Flash Flood Warning",
+     "onset": "2026-10-09T17:35:00-04:00",
+     "expires": "2026-10-09T21:30:00-04:00",
+     "urgency": "Immediate",
+     "category": [
+      "Met"
+     ],
+     "headline": "Flash Flood Warning issued October 9 at 5:35PM EDT until October 9 at 9:30PM EDT by NWS Tallahassee FL",
+     "language": "es-US",
+     "severity": "Severe",
+     "certainty": "Likely",
+     "effective": "2026-10-09T17:35:00-04:00",
+     "eventCode": [
+      {
+       "id": 38,
+       "name": "SAME",
+       "value": "FFW"
+      },
+      {
+       "id": 1595,
+       "name": "NationalWeatherService",
+       "value": "FFW"
+      }
+     ],
+     "parameter": [
+      {
+       "name": "AWIPSidentifier",
+       "value": "FFWTAE"
+      },
+      {
+       "name": "WMOidentifier",
+       "value": "WGUS52 KTAE 092135"
+      },
+      {
+       "name": "flashFloodDetection",
+       "value": "OBSERVED"
+      },
+      {
+       "name": "flashFloodDamageThreat",
+       "value": "CONSIDERABLE"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "EAS"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "NWEM"
+      },
+      {
+       "name": "EAS-ORG",
+       "value": "WXR"
+      },
+      {
+       "name": "VTEC",
+       "value": "/O.NEW.KTAE.FF.W.0040.261009T2135Z-261010T0130Z/"
+      },
+      {
+       "name": "eventEndingTime",
+       "value": "2026-10-09T21:30:00-04:00"
+      },
+      {
+       "name": "WEAHandling",
+       "value": "Imminent Threat"
+      },
+      {
+       "name": "CMAMtext",
+       "value": "SNM: AVISO DE INUNDACIONES REPENTINAS hasta 9:30 PM EDT. Evite areas inundadas."
+      },
+      {
+       "name": "CMAMlongtext",
+       "value": "Servicio Nacional de Meteorologia: AVISO DE INUNDACIONES REPENTINAS en efecto para esta area hasta las 9:30 PM EDT. Esta es una situacion peligrosa y amenaza la vida. No intente viajar a menos que sea para abandonar un area propensa a inundaciones o bajo una orden de desalojo."
+      }
+     ],
+     "senderName": "NWS Tallahassee FL",
+     "description": "FFWTAE\n\nThe National Weather Service in Tallahassee has issued a\n\n* Flash Flood Warning for...\nCentral Bay County in the panhandle of Florida...\n\n* Until 830 PM CDT.\n\n* At 435 PM CDT, local law enforcement reported flooded roads across\nLynn Haven and Panama City. Flash flooding is already occurring.\nAdditional rainfall is on the way.\n\nHAZARD...Life threatening flash flooding. Heavy rain producing\nflash flooding.\n\nSOURCE...Law enforcement reported.\n\nIMPACT...Life threatening flash flooding of creeks and streams,\nurban areas, highways, streets and underpasses.\n\n* Some locations that will experience flash flooding include...\nPanama City, Lynn Haven, Panama City Beach, Callaway, Springfield,\nHiland Park, Tyndall Air Force Base, Parker, Millville, Dirego\nPark, Cedar Grove, Magnolia Beach, Bay Harbor, Beacon Beach, St\nAndrews State Park, Biltmore Beach, Brannonville, Gulf Lagoon\nBeach, College Station and West Panama City.\n",
+     "instruction": "Turn around, don't drown when encountering flooded roads. Most flood\ndeaths occur in vehicles.\n\nBe aware of your surroundings and do not drive on flooded roads.\n\nPlease report observed flooding to local emergency services or law\nenforcement and request they pass this information to the National\nWeather Service when you can do so safely.",
+     "responseType": [
+      "Avoid"
+     ]
+    }
+   ],
+   "originalMessage": ""
+  },
+  {
+   "identifier": "urn:oid:2.49.0.1.840.0.eaec74e459a59e3444519b055381e2b2f92fdd3f.001.1.IPAWS",
+   "sent": "2026-10-09T21:36:00.000Z",
+   "msgType": "Alert",
+   "status": "Actual",
+   "info": [
+    {
+     "web": "http://www.weather.gov",
+     "area": [
+      {
+       "geocode": [
+        {
+         "id": 12925,
+         "name": "SAME",
+         "value": "012037"
+        },
+        {
+         "id": 13197,
+         "name": "SAME",
+         "value": "012045"
+        },
+        {
+         "id": 11717,
+         "name": "UGC",
+         "value": "FLC037"
+        },
+        {
+         "id": 10212,
+         "name": "UGC",
+         "value": "FLC045"
+        }
+       ],
+       "polygon": {
+        "type": "Polygon",
+        "coordinates": [
+         [
+          [
+           -85.03,
+           29.8
+          ],
+          [
+           -85.02,
+           29.81
+          ],
+          [
+           -85.02,
+           29.82
+          ],
+          [
+           -85.03,
+           29.83
+          ],
+          [
+           -85.03,
+           29.84
+          ],
+          [
+           -84.81,
+           29.91
+          ],
+          [
+           -84.72,
+           29.64
+          ],
+          [
+           -84.91,
+           29.57
+          ],
+          [
+           -85.03,
+           29.8
+          ]
+         ]
+        ]
+       },
+       "areaDesc": "Franklin, FL; Gulf, FL"
+      }
+     ],
+     "event": "Tornado Warning",
+     "onset": "2026-10-09T17:36:00-04:00",
+     "expires": "2026-10-09T18:00:00-04:00",
+     "urgency": "Immediate",
+     "category": [
+      "Met"
+     ],
+     "headline": "Tornado Warning issued October 9 at 5:36PM EDT until October 9 at 6:00PM EDT by NWS Tallahassee FL",
+     "language": "en-US",
+     "severity": "Extreme",
+     "certainty": "Observed",
+     "effective": "2026-10-09T17:36:00-04:00",
+     "eventCode": [
+      {
+       "id": 11,
+       "name": "SAME",
+       "value": "TOR"
+      },
+      {
+       "id": 1621,
+       "name": "NationalWeatherService",
+       "value": "TOW"
+      }
+     ],
+     "parameter": [
+      {
+       "name": "AWIPSidentifier",
+       "value": "TORTAE"
+      },
+      {
+       "name": "WMOidentifier",
+       "value": "WFUS52 KTAE 092136"
+      },
+      {
+       "name": "eventMotionDescription",
+       "value": "2026-10-09T21:36:00Z...storm...157DEG...24KT...29.65,-84.83"
+      },
+      {
+       "name": "maxHailSize",
+       "value": "0.00"
+      },
+      {
+       "name": "tornadoDetection",
+       "value": "RADAR INDICATED"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "EAS"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "NWEM"
+      },
+      {
+       "name": "EAS-ORG",
+       "value": "WXR"
+      },
+      {
+       "name": "VTEC",
+       "value": "/O.NEW.KTAE.TO.W.0052.261009T2136Z-261009T2200Z/"
+      },
+      {
+       "name": "eventEndingTime",
+       "value": "2026-10-09T18:00:00-04:00"
+      },
+      {
+       "name": "WEAHandling",
+       "value": "Imminent Threat"
+      },
+      {
+       "name": "CMAMtext",
+       "value": "NWS: TORNADO WARNING in this area til 6:00 PM EDT. Take shelter now. Check media."
+      },
+      {
+       "name": "CMAMlongtext",
+       "value": "National Weather Service: TORNADO WARNING in this area until 6:00 PM EDT. Take shelter now in a basement or an interior room on the lowest floor of a sturdy building. If you are outdoors, in a mobile home, or in a vehicle, move to the closest substantial shelter and protect yourself from flying debris. Check media."
+      }
+     ],
+     "senderName": "NWS Tallahassee FL",
+     "description": "TORTAE\n\nThe National Weather Service in Tallahassee has issued a\n\n* Tornado Warning for...\nSoutheastern Gulf County in the Panhandle of Florida...\nSouthwestern Franklin County in Big Bend Florida...\n\n* Until 600 PM EDT.\n\n* At 536 PM EDT, a severe thunderstorm capable of producing a tornado\nwas located over St George Island, moving north at 30 mph.\n\nHAZARD...Tornado.\n\nSOURCE...Radar indicated rotation.\n\nIMPACT...Flying debris will be dangerous to those caught without\nshelter. Mobile homes will be damaged or destroyed.\nDamage to roofs, windows, and vehicles will occur.  Tree\ndamage is likely.\n\n* This dangerous storm will be near...\nSt George Island around 540 PM EDT.\nEastpoint around 545 PM EDT.\n\nOther locations impacted by this tornadic thunderstorm include\nFranklin, High Bluff, St George Island St Pk, Creels, Beverly, Hays\nPlace, and Green Point.\n",
+     "instruction": "TAKE COVER NOW! Move to a basement or an interior room on the lowest\nfloor of a sturdy building. Avoid windows. If you are outdoors, in a\nmobile home, or in a vehicle, move to the closest substantial shelter\nand protect yourself from flying debris.",
+     "responseType": [
+      "Shelter"
+     ]
+    },
+    {
+     "web": "http://www.weather.gov",
+     "area": [
+      {
+       "geocode": [
+        {
+         "id": 12925,
+         "name": "SAME",
+         "value": "012037"
+        },
+        {
+         "id": 13197,
+         "name": "SAME",
+         "value": "012045"
+        },
+        {
+         "id": 11717,
+         "name": "UGC",
+         "value": "FLC037"
+        },
+        {
+         "id": 10212,
+         "name": "UGC",
+         "value": "FLC045"
+        }
+       ],
+       "polygon": {
+        "type": "Polygon",
+        "coordinates": [
+         [
+          [
+           -85.03,
+           29.8
+          ],
+          [
+           -85.02,
+           29.81
+          ],
+          [
+           -85.02,
+           29.82
+          ],
+          [
+           -85.03,
+           29.83
+          ],
+          [
+           -85.03,
+           29.84
+          ],
+          [
+           -84.81,
+           29.91
+          ],
+          [
+           -84.72,
+           29.64
+          ],
+          [
+           -84.91,
+           29.57
+          ],
+          [
+           -85.03,
+           29.8
+          ]
+         ]
+        ]
+       },
+       "areaDesc": "Franklin, FL; Gulf, FL"
+      }
+     ],
+     "event": "Tornado Warning",
+     "onset": "2026-10-09T17:36:00-04:00",
+     "expires": "2026-10-09T18:00:00-04:00",
+     "urgency": "Immediate",
+     "category": [
+      "Met"
+     ],
+     "headline": "Tornado Warning issued October 9 at 5:36PM EDT until October 9 at 6:00PM EDT by NWS Tallahassee FL",
+     "language": "es-US",
+     "severity": "Extreme",
+     "certainty": "Observed",
+     "effective": "2026-10-09T17:36:00-04:00",
+     "eventCode": [
+      {
+       "id": 11,
+       "name": "SAME",
+       "value": "TOR"
+      },
+      {
+       "id": 1621,
+       "name": "NationalWeatherService",
+       "value": "TOW"
+      }
+     ],
+     "parameter": [
+      {
+       "name": "AWIPSidentifier",
+       "value": "TORTAE"
+      },
+      {
+       "name": "WMOidentifier",
+       "value": "WFUS52 KTAE 092136"
+      },
+      {
+       "name": "eventMotionDescription",
+       "value": "2026-10-09T21:36:00Z...storm...157DEG...24KT...29.65,-84.83"
+      },
+      {
+       "name": "maxHailSize",
+       "value": "0.00"
+      },
+      {
+       "name": "tornadoDetection",
+       "value": "RADAR INDICATED"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "EAS"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "NWEM"
+      },
+      {
+       "name": "EAS-ORG",
+       "value": "WXR"
+      },
+      {
+       "name": "VTEC",
+       "value": "/O.NEW.KTAE.TO.W.0052.261009T2136Z-261009T2200Z/"
+      },
+      {
+       "name": "eventEndingTime",
+       "value": "2026-10-09T18:00:00-04:00"
+      },
+      {
+       "name": "WEAHandling",
+       "value": "Imminent Threat"
+      },
+      {
+       "name": "CMAMtext",
+       "value": "SNM:AVISO DE TORNADO hasta las 6:00 PM EDT. Refugiese ahora. Consulte medios informativos"
+      },
+      {
+       "name": "CMAMlongtext",
+       "value": "Servicio Nacional de Meteorologia: AVISO DE TORNADO en efecto hasta las 6:00 PM EDT. Busque refugio ahora en un sotano o en el interior de un cuarto en el nivel mas bajo de un edificio seguro. Si esta al aire libre, en una casa movil, o en un vehiculo, debe ir al edificio seguro mas cercano y protegerse de proyectiles. Consulte los medios informativos."
+      }
+     ],
+     "senderName": "NWS Tallahassee FL",
+     "description": "TORTAE\n\nThe National Weather Service in Tallahassee has issued a\n\n* Tornado Warning for...\nSoutheastern Gulf County in the Panhandle of Florida...\nSouthwestern Franklin County in Big Bend Florida...\n\n* Until 600 PM EDT.\n\n* At 536 PM EDT, a severe thunderstorm capable of producing a tornado\nwas located over St George Island, moving north at 30 mph.\n\nHAZARD...Tornado.\n\nSOURCE...Radar indicated rotation.\n\nIMPACT...Flying debris will be dangerous to those caught without\nshelter. Mobile homes will be damaged or destroyed.\nDamage to roofs, windows, and vehicles will occur.  Tree\ndamage is likely.\n\n* This dangerous storm will be near...\nSt George Island around 540 PM EDT.\nEastpoint around 545 PM EDT.\n\nOther locations impacted by this tornadic thunderstorm include\nFranklin, High Bluff, St George Island St Pk, Creels, Beverly, Hays\nPlace, and Green Point.\n",
+     "instruction": "TAKE COVER NOW! Move to a basement or an interior room on the lowest\nfloor of a sturdy building. Avoid windows. If you are outdoors, in a\nmobile home, or in a vehicle, move to the closest substantial shelter\nand protect yourself from flying debris.",
+     "responseType": [
+      "Shelter"
+     ]
+    }
+   ],
+   "originalMessage": ""
+  },
+  {
+   "identifier": "2781353712186803",
+   "sent": "2026-10-09T22:01:50.000Z",
+   "msgType": "Update",
+   "status": "Actual",
+   "info": [
+    {
+     "area": [
+      {
+       "geocode": [
+        {
+         "id": 268,
+         "name": "SAME",
+         "value": "006029"
+        }
+       ],
+       "polygon": {
+        "type": "Polygon",
+        "coordinates": [
+         [
+          [
+           -118.4193,
+           35.712
+          ],
+          [
+           -118.4168,
+           35.7207
+          ],
+          [
+           -118.417,
+           35.7314
+          ],
+          [
+           -118.4136,
+           35.7315
+          ],
+          [
+           -118.4121,
+           35.732
+          ],
+          [
+           -118.4098,
+           35.734
+          ],
+          [
+           -118.4064,
+           35.7336
+          ],
+          [
+           -118.4041,
+           35.732
+          ],
+          [
+           -118.4,
+           35.7312
+          ],
+          [
+           -118.3983,
+           35.7313
+          ],
+          [
+           -118.3953,
+           35.7301
+          ],
+          [
+           -118.3906,
+           35.7283
+          ],
+          [
+           -118.3877,
+           35.7279
+          ],
+          [
+           -118.3875,
+           35.7247
+          ],
+          [
+           -118.3847,
+           35.723
+          ],
+          [
+           -118.3819,
+           35.7197
+          ],
+          [
+           -118.377,
+           35.7151
+          ],
+          [
+           -118.3778,
+           35.7117
+          ],
+          [
+           -118.3784,
+           35.7099
+          ],
+          [
+           -118.3767,
+           35.7072
+          ],
+          [
+           -118.3763,
+           35.7042
+          ],
+          [
+           -118.38,
+           35.6977
+          ],
+          [
+           -118.3823,
+           35.6935
+          ],
+          [
+           -118.3908,
+           35.695
+          ],
+          [
+           -118.3931,
+           35.6948
+          ],
+          [
+           -118.3985,
+           35.6897
+          ],
+          [
+           -118.4008,
+           35.6878
+          ],
+          [
+           -118.4052,
+           35.6926
+          ],
+          [
+           -118.406,
+           35.6936
+          ],
+          [
+           -118.4086,
+           35.6929
+          ],
+          [
+           -118.4122,
+           35.6936
+          ],
+          [
+           -118.4151,
+           35.6952
+          ],
+          [
+           -118.417,
+           35.6953
+          ],
+          [
+           -118.4179,
+           35.6957
+          ],
+          [
+           -118.4199,
+           35.6974
+          ],
+          [
+           -118.4208,
+           35.6984
+          ],
+          [
+           -118.4215,
+           35.6997
+          ],
+          [
+           -118.4219,
+           35.7012
+          ],
+          [
+           -118.422,
+           35.702
+          ],
+          [
+           -118.423,
+           35.7022
+          ],
+          [
+           -118.4232,
+           35.7066
+          ],
+          [
+           -118.4193,
+           35.712
+          ]
+         ]
+        ]
+       },
+       "areaDesc": "Kern County Fire - OES"
+      }
+     ],
+     "event": "Fire Warning",
+     "expires": "2026-10-09T19:01:50-07:00",
+     "urgency": "Immediate",
+     "category": [
+      "Safety"
+     ],
+     "headline": "Evacuation ORDER Update # 1 Cyrus Fire Fire 10-09-2026 3:01pm",
+     "language": "en-US",
+     "severity": "Extreme",
+     "certainty": "Observed",
+     "eventCode": [
+      {
+       "id": 2427,
+       "name": "SAME",
+       "value": "FRW"
+      }
+     ],
+     "parameter": [
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "CAPEXCH"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "NWEM"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "EAS"
+      },
+      {
+       "name": "EAS-ORG",
+       "value": "CIV"
+      },
+      {
+       "name": "CMAMtext",
+       "value": "Kern County Sheriff: Cyrus Fire updated to an Evacuation Order. Leave NOW. "
+      },
+      {
+       "name": "CMAMlongtext",
+       "value": "Kern County Sheriff: WILDFIRE Update # 1 Evacuation ORDER in effect for the Cyrus Fire. Genasys Protect Zone(s): KRN-761 Visibility in area will be reduced and roads/evacuation routes can become blocked; LEAVE now. CALL 9-1-1 if you or others have an emergency CHECK local media for updates."
+      },
+      {
+       "name": "WEAHandling",
+       "value": "Imminent Threat"
+      },
+      {
+       "name": "timezone",
+       "value": "PST"
+      }
+     ],
+     "senderName": "Kern County OES"
+    }
+   ],
+   "originalMessage": "<references>201703_ReadyKern_Kern_County_OES,2780357279770323,2026-10-09T14:28:45-07:00</references>"
+  },
+  {
+   "identifier": "2777952097934023",
+   "sent": "2026-10-09T22:19:11.000Z",
+   "msgType": "Alert",
+   "status": "Actual",
+   "info": [
+    {
+     "web": "https://www.facebook.com/KanecountyEM",
+     "area": [
+      {
+       "geocode": [
+        {
+         "id": 195165,
+         "name": "SAME",
+         "value": "049025"
+        }
+       ],
+       "polygon": {
+        "type": "Polygon",
+        "coordinates": [
+         [
+          [
+           -112.7978,
+           37.4368
+          ],
+          [
+           -112.3783,
+           37.4723
+          ],
+          [
+           -112.5053,
+           37.1588
+          ],
+          [
+           -112.8452,
+           37.1741
+          ],
+          [
+           -112.7978,
+           37.4368
+          ]
+         ]
+        ]
+       },
+       "areaDesc": "Kane County"
+      }
+     ],
+     "event": "Local Area Emergency",
+     "expires": "2026-10-09T17:19:11-07:00",
+     "urgency": "Expected",
+     "category": [
+      "Met"
+     ],
+     "headline": "Rain",
+     "language": "en-US",
+     "severity": "Severe",
+     "certainty": "Likely",
+     "eventCode": [
+      {
+       "id": 2640,
+       "name": "SAME",
+       "value": "LAE"
+      }
+     ],
+     "parameter": [
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "CAPEXCH"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "NWEM"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "EAS"
+      },
+      {
+       "name": "EAS-ORG",
+       "value": "CIV"
+      },
+      {
+       "name": "CMAMtext",
+       "value": "KANE COUNTY: Heavy Rain Expected Sunday & Monday. Sand Bags & supplies at N. Event Center."
+      },
+      {
+       "name": "CMAMlongtext",
+       "value": "KANE COUNTY: HEAVY RAIN expected Sunday & Monday.  Flooding possible. Pre-filled sandbags and sandbagging supplies available at North Event Center.  Updates posted at Kane County Emergency Services FB page. https://www.facebook.com/KanecountyEM/\n AVOID rising water."
+      },
+      {
+       "name": "WEAHandling",
+       "value": "Imminent Threat"
+      },
+      {
+       "name": "timezone",
+       "value": "MST"
+      }
+     ],
+     "senderName": "201430,Kane County,Kane County"
+    }
+   ],
+   "originalMessage": ""
+  },
+  {
+   "identifier": "2778089537044365",
+   "sent": "2026-10-09T22:43:45.000Z",
+   "msgType": "Alert",
+   "status": "Actual",
+   "info": [
+    {
+     "area": [
+      {
+       "geocode": [
+        {
+         "id": 268,
+         "name": "SAME",
+         "value": "006029"
+        }
+       ],
+       "polygon": {
+        "type": "Polygon",
+        "coordinates": [
+         [
+          [
+           -118.3345,
+           35.7364
+          ],
+          [
+           -118.3357,
+           35.7353
+          ],
+          [
+           -118.339,
+           35.7343
+          ],
+          [
+           -118.3383,
+           35.7333
+          ],
+          [
+           -118.3384,
+           35.7276
+          ],
+          [
+           -118.3388,
+           35.7271
+          ],
+          [
+           -118.3377,
+           35.7265
+          ],
+          [
+           -118.3376,
+           35.7257
+          ],
+          [
+           -118.3358,
+           35.7228
+          ],
+          [
+           -118.3351,
+           35.7193
+          ],
+          [
+           -118.3354,
+           35.7178
+          ],
+          [
+           -118.3342,
+           35.7163
+          ],
+          [
+           -118.3345,
+           35.7145
+          ],
+          [
+           -118.3341,
+           35.7134
+          ],
+          [
+           -118.3345,
+           35.7121
+          ],
+          [
+           -118.3333,
+           35.71
+          ],
+          [
+           -118.3325,
+           35.7099
+          ],
+          [
+           -118.3316,
+           35.7088
+          ],
+          [
+           -118.3314,
+           35.7074
+          ],
+          [
+           -118.3303,
+           35.706
+          ],
+          [
+           -118.3297,
+           35.7044
+          ],
+          [
+           -118.3261,
+           35.7017
+          ],
+          [
+           -118.3263,
+           35.6984
+          ],
+          [
+           -118.3253,
+           35.6975
+          ],
+          [
+           -118.3289,
+           35.6935
+          ],
+          [
+           -118.3351,
+           35.6898
+          ],
+          [
+           -118.3408,
+           35.683
+          ],
+          [
+           -118.3486,
+           35.679
+          ],
+          [
+           -118.3508,
+           35.6756
+          ],
+          [
+           -118.356,
+           35.6743
+          ],
+          [
+           -118.3568,
+           35.6766
+          ],
+          [
+           -118.3576,
+           35.6773
+          ],
+          [
+           -118.3801,
+           35.6819
+          ],
+          [
+           -118.3848,
+           35.6836
+          ],
+          [
+           -118.388,
+           35.682
+          ],
+          [
+           -118.3902,
+           35.6823
+          ],
+          [
+           -118.3916,
+           35.6819
+          ],
+          [
+           -118.3949,
+           35.6797
+          ],
+          [
+           -118.3958,
+           35.6784
+          ],
+          [
+           -118.3996,
+           35.675
+          ],
+          [
+           -118.4009,
+           35.6747
+          ],
+          [
+           -118.4025,
+           35.676
+          ],
+          [
+           -118.4057,
+           35.6767
+          ],
+          [
+           -118.4063,
+           35.678
+          ],
+          [
+           -118.4061,
+           35.6797
+          ],
+          [
+           -118.4074,
+           35.6806
+          ],
+          [
+           -118.4118,
+           35.6804
+          ],
+          [
+           -118.413,
+           35.6796
+          ],
+          [
+           -118.4147,
+           35.677
+          ],
+          [
+           -118.4157,
+           35.6768
+          ],
+          [
+           -118.4179,
+           35.6783
+          ],
+          [
+           -118.4212,
+           35.6824
+          ],
+          [
+           -118.4238,
+           35.6833
+          ],
+          [
+           -118.4244,
+           35.6843
+          ],
+          [
+           -118.4272,
+           35.6856
+          ],
+          [
+           -118.4261,
+           35.6879
+          ],
+          [
+           -118.426,
+           35.692
+          ],
+          [
+           -118.4268,
+           35.6944
+          ],
+          [
+           -118.423,
+           35.7022
+          ],
+          [
+           -118.422,
+           35.702
+          ],
+          [
+           -118.4215,
+           35.6997
+          ],
+          [
+           -118.4208,
+           35.6984
+          ],
+          [
+           -118.4179,
+           35.6957
+          ],
+          [
+           -118.4151,
+           35.6952
+          ],
+          [
+           -118.4122,
+           35.6936
+          ],
+          [
+           -118.4086,
+           35.6929
+          ],
+          [
+           -118.406,
+           35.6936
+          ],
+          [
+           -118.4008,
+           35.6878
+          ],
+          [
+           -118.3931,
+           35.6948
+          ],
+          [
+           -118.3908,
+           35.695
+          ],
+          [
+           -118.3824,
+           35.6935
+          ],
+          [
+           -118.3763,
+           35.7043
+          ],
+          [
+           -118.3767,
+           35.7072
+          ],
+          [
+           -118.3784,
+           35.7099
+          ],
+          [
+           -118.377,
+           35.7151
+          ],
+          [
+           -118.3819,
+           35.7197
+          ],
+          [
+           -118.3847,
+           35.723
+          ],
+          [
+           -118.3875,
+           35.7247
+          ],
+          [
+           -118.3877,
+           35.7277
+          ],
+          [
+           -118.3756,
+           35.7316
+          ],
+          [
+           -118.3677,
+           35.7318
+          ],
+          [
+           -118.3619,
+           35.7327
+          ],
+          [
+           -118.3596,
+           35.7361
+          ],
+          [
+           -118.3551,
+           35.737
+          ],
+          [
+           -118.3512,
+           35.7367
+          ],
+          [
+           -118.3484,
+           35.7386
+          ],
+          [
+           -118.3434,
+           35.7393
+          ],
+          [
+           -118.3349,
+           35.7394
+          ],
+          [
+           -118.3343,
+           35.7378
+          ],
+          [
+           -118.3345,
+           35.7364
+          ]
+         ]
+        ]
+       },
+       "areaDesc": "Kern County Fire - OES"
+      }
+     ],
+     "event": "Fire Warning",
+     "expires": "2026-10-09T19:43:45-07:00",
+     "urgency": "Immediate",
+     "category": [
+      "Safety"
+     ],
+     "headline": "Evacuation WARNING Update #2 Cyrus Fire 10-09-2026 3:44pm",
+     "language": "en-US",
+     "severity": "Extreme",
+     "certainty": "Observed",
+     "eventCode": [
+      {
+       "id": 2427,
+       "name": "SAME",
+       "value": "FRW"
+      }
+     ],
+     "parameter": [
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "CAPEXCH"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "NWEM"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "EAS"
+      },
+      {
+       "name": "EAS-ORG",
+       "value": "CIV"
+      },
+      {
+       "name": "CMAMtext",
+       "value": "Kern County Sheriff: Update for Cyrus Fire WILDFIRE. Check facebook.com/readykern"
+      },
+      {
+       "name": "CMAMlongtext",
+       "value": "Kern County Sheriff: Update for Cyrus Fire in the Northeast of Lake Isabella. WILDFIRE. Evacuation WARNING Zone(s) KRN-760-B Visibility in area will be reduced and roads can become blocked; PREPARE to leave. CALL 9-1-1 for an emergency CHECK Facebook.com/ReadyKern for updates."
+      },
+      {
+       "name": "WEAHandling",
+       "value": "Imminent Threat"
+      },
+      {
+       "name": "timezone",
+       "value": "PST"
+      }
+     ],
+     "senderName": "201703,ReadyKern,Kern County OES"
+    }
+   ],
+   "originalMessage": ""
+  },
+  {
+   "identifier": "OnSolve-30f33d1bd5d4431fb5f3817e0dd1ed30",
+   "sent": "2026-10-09T22:52:21.000Z",
+   "msgType": "Alert",
+   "status": "Actual",
+   "info": [
+    {
+     "area": [
+      {
+       "geocode": [
+        {
+         "id": 4566,
+         "name": "SAME",
+         "value": "006037"
+        }
+       ],
+       "polygon": {
+        "type": "Polygon",
+        "coordinates": [
+         [
+          [
+           -118.2376,
+           33.7279
+          ],
+          [
+           -118.2485,
+           33.7551
+          ],
+          [
+           -118.2396,
+           33.7676
+          ],
+          [
+           -118.2207,
+           33.7825
+          ],
+          [
+           -118.2229,
+           33.7836
+          ],
+          [
+           -118.2235,
+           33.7862
+          ],
+          [
+           -118.2276,
+           33.79
+          ],
+          [
+           -118.2219,
+           33.8043
+          ],
+          [
+           -118.2227,
+           33.8045
+          ],
+          [
+           -118.2229,
+           33.8128
+          ],
+          [
+           -118.2246,
+           33.8211
+          ],
+          [
+           -118.2246,
+           33.8244
+          ],
+          [
+           -118.2223,
+           33.8244
+          ],
+          [
+           -118.2223,
+           33.8256
+          ],
+          [
+           -118.2157,
+           33.8259
+          ],
+          [
+           -118.2169,
+           33.8317
+          ],
+          [
+           -118.216,
+           33.8343
+          ],
+          [
+           -118.2134,
+           33.8343
+          ],
+          [
+           -118.2113,
+           33.8391
+          ],
+          [
+           -118.2077,
+           33.8391
+          ],
+          [
+           -118.2011,
+           33.8608
+          ],
+          [
+           -118.2035,
+           33.8611
+          ],
+          [
+           -118.2063,
+           33.8703
+          ],
+          [
+           -118.2053,
+           33.8705
+          ],
+          [
+           -118.2085,
+           33.8747
+          ],
+          [
+           -118.209,
+           33.8813
+          ],
+          [
+           -118.1879,
+           33.8815
+          ],
+          [
+           -118.1872,
+           33.8854
+          ],
+          [
+           -118.1774,
+           33.8854
+          ],
+          [
+           -118.1774,
+           33.8819
+          ],
+          [
+           -118.1513,
+           33.882
+          ],
+          [
+           -118.1512,
+           33.869
+          ],
+          [
+           -118.1466,
+           33.869
+          ],
+          [
+           -118.1466,
+           33.8603
+          ],
+          [
+           -118.157,
+           33.8602
+          ],
+          [
+           -118.157,
+           33.8575
+          ],
+          [
+           -118.1555,
+           33.8575
+          ],
+          [
+           -118.1555,
+           33.8544
+          ],
+          [
+           -118.1637,
+           33.8543
+          ],
+          [
+           -118.1643,
+           33.854
+          ],
+          [
+           -118.1676,
+           33.8542
+          ],
+          [
+           -118.1676,
+           33.8473
+          ],
+          [
+           -118.1674,
+           33.8469
+          ],
+          [
+           -118.1643,
+           33.847
+          ],
+          [
+           -118.164,
+           33.8276
+          ],
+          [
+           -118.161,
+           33.8277
+          ],
+          [
+           -118.1579,
+           33.8251
+          ],
+          [
+           -118.156,
+           33.8251
+          ],
+          [
+           -118.1558,
+           33.8275
+          ],
+          [
+           -118.1541,
+           33.8275
+          ],
+          [
+           -118.1541,
+           33.829
+          ],
+          [
+           -118.1514,
+           33.8293
+          ],
+          [
+           -118.1509,
+           33.8298
+          ],
+          [
+           -118.15,
+           33.8324
+          ],
+          [
+           -118.1426,
+           33.8323
+          ],
+          [
+           -118.1424,
+           33.8471
+          ],
+          [
+           -118.1251,
+           33.8471
+          ],
+          [
+           -118.1252,
+           33.8323
+          ],
+          [
+           -118.0978,
+           33.8323
+          ],
+          [
+           -118.0933,
+           33.8318
+          ],
+          [
+           -118.0932,
+           33.8313
+          ],
+          [
+           -118.086,
+           33.8313
+          ],
+          [
+           -118.0818,
+           33.8314
+          ],
+          [
+           -118.0828,
+           33.8297
+          ],
+          [
+           -118.0825,
+           33.8279
+          ],
+          [
+           -118.0817,
+           33.825
+          ],
+          [
+           -118.0809,
+           33.8249
+          ],
+          [
+           -118.0773,
+           33.8238
+          ],
+          [
+           -118.0749,
+           33.823
+          ],
+          [
+           -118.0749,
+           33.8229
+          ],
+          [
+           -118.0748,
+           33.8228
+          ],
+          [
+           -118.0747,
+           33.8234
+          ],
+          [
+           -118.0725,
+           33.8235
+          ],
+          [
+           -118.0718,
+           33.8232
+          ],
+          [
+           -118.0718,
+           33.824
+          ],
+          [
+           -118.0687,
+           33.824
+          ],
+          [
+           -118.0688,
+           33.8222
+          ],
+          [
+           -118.0666,
+           33.8222
+          ],
+          [
+           -118.0659,
+           33.8241
+          ],
+          [
+           -118.0633,
+           33.8241
+          ],
+          [
+           -118.0633,
+           33.8196
+          ],
+          [
+           -118.0686,
+           33.8172
+          ],
+          [
+           -118.0733,
+           33.8145
+          ],
+          [
+           -118.0782,
+           33.8093
+          ],
+          [
+           -118.0845,
+           33.803
+          ],
+          [
+           -118.0861,
+           33.7967
+          ],
+          [
+           -118.0876,
+           33.7949
+          ],
+          [
+           -118.0969,
+           33.7787
+          ],
+          [
+           -118.097,
+           33.7735
+          ],
+          [
+           -118.0925,
+           33.7654
+          ],
+          [
+           -118.0921,
+           33.7584
+          ],
+          [
+           -118.096,
+           33.7564
+          ],
+          [
+           -118.1058,
+           33.751
+          ],
+          [
+           -118.1132,
+           33.747
+          ],
+          [
+           -118.1148,
+           33.7456
+          ],
+          [
+           -118.1147,
+           33.7447
+          ],
+          [
+           -118.1201,
+           33.7363
+          ],
+          [
+           -118.2376,
+           33.7279
+          ]
+         ]
+        ]
+       },
+       "areaDesc": "CA City of Long Beach"
+      }
+     ],
+     "event": "Local Area Emergency",
+     "expires": "2026-10-10T00:52:21-04:00",
+     "urgency": "Expected",
+     "category": [
+      "Safety"
+     ],
+     "headline": "Local Area Emergency",
+     "language": "en-US",
+     "severity": "Severe",
+     "certainty": "Observed",
+     "effective": "2026-10-09T18:52:21-04:00",
+     "eventCode": [
+      {
+       "id": 2640,
+       "name": "SAME",
+       "value": "LAE"
+      }
+     ],
+     "parameter": [
+      {
+       "name": "EAS-ORG",
+       "value": "CIV"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "EAS"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "NWEM"
+      },
+      {
+       "name": "WEAHandling",
+       "value": "Public Safety"
+      },
+      {
+       "name": "CMAMtext",
+       "value": "LongBeach: Prepare for rain/wind Get sandbags-Fire Station 7, 12, 13, 14 & 5400 E Ocean Bl"
+      },
+      {
+       "name": "CMAMlongtext",
+       "value": "City of Long Beach: Residents are advised to prepare for high tides, swells and potential showers and heavy wind through 10/13. Sand and sandbags are available at Fire Stations 7, 12, 13, 14 and Claremont Lot, 5400 E Ocean Blvd. Future emergency alerts will be through AlertLB.com. Sign up now. Stay updated: longbeach.gov/emergency"
+      },
+      {
+       "name": "timezone",
+       "value": "PST"
+      }
+     ],
+     "senderName": "201406,CA City of Long Beach,City of Long Beach",
+     "responseType": [
+      "Prepare"
+     ]
+    },
+    {
+     "area": [
+      {
+       "geocode": [
+        {
+         "id": 4566,
+         "name": "SAME",
+         "value": "006037"
+        }
+       ],
+       "polygon": {
+        "type": "Polygon",
+        "coordinates": [
+         [
+          [
+           -118.2376,
+           33.7279
+          ],
+          [
+           -118.2485,
+           33.7551
+          ],
+          [
+           -118.2396,
+           33.7676
+          ],
+          [
+           -118.2207,
+           33.7825
+          ],
+          [
+           -118.2229,
+           33.7836
+          ],
+          [
+           -118.2235,
+           33.7862
+          ],
+          [
+           -118.2276,
+           33.79
+          ],
+          [
+           -118.2219,
+           33.8043
+          ],
+          [
+           -118.2227,
+           33.8045
+          ],
+          [
+           -118.2229,
+           33.8128
+          ],
+          [
+           -118.2246,
+           33.8211
+          ],
+          [
+           -118.2246,
+           33.8244
+          ],
+          [
+           -118.2223,
+           33.8244
+          ],
+          [
+           -118.2223,
+           33.8256
+          ],
+          [
+           -118.2157,
+           33.8259
+          ],
+          [
+           -118.2169,
+           33.8317
+          ],
+          [
+           -118.216,
+           33.8343
+          ],
+          [
+           -118.2134,
+           33.8343
+          ],
+          [
+           -118.2113,
+           33.8391
+          ],
+          [
+           -118.2077,
+           33.8391
+          ],
+          [
+           -118.2011,
+           33.8608
+          ],
+          [
+           -118.2035,
+           33.8611
+          ],
+          [
+           -118.2063,
+           33.8703
+          ],
+          [
+           -118.2053,
+           33.8705
+          ],
+          [
+           -118.2085,
+           33.8747
+          ],
+          [
+           -118.209,
+           33.8813
+          ],
+          [
+           -118.1879,
+           33.8815
+          ],
+          [
+           -118.1872,
+           33.8854
+          ],
+          [
+           -118.1774,
+           33.8854
+          ],
+          [
+           -118.1774,
+           33.8819
+          ],
+          [
+           -118.1513,
+           33.882
+          ],
+          [
+           -118.1512,
+           33.869
+          ],
+          [
+           -118.1466,
+           33.869
+          ],
+          [
+           -118.1466,
+           33.8603
+          ],
+          [
+           -118.157,
+           33.8602
+          ],
+          [
+           -118.157,
+           33.8575
+          ],
+          [
+           -118.1555,
+           33.8575
+          ],
+          [
+           -118.1555,
+           33.8544
+          ],
+          [
+           -118.1637,
+           33.8543
+          ],
+          [
+           -118.1643,
+           33.854
+          ],
+          [
+           -118.1676,
+           33.8542
+          ],
+          [
+           -118.1676,
+           33.8473
+          ],
+          [
+           -118.1674,
+           33.8469
+          ],
+          [
+           -118.1643,
+           33.847
+          ],
+          [
+           -118.164,
+           33.8276
+          ],
+          [
+           -118.161,
+           33.8277
+          ],
+          [
+           -118.1579,
+           33.8251
+          ],
+          [
+           -118.156,
+           33.8251
+          ],
+          [
+           -118.1558,
+           33.8275
+          ],
+          [
+           -118.1541,
+           33.8275
+          ],
+          [
+           -118.1541,
+           33.829
+          ],
+          [
+           -118.1514,
+           33.8293
+          ],
+          [
+           -118.1509,
+           33.8298
+          ],
+          [
+           -118.15,
+           33.8324
+          ],
+          [
+           -118.1426,
+           33.8323
+          ],
+          [
+           -118.1424,
+           33.8471
+          ],
+          [
+           -118.1251,
+           33.8471
+          ],
+          [
+           -118.1252,
+           33.8323
+          ],
+          [
+           -118.0978,
+           33.8323
+          ],
+          [
+           -118.0933,
+           33.8318
+          ],
+          [
+           -118.0932,
+           33.8313
+          ],
+          [
+           -118.086,
+           33.8313
+          ],
+          [
+           -118.0818,
+           33.8314
+          ],
+          [
+           -118.0828,
+           33.8297
+          ],
+          [
+           -118.0825,
+           33.8279
+          ],
+          [
+           -118.0817,
+           33.825
+          ],
+          [
+           -118.0809,
+           33.8249
+          ],
+          [
+           -118.0773,
+           33.8238
+          ],
+          [
+           -118.0749,
+           33.823
+          ],
+          [
+           -118.0749,
+           33.8229
+          ],
+          [
+           -118.0748,
+           33.8228
+          ],
+          [
+           -118.0747,
+           33.8234
+          ],
+          [
+           -118.0725,
+           33.8235
+          ],
+          [
+           -118.0718,
+           33.8232
+          ],
+          [
+           -118.0718,
+           33.824
+          ],
+          [
+           -118.0687,
+           33.824
+          ],
+          [
+           -118.0688,
+           33.8222
+          ],
+          [
+           -118.0666,
+           33.8222
+          ],
+          [
+           -118.0659,
+           33.8241
+          ],
+          [
+           -118.0633,
+           33.8241
+          ],
+          [
+           -118.0633,
+           33.8196
+          ],
+          [
+           -118.0686,
+           33.8172
+          ],
+          [
+           -118.0733,
+           33.8145
+          ],
+          [
+           -118.0782,
+           33.8093
+          ],
+          [
+           -118.0845,
+           33.803
+          ],
+          [
+           -118.0861,
+           33.7967
+          ],
+          [
+           -118.0876,
+           33.7949
+          ],
+          [
+           -118.0969,
+           33.7787
+          ],
+          [
+           -118.097,
+           33.7735
+          ],
+          [
+           -118.0925,
+           33.7654
+          ],
+          [
+           -118.0921,
+           33.7584
+          ],
+          [
+           -118.096,
+           33.7564
+          ],
+          [
+           -118.1058,
+           33.751
+          ],
+          [
+           -118.1132,
+           33.747
+          ],
+          [
+           -118.1148,
+           33.7456
+          ],
+          [
+           -118.1147,
+           33.7447
+          ],
+          [
+           -118.1201,
+           33.7363
+          ],
+          [
+           -118.2376,
+           33.7279
+          ]
+         ]
+        ]
+       },
+       "areaDesc": "CA City of Long Beach"
+      }
+     ],
+     "event": "Local Area Emergency",
+     "expires": "2026-10-10T00:52:21-04:00",
+     "urgency": "Expected",
+     "category": [
+      "Safety"
+     ],
+     "headline": "Local Area Emergency",
+     "language": "es-US",
+     "severity": "Severe",
+     "certainty": "Observed",
+     "effective": "2026-10-09T18:52:21-04:00",
+     "eventCode": [
+      {
+       "id": 2640,
+       "name": "SAME",
+       "value": "LAE"
+      }
+     ],
+     "parameter": [
+      {
+       "name": "EAS-ORG",
+       "value": "CIV"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "EAS"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "NWEM"
+      },
+      {
+       "name": "WEAHandling",
+       "value": "Public Safety"
+      },
+      {
+       "name": "CMAMtext",
+       "value": "LongBeach: Preparese para lluvia. Sacos de arena en estacion de bomberos 7, 12, 13, 14"
+      },
+      {
+       "name": "CMAMlongtext",
+       "value": "Long Beach: Se recomienda prepararse para mareas altas, oleaje, posibles chubascos y vientos fuertes hasta el 13 de oct. Arena y sacos de arena disponibles en estaciones de bomberos 7, 12, 13 y 14, y el estacionamiento Claremont (5400 E Ocean Blvd). Futuras alertas se emitiran a traves de AlertLB.com registrese ahora. Mas informacion: longbeach.gov/emergency"
+      },
+      {
+       "name": "timezone",
+       "value": "PST"
+      }
+     ],
+     "senderName": "201406,CA City of Long Beach,City of Long Beach",
+     "responseType": [
+      "Prepare"
+     ]
+    }
+   ],
+   "originalMessage": ""
+  },
+  {
+   "identifier": "2779429566817176",
+   "sent": "2026-10-09T23:58:12.000Z",
+   "msgType": "Alert",
+   "status": "Actual",
+   "info": [
+    {
+     "area": [
+      {
+       "geocode": [
+        {
+         "id": 268,
+         "name": "SAME",
+         "value": "006029"
+        }
+       ],
+       "polygon": {
+        "type": "Polygon",
+        "coordinates": [
+         [
+          [
+           -118.3359,
+           35.6709
+          ],
+          [
+           -118.3416,
+           35.6732
+          ],
+          [
+           -118.3499,
+           35.6724
+          ],
+          [
+           -118.3542,
+           35.673
+          ],
+          [
+           -118.3559,
+           35.6743
+          ],
+          [
+           -118.3508,
+           35.6756
+          ],
+          [
+           -118.3486,
+           35.679
+          ],
+          [
+           -118.3408,
+           35.683
+          ],
+          [
+           -118.3351,
+           35.6898
+          ],
+          [
+           -118.3289,
+           35.6935
+          ],
+          [
+           -118.3253,
+           35.6975
+          ],
+          [
+           -118.3265,
+           35.6985
+          ],
+          [
+           -118.3262,
+           35.7017
+          ],
+          [
+           -118.3296,
+           35.7042
+          ],
+          [
+           -118.3315,
+           35.7075
+          ],
+          [
+           -118.3317,
+           35.7088
+          ],
+          [
+           -118.3324,
+           35.7098
+          ],
+          [
+           -118.3335,
+           35.71
+          ],
+          [
+           -118.3346,
+           35.7119
+          ],
+          [
+           -118.3341,
+           35.7134
+          ],
+          [
+           -118.3346,
+           35.7145
+          ],
+          [
+           -118.3343,
+           35.7163
+          ],
+          [
+           -118.3356,
+           35.7179
+          ],
+          [
+           -118.3352,
+           35.7195
+          ],
+          [
+           -118.3358,
+           35.7225
+          ],
+          [
+           -118.3377,
+           35.7263
+          ],
+          [
+           -118.3389,
+           35.727
+          ],
+          [
+           -118.3384,
+           35.7277
+          ],
+          [
+           -118.3384,
+           35.7331
+          ],
+          [
+           -118.3391,
+           35.7341
+          ],
+          [
+           -118.3384,
+           35.7348
+          ],
+          [
+           -118.3358,
+           35.7353
+          ],
+          [
+           -118.3344,
+           35.7367
+          ],
+          [
+           -118.3349,
+           35.7394
+          ],
+          [
+           -118.3378,
+           35.7426
+          ],
+          [
+           -118.3371,
+           35.7442
+          ],
+          [
+           -118.335,
+           35.7462
+          ],
+          [
+           -118.3342,
+           35.7482
+          ],
+          [
+           -118.3314,
+           35.75
+          ],
+          [
+           -118.3304,
+           35.7537
+          ],
+          [
+           -118.3296,
+           35.7546
+          ],
+          [
+           -118.328,
+           35.7551
+          ],
+          [
+           -118.3269,
+           35.7562
+          ],
+          [
+           -118.3245,
+           35.7557
+          ],
+          [
+           -118.3223,
+           35.758
+          ],
+          [
+           -118.32,
+           35.7621
+          ],
+          [
+           -118.3199,
+           35.764
+          ],
+          [
+           -118.3193,
+           35.7641
+          ],
+          [
+           -118.3186,
+           35.7673
+          ],
+          [
+           -118.3189,
+           35.7684
+          ],
+          [
+           -118.3204,
+           35.7693
+          ],
+          [
+           -118.3205,
+           35.7718
+          ],
+          [
+           -118.3211,
+           35.7728
+          ],
+          [
+           -118.3229,
+           35.7732
+          ],
+          [
+           -118.3249,
+           35.7745
+          ],
+          [
+           -118.3222,
+           35.776
+          ],
+          [
+           -118.3222,
+           35.7767
+          ],
+          [
+           -118.3232,
+           35.7771
+          ],
+          [
+           -118.3228,
+           35.7782
+          ],
+          [
+           -118.3234,
+           35.7799
+          ],
+          [
+           -118.3216,
+           35.7834
+          ],
+          [
+           -118.3235,
+           35.784
+          ],
+          [
+           -118.3238,
+           35.7849
+          ],
+          [
+           -118.3253,
+           35.7858
+          ],
+          [
+           -118.3277,
+           35.7852
+          ],
+          [
+           -118.3312,
+           35.7854
+          ],
+          [
+           -118.3324,
+           35.7862
+          ],
+          [
+           -118.3347,
+           35.7865
+          ],
+          [
+           -118.3364,
+           35.7879
+          ],
+          [
+           -118.3401,
+           35.7868
+          ],
+          [
+           -118.3428,
+           35.7868
+          ],
+          [
+           -118.3418,
+           35.7887
+          ],
+          [
+           -118.3419,
+           35.7901
+          ],
+          [
+           -118.2706,
+           35.7898
+          ],
+          [
+           -118.2587,
+           35.7387
+          ],
+          [
+           -118.2732,
+           35.7233
+          ],
+          [
+           -118.2779,
+           35.7117
+          ],
+          [
+           -118.2781,
+           35.6999
+          ],
+          [
+           -118.2708,
+           35.6866
+          ],
+          [
+           -118.2713,
+           35.6862
+          ],
+          [
+           -118.2777,
+           35.6887
+          ],
+          [
+           -118.2835,
+           35.6897
+          ],
+          [
+           -118.2944,
+           35.6898
+          ],
+          [
+           -118.2958,
+           35.6874
+          ],
+          [
+           -118.3033,
+           35.6818
+          ],
+          [
+           -118.3051,
+           35.6818
+          ],
+          [
+           -118.31,
+           35.6841
+          ],
+          [
+           -118.311,
+           35.6839
+          ],
+          [
+           -118.3207,
+           35.6787
+          ],
+          [
+           -118.3225,
+           35.6786
+          ],
+          [
+           -118.3245,
+           35.6777
+          ],
+          [
+           -118.3265,
+           35.6755
+          ],
+          [
+           -118.3262,
+           35.6734
+          ],
+          [
+           -118.3287,
+           35.673
+          ],
+          [
+           -118.3309,
+           35.6732
+          ],
+          [
+           -118.3359,
+           35.6709
+          ]
+         ]
+        ]
+       },
+       "areaDesc": "Kern County Fire - OES"
+      }
+     ],
+     "event": "Fire Warning",
+     "expires": "2026-10-09T20:58:12-07:00",
+     "urgency": "Immediate",
+     "category": [
+      "Safety"
+     ],
+     "headline": "Evacuation WARNING Update #3 Cyrus Fire 10-09-2026 4:58pm",
+     "language": "en-US",
+     "severity": "Extreme",
+     "certainty": "Observed",
+     "eventCode": [
+      {
+       "id": 2427,
+       "name": "SAME",
+       "value": "FRW"
+      }
+     ],
+     "parameter": [
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "CAPEXCH"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "NWEM"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "EAS"
+      },
+      {
+       "name": "EAS-ORG",
+       "value": "CIV"
+      },
+      {
+       "name": "CMAMtext",
+       "value": "Kern County Sheriff: Update for Cyrus Fire WILDFIRE. Check facebook.com/readykern"
+      },
+      {
+       "name": "CMAMlongtext",
+       "value": "Kern County Sheriff: Update for Cyrus Fire in the Northeast of Lake Isabella. WILDFIRE. Evacuation WARNING Zone(s) KRN-768 Visibility in area will be reduced and roads can become blocked; PREPARE to leave. CALL 9-1-1 for an emergency CHECK Facebook.com/ReadyKern for updates."
+      },
+      {
+       "name": "WEAHandling",
+       "value": "Imminent Threat"
+      },
+      {
+       "name": "timezone",
+       "value": "PST"
+      }
+     ],
+     "senderName": "201703,ReadyKern,Kern County OES"
+    }
+   ],
+   "originalMessage": ""
+  },
+  {
+   "identifier": "TXDOT-c0386022-badf-47e8-a9d0-cbcb45d055e1",
+   "sent": "2026-10-10T00:13:00.000Z",
+   "msgType": "Cancel",
+   "status": "Actual",
+   "info": null,
+   "originalMessage": "<references>redacted@example.invalid,TXDOT-e1302116-d5ca-42e5-bb1a-1bb41a763dce,2026-10-09T14:30:11-05:00</references>"
+  },
+  {
+   "identifier": "TXDOT-748ce87b-5595-45d9-8fab-696251216aac",
+   "sent": "2026-10-10T00:21:07.000Z",
+   "msgType": "Alert",
+   "status": "Actual",
+   "info": [
+    {
+     "area": [
+      {
+       "geocode": [
+        {
+         "id": 112055,
+         "name": "SAME",
+         "value": "048031"
+        }
+       ],
+       "polygon": {
+        "type": "Polygon",
+        "coordinates": [
+         [
+          [
+           -98.3903,
+           30.3168
+          ],
+          [
+           -98.3915,
+           30.314
+          ],
+          [
+           -98.394,
+           30.3073
+          ],
+          [
+           -98.3952,
+           30.3037
+          ],
+          [
+           -98.3956,
+           30.3011
+          ],
+          [
+           -98.3958,
+           30.2994
+          ],
+          [
+           -98.396,
+           30.2986
+          ],
+          [
+           -98.3961,
+           30.2979
+          ],
+          [
+           -98.3965,
+           30.2964
+          ],
+          [
+           -98.3973,
+           30.2948
+          ],
+          [
+           -98.3978,
+           30.294
+          ],
+          [
+           -98.3985,
+           30.2931
+          ],
+          [
+           -98.3992,
+           30.2925
+          ],
+          [
+           -98.4009,
+           30.291
+          ],
+          [
+           -98.4028,
+           30.2893
+          ],
+          [
+           -98.4045,
+           30.2874
+          ],
+          [
+           -98.4054,
+           30.2861
+          ],
+          [
+           -98.4059,
+           30.2841
+          ],
+          [
+           -98.406,
+           30.2819
+          ],
+          [
+           -98.4058,
+           30.2809
+          ],
+          [
+           -98.4055,
+           30.28
+          ],
+          [
+           -98.4052,
+           30.2795
+          ],
+          [
+           -98.4048,
+           30.2788
+          ],
+          [
+           -98.4039,
+           30.2775
+          ],
+          [
+           -98.4026,
+           30.2755
+          ],
+          [
+           -98.4009,
+           30.2731
+          ],
+          [
+           -98.3957,
+           30.2666
+          ],
+          [
+           -98.3961,
+           30.2662
+          ],
+          [
+           -98.3995,
+           30.2705
+          ],
+          [
+           -98.403,
+           30.2753
+          ],
+          [
+           -98.405,
+           30.2785
+          ],
+          [
+           -98.4063,
+           30.2817
+          ],
+          [
+           -98.4063,
+           30.2843
+          ],
+          [
+           -98.4051,
+           30.287
+          ],
+          [
+           -98.4039,
+           30.2887
+          ],
+          [
+           -98.4006,
+           30.2915
+          ],
+          [
+           -98.3974,
+           30.2949
+          ],
+          [
+           -98.3964,
+           30.298
+          ],
+          [
+           -98.3957,
+           30.3036
+          ],
+          [
+           -98.3914,
+           30.3167
+          ],
+          [
+           -98.3903,
+           30.3168
+          ]
+         ]
+        ]
+       },
+       "areaDesc": "AffectedArea"
+      }
+     ],
+     "event": "Local Area Emergency",
+     "expires": "2026-10-09T23:21:07-05:00",
+     "urgency": "Immediate",
+     "category": [
+      "Transport"
+     ],
+     "headline": "US-281 NB and SB closed at Old River Crossing ",
+     "language": "en-US",
+     "severity": "Severe",
+     "certainty": "Observed",
+     "effective": "2026-10-09T19:21:07-05:00",
+     "eventCode": [
+      {
+       "id": 2640,
+       "name": "SAME",
+       "value": "LAE"
+      }
+     ],
+     "parameter": [
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "EAS"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "NWEM"
+      },
+      {
+       "name": "WEAHandling",
+       "value": "Public Safety"
+      },
+      {
+       "name": "CMAMtext",
+       "value": "US-281 NB and SB closed at Old River Crossing "
+      },
+      {
+       "name": "CMAMlongtext",
+       "value": "US-281 NB and SB closed at Old River Crossing due to major collision. Seek alt routes. "
+      }
+     ],
+     "senderName": "TXDOT,Austin,TX",
+     "description": "US-281 NB and SB closed at Old River Crossing due to major collision. Seek alt routes."
+    }
+   ],
+   "originalMessage": ""
+  },
+  {
+   "identifier": "17915921290001398897078",
+   "sent": "2026-10-10T00:28:49.000Z",
+   "msgType": "Alert",
+   "status": "Actual",
+   "info": [
+    {
+     "area": [
+      {
+       "geocode": [
+        {
+         "id": 36800,
+         "name": "SAME",
+         "value": "022111"
+        }
+       ],
+       "areaDesc": "Union"
+      }
+     ],
+     "event": "Law Enforcement Warning",
+     "onset": "2026-10-09T19:20:00-05:00",
+     "expires": "2026-10-10T03:28:49-05:00",
+     "urgency": "Immediate",
+     "category": [
+      "Safety"
+     ],
+     "language": "en-US",
+     "severity": "Extreme",
+     "certainty": "Observed",
+     "effective": "2026-10-09T19:20:00-05:00",
+     "eventCode": [
+      {
+       "id": 3971,
+       "name": "SAME",
+       "value": "LEW"
+      }
+     ],
+     "parameter": [
+      {
+       "name": "WEAHandling",
+       "value": "Imminent Threat"
+      },
+      {
+       "name": "CMAMtext",
+       "value": "PUBLIC SAFETY ALERT: ROCKY BRANCH, UNION PARISH"
+      },
+      {
+       "name": "CMAMlongtext",
+       "value": "Avoid Rocky Branch Road and the surrounding area. Jonathan Casio, a white male in his 30s, is armed and dangerous. Do not approach or attempt to confront him. If you see him, move to a safe location and call 911.\nStay clear of the area until an official all-clear is issued."
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "NWEM"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "EAS"
+      }
+     ],
+     "senderName": "LA_Union_Parish_Office_of_Homeland_Security_and_Emergency_Preparedness",
+     "description": "",
+     "responseType": [
+      "Avoid"
+     ]
+    }
+   ],
+   "originalMessage": ""
+  },
+  {
+   "identifier": "TXDOT-b4fbcf93-edc1-4c55-aa58-6a1638d1d2b8",
+   "sent": "2026-10-10T00:33:12.000Z",
+   "msgType": "Alert",
+   "status": "Actual",
+   "info": [
+    {
+     "area": [
+      {
+       "geocode": [
+        {
+         "id": 3531,
+         "name": "SAME",
+         "value": "048219"
+        }
+       ],
+       "polygon": {
+        "type": "Polygon",
+        "coordinates": [
+         [
+          [
+           -102.1093,
+           33.7695
+          ],
+          [
+           -102.1058,
+           33.7673
+          ],
+          [
+           -102.104,
+           33.7656
+          ],
+          [
+           -102.104,
+           33.7665
+          ],
+          [
+           -102.1041,
+           33.7728
+          ],
+          [
+           -102.1031,
+           33.7729
+          ],
+          [
+           -102.1032,
+           33.7662
+          ],
+          [
+           -102.1037,
+           33.7653
+          ],
+          [
+           -102.1021,
+           33.7635
+          ],
+          [
+           -102.1007,
+           33.7626
+          ],
+          [
+           -102.0989,
+           33.7616
+          ],
+          [
+           -102.0973,
+           33.761
+          ],
+          [
+           -102.0952,
+           33.7606
+          ],
+          [
+           -102.0938,
+           33.7603
+          ],
+          [
+           -102.0922,
+           33.7598
+          ],
+          [
+           -102.0925,
+           33.7591
+          ],
+          [
+           -102.0952,
+           33.7597
+          ],
+          [
+           -102.1003,
+           33.761
+          ],
+          [
+           -102.1034,
+           33.7636
+          ],
+          [
+           -102.1032,
+           33.762
+          ],
+          [
+           -102.1046,
+           33.7622
+          ],
+          [
+           -102.1054,
+           33.7654
+          ],
+          [
+           -102.1121,
+           33.7691
+          ],
+          [
+           -102.1259,
+           33.7769
+          ],
+          [
+           -102.1244,
+           33.7792
+          ],
+          [
+           -102.1093,
+           33.7695
+          ]
+         ]
+        ]
+       },
+       "areaDesc": "AffectedArea"
+      }
+     ],
+     "event": "Local Area Emergency",
+     "expires": "2026-10-09T23:33:12-05:00",
+     "urgency": "Immediate",
+     "category": [
+      "Transport"
+     ],
+     "headline": "US84 EASTBOUND CLOSED AT FM2130. EB US84 TRAFFIC DETOUR SOUTH ON FM2130",
+     "language": "en-US",
+     "severity": "Severe",
+     "certainty": "Observed",
+     "effective": "2026-10-09T19:33:12-05:00",
+     "eventCode": [
+      {
+       "id": 2640,
+       "name": "SAME",
+       "value": "LAE"
+      }
+     ],
+     "parameter": [
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "EAS"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "NWEM"
+      },
+      {
+       "name": "WEAHandling",
+       "value": "Public Safety"
+      },
+      {
+       "name": "CMAMtext",
+       "value": "US84 EASTBOUND CLOSED AT FM2130. EB US84 TRAFFIC DETOUR SOUTH ON FM2130"
+      },
+      {
+       "name": "CMAMlongtext",
+       "value": "US84 EASTBOUND CLOSED AT FM2130. \nEB US84 TRAFFIC IS BEING DETOURED SOUTH ON FM2130."
+      }
+     ],
+     "senderName": "TXDOT,Austin,TX",
+     "description": "US84 EASTBOUND CLOSED AT FM2130. \nEB US84 TRAFFIC IS BEING DETOURED SOUTH ON FM2130."
+    }
+   ],
+   "originalMessage": ""
+  },
+  {
+   "identifier": "TXDOT-c2fe10d5-a650-4637-b30b-7357ba47f1ff",
+   "sent": "2026-10-10T00:56:59.000Z",
+   "msgType": "Alert",
+   "status": "Actual",
+   "info": [
+    {
+     "area": [
+      {
+       "geocode": [
+        {
+         "id": 37121,
+         "name": "SAME",
+         "value": "048039"
+        }
+       ],
+       "polygon": {
+        "type": "Polygon",
+        "coordinates": [
+         [
+          [
+           -95.3924,
+           29.4982
+          ],
+          [
+           -95.3872,
+           29.4972
+          ],
+          [
+           -95.4178,
+           29.4574
+          ],
+          [
+           -95.4226,
+           29.4591
+          ],
+          [
+           -95.3924,
+           29.4982
+          ]
+         ]
+        ]
+       },
+       "areaDesc": "AffectedArea"
+      }
+     ],
+     "event": "Local Area Emergency",
+     "expires": "2026-10-10T01:56:59-05:00",
+     "urgency": "Immediate",
+     "category": [
+      "Transport"
+     ],
+     "headline": "SH288 North @ SH6 Freeway Closed",
+     "language": "en-US",
+     "severity": "Severe",
+     "certainty": "Observed",
+     "effective": "2026-10-09T19:56:59-05:00",
+     "eventCode": [
+      {
+       "id": 2640,
+       "name": "SAME",
+       "value": "LAE"
+      }
+     ],
+     "parameter": [
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "EAS"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "NWEM"
+      },
+      {
+       "name": "WEAHandling",
+       "value": "Public Safety"
+      },
+      {
+       "name": "CMAMtext",
+       "value": "SH288 North @ SH6 Freeway Closed. Go to https://www.TxDOTAlerts.com"
+      },
+      {
+       "name": "CMAMlongtext",
+       "value": "SH288 North @ SH6 Freeway Closed Major Accident. Go to https://www.TxDOTAlerts.com"
+      }
+     ],
+     "senderName": "TXDOT,Austin,TX",
+     "description": "SH288 North @ SH6 Freeway Closed Major Accident"
+    }
+   ],
+   "originalMessage": ""
+  },
+  {
+   "identifier": "AS-WY-4849b2e7-c698-4ae3-9f7c-ef8a0a17f71c",
+   "sent": "2026-10-10T01:03:23.000Z",
+   "msgType": "Alert",
+   "status": "Actual",
+   "info": [
+    {
+     "area": [
+      {
+       "geocode": [
+        {
+         "id": 7985,
+         "name": "SAME",
+         "value": "056033"
+        }
+       ],
+       "areaDesc": "West Beckton"
+      }
+     ],
+     "event": "Fire Warning",
+     "expires": "2026-10-09T23:03:23-06:00",
+     "urgency": "Immediate",
+     "category": [
+      "Safety"
+     ],
+     "language": "en-US",
+     "severity": "Extreme",
+     "certainty": "Observed",
+     "effective": "2026-10-09T19:03:23-06:00",
+     "eventCode": [
+      {
+       "id": 2427,
+       "name": "SAME",
+       "value": "FRW"
+      }
+     ],
+     "parameter": [
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "EAS"
+      },
+      {
+       "name": "WEAHandling",
+       "value": "Imminent Threat"
+      },
+      {
+       "name": "CMAMtext",
+       "value": "SHERIDAN ALERTS- SET: WILDFIRE west of BECKTON. Be ready to leave at a moment's notice."
+      },
+      {
+       "name": "CMAMlongtext",
+       "value": "SHERIDAN ALERTS- SET: WILDFIRE west of BECKTON. Areas west of Beckton are now in SET status. Be ready to leave at a moment's notice. Gather essential items, prepare pets and livestock, and leave early if you need extra time. Monitor official updates and see the exact mapped area at https://perimetermap.com."
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "NWEM"
+      }
+     ],
+     "senderName": "Sheridan County WY",
+     "instruction": "SHERIDAN ALERTS- SET: WILDFIRE west of BECKTON. Be ready to leave at a moment's notice. Gather medications, medical devices, phones and chargers, keys, wallet or ID, important documents, water, clothing, and supplies for pets or livestock. Plan transportation and where you will go. Leave early if you need extra time. Keep roads clear for responders. Monitor official updates and see the exact mapped area at https://perimetermap.com ",
+     "responseType": [
+      "Prepare"
+     ]
+    },
+    {
+     "area": [
+      {
+       "geocode": [
+        {
+         "id": 7985,
+         "name": "SAME",
+         "value": "056033"
+        }
+       ],
+       "areaDesc": "West Beckton"
+      }
+     ],
+     "event": "Advertencia de Fuego",
+     "expires": "2026-10-09T23:03:23-06:00",
+     "urgency": "Immediate",
+     "category": [
+      "Safety"
+     ],
+     "language": "es-US",
+     "severity": "Extreme",
+     "certainty": "Observed",
+     "effective": "2026-10-09T19:03:23-06:00",
+     "eventCode": [
+      {
+       "id": 2427,
+       "name": "SAME",
+       "value": "FRW"
+      }
+     ],
+     "parameter": [
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "EAS"
+      },
+      {
+       "name": "WEAHandling",
+       "value": "Imminent Threat"
+      },
+      {
+       "name": "CMAMtext",
+       "value": "SHERIDAN ALERTAS- SET: INCENDIO FORESTAL al oeste de BECKTON. Este listo para salir."
+      },
+      {
+       "name": "CMAMlongtext",
+       "value": "SHERIDAN ALERTAS- SET: INCENDIO FORESTAL al oeste de BECKTON. Las areas al oeste de Beckton ahora estan en estado SET. Este listo para salir de inmediato. Reuna articulos esenciales, prepare mascotas y ganado, y salga temprano si necesita mas tiempo. Vea el area exacta en https://perimetermap.com."
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "NWEM"
+      }
+     ],
+     "senderName": "Sheridan County WY",
+     "responseType": [
+      "Prepare"
+     ]
+    }
+   ],
+   "originalMessage": ""
+  },
+  {
+   "identifier": "2776955665674647",
+   "sent": "2026-10-10T02:34:50.000Z",
+   "msgType": "Alert",
+   "status": "Actual",
+   "info": [
+    {
+     "area": [
+      {
+       "circle": [
+        {
+         "type": "Circle",
+         "radius": 0.6767,
+         "coordinates": [
+          [
+           -106.5556,
+           35.304
+          ]
+         ]
+        }
+       ],
+       "geocode": [
+        {
+         "id": 17130,
+         "name": "SAME",
+         "value": "035043"
+        }
+       ],
+       "areaDesc": "Sandoval, NM"
+      }
+     ],
+     "event": "Shelter in Place Warning",
+     "expires": "2026-10-09T20:34:50-07:00",
+     "urgency": "Immediate",
+     "category": [
+      "Safety"
+     ],
+     "headline": "Ad-Hoc Notification",
+     "language": "en-US",
+     "severity": "Extreme",
+     "certainty": "Observed",
+     "eventCode": [
+      {
+       "id": 3845,
+       "name": "SAME",
+       "value": "SPW"
+      }
+     ],
+     "parameter": [
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "CAPEXCH"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "NWEM"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "EAS"
+      },
+      {
+       "name": "EAS-ORG",
+       "value": "CIV"
+      },
+      {
+       "name": "CMAMtext",
+       "value": "The Town of Bernalillo Police are requesting that residents shelter in place "
+      },
+      {
+       "name": "WEAHandling",
+       "value": "Imminent Threat"
+      },
+      {
+       "name": "timezone",
+       "value": "MST"
+      }
+     ],
+     "senderName": "200360,Sandoval County - Resident,Sandoval County",
+     "description": "The Town of Bernalillo Police are requesting that residents shelter in place due to law enforcement activity in the area of South Calle Del Bosque / Calle Laguna. If you see suspicious activity, please call 911.",
+     "instruction": "The Town of Bernalillo Police are requesting that residents shelter in place due to law enforcement activity in the area of South Calle Del Bosque / Calle Laguna. If you see suspicious activity, please call 911."
+    }
+   ],
+   "originalMessage": ""
+  },
+  {
+   "identifier": "TXDOT-43d3be07-b648-4cc9-8382-737746bd183f",
+   "sent": "2026-10-10T02:50:48.000Z",
+   "msgType": "Alert",
+   "status": "Actual",
+   "info": [
+    {
+     "area": [
+      {
+       "geocode": [
+        {
+         "id": 112055,
+         "name": "SAME",
+         "value": "048031"
+        }
+       ],
+       "polygon": {
+        "type": "Polygon",
+        "coordinates": [
+         [
+          [
+           -98.3903,
+           30.3168
+          ],
+          [
+           -98.3915,
+           30.314
+          ],
+          [
+           -98.394,
+           30.3073
+          ],
+          [
+           -98.3952,
+           30.3037
+          ],
+          [
+           -98.3956,
+           30.3011
+          ],
+          [
+           -98.3958,
+           30.2994
+          ],
+          [
+           -98.396,
+           30.2986
+          ],
+          [
+           -98.3961,
+           30.2979
+          ],
+          [
+           -98.3965,
+           30.2964
+          ],
+          [
+           -98.3973,
+           30.2948
+          ],
+          [
+           -98.3978,
+           30.294
+          ],
+          [
+           -98.3985,
+           30.2931
+          ],
+          [
+           -98.3992,
+           30.2925
+          ],
+          [
+           -98.4009,
+           30.291
+          ],
+          [
+           -98.4028,
+           30.2893
+          ],
+          [
+           -98.4045,
+           30.2874
+          ],
+          [
+           -98.4054,
+           30.2861
+          ],
+          [
+           -98.4059,
+           30.2841
+          ],
+          [
+           -98.406,
+           30.2819
+          ],
+          [
+           -98.4058,
+           30.2809
+          ],
+          [
+           -98.4055,
+           30.28
+          ],
+          [
+           -98.4052,
+           30.2795
+          ],
+          [
+           -98.4048,
+           30.2788
+          ],
+          [
+           -98.4039,
+           30.2775
+          ],
+          [
+           -98.4026,
+           30.2755
+          ],
+          [
+           -98.4009,
+           30.2731
+          ],
+          [
+           -98.3957,
+           30.2666
+          ],
+          [
+           -98.3961,
+           30.2662
+          ],
+          [
+           -98.3995,
+           30.2705
+          ],
+          [
+           -98.403,
+           30.2753
+          ],
+          [
+           -98.405,
+           30.2785
+          ],
+          [
+           -98.4063,
+           30.2817
+          ],
+          [
+           -98.4063,
+           30.2843
+          ],
+          [
+           -98.4051,
+           30.287
+          ],
+          [
+           -98.4039,
+           30.2887
+          ],
+          [
+           -98.4006,
+           30.2915
+          ],
+          [
+           -98.3974,
+           30.2949
+          ],
+          [
+           -98.3964,
+           30.298
+          ],
+          [
+           -98.3957,
+           30.3036
+          ],
+          [
+           -98.3914,
+           30.3167
+          ],
+          [
+           -98.3903,
+           30.3168
+          ]
+         ]
+        ]
+       },
+       "areaDesc": "AffectedArea"
+      }
+     ],
+     "event": "Local Area Emergency",
+     "expires": "2026-10-10T05:50:48-05:00",
+     "urgency": "Immediate",
+     "category": [
+      "Transport"
+     ],
+     "headline": "US-281 NB and SB closed at Old River Crossing ",
+     "language": "en-US",
+     "severity": "Severe",
+     "certainty": "Observed",
+     "effective": "2026-10-09T21:50:48-05:00",
+     "eventCode": [
+      {
+       "id": 2640,
+       "name": "SAME",
+       "value": "LAE"
+      }
+     ],
+     "parameter": [
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "EAS"
+      },
+      {
+       "name": "BLOCKCHANNEL",
+       "value": "NWEM"
+      },
+      {
+       "name": "WEAHandling",
+       "value": "Public Safety"
+      },
+      {
+       "name": "CMAMtext",
+       "value": "US-281 NB and SB closed at Old River Crossing "
+      },
+      {
+       "name": "CMAMlongtext",
+       "value": "US-281 NB and SB closed at Old River Crossing due to major collision. Seek alt routes. "
+      }
+     ],
+     "senderName": "TXDOT,Austin,TX",
+     "description": "US-281 NB and SB closed at Old River Crossing due to major collision. Seek alt routes."
+    }
+   ],
+   "originalMessage": ""
+  }
+ ]
+}
