@@ -92,7 +92,7 @@ export function CameraPanel({ state, frame, selectedId, onSelect, centre = null,
               <X size={14} aria-hidden="true" />
             </button>
           </div>
-          <div className="xs-zone-meta">{cameraViewText(selected.feature)}</div>
+          <div className="xs-zone-meta">{cameraViewText(selected.feature, tf)}</div>
           {cameraServiceText(selected.feature) && <div className="xs-zone-meta">{cameraServiceText(selected.feature)}</div>}
           <div className="xs-zone-meta">Credit: {selected.feature.properties.credit}</div>
           <button type="button" className="xs-btn" onClick={() => frame.request(selected.feature.properties.id)} disabled={frame.loading && frame.cameraId === selectedId}>

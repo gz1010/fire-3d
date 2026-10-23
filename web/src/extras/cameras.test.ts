@@ -18,6 +18,7 @@ import {
 } from './cameras'
 import type { CamerasResponse } from './types'
 import { setCaliforniaCommandClock } from './__fixtures__/clock.testutil'
+import { timeFmt } from '../lib/time'
 
 setCaliforniaCommandClock()
 
@@ -101,8 +102,8 @@ describe('camera texts', () => {
   const [sanel, , hopland101] = sortCameras(CAMERAS_SAMPLE, COOLEY).map((i) => i.feature)
 
   it('describes view and service state from the sources only', () => {
-    expect(cameraViewText(sanel)).toBe('Pan-tilt-zoom; pointing S (170°) as last reported')
-    expect(cameraViewText(hopland101)).toBe('Fixed view looking south')
+    expect(cameraViewText(sanel, timeFmt('America/Los_Angeles', '24h'))).toBe('Pan-tilt-zoom; pointing S (170°) as last reported')
+    expect(cameraViewText(hopland101, timeFmt('America/Los_Angeles', '24h'))).toBe('Fixed view looking south')
     expect(cameraServiceText(hopland101)).toBe('In service · new image about every 10 min')
     expect(cameraServiceText(sanel)).toBeNull()
     expect(cameraServiceText({ ...hopland101, properties: { ...hopland101.properties, in_service: false } })).toBe('Out of service (Caltrans)')

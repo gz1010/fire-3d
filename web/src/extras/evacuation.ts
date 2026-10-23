@@ -349,10 +349,6 @@ export function zoneNearFire(zone: EvacZoneFeature, fire: FireReference | null):
   return { zone, distanceKm: d, outsideAnalysisArea: outside }
 }
 
-/** "Cal OES does not say which fire this is for": shown for zones outside the fire's analysis area.
- *  @deprecated California-only wording: use `notFireSpecific(aggregatorOf(data, zoneSourceId(p)))`. */
-export const NOT_FIRE_SPECIFIC = notFireSpecific('Cal OES')
-
 /** [w, s, e, n] around a set of zones (outer rings), for "Show on map" (fitBounds); null when empty. */
 export function zonesBounds(features: EvacZoneFeature[]): [number, number, number, number] | null {
   return geometriesBounds(features.map((f) => f.geometry as GeoPolygon))
@@ -399,8 +395,8 @@ export function zoneTimeText(p: Pick<EvacZoneProps, 'status_updated_ms' | 'aggre
 }
 
 /** Text for one zone in the panel (official wording verbatim; times labelled by who set them). `tf` (CONTRACT
- *  §14.9.6): the zone and clock of the times, default `getTimeFormat()`. */
-export function zoneDetail(f: EvacZoneFeature, nowMs: number, tf: TimeFmt = getTimeFormat()): ZoneDetail {
+ *  §14.9.6, required since the integration): the zone and clock of the times. */
+export function zoneDetail(f: EvacZoneFeature, nowMs: number, tf: TimeFmt): ZoneDetail {
   const p = f.properties
   const extra: string[] = []
   if (p.critical_info) extra.push(p.critical_info)

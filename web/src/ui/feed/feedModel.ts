@@ -65,8 +65,8 @@ export interface FeedInput {
   wallMs?: number
   // ---- additions (brief 3, CONTRACT §14.9.6)
   /** Zone and clock of every time in the items (the fire's zone; 12-hour in Public, 24-hour in Command and Forensic).
-   *  Default `getTimeFormat()` (the open fire's zone and the current workspace's clock). */
-  tf?: TimeFmt
+   *  Required since the brief-3 integration (CONTRACT §14.9.6); components pass `useTimeFormat()`. */
+  tf: TimeFmt
 }
 
 function locate(m: IncidentManifest | null, x?: number, z?: number): FeedItem['location'] {
@@ -503,7 +503,7 @@ const TOPIC_ORDER: Partial<Record<FeedTopic, number>> = { ignition: 0, forecast:
  *  the forecast run only when their inputs are given. */
 export function buildFeedItems(input: FeedInput): FeedItem[] {
   const { manifest, events, annotations } = input
-  const tf = input.tf ?? getTimeFormat()
+  const tf = input.tf
   const c: Ctx = {
     manifest,
     tf,

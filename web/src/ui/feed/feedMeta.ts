@@ -19,7 +19,6 @@ const FEED_TOPICS: Record<Exclude<FeedTopic, EventKind>, TopicStyle> = {
   weather: { Icon: Wind, color: 'var(--ev-wind)', label: 'Weather' },
   imagery: { Icon: ImageIcon, color: 'var(--m-info)', label: 'Satellite image' },
   camera: { Icon: Camera, color: 'var(--m-info)', label: 'Camera' },
-  calfire: { Icon: ShieldAlert, color: 'var(--m-official, #e8edf3)', label: 'CAL FIRE record' },
   record: { Icon: ShieldAlert, color: 'var(--m-official, #e8edf3)', label: 'Agency record' },
   'local-alert': { Icon: Megaphone, color: 'var(--m-evac-order)', label: "Local officials' alert" },
   'fire-weather': { Icon: Flag, color: 'var(--m-nws, #f472b6)', label: 'Fire weather alert' },

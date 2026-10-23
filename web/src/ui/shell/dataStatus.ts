@@ -13,7 +13,7 @@
 import type { DetectionsFile, ForecastManifest, IncidentManifest, IncidentSummary, PerimetersFile, WeatherFile } from '../../api/types'
 import { fmtAcres, satelliteName } from '../../lib/format'
 import { evacuationWho, type EvacuationOfficial } from '../../official/model'
-import { fmtAt, fmtDayDate, fmtRelative, timeFmt, type TimeFmt } from '../../lib/time'
+import { fmtAt, fmtDayDate, fmtRelative, type TimeFmt } from '../../lib/time'
 import { getTimeFormat } from '../../state/timeZone'
 import { STALE_AFTER_MS } from '../timeline/model'
 
@@ -74,12 +74,6 @@ export function weatherSourceLabel(source: string): string {
     return `Open-Meteo${kind ? ` ${kind}` : ''}${model && parts.length > 1 ? ` (${model})` : ''}`
   }
   return source
-}
-
-/** Absolute time with zone; the year is added when it differs from the year of `nowMs`.
- *  @deprecated Pacific-bound: use `fmtStatusTimeAt(tMs, nowMs, tf)` (CONTRACT §14.9.6). */
-export function fmtStatusTime(tMs: number, nowMs: number): string {
-  return fmtStatusTimeAt(tMs, nowMs, timeFmt('America/Los_Angeles', '24h')) // tz-ok: the deprecated brief-2 helper is Pacific by definition until the integration deletes it
 }
 
 /** Absolute time in `tf`'s zone and clock with the zone abbreviation; the year is added when the local year differs

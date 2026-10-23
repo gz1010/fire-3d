@@ -11,7 +11,6 @@ import {
   fireWeatherAtPointState,
   fireWeatherNow,
   groupZones,
-  insideCalifornia,
   LOWER48_CODES,
   officialNowScope,
   statesChecked,
@@ -108,8 +107,6 @@ describe('evacuation at a point (location card)', () => {
     const b = pointQueryBbox(-117.7912345, 33.6812345)
     expect(b[0] < -117.7912345 && b[2] > -117.7912345 && b[1] < 33.6812345 && b[3] > 33.6812345).toBe(true)
     expect(b[2] - b[0]).toBeCloseTo(0.01, 6)
-    expect(insideCalifornia(-118.2, 34)).toBe(true)
-    expect(insideCalifornia(-104.9, 39.7)).toBe(false)
   })
 })
 

@@ -312,13 +312,6 @@ export function needsPointQuery(i: Pick<EvacuationAtPointInput, 'lon' | 'lat' | 
   return !bboxContains(b, i.lon, i.lat)
 }
 
-/** Rough bounds of California (+ a margin).
- *  @deprecated Brief 3: no evacuation or NWS path uses it any more (the backend's registry and `states_checked`
- *  decide); kept until the integration removes it. */
-export function insideCalifornia(lon: number, lat: number): boolean {
-  return lon >= -124.9 && lon <= -113.8 && lat >= 32.2 && lat <= 42.3
-}
-
 /** A small, cache-friendly query box around a point (±0.005°, centre rounded to 0.001°: it always contains the point). */
 export function pointQueryBbox(lon: number, lat: number): BBox {
   const r = (v: number) => Math.round(v * 1000) / 1000

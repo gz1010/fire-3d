@@ -259,9 +259,9 @@ export function frameTimeText(frame: Pick<CameraFrameResponse, 'image_time_ms' |
   return `Image updated ${fmtWhen(frame.image_time_ms, nowMs, tf)} (${agoText(frame.image_time_ms, nowMs)}) by the camera server's clock`
 }
 
-/** Plain description of a camera's direction / view. `tf` (CONTRACT §14.9.6) is accepted for the shared signature;
- *  the text has no time in it today. */
-export function cameraViewText(f: CameraFeature, _tf?: TimeFmt): string {
+/** Plain description of a camera's direction / view. `tf` (CONTRACT §14.9.6, required since the integration) is part
+ *  of the shared signature; the text has no time in it today. */
+export function cameraViewText(f: CameraFeature, _tf: TimeFmt): string {
   const p = f.properties
   if (p.azimuth_deg != null) return `Pan-tilt-zoom; pointing ${compassWord(p.azimuth_deg)} (${Math.round(p.azimuth_deg)}°) as last reported`
   if (p.view && p.kind === 'traffic') return `Fixed view looking ${p.view.toLowerCase()}`

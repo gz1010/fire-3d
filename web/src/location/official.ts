@@ -63,8 +63,9 @@ export interface OfficialContext {
   incidentUrl: string | null
   /** Zones shown before "+N more". */
   maxZones?: number
-  /** Zone and clock of the times (the fire's zone, else the point's; CONTRACT §14.9.6). Default `getTimeFormat()`. */
-  tf?: TimeFmt
+  /** Zone and clock of the times (the fire's zone, else the point's; CONTRACT §14.9.6, required since the
+   *  integration). */
+  tf: TimeFmt
 }
 
 const CAL_OES_FALLBACK = 'https://gis.data.ca.gov/datasets/CalEMA::california-evacuation-aggregation-layer'
@@ -276,8 +277,7 @@ function calfireUrl(cf: CalFireOfficial, fallback: string | null): string | null
   return https(cf.url) ?? https(fallback)
 }
 
-export function officialBlock(info: OfficialInfo, ctx: OfficialContext): OfficialBlock {
-  const c = { ...ctx, tf: ctx.tf ?? getTimeFormat() }
+export function officialBlock(info: OfficialInfo, c: OfficialContext): OfficialBlock {
   const evacuation = evacuationLines(info.evacuation, c)
   const fireWeather = [...fireWeatherLines(info.fireWeather), ...localAlertLines(info.local, c.tf, 3, { units: c.units, fireOpen: c.fireName != null })]
   const links: OfficialLink[] = []
@@ -298,8 +298,9 @@ export function officialBlock(info: OfficialInfo, ctx: OfficialContext): Officia
 }
 
 /** The dryness reason may cite an official threshold: the Red Flag Warning (or Fire Weather Watch) in effect here.
- *  `tf` (CONTRACT §14.9.6) is accepted for the shared signature; the note has no time in it today. */
-export function officialFireWeatherNote(fw: FireWeatherOfficial, _tf?: TimeFmt): string | null {
+ *  `tf` (CONTRACT §14.9.6, required since the integration) is part of the shared signature; the note has no time in
+ *  it today. */
+export function officialFireWeatherNote(fw: FireWeatherOfficial, _tf: TimeFmt): string | null {
   const a = alertsInEffect(fw).find((x) => x.phase === 'active')
   return a ? `NWS ${a.event} in effect` : null
 }

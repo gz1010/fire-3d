@@ -6,8 +6,8 @@
 // in the map workspace's Public preset ("3:40 PM MDT") and 24-hour in Command and Forensic ("15:40 MDT").
 // Components get their TimeFmt from `useTimeFormat()` (state/timeZone.ts); pure helpers take it as an argument.
 //
-// The Pacific-bound names at the end of this file (TZ, laParts, fmtDateTime, …) are DEPRECATED: kept only until the
-// brief-3 integration deletes them (`node web/scripts/check-time-api.mjs web/src` must report 0 uses first).
+// The Pacific-bound names of brief 2 (TZ, laParts, fmtDateTime, …) were deleted by the brief-3 integration once
+// `node web/scripts/check-time-api.mjs web/src` reported 0 uses (CONTRACT §14.9.3); the checker still guards them.
 
 export const MINUTE_MS = 60_000
 export const HOUR_MS = 3_600_000
@@ -369,100 +369,4 @@ export function msFromHours(hours: number, originMs: number): number {
 
 function pad2(n: number): string {
   return n < 10 ? `0${n}` : String(n)
-}
-
-// ------------------------------------------------------------------------------------------------- DEPRECATED (§14.9.3)
-// Pacific-bound names from before brief 3. Each delegates to the zone-aware API with America/Los_Angeles and a 24-hour
-// clock, so not-yet-migrated callers keep today's strings. Deleted by the integration once nothing imports them.
-
-/** @deprecated Pacific-bound; use a TimeFmt (`useTimeFormat()` / `timeFmt(tz, clock)`). */
-export const TZ = 'America/Los_Angeles'
-const LA_24: TimeFmt = Object.freeze({ tz: TZ, clock: '24h' })
-
-/** @deprecated use `WallParts`. */
-export type LaParts = WallParts
-
-/** @deprecated "Aug 14, 17:02" in Pacific time; use `fmtAt(ms, tf)`. */
-export function fmtDateTime(ms: number): string {
-  return fmtAt(ms, LA_24)
-}
-
-/** @deprecated "Aug 14, 2025" in Pacific time; use `fmtDayDate(ms, tz, { year: 'always' })`. */
-export function fmtDate(ms: number): string {
-  return fmtDayDate(ms, TZ, { year: 'always' })
-}
-
-/** @deprecated "Aug 14, 2025 14:26" in Pacific time; use `fmtAt(ms, tf, { year: 'always' })`. */
-export function fmtDateTimeYear(ms: number): string {
-  return fmtAt(ms, LA_24, { year: 'always' })
-}
-
-/** @deprecated "17:02" in Pacific time; use `fmtClock(ms, tf)`. */
-export function fmtTime(ms: number): string {
-  return fmtClock(ms, LA_24)
-}
-
-/** @deprecated "Aug 14" in Pacific time; use `fmtDayDate(ms, tz)`. */
-export function fmtDay(ms: number): string {
-  return fmtDayDate(ms, TZ)
-}
-
-/** @deprecated "Aug 14, 2025 – Aug 18, 2025" in Pacific time; use `fmtDayRange(start, end, tz)`. */
-export function fmtDateRange(startMs: number, endMs: number): string {
-  return fmtDayRange(startMs, endMs, TZ)
-}
-
-/** @deprecated "PDT" / "PST"; use `zoneAbbr(ms, tz)`. */
-export function tzLabel(ms: number): string {
-  return zoneAbbr(ms, TZ)
-}
-
-/** @deprecated use `wallParts(ms, tz)`. */
-export function laParts(ms: number): LaParts {
-  return wallParts(ms, TZ)
-}
-
-/** @deprecated use `zoneOffsetMinutes(ms, tz)`. */
-export function laOffsetMinutes(ms: number): number {
-  return zoneOffsetMinutes(ms, TZ)
-}
-
-/** @deprecated use `startOfLocalDay(ms, tz)`. */
-export function startOfLaDay(ms: number): number {
-  return startOfLocalDay(ms, TZ)
-}
-
-/** @deprecated use `localHourTicks(start, end, tz, stepHours)`. */
-export function laTicks(startMs: number, endMs: number, stepHours = 24): number[] {
-  return localHourTicks(startMs, endMs, TZ, stepHours)
-}
-
-/** @deprecated use `localDayTicks(start, end, tz, stepDays)`. */
-export function laDayTicks(startMs: number, endMs: number, stepDays = 1): number[] {
-  return localDayTicks(startMs, endMs, TZ, stepDays)
-}
-
-/** @deprecated "Aug 14, 17:02 PDT"; use `fmtAt(ms, tf, { zone: true })`. */
-export function fmtDateTimeTz(ms: number): string {
-  return fmtAt(ms, LA_24, { zone: true })
-}
-
-/** @deprecated "Aug 14, 2025 14:26 PDT"; use `fmtAt(ms, tf, { year: 'always', zone: true })`. */
-export function fmtDateTimeYearTz(ms: number): string {
-  return fmtAt(ms, LA_24, { year: 'always', zone: true })
-}
-
-/** @deprecated "Fri Aug 14"; use `fmtDayDate(ms, tz, { weekday: true })`. */
-export function fmtWeekdayDay(ms: number): string {
-  return fmtDayDate(ms, TZ, { weekday: true })
-}
-
-/** @deprecated use `wallTimeToMs(tz, y, mo, d, h, mi)`. */
-export function laWallToMs(year: number, month: number, day: number, hour = 0, minute = 0): number {
-  return wallTimeToMs(TZ, year, month, day, hour, minute)
-}
-
-/** @deprecated use `localWallTicks(start, end, stepHours, tf)`. */
-export function laWallTicks(startMs: number, endMs: number, stepHours: number): TimeTick[] {
-  return localWallTicks(startMs, endMs, stepHours, LA_24)
 }

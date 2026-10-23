@@ -119,9 +119,6 @@ export function useRecord(ctx?: OfficialContext): RecordStatus {
   }, [raw, summary, c.incidentId, c.hasIncident, c.demo])
 }
 
-/** @deprecated Brief 3: use `useRecord()` (the record is CAL FIRE's or NIFC WFIGS's). */
-export const useCalfire = useRecord
-
 /**
  * Official information at a point (I5): the state source's evacuation zones containing it (checked around the point
  * itself when it lies outside the open fire's area, current time only; "not available in this state" where no state

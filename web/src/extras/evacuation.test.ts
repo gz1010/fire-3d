@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { EVAC_SAMPLE } from './__fixtures__/samples'
 import {
   answeredNames,
+  notFireSpecific,
   evacuationSourceUrl,
   hazardNote,
   EVAC_LAYERS,
@@ -12,7 +13,6 @@ import {
   evacuationFeedItems,
   evacuationLayerGroup,
   evacuationLegend,
-  NOT_FIRE_SPECIFIC,
   statusText,
   zoneDetail,
   zoneIssuer,
@@ -238,12 +238,12 @@ describe('panel details and feed items', () => {
     expect(n.distanceKm).toBeGreaterThan(60)
     expect(n.distanceKm).toBeLessThan(65)
     expect(n.key).toBe(true)
-    expect(n.notes).not.toContain(NOT_FIRE_SPECIFIC)
+    expect(n.notes).not.toContain(notFireSpecific('Cal OES'))
     expect(f.issuer).toBe('Orange County')
     expect(f.title).toBe('Evacuation Warning: 1 zone (Orange County)')
     expect(f.distanceKm).toBeGreaterThan(250)
     expect(f.detail).toMatch(/^\d[\d,.]* km from the fire\. Cal OES does not say which fire this is for\./)
-    expect(f.notes).toContain(NOT_FIRE_SPECIFIC)
+    expect(f.notes).toContain(notFireSpecific('Cal OES'))
     expect(f.highlight).toEqual({ kind: 'evacuation', id: f.id, zoneIds: ['far'] })
     // an order outside the fire's area is listed, but not as a key event of this fire
     const farOrder = evacuationFeedItems(withZones([{ ...far, properties: { ...far.properties, status: 'Evacuation Order', status_key: 'order' } }]), null, { fire })

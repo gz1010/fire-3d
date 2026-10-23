@@ -134,9 +134,9 @@ describe('NWS fire weather in the card', () => {
     expect(arch.fireWeather[0].subCompact).toBe(arch.fireWeather[0].sub)
   })
   it('the dryness reason may cite only an alert in effect', () => {
-    expect(officialFireWeatherNote(fw({ state: 'active', alerts: [alert({})] }))).toBe('NWS Red Flag Warning in effect')
-    expect(officialFireWeatherNote(fw({ state: 'active', alerts: [alert({ phase: 'upcoming' })] }))).toBeNull()
-    expect(officialFireWeatherNote(fw({ state: 'none' }))).toBeNull()
+    expect(officialFireWeatherNote(fw({ state: 'active', alerts: [alert({})] }), LA24)).toBe('NWS Red Flag Warning in effect')
+    expect(officialFireWeatherNote(fw({ state: 'active', alerts: [alert({ phase: 'upcoming' })] }), LA24)).toBeNull()
+    expect(officialFireWeatherNote(fw({ state: 'none' }), LA24)).toBeNull()
     expect(alertsInEffect(fw({ state: 'past-date', alerts: [alert({})] }))).toEqual([])
   })
 })

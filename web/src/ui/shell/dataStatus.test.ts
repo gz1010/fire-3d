@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Detection, Perimeter } from '../../api/types'
 import { timeFmt } from '../../lib/time'
-import { buildDataStatus, fmtAge, fmtStatusTime, fmtStatusTimeAt, freshnessLine, weatherSourceLabel, type DataStatusInput } from './dataStatus'
+import { buildDataStatus, fmtAge, fmtStatusTimeAt, freshnessLine, weatherSourceLabel, type DataStatusInput } from './dataStatus'
 import { setCaliforniaCommandClock } from '../../extras/__fixtures__/clock.testutil'
 
 setCaliforniaCommandClock()
@@ -70,10 +70,11 @@ describe('buildDataStatus', () => {
   })
 })
 
-describe('fmtStatusTime', () => {
+describe('fmtStatusTimeAt', () => {
   it('adds the year only when it is not the current one', () => {
-    expect(fmtStatusTime(T0, T0 + 24 * H)).toBe('Jan 8, 04:00 PST')
-    expect(fmtStatusTime(T0, Date.UTC(2026, 9, 17, 20))).toBe('Jan 8, 2025 04:00 PST')
+    const la = timeFmt('America/Los_Angeles', '24h') // tz-ok: a California fire's own zone
+    expect(fmtStatusTimeAt(T0, T0 + 24 * H, la)).toBe('Jan 8, 04:00 PST')
+    expect(fmtStatusTimeAt(T0, Date.UTC(2026, 9, 17, 20), la)).toBe('Jan 8, 2025 04:00 PST')
     const r = buildDataStatus(input('historical'), Date.UTC(2026, 9, 17, 20))
     expect(r.find((x) => x.key === 'bundle')?.value).toBe('Jan 8, 2025 06:00 PST')
   })
