@@ -41,8 +41,8 @@ covers the spread forecast in `backend/fire3d/spread/` with the defaults in `bac
 - **Outside California (section 10, brief 3).** The model was re-run on 12 past fires, two in each of six regions,
   with starts and a regional live fuel moisture method (the NFDRS 2016 Growing Season Index) fixed in advance. Mean
   growth Sørensen per region (two fires each, so rough: two fires of a region differ by about 0.1 on average):
-  Northwest 0.26, Northern Rockies 0.34, Great Basin 0.25, Southwest
-  0.35, Southern Plains 0.39, Southeast 0.19, against 0.43 in Southern California, where the settings were fitted.
+  Northwest 0.26, Northern Rockies 0.34, Great Basin 0.25, Southwest 0.35, Southern Plains 0.39, Southeast 0.19,
+  against 0.43 in Southern California, where the settings were fitted.
   Outside California the model usually forecasts too little new growth (8 of 12 fires), the opposite of California;
   a faster spread setting would help those fires but makes California worse, so nothing was changed. Rocky
   Mountain, Eastern and Northern California have no test fire ("accuracy not yet tested here").
