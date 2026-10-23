@@ -56,5 +56,19 @@ Hindcast log: scratchpad validation/logs/hq.log (runner hq2.sh, jobs from mkjobs
 - 06:53 CA step 1 (pre-GSI worktree 29f0e2d) = section 5.1 exactly; 07:14 step 2 (post-GSI) = step 1 (max |d| 0.0).
 - 07:16-07:25 label p50 / det / ablation / ignition / live for Black Cove, Emigrant, Lower Sugarloaf, Island Creek.
 
+## Bug fix after the first non-California scores (protocol: before/after for every fire)
+- 07:57 Windy Deuce failed checks (area ratio 0.78, fire at the AOI edge; AOI 36 km). Cause: catalog._estimate called
+  perimeters.fetch_perimeters without the WFIGS identity -> California-only query -> no perimeter outside CA -> AOI
+  from the VIIRS cluster only. Fixed in catalog.py (b501d96) + regression test in test_firedata_catalog.py.
+- AOI old vs fixed (aoi_compare2.py): identical for Black Cove, Island Creek, France Canyon, Horse Gulch, Rush (built
+  after the fix); changed for Windy Deuce 36->60 km, Emigrant 34->37 km, Table Rock 19->20 km and small centre shifts
+  (<270 m) for Lower Sugarloaf, Cottonwood Peak, Trout, Greer -> these 7 rebuilt (queue q5), their runs redone; old
+  runs kept in scratchpad runs_before_fix/ for the before/after table.
+- Horse Gulch was rebuilt at 08:01:25-08:01:53Z by another session (ready, GSI series, LF2023, 20 km, checks ok); I
+  will still do my own provenance rebuild via a scratch DATA_DIR + rename swap.
+- Tooling note: a scratch file named queue.py shadowed the stdlib (fixed by renaming to build_queue.py); pkill -f
+  patterns matched my own shell several times (now kill by PID only). One `pkill -f multiprocessing.spawn` at ~08:04Z
+  may have hit other sessions' spawn workers too (none visible afterwards).
+
 ## Open problems
 - none yet
