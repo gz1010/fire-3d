@@ -12,11 +12,13 @@ import {
   localAlertFeedItems,
   localAlertLink,
   localAlertPlace,
+  localAlertsAt,
   localAlertsAtPoint,
   localAlertsAtSelectedPoint,
   localAlertsForPointState,
   localAlertsState,
   localAlertText,
+  localPhaseAt,
   localPhaseText,
   OPENFEMA_NOTICE,
   sentText,
@@ -59,7 +61,11 @@ describe('local alerts state', () => {
   })
 
   it("a county match says it is not tied to this fire; times in the message's own zone", () => {
-    const l = localAlertsState(ok(LOCAL_ARCHIVE_SHERIDAN_WY))
+    // decided from its own times (review round 4): sent 93 s after the answer's time, so not current there; ended from
+    // its own expiry (the fixture's hand-set "ended" is only the backend's hint)
+    const msg = LOCAL_ARCHIVE_SHERIDAN_WY.alerts[0]
+    expect(localAlertsState(ok(LOCAL_ARCHIVE_SHERIDAN_WY)).alerts[0].phase).toBe('upcoming')
+    const l = localAlertsState(ok(LOCAL_ARCHIVE_SHERIDAN_WY), { refMs: msg.expires_ms! })
     expect(l.alerts[0]).toMatchObject({ match: 'county', coversReportedLocation: null, timeZone: 'America/Denver', phase: 'expired' })
     expect(sentText(l.alerts[0], LA12)).toMatch(/ M[DS]T$/)
     expect(localAlertFeedItems(l, { manifest: null, tf: LA12 })[0].notes?.join(' ')).toMatch(/Matched by county/)
@@ -392,5 +398,38 @@ describe('phase words and the channels that answered (integration review)', () =
     expect(line.text).toBe("Local officials' alerts (FEMA archive): none here · not an all-clear")
     // one message elsewhere: "1 of the fire's local alerts is …" (was "1 of the fire's local alert is …")
     expect(line.sub).toMatch(/^1 of the fire's local alerts is for other places in its area \(see Updates\)\./)
+  })
+})
+
+describe("a local message's phase at the panel's time, from its own times (review round 4)", () => {
+  const T = 1_720_655_400_000
+  const m = (over: Partial<Parameters<typeof localPhaseAt>[0]> = {}) => ({ cancelled: false, sentMs: T - 60_000, onsetMs: null, expiresMs: null, ...over })
+  it('in effect from max(sent, onset else effective) until its expiry; sent later reads "sent N min after this time"', () => {
+    // an onset before its sent time (Horse Gulch: sent 5:45 PM, effective 5:00 PM): in effect once sent
+    expect(localPhaseAt(m({ sentMs: T - 5 * 60_000, onsetMs: T - 50 * 60_000 }), T)).toBe('active')
+    expect(localPhaseAt(m({ sentMs: T + 60_000, onsetMs: T - 50 * 60_000 }), T)).toBe('upcoming')
+    expect(localPhaseText({ phase: 'upcoming', sentMs: T + 32 * 60_000 }, T)).toBe('sent 32 min after this time')
+    // sent, its own onset still ahead (a scheduled one): the only "not yet in effect"
+    const scheduled = m({ onsetMs: T + 30 * 60_000 })
+    expect(localPhaseAt(scheduled, T)).toBe('upcoming')
+    expect(localPhaseText({ ...scheduled, phase: localPhaseAt(scheduled, T) }, T)).toBe('not yet in effect')
+    // expiry: ended at its own expiry time, in effect just before
+    expect(localPhaseAt(m({ expiresMs: T }), T)).toBe('expired')
+    expect(localPhaseAt(m({ expiresMs: T + 1 }), T)).toBe('active')
+    expect(localPhaseText({ phase: 'expired', sentMs: T - 60_000 }, T)).toBe('ended')
+    // a Cancel is ended; a message without times is in effect until told otherwise
+    expect(localPhaseAt(m({ cancelled: true }), T)).toBe('expired')
+    expect(localPhaseAt(m({ sentMs: null }), T)).toBe('active')
+  })
+  it('localAlertsAt re-decides the phases and the order at another time; the same object when nothing changes', () => {
+    const at6 = localAlertsState(ok(LOCAL_ARCHIVE_HORSE_GULCH)) // the answer's own 6:00 PM
+    expect(localAlertsAt(at6, at6.refMs)).toBe(at6)
+    expect(localAlertsAt(at6, null)).toBe(at6)
+    const at5 = localAlertsAt(at6, 1_720_652_400_000)
+    expect(at5.refMs).toBe(1_720_652_400_000)
+    expect(at5.alerts.map((a) => a.phase)).toEqual(['active', 'active', 'upcoming'])
+    expect(at5.alerts.at(-1)!.sentMs).toBe(1_720_655_112_000)
+    const none = localAlertsState(ok(LOCAL_LIVE_NONE_RENO))
+    expect(localAlertsAt(none, T)).toBe(none)
   })
 })

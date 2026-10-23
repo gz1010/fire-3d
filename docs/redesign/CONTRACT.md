@@ -2264,6 +2264,30 @@ From `us-pipeline.md` (§14.7, review round 1) and `us-official.md` (M5, review 
   messages sent by the answer's time (`LocalAlertsOfficial.refMs`, `officialBadge`): at 5:00 PM Public's short line
   quotes the 3:53 PM Cave Gulch message, the badge says 2, and the 5:45 PM message is listed last in Details with
   "sent 45 min after this time".
+- **Integration, review round 4: the web decides at the panel's own time, from each message's own times.** Round 3
+  judged "in effect" at the answer's `requested_at_ms`, which is the start of the hour (the query's `at_ms` is
+  hour-quantised, `fireWeatherAtMs`), so at 5:50 PM MDT the 5:45 PM evacuation read "not yet in effect", Public's
+  short line quoted the 3:53 PM message and the badge said 2 (at 2:50 PM the 2:45 PM Fire Warning read "not yet in
+  effect" and there was no badge). The rule now (`localPhaseAt`): at the panel's time `refMs` (the replay minute on
+  screen, or now for a live fire) a message is **in effect** when `sent_ms <= refMs`, max(sent, onset else effective)
+  `<= refMs` and `expires_ms` is null or later than `refMs`; it is **"sent N min after this time"** when `sent_ms >
+  refMs` (never quoted as current, never counted); it is "not yet in effect" only when it was sent and its own onset
+  (else effective) time is still ahead; it has **ended** from its expiry, or when it is a Cancel. Every panel decides
+  at its own time: `localAlertsState(q, { refMs })` (the hooks: `useOfficialNow` at `useOfficialPanelTime()`,
+  `useOfficialAtPoint` and the feed at the official context's `refMs`) and `localAlertsAt(l, refMs)` (re-decides the
+  phases and the order at another time; used by Official now's `LocalAlertsRow`, Public's `localAlertsLine`, the
+  location card's `localAlertLines` and `officialBadge(evac, fw, local, refMs)`). `useOfficialBadge` passes
+  `useOfficialPanelTime()`: now for a live fire (or no fire), else the replay minute, the rule of Official now, the
+  short summary and the location card, so the badge counts what the panel it opens lists. `LocalAlertItem` carries
+  `onsetMs` (onset, else effective) and `cancelled`; `LocalAlertsOfficial.refMs` is the time the phases were decided at
+  (the panel's, else `requested_at_ms`, else `now_ms`). The backend's hour-level `phase` stays as a hint (used only for
+  an answer without any time); `nws.local_phase` is unchanged. **Why the query stays hour-quantised:** the answer at an
+  hour lists every message sent in [hour − 24 h, hour + 1 h], so it already holds every message any minute of that
+  hour needs; deciding at the minute on the web needs no refetch while the timeline is scrubbed or played, and the
+  web's per-URL cache and the backend's archive cache stay keyed by the hour (an exact-time query would be a new
+  request every minute of scrubbing). Horse Gulch: 5:50 PM all three in effect, the short line quotes the 5:45 PM
+  evacuation, badge 3; 2:50 PM the Fire Warning in effect, badge 1; 5:00 PM and 6:00 PM as in round 3 (badge 2 and
+  3); 7:50 PM the 5:45 PM message has ended (its expiry 7:45 PM), badge 2.
 
 ### 14.8 Evacuations and cameras (`us-official`, both ends)
 
@@ -2900,6 +2924,13 @@ them into this section as "14.x as built" sub-headings.
   (when nothing else is in effect) with "sent N min after this time". The badge's screen-reader words read "the most
   urgent an evacuation order" (was "a evacuation order").
 - 14.11: one wheel notch ends a fire card's or an official area's focus hold (see "14.11 as built", round 3).
+
+**Integration part 1 review fixes, round 4 (2026-10-23; report key `part1_review_fixes_round4`).**
+- 14.7: round 3 decided whether a local message was in effect at the start of the hour (the answer's
+  `requested_at_ms`), so a message sent between the hour and the replay time read "not yet in effect" and was left
+  out of the badge. The web now decides "in effect", the order, the short line and the badge count at the panel's own
+  time from each message's own times (see "14.7 as built", round 4); the query stays hour-quantised (why: same
+  sub-heading). No backend change (a docstring in `nws.local_phase`).
 
 **Folded (integration part 1, 2026-10-23):** `us-catalog.md`, `us-official.md`, `us-pipeline.md` and `us-web.md` are
 summarised in the "14.0 as built" to "14.14 as built" sub-headings above (what differs from the text, the deviations

@@ -38,7 +38,7 @@ import type { TimeFmt } from '../lib/time'
 import { httpsUrl } from './url'
 import type { CalFireStatus } from './calfire'
 import type { RecordStatus } from './record'
-import { sentAfter, type LocalAlertsOfficial } from './localAlerts'
+import { localAlertsAt, sentAfter, type LocalAlertsOfficial } from './localAlerts'
 import type { FeedItemStatus } from '../ui/feed/types'
 
 export type { CalFireStatus } from './calfire'
@@ -702,8 +702,9 @@ export function statewideCountText(alerts: readonly { phase: string }[], stateCo
 export interface OfficialBadge {
   /** Active official items: evacuation (status, issuer) groups of orders / shelter / warnings near the fire, NWS
    *  alerts in effect (or upcoming) at the reference time, and local officials' messages in effect (or upcoming; brief
-   *  3, CONTRACT §14.7: integration review UX-M1) that were sent by then: a message sent after the answer's time (a
-   *  replay's next hour) is not counted as active (review round 3, N4). */
+   *  3, CONTRACT §14.7: integration review UX-M1) at the panel's own time, from their own times: a message sent after
+   *  that time (a replay's next hour) is not counted (review round 3, N4); one already sent and past its own effective
+   *  time is (review round 4). */
   count: number
   /** The most urgent: an order (an evacuation order or shelter in place, or a local "Evacuation Immediate" / "Shelter
    *  In Place Warning"), an evacuation warning, another local officials' message (a "Fire Warning", a civil emergency
@@ -719,7 +720,14 @@ export function localBadgeLevel(event: string): 'order' | 'local' {
   return /^(evacuation immediate|shelter in place warning)$/i.test(event.trim()) ? 'order' : 'local'
 }
 
-export function officialBadge(evac: EvacuationOfficial, fw: FireWeatherOfficial, local?: Pick<LocalAlertsOfficial, 'state' | 'alerts' | 'refMs'> | null): OfficialBadge {
+/** `refMs`: the panel's own time (the replay minute on screen, or now when live); local officials' messages are
+ *  decided at it (`localAlertsAt`), else at the time the answer was decided at (`local.refMs`). */
+export function officialBadge(
+  evac: EvacuationOfficial,
+  fw: FireWeatherOfficial,
+  local?: Pick<LocalAlertsOfficial, 'state' | 'alerts' | 'refMs'> | null,
+  refMs?: number | null,
+): OfficialBadge {
   const groups = new Set<string>()
   let level: OfficialBadge['level'] = null
   if (evac.state === 'listed') {
@@ -731,8 +739,10 @@ export function officialBadge(evac: EvacuationOfficial, fw: FireWeatherOfficial,
   }
   const alerts = fw.state === 'active' ? fw.alerts.filter((a) => a.phase === 'active' || a.phase === 'upcoming').length : 0
   if (alerts) level = higher(level, 'fire-weather')
-  // a message sent after the answer's time did not exist yet there: never counted as active (review round 3, N4)
-  const messages = local?.state === 'listed' ? local.alerts.filter((a) => (a.phase === 'active' || a.phase === 'upcoming') && !sentAfter(a, local.refMs)) : []
+  // decided at the panel's time from each message's own times (review round 4); a message sent after it did not exist
+  // yet there: never counted (review round 3, N4)
+  const l = local ? localAlertsAt(local, refMs) : null
+  const messages = l?.state === 'listed' ? l.alerts.filter((a) => (a.phase === 'active' || a.phase === 'upcoming') && !sentAfter(a, l.refMs)) : []
   for (const m of messages) level = higher(level, localBadgeLevel(m.event))
   return { count: groups.size + alerts + messages.length, level }
 }

@@ -12,7 +12,7 @@ import { area, distance } from '../lib/plainLanguage'
 import { fmtAt, fmtRelative, type TimeFmt } from '../lib/time'
 import { getTimeFormat } from '../state/timeZone'
 import type { Units } from '../state/workspace'
-import { answeredChannelsText, ARCHIVE_CREDIT, LOCAL_STANDING_CAVEAT, localAlertPlace, localPhaseText, OPENFEMA_NOTICE, sentText, type LocalAlertsOfficial } from '../official/localAlerts'
+import { answeredChannelsText, ARCHIVE_CREDIT, LOCAL_STANDING_CAVEAT, localAlertPlace, localAlertsAt, localPhaseText, OPENFEMA_NOTICE, sentText, type LocalAlertsOfficial } from '../official/localAlerts'
 
 export type OfficialTone = 'order' | 'warning' | 'other' | 'quiet' | 'unknown' | 'loading'
 
@@ -231,8 +231,10 @@ const NONE_HERE: Record<ReturnType<typeof answeredChannelsText>, string> = {
  * county: review round 2, N3); endpoint missing or failed, outside the lower 48 or the point's state unknown: "Local
  * officials' alerts: not checked", never "none" (N2).
  */
-export function localAlertLines(l: LocalAlertsOfficial | undefined, tf: TimeFmt, max = 3, opts: { units?: Units; fireOpen?: boolean; refMs?: number } = {}): OfficialLine[] {
-  if (!l) return []
+export function localAlertLines(answer: LocalAlertsOfficial | undefined, tf: TimeFmt, max = 3, opts: { units?: Units; fireOpen?: boolean; refMs?: number } = {}): OfficialLine[] {
+  if (!answer) return []
+  // in effect and the order at the card's own time (the replay minute, or now), from each message's own times (round 4)
+  const l = localAlertsAt(answer, opts.refMs)
   const metric = opts.units === 'metric'
   const elsewhere = [
     // the fire's own answer: its messages for other places in its area are in Updates
@@ -267,7 +269,7 @@ export function localAlertLines(l: LocalAlertsOfficial | undefined, tf: TimeFmt,
       const shown = l.pointSource === 'box' ? l.alerts.length : max
       const out = l.alerts.slice(0, shown).map((a): OfficialLine => {
         const when = sentText(a, tf)
-        const phase = localPhaseText(a, opts.refMs)
+        const phase = localPhaseText(a, l.refMs)
         const place = localAlertPlace(a, { metric, fireOpen: opts.fireOpen })
         const sub = [a.event, when, a.archived ? 'FEMA archive' : 'relayed by the National Weather Service', phase, place, a.archived ? `${ARCHIVE_CREDIT}: ${OPENFEMA_NOTICE}` : null].filter(Boolean).join(' · ')
         const subCompact = [when, a.archived ? 'FEMA archive' : 'relayed by NWS', phase, place].filter(Boolean).join(' · ')

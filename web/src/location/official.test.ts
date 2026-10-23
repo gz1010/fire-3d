@@ -213,12 +213,18 @@ describe('NWS status and local officials\' alerts in the card (brief 3, CONTRACT
     expect(JSON.stringify(b)).not.toMatch(/lower 48/)
   })
   it('a live relayed alert and an archived one with the FEMA notice; every local line links', () => {
-    const live = officialBlock({ ...na, local: localAlertsState(ok(LOCAL_LIVE_LA_CEM)) }, { ...CTX, tf: LA12 })
+    // the card decides at its own time (review round 4): here the answer's own now, while the message is in effect
+    const live = officialBlock({ ...na, local: localAlertsState(ok(LOCAL_LIVE_LA_CEM)) }, { ...CTX, tf: LA12, refMs: LOCAL_LIVE_LA_CEM.now_ms })
     const l = live.fireWeather.find((x) => x.key.startsWith('local-'))!
     expect(l).toMatchObject({ text: 'Alert, issuer not named: "Alert from AlertLACounty"', official: true, tone: 'warning', url: 'https://api.weather.gov/alerts/v2-3.13.8-1556392-1792113838542', urlLabel: 'source record (NWS)' })
     // review R1: where the message's area lies (this one was matched by county)
     expect(l.sub).toBe('Civil Emergency Message · sent Oct 15, 6:23 PM PDT · relayed by the National Weather Service · matched by county, not by an exact area · may be about another fire')
-    const arch = officialBlock({ ...na, local: localAlertsState(ok(LOCAL_ARCHIVE_KERN_FRW)) }, { ...CTX, tf: LA12 })
+    // two days later (the card's CTX time) the same answer's message has passed its own expiry: "ended", never current
+    const later = officialBlock({ ...na, local: localAlertsState(ok(LOCAL_LIVE_LA_CEM)) }, { ...CTX, tf: LA12 }).fireWeather.find((x) => x.key.startsWith('local-'))!
+    expect(later.tone).toBe('other')
+    expect(later.sub).toContain('· relayed by the National Weather Service · ended ·')
+    // a past time: the card at the replay time the archive answer is for
+    const arch = officialBlock({ ...na, local: localAlertsState(ok(LOCAL_ARCHIVE_KERN_FRW)) }, { ...CTX, tf: LA12, refMs: LOCAL_ARCHIVE_KERN_FRW.requested_at_ms! })
     const a = arch.fireWeather.find((x) => x.key.startsWith('local-'))!
     expect(a.text).toBe('Archived alert from Kern County OES: "Kern County Sheriff: Cyrus Fire updated to an Evacuation Order. Leave NOW."')
     expect(a.sub).toMatch(/· FEMA archive · (area [^·]+|area covers [^·]+)( · may be about another fire)? · FEMA IPAWS archive via OpenFEMA: This product uses the Federal Emergency Management Agency's OpenFEMA API, but is not endorsed by FEMA$/)

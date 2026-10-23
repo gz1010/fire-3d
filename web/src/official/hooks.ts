@@ -16,7 +16,7 @@ import { timeFmt } from '../lib/time'
 import { useStore } from '../state/store'
 import { useTimeFormat } from '../state/timeZone'
 import { recordStatus, type RecordStatus } from './record'
-import { useOfficialContext, type OfficialContext } from './context'
+import { useOfficialContext, useOfficialPanelTime, type OfficialContext } from './context'
 import { fireWeatherStatewideUrl, localAlertsBboxUrl, OFFICIAL_REFRESH_MS } from './client'
 import { bboxContains } from './geo'
 import { localAlertsAtSelectedPoint, localAlertsState, type LocalAlertsOfficial } from './localAlerts'
@@ -40,7 +40,7 @@ import { useFireWeatherData, useOfficialRuntime } from './runtime'
 import type { FireWeatherResponse, LocalAlertsResponse } from './types'
 
 export type { CalFireOfficial, EvacuationOfficial, FireWeatherOfficial, OfficialAlert, OfficialBadge, OfficialZone } from './model'
-export { useOfficialContext, type OfficialContext } from './context'
+export { useOfficialContext, useOfficialPanelTime, type OfficialContext } from './context'
 
 /** The point's place from /api/geo/lookup (brief 3; CONTRACT §14.9.6): its state decides what was checked there. */
 export interface OfficialPlace {
@@ -160,8 +160,9 @@ export function useOfficialAtPoint(lon: number | null, lat: number | null): Offi
       lon,
       lat,
       demo: ctx.demo,
-      live: localLive ? localAlertsState({ data: lq.data, loading: lq.loading, error: lq.error }) : null,
-      fire: inFireArea ? localAlertsState(incidentLocal) : null,
+      // decided at the official time (now, or the replay minute); the card re-decides at its own (localAlertLines)
+      live: localLive ? localAlertsState({ data: lq.data, loading: lq.loading, error: lq.error }, { refMs: ctx.refMs }) : null,
+      fire: inFireArea ? localAlertsState(incidentLocal, { refMs: ctx.refMs }) : null,
       countyFips,
       pointState,
       lookupFailed,
@@ -231,20 +232,26 @@ export function useOfficialNow(): OfficialInfo {
     [fw, statewide, ctx, tf],
   )
   const incidentLocal = useIncidentLocal(ctx.incidentId)
+  // local officials' messages: in effect, the order and the short line decided at the panel's own time (the replay
+  // minute on screen, or now when live), from each message's own times; never at the query's hour (review round 4)
+  const panelMs = useOfficialPanelTime()
   const local = useMemo(
     () =>
       ctx.hasIncident
-        ? localAlertsState(incidentLocal, { demo: ctx.demo })
+        ? localAlertsState(incidentLocal, { demo: ctx.demo, refMs: panelMs })
         : { ...localAlertsState(null), reason: "Local officials' alerts are checked for a selected fire, or at an address." },
-    [ctx, incidentLocal],
+    [ctx, incidentLocal, panelMs],
   )
   return useMemo(() => ({ evacuation, fireWeather, calfire, local }), [evacuation, fireWeather, calfire, local])
 }
 
 /** The phone Updates badge (I5): active official items near the open fire (evacuation zones, NWS fire weather alerts
- *  and local officials' messages) and the most urgent level (none on the overview: the badge is about the open fire). */
+ *  and local officials' messages) and the most urgent level (none on the overview: the badge is about the open fire).
+ *  Local messages are counted at the panel's own time (the replay minute, or now when live; review round 4), the time
+ *  the Updates panel it opens lists them at. */
 export function useOfficialBadge(): OfficialBadge {
   const { evacuation, fireWeather, local } = useOfficialNow()
+  const panelMs = useOfficialPanelTime()
   const open = useStore((s) => s.incidentId != null)
-  return useMemo(() => (open ? officialBadge(evacuation, fireWeather, local) : { count: 0, level: null }), [open, evacuation, fireWeather, local])
+  return useMemo(() => (open ? officialBadge(evacuation, fireWeather, local, panelMs) : { count: 0, level: null }), [open, evacuation, fireWeather, local, panelMs])
 }

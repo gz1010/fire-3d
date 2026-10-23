@@ -3,8 +3,10 @@ import type { CalFireOfficial, EvacuationOfficial, FireWeatherOfficial, Official
 import { calfireLine, evacuationLine, fireWeatherLine, localAlertsLine, officialSummary } from './officialSummary'
 import { setCaliforniaCommandClock } from '../../extras/__fixtures__/clock.testutil'
 import { LOCAL_ARCHIVE_HORSE_GULCH } from '../../official/__fixtures__/localAlerts'
-import { localAlertPlace, localAlertsState } from '../../official/localAlerts'
+import { localAlertPlace, localAlertsState, localPhaseText } from '../../official/localAlerts'
 import { officialBadge } from '../../official/model'
+import type { LocalAlert } from '../../official/types'
+import { localAlertLines } from '../../location/official'
 import { timeFmt } from '../../lib/time'
 
 setCaliforniaCommandClock()
@@ -162,10 +164,12 @@ describe("local officials' alerts in the Public summary and the phone badge (Hor
     const l2 = localAlertsState({ data: upcomingAfter(at2), loading: false, error: null })
     expect(l2.alerts.every((a) => a.phase === 'upcoming')).toBe(true)
     expect(officialBadge(notAvailable, fw({ state: 'none' }), l2)).toEqual({ count: 0, level: null })
-    // the live answer (no requested time): every listed message in effect counts
+    // a live answer (no requested time) is decided at its own now (review round 4): these 2024 messages have all passed
+    // their own expiry, so none counts; at the panel's time (6:00 PM that day) all three do
     const live = localAlertsState({ data: { ...LOCAL_ARCHIVE_HORSE_GULCH, requested_at_ms: null }, loading: false, error: null })
-    expect(live.refMs).toBeNull()
-    expect(officialBadge(notAvailable, fw({ state: 'none' }), live)).toEqual({ count: 3, level: 'order' })
+    expect(live.refMs).toBe(LOCAL_ARCHIVE_HORSE_GULCH.now_ms)
+    expect(officialBadge(notAvailable, fw({ state: 'none' }), live)).toEqual({ count: 0, level: null })
+    expect(officialBadge(notAvailable, fw({ state: 'none' }), live, 1720656000000)).toEqual({ count: 3, level: 'order' })
   })
 
   it('the phone badge counts the in-effect local messages; an Evacuation Immediate is the most urgent level', () => {
@@ -175,5 +179,107 @@ describe("local officials' alerts in the Public summary and the phone badge (Hor
     expect(officialBadge(notAvailable, fw({ state: 'active', alerts: [alert({})] }), warning)).toEqual({ count: 2, level: 'local' })
     // before: nothing counted
     expect(officialBadge(notAvailable, fw({ state: 'none' }))).toEqual({ count: 0, level: null })
+  })
+})
+
+describe('Horse Gulch local messages at the panel’s own time, from an hour-quantised answer (review round 4)', () => {
+  const H = 3_600_000
+  const MDT12 = timeFmt('America/Denver', '12h')
+  const notAvailable = evac({ state: 'not-available', notAvailableIn: ['Montana'] })
+  const none = fw({ state: 'none' })
+  // the backend's answer for the hour the web asks about (at_ms = the hour): the messages sent in [hour − 24 h, hour +
+  // 1 h], each with the backend's hour-level phase (nws.local_phase at the hour), as the API answers it
+  const hourPhase = (x: LocalAlert, at: number): LocalAlert['phase'] => {
+    const start = Math.max(...[x.onset_ms ?? x.effective_ms, x.sent_ms].filter((t): t is number => t != null))
+    if (at < start) return 'upcoming'
+    return x.expires_ms != null && at >= x.expires_ms ? 'ended' : 'in_effect'
+  }
+  const answerAt = (atMs: number) => {
+    const hour = Math.floor(atMs / H) * H
+    const alerts = LOCAL_ARCHIVE_HORSE_GULCH.alerts.filter((x) => x.sent_ms! >= hour - 24 * H && x.sent_ms! <= hour + H).map((x) => ({ ...x, phase: hourPhase(x, hour) }))
+    return { ...LOCAL_ARCHIVE_HORSE_GULCH, requested_at_ms: hour, alerts }
+  }
+  // the hooks: decided at the panel's time (useOfficialNow); the panels: given their own time
+  const atPanel = (t: number) => localAlertsState({ data: answerAt(t), loading: false, error: null }, { refMs: t })
+  const atHour = (t: number) => localAlertsState({ data: answerAt(t), loading: false, error: null })
+  const EVAC_545 = 'Archived alert from MTHelenaPoliceDepartment: “Urgent! Evacuation for Horse Gulch Fire: Residences between Cave Gulch to Magpie Gulch” · sent Jul 10, 2024 5:45 PM MDT · FEMA archive · area covers the fire\'s reported location · +2 more in Details'
+  const CAVE_353 = 'Archived alert from MTHelenaPoliceDepartment: “Urgent. A fire evacuation notice has been issued by the Sheriff for the Cave Gulch area.” · sent Jul 10, 2024 3:53 PM MDT · FEMA archive · matched by county, not by an exact area · may be about another fire'
+
+  it('5:50 PM MDT: the 5:45 PM evacuation (effective 5:00 PM) is in effect, quoted first and counted; never "not yet in effect"', () => {
+    const t = 1720655400000
+    expect(answerAt(t).alerts.find((x) => x.sent_ms === 1720655112000)!.phase).toBe('upcoming') // the backend's 5:00 PM hint
+    const l = atPanel(t)
+    expect(l.refMs).toBe(t)
+    expect(l.alerts.map((a) => [a.sentMs, a.phase])).toEqual([
+      [1720655112000, 'active'],
+      [1720648395000, 'active'],
+      [1720644330000, 'active'],
+    ])
+    expect(l.alerts.map((a) => localPhaseText(a, l.refMs))).toEqual([null, null, null])
+    expect(localAlertsLine(l, MDT12, t)!.text).toBe(EVAC_545)
+    expect(officialBadge(notAvailable, none, l, t)).toEqual({ count: 3, level: 'order' })
+    // the panels and the badge re-decide an answer decided at the query's hour at their own time: the same result
+    const hour = atHour(t)
+    expect(hour.refMs).toBe(1720652400000)
+    expect(localAlertsLine(hour, MDT12, t)!.text).toBe(EVAC_545)
+    expect(officialBadge(notAvailable, none, hour, t)).toEqual({ count: 3, level: 'order' })
+    // the location card's lines (Command and phones): the 5:45 PM message first, in effect, no phase words
+    const card = localAlertLines(hour, MDT12, 3, { units: 'us', fireOpen: true, refMs: t }).filter((x) => x.url)
+    expect(card[0].text).toBe('Archived alert from MTHelenaPoliceDepartment: "Urgent! Evacuation for Horse Gulch Fire: Residences between Cave Gulch to Magpie Gulch"')
+    expect(card[0].tone).toBe('warning')
+    for (const line of card) expect(line.sub).not.toMatch(/not yet in effect|after this time|ended/)
+  })
+
+  it('2:50 PM MDT: the 2:45 PM pre-evacuation Fire Warning (effective 2:28 PM) is in effect; the badge shows 1', () => {
+    const t = 1720644600000
+    const l = atPanel(t)
+    expect(l.alerts).toHaveLength(1) // the 2:00 PM answer lists messages sent up to 3:00 PM: only this one
+    expect(l.alerts[0]).toMatchObject({ event: 'Fire Warning', phase: 'active' })
+    expect(localPhaseText(l.alerts[0], l.refMs)).toBeNull()
+    expect(localAlertsLine(l, MDT12, t)!.text).toBe(
+      'Archived alert from MTHelenaPoliceDepartment: “Urgent. A fire pre-evacuation notice has been issued by the Sheriff for Horse Gulch area.” · sent Jul 10, 2024 2:45 PM MDT · FEMA archive · matched by county, not by an exact area · may be about another fire',
+    )
+    expect(officialBadge(notAvailable, none, l, t)).toEqual({ count: 1, level: 'local' })
+    expect(officialBadge(notAvailable, none, atHour(t), t)).toEqual({ count: 1, level: 'local' })
+    // 2:20 PM, the same hour's answer: not sent yet (and before its effective time): said so, never counted
+    const early = 1720642800000
+    const e = atPanel(early)
+    expect(localPhaseText(e.alerts[0], e.refMs)).toBe('sent 26 min after this time')
+    expect(localAlertsLine(e, MDT12, early)!.text).toContain('· sent 26 min after this time ·')
+    expect(officialBadge(notAvailable, none, e, early)).toEqual({ count: 0, level: null })
+  })
+
+  it('5:00 PM MDT (round 3 kept): the 5:45 PM message reads "sent 45 min after this time"; the badge shows 2', () => {
+    const t = 1720652400000
+    const l = atPanel(t)
+    expect(localAlertsLine(l, MDT12, t)!.text).toBe(`${CAVE_353} · +2 more in Details`)
+    const later = l.alerts.find((a) => a.sentMs === 1720655112000)!
+    expect(later.phase).toBe('upcoming')
+    expect(localPhaseText(later, l.refMs)).toBe('sent 45 min after this time')
+    expect(l.alerts.at(-1)).toBe(later) // in effect first
+    expect(officialBadge(notAvailable, none, l, t)).toEqual({ count: 2, level: 'order' })
+  })
+
+  it('6:00 PM MDT: all three in effect; the badge shows 3', () => {
+    const t = 1720656000000
+    const l = atPanel(t)
+    expect(l.alerts.every((a) => a.phase === 'active')).toBe(true)
+    expect(localAlertsLine(l, MDT12, t)!.text).toBe(EVAC_545)
+    expect(officialBadge(notAvailable, none, l, t)).toEqual({ count: 3, level: 'order' })
+  })
+
+  it('expiry: the 5:45 PM evacuation ends at its own expiry (7:45:12 PM MDT), at the panel’s minute', () => {
+    const before = 1720662300000 // 7:45 PM: 12 s before it expires
+    expect(officialBadge(notAvailable, none, atPanel(before), before)).toEqual({ count: 3, level: 'order' })
+    const t = 1720662600000 // 7:50 PM
+    const l = atPanel(t)
+    const ended = l.alerts.find((a) => a.sentMs === 1720655112000)!
+    expect(ended.phase).toBe('expired')
+    expect(localPhaseText(ended, l.refMs)).toBe('ended')
+    expect(l.alerts.at(-1)).toBe(ended)
+    expect(localAlertsLine(l, MDT12, t)!.text).toBe(`${CAVE_353} · +1 more in Details`)
+    expect(officialBadge(notAvailable, none, l, t)).toEqual({ count: 2, level: 'order' })
+    // the 7:00 PM answer still says "in effect" at its hour; the panel's 7:50 PM decides
+    expect(officialBadge(notAvailable, none, atHour(t), t)).toEqual({ count: 2, level: 'order' })
   })
 })

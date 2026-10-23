@@ -24,6 +24,7 @@ import {
   LOCAL_PLACE_NOTE,
   LOCAL_STANDING_CAVEAT,
   localAlertPlace,
+  localAlertsAt,
   localPhaseText,
   OPENFEMA_NOTICE,
   OPENFEMA_TERMS_URL,
@@ -448,9 +449,11 @@ const NONE_HERE: Record<ReturnType<typeof answeredChannelsText>, string> = {
  *  1.7 mi from the fire's reported location · may be about another fire"; review round 1, R1), the most relevant
  *  first (localAlertOrder); the archive with its notice and credit; pending and not-checked states said as such; the
  *  standing caveat behind "More". */
-export function LocalAlertsRow({ l, wallMs, refMs }: { l: LocalAlertsOfficial; wallMs: number; /** The time the panel is for (the replay time, or now). */ refMs?: number }) {
+export function LocalAlertsRow({ l: answer, wallMs, refMs }: { l: LocalAlertsOfficial; wallMs: number; /** The time the panel is for (the replay time, or now). */ refMs?: number }) {
   const tf = useTimeFormat()
   const metric = useWorkspace((s) => s.units === 'metric')
+  // in effect and the order at the panel's own time, from each message's own times (review round 4)
+  const l = useMemo(() => localAlertsAt(answer, refMs), [answer, refMs])
   const label = "Local officials' alerts"
   // the channels that answered: a past time older than NWS keeps reads FEMA's archive only (review UX-m3)
   const source = answeredChannelsText(l)
@@ -514,7 +517,7 @@ export function LocalAlertsRow({ l, wallMs, refMs }: { l: LocalAlertsOfficial; w
             {a.lead}: <strong className="on-official">&ldquo;{a.text}&rdquo;</strong>
           </p>
           <p className="on-meta">
-            {join([a.event, sentText(a, tf), a.archived ? 'FEMA archive' : 'relayed by the National Weather Service', localPhaseText(a, refMs)])}
+            {join([a.event, sentText(a, tf), a.archived ? 'FEMA archive' : 'relayed by the National Weather Service', localPhaseText(a, l.refMs)])}
             {' · '}
             <SourceLink href={a.link.url}>{a.link.label}</SourceLink>
           </p>

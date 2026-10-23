@@ -12,7 +12,7 @@
 import { DEFAULT_MARGIN_KM } from '../../extras/client'
 import { fmtWhen } from '../../extras/format'
 import { distanceText } from '../../official/geo'
-import { localAlertPlace, localPhaseText, sentText, type LocalAlertsOfficial } from '../../official/localAlerts'
+import { localAlertPlace, localAlertsAt, localPhaseText, sentText, type LocalAlertsOfficial } from '../../official/localAlerts'
 import { evacuationWho, groupZones, localBadgeLevel, notAvailableReason, type CalFireOfficial, type EvacuationOfficial, type FireWeatherOfficial } from '../../official/model'
 import { fmtAcres, fmtNumber } from '../../lib/format'
 import { fmtAt, type TimeFmt } from '../../lib/time'
@@ -118,8 +118,10 @@ export function fireWeatherLine(f: FireWeatherOfficial): SummaryLine {
  * viewer's units; review round 2, N1) and its link; "+N more in Details" for the rest. `refMs`: the time the panel is
  * for (the replay time, or now).
  */
-export function localAlertsLine(l: LocalAlertsOfficial | null | undefined, tf: TimeFmt, refMs?: number | null, metric = false): SummaryLine | null {
-  if (!l || l.state !== 'listed') return null
+export function localAlertsLine(answer: LocalAlertsOfficial | null | undefined, tf: TimeFmt, refMs?: number | null, metric = false): SummaryLine | null {
+  if (!answer || answer.state !== 'listed') return null
+  // in effect and the order at the panel's own time, from each message's own times (review round 4)
+  const l = localAlertsAt(answer, refMs)
   const live = l.alerts.filter((a) => a.phase === 'active' || a.phase === 'upcoming')
   const a = live[0]
   if (!a) return null
@@ -127,7 +129,7 @@ export function localAlertsLine(l: LocalAlertsOfficial | null | undefined, tf: T
     `${a.lead}: “${a.text}”`,
     sentText(a, tf),
     a.archived ? 'FEMA archive' : 'relayed by NWS',
-    localPhaseText(a, refMs),
+    localPhaseText(a, l.refMs),
     localAlertPlace(a, { metric }),
     live.length > 1 ? `+${live.length - 1} more in Details` : null,
   ]

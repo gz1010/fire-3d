@@ -157,7 +157,7 @@ export function useExtrasFeedItems(): FeedItem[] {
       ...(ctx.demo || (summary?.record_source ?? 'calfire') !== 'wfigs' ? [] : wfigsRecordFeedItems(record, { mode, manifest, summary, tf })),
       ...(ctx.demo ? [] : fireWeatherFeedItems(fw, { mode, refMs: ctx.refMs, manifest, metric, tf })),
       // local officials' messages relayed by NWS / archived by FEMA (CONTRACT §14.7)
-      ...(ctx.demo ? [] : localAlertFeedItems(localAlertsState({ data: localData, loading: false, error: null }), { manifest, tf, metric })),
+      ...(ctx.demo ? [] : localAlertFeedItems(localAlertsState({ data: localData, loading: false, error: null }, { refMs: ctx.refMs }), { manifest, tf, metric })),
       ...cameraFeedItems(v.cams, tf),
       ...imageryFeedItems(v.imgs, range, startedMs),
     ]

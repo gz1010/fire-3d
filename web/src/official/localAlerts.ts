@@ -54,9 +54,15 @@ export interface LocalAlertItem {
   /** Its full verbatim texts (headline, WEA, description, instruction), for "More". */
   full: { label: string; text: string }[]
   sentMs: number | null
+  /** The issuer's onset time, else its effective time, verbatim (null when it gave neither). */
+  onsetMs: number | null
   expiresMs: number | null
+  /** A CAP "Cancel" message: ended whatever its times. */
+  cancelled: boolean
   /** IANA zone of its area (null = not known: the fire's zone is used). */
   timeZone: string | null
+  /** Its phase at the time the panel is for (`LocalAlertsOfficial.refMs`), decided from its own times
+   *  (`localPhaseAt`; review round 4), never from the backend's hour-level hint. */
   phase: FeedItemStatus
   /** The issuer's link when present, else the record it was read from (always https). */
   link: { url: string; label: string }
@@ -103,8 +109,10 @@ export interface LocalAlertsOfficial {
   /** Which answer `localAlertsAtPoint` filtered: the open fire's own answer (its other messages are in Updates) or the
    *  live `?bbox=` answer for the point's box (its messages are not in Updates, so the card lists them all). */
   pointSource?: 'fire' | 'box'
-  /** The time the answer is for (its `requested_at_ms`; null or absent: now). A message sent after it reads "sent N min
-   *  after this time" and is not counted as active (review round 3, N4). */
+  /** The time the phases and the order were decided at (review round 4): the panel's own time (the replay time on
+   *  screen, or now when live) when the hooks give it, else the answer's `requested_at_ms`, else its `now_ms`. A
+   *  message sent after it reads "sent N min after this time" and is never counted as active (review round 3, N4).
+   *  `localAlertsAt` re-decides them at another time. */
   refMs?: number | null
 }
 
@@ -131,8 +139,28 @@ export function localAlertLink(a: Pick<LocalAlert, 'web' | 'source_url' | 'archi
   return { url: src, label: a.archived || a.channel === 'openfema_archive' ? 'source record (FEMA archive)' : 'source record (NWS)' }
 }
 
-/** One message for the panels. `refMs` is the time the answer is for (`requested_at_ms`): a message the answer has
- *  in effect but sent after that time (an older backend; review round 3, N4) is not yet in effect there. */
+/**
+ * A local message's phase at `refMs` (the time the panel is for: the replay time on screen, or now when live), from
+ * its own times only (review round 4; CONTRACT 14.7 as built): ended once cancelled or from its expiry; "upcoming"
+ * while it was not sent yet (a replay lists the hour after the answer's time: "sent N min after this time", never
+ * current) or its onset (else effective) time is still ahead; in effect otherwise. So a message is in effect from
+ * max(sent, onset else effective) until its expiry: an issuer can give an onset earlier than its sent time (Horse
+ * Gulch, MT: sent 5:45 PM MDT, effective 5:00 PM), and the message is in effect from 5:45 PM, never before and never
+ * "not yet in effect" after. The backend's `nws.local_phase` applies the same rule at the answer's hour; the web
+ * decides at the panel's minute, so it never depends on that hint.
+ */
+export function localPhaseAt(a: Pick<LocalAlertItem, 'cancelled' | 'sentMs' | 'onsetMs' | 'expiresMs'>, refMs: number): FeedItemStatus {
+  if (a.cancelled) return 'expired'
+  if (a.sentMs != null && refMs < a.sentMs) return 'upcoming'
+  if (a.onsetMs != null && refMs < a.onsetMs) return 'upcoming'
+  if (a.expiresMs != null && refMs >= a.expiresMs) return 'expired'
+  return 'active'
+}
+
+const finiteMs = (t: number | null | undefined): t is number => t != null && Number.isFinite(t)
+
+/** One message for the panels, its phase decided at `refMs` (the panel's time; `localPhaseAt`). Without a time (an
+ *  answer without `now_ms`) the backend's phase is the hint, never in effect before it was sent (review round 3, N4). */
 export function toLocalAlertItem(a: LocalAlert, refMs?: number | null): LocalAlertItem | null {
   const link = localAlertLink(a)
   if (!link) return null // never shown without a link (the backend drops these too)
@@ -154,9 +182,15 @@ export function toLocalAlertItem(a: LocalAlert, refMs?: number | null): LocalAle
     text: localAlertText(a),
     full,
     sentMs: a.sent_ms,
+    onsetMs: a.onset_ms ?? a.effective_ms ?? null,
     expiresMs: a.expires_ms,
+    cancelled: a.message_type === 'Cancel',
     timeZone: a.time_zone,
-    phase: a.phase === 'in_effect' && sentAfter({ sentMs: a.sent_ms }, refMs) ? 'upcoming' : (PHASE[a.phase] ?? 'active'),
+    phase: finiteMs(refMs)
+      ? localPhaseAt({ cancelled: a.message_type === 'Cancel', sentMs: a.sent_ms, onsetMs: a.onset_ms ?? a.effective_ms ?? null, expiresMs: a.expires_ms }, refMs)
+      : a.phase === 'in_effect' && sentAfter({ sentMs: a.sent_ms }, refMs)
+        ? 'upcoming'
+        : (PHASE[a.phase] ?? 'active'),
     link,
     match: a.match,
     coversReportedLocation: a.covers_reported_location,
@@ -176,6 +210,25 @@ export function localAlertOrder(a: Pick<LocalAlertItem, 'phase' | 'where' | 'sen
   const cov = (x: typeof a) => (x.where.covers ? 0 : 1)
   const km = (x: typeof a) => (x.where.covers ? 0 : (x.where.km ?? Infinity))
   return ORDER[a.phase] - ORDER[b.phase] || cov(a) - cov(b) || km(a) - km(b) || (b.sentMs ?? 0) - (a.sentMs ?? 0)
+}
+
+/**
+ * The answer with every message's phase and the order decided at `refMs`, the time the panel is for (the replay time
+ * on screen, or now when live; review round 4): the panels (Official now, Public's short line, the location card) and
+ * the phone badge call it with their own time, so "in effect", the order, the short line and the count agree with the
+ * clock on screen. The query stays hour-quantised: the answer at an hour lists every message sent up to the end of
+ * that hour (the replay window is the answer's time + 1 h), so any minute of the hour is decided from it without a
+ * refetch. Unchanged (the same object) without a time, when it is not a list, or when decided at that time already.
+ */
+export function localAlertsAt<T extends Pick<LocalAlertsOfficial, 'state' | 'alerts' | 'refMs'>>(l: T, refMs: number | null | undefined): T {
+  if (!finiteMs(refMs) || l.refMs === refMs || l.state !== 'listed') return l
+  const alerts = l.alerts
+    .map((a) => {
+      const phase = localPhaseAt(a, refMs)
+      return phase === a.phase ? a : { ...a, phase }
+    })
+    .sort(localAlertOrder)
+  return { ...l, alerts, refMs }
 }
 
 /**
@@ -284,8 +337,13 @@ export function localAlertsAtSelectedPoint(i: LocalAtSelectedPointInput): LocalA
   return { ...localAlertsState(null), reason: "Past local alerts are checked for the selected fire's area only." }
 }
 
-/** The local alerts answer as an explicit state (never "none" where nothing was checked). */
-export function localAlertsState(q: Pick<QueryState<LocalAlertsResponse>, 'data' | 'loading' | 'error'> | null, opts: { demo?: boolean } = {}): LocalAlertsOfficial {
+/** The local alerts answer as an explicit state (never "none" where nothing was checked). `opts.refMs`: the time the
+ *  panel is for (the official context's `refMs`: the replay time on screen, or now when live); each message's phase
+ *  and the order are decided at it (else at the answer's `requested_at_ms`, else its `now_ms`; review round 4). */
+export function localAlertsState(
+  q: Pick<QueryState<LocalAlertsResponse>, 'data' | 'loading' | 'error'> | null,
+  opts: { demo?: boolean; refMs?: number | null } = {},
+): LocalAlertsOfficial {
   const empty = { alerts: [], channels: [], archive: false, archivePending: false, checkedMs: null, caveats: [LOCAL_STANDING_CAVEAT], credits: [LIVE_CREDIT] }
   if (opts.demo) return { ...empty, state: 'not-checked', reason: 'Demo data: local alerts are not checked for simulated incidents.' }
   if (!q) return { ...empty, state: 'not-checked', reason: null }
@@ -296,6 +354,7 @@ export function localAlertsState(q: Pick<QueryState<LocalAlertsResponse>, 'data'
     return { ...empty, state: 'loading', reason: null }
   }
   const channels = d.channels ?? []
+  const refMs = [opts.refMs, d.requested_at_ms, d.now_ms].find(finiteMs) ?? null
   const arch = channels.find((c) => c.id === 'openfema_archive')
   const live = channels.find((c) => c.id === 'nws_api')
   const archive = arch != null && (arch.status === 'available' || arch.status === 'pending')
@@ -307,14 +366,14 @@ export function localAlertsState(q: Pick<QueryState<LocalAlertsResponse>, 'data'
     checkedMs: live?.retrieved_ms ?? d.retrieved_ms ?? null,
     caveats,
     credits: archive ? [LIVE_CREDIT, ARCHIVE_CREDIT] : [LIVE_CREDIT],
-    refMs: d.requested_at_ms ?? null,
+    refMs,
   }
   if (d.status === 'not_available_for_past_dates') return { ...base, alerts: [], state: 'not-checked', reason: d.reason }
   // outside the lower 48 nothing is checked (the backend answers state_not_available): "not checked", not an outage
   if (d.status === 'unavailable' && d.reason_code === 'state_not_available') return { ...base, alerts: [], state: 'not-checked', reason: d.reason }
   if (d.status === 'unavailable') return { ...base, alerts: [], state: 'unavailable', reason: d.reason }
   const alerts = d.alerts
-    .map((a) => toLocalAlertItem(a, d.requested_at_ms))
+    .map((a) => toLocalAlertItem(a, refMs))
     .filter((a): a is LocalAlertItem => a != null)
     .sort(localAlertOrder)
   const answered = channels.some((c) => c.status === 'available')
@@ -345,9 +404,10 @@ function afterSpan(ms: number): string {
 /**
  * A message's phase in the words of its line (integration review UX-m2): null while in effect; "ended"; a message sent
  * after the reference time (a replay's +1 h window, §14.7) "sent 32 min after this time", never "upcoming" (a "leave
- * now" order is not a scheduled one); another message not yet in effect (its onset later) "not yet in effect". A
- * message sent after the reference time says so whatever its phase (review round 3, N4): an issuer can give an onset
- * or effective time earlier than its sent time, and the line must never quote it as current before it was sent.
+ * now" order is not a scheduled one); another message not yet in effect (sent, its onset still ahead) "not yet in
+ * effect". A message sent after the reference time says so whatever its phase (review round 3, N4). `refMs` must be
+ * the time the phase was decided at (`localAlertsAt` the panel's time first; review round 4), so an already-sent,
+ * already-effective message never reads "not yet in effect".
  */
 export function localPhaseText(a: Pick<LocalAlertItem, 'phase' | 'sentMs'>, refMs?: number | null): string | null {
   if (sentAfter(a, refMs)) return `sent ${afterSpan(a.sentMs! - refMs!)} after this time`
