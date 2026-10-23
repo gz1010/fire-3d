@@ -28,10 +28,15 @@ validation's progress/report, tests that test only those.
 - Screenshots batch 1 (overview x6) and 2 (fires x10) taken and viewed; wording scan 48 hits, all justified; key scan
   0 (scratch logs, my commits, tracked files).
 
+- Batch 3 screenshots, keyboard and reduced-motion checks; two bugs found and fixed: 9ed18c0 (an unprepared fire's
+  card no longer loses to a nearby prepared fire's zoom focus), b6c90a4 (past time in a state without a feed:
+  'not available in this state' on the location card); cf98ab1 CONTRACT notes for both.
+- Final gates: backend 956 passed; web typecheck 0, lint 55 (scene only), 73 files 1116 passed 2 skipped, build OK;
+  check-time-api 0/0; wording scan 48 hits all justified; key scan 0; API log 674 GET, 0 non-GET.
+- Report docs/redesign/reports/brief3-integration.json (with `part2`); servers 8715/5185 stopped.
+
 ## Next
-1. Batch 3 screenshots (search, location cards, fire cards, prepare card, Emigrant retake); keyboard and reduced
-   motion checks.
-2. Full gates; report with part2 list.
+- Part 2 (after validation): see the report's `part2` list.
 
 ## Decisions
 - IncidentSummary (R) fields keep a Python default (old manifests are filled on read) but are always dumped; TS
@@ -43,3 +48,5 @@ validation's progress/report, tests that test only those.
 - Emigrant is in Oregon (America/Los_Angeles, UTM 10), not Montana as the task list said.
 
 ## Open problems
+- Startup race: a search answered before the map controller exists is dropped (mapController.ts:286); minor.
+- Forensic screenshots time out under swiftshader here (not a functional finding).
