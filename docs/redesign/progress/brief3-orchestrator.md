@@ -36,6 +36,11 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
   Reviews of us-catalog and us-pipeline had committed their review3 reports (2dfb78e, b28e7f9; both fix-needed);
   their fixers were interrupted with uncommitted edits. Resumed both workflows from their journals (the fixer
   prompt now tells a re-run fixer to review its predecessor's uncommitted edits) and us-official via SendMessage.
+- ~03:20 UTC: all four wave-1 roles finished (us-official 878 backend / 1,079 web tests). Reviews: us-catalog pass
+  (4e3c8d6); us-pipeline fixer round 1 committed (20f33d3), Black Cove build in progress; us-web and us-official
+  reviews running.
+- The user's usage limit resets 2:20 AM EDT (06:20 UTC). Wake-ups scheduled at 06:25 and 07:25 UTC to resume
+  automatically (stopped workflows from their journals, stopped agents via SendMessage).
 - Lesson: never SendMessage a workflow agent (it starts a second copy); relay through files or Agent-tool agents.
 
 ## Carry-over items for later stages (integration unless a role owns the file)
