@@ -522,7 +522,10 @@ Fire-3d summarizes the runs in two ways:
 Three calibrated settings are on by default ([docs/validation.md](docs/validation.md), sections 3 and 5):
 
 1. **Drought-adjusted live fuel moisture.** After a dry winter the vegetation is treated as drier than the monthly
-   table says. (Eaton had only 12 mm of rain since October.)
+   table says. (Eaton had only 12 mm of rain since October.) Outside California the moisture of living plants comes
+   instead from a growing-season index computed from the fire's own weather (the NFDRS 2016 GSI), because
+   California's month table does not fit other climates: it assumed green grass in a Texas February, where the grass
+   was cured.
 2. **Held quiet perimeter.** Edges with no growth and no satellite detection of new burning within 1 km in the
    12 hours before the start do not spread. A detection counts as spread only where it coincides with growth: hot
    pixels on ground that burned more than 12 hours earlier are burnout, not spread.
@@ -583,10 +586,52 @@ would improve.
 ### Caveats on the scores
 
 - The hindcasts used almost perfect weather (archived short-range HRRR forecasts). Real-time forecasts will do worse.
-- Only three fires were used, two of them in the same Santa Ana wind event, and all in chaparral and grass. The
-  settings may not transfer to timber or other fire regimes.
+- Only three fires were used to set the model, two of them in the same Santa Ana wind event, and all in chaparral and
+  grass. The test outside California (next section) shows that the settings do not transfer well.
 - The shrinking multiplier will under-predict a new wind event two or three days after the start.
 - The "observed" spread is itself a reconstruction: on a synthetic test its median timing error was 1.29 hours.
+
+### Outside California: 12 past fires in six regions
+
+Before brief 3's launch the model was tested on 12 past fires outside California, two in each of six regions (the
+national fire-management areas): the Northwest, Northern Rockies, Great Basin, Southwest, Southern Plains (Texas and
+Oklahoma) and Southeast. The fires, start times and rules were written down before the first score
+([docs/validation.md, section 10](docs/validation.md#10-outside-california-brief-3)); nothing was tuned on them. Each
+fire was re-forecast from 3 or 4 start times during its main growth with archived weather and scored at 12, 24, 48
+and 72 hours with the same growth-only Sørensen score (0 = no overlap, 1 = perfect).
+
+| Region | Test fires (score each) | Region score | Forecast growth vs real growth (median) |
+|---|---|---:|---|
+| Northwest | Emigrant, OR (0.28); Lower Sugarloaf, WA (0.23) | 0.26 | about a quarter (0.26×) |
+| Northern Rockies | Island Creek, ID (0.19); Horse Gulch, MT (0.49) | 0.34 | too little on one (0.63×), too much on the other (1.78×) |
+| Great Basin | France Canyon, UT (0.22); Cottonwood Peak, NV (0.28) | 0.25 | a little too little (0.83×) |
+| Southwest | Trout, NM (0.35); Greer, AZ (0.35) | 0.35 | too much (1.84×) |
+| Southern Plains | Windy Deuce, TX (0.30); Rush, OK (0.49) | 0.39 | too little (0.69×) |
+| Southeast | Table Rock, SC (0.21); Black Cove, NC (0.17) | 0.19 | about a third (0.35×) |
+| Southern California (for comparison) | Eaton (0.44), Madre (0.40), Palisades (0.47) | 0.43 | too much (1.85×) |
+| Rocky Mountain, Eastern, Northern California | none | not tested | "Accuracy not yet tested here" |
+
+What this means, in plain words:
+
+- **The model does worse outside California.** Region scores range from 0.19 (Southeast) to 0.39 (Southern Plains),
+  against 0.43 in Southern California, where the settings were fitted (a best case).
+- **It usually forecasts too little new spread outside California** (8 of the 12 fires), because the settings that
+  slow the model down were fitted to California fires that it over-predicted. Fires that ran again days after a quiet
+  spell are the worst case. The exceptions were wind-driven runs in grass and timber (Greer, Horse Gulch, Trout), which
+  grew too much, as California's fires do.
+- **The Appalachian leaf-litter fires** (Table Rock and Black Cove) scored lowest: the model forecast a fifth to a half
+  of the real growth.
+- **Two fires per region is a small sample.** Two fires of the same region differ by about 0.1 on average, so a region
+  score is uncertain by roughly ±0.07 (±0.13 with 95 % confidence); in the Northern Rockies the two fires differ by
+  0.30. Each region tested only the fuels its two fires burned; its other fuels are untested.
+- **Live forecasts will do worse.** These re-runs used the weather that really happened. Re-issuing the same fires
+  as if they were live (forecast from the latest satellite pass) scored 0.23 on average, and real live forecasts use
+  predicted weather, which is worse again.
+- **Southern Plains depends on one fire's timing.** Windy Deuce's run is timed by satellite passes, and NIFC's own
+  perimeter time differs by about a day, so its score is uncertain.
+
+The app shows these results per region as described in [How good is the model here?](#start-on-the-national-map).
+The numbers are in `backend/fire3d/data/regional_accuracy.json`.
 
 ### Live forecasts
 
@@ -621,11 +666,32 @@ seconds. To reproduce the numbers, see [docs/validation.md, section 9](docs/vali
 
 ## Limitations
 
-- **California only.** The overview shows what CAL FIRE lists as active and its 2026 list (300 acres or more); the
-  2025 list (300 acres or more, or 100 with the picker's toggle) is behind a filter. Zooming in shows the spread only
-  for prepared fires in those lists; any other fire needs "Prepare analysis" first.
+- **The lower 48 states and Washington, DC only.** Alaska and Hawaii are not supported yet (they need different map
+  handling and have patchier terrain and fuel data): their fires are not listed, a fire there cannot be prepared, and
+  a point there says "Fire-3d does not support Alaska, Hawaii or US territories yet." The overview shows every fire
+  CAL FIRE or NIFC lists as active, and the 2026 and 2025 fires of 300 acres or more (100 with the picker's switch for
+  2025). Zooming in shows the spread only for prepared fires; any other fire needs "Prepare analysis" first.
+- **Accuracy differs by region, and the samples are small.** The model was tested on 2 past fires in each of six
+  regions outside California (scores 0.19 to 0.39, against 0.43 in Southern California, where its settings were
+  fitted); see [Outside California](#outside-california-12-past-fires-in-six-regions). Two fires per region give a
+  rough value (about ±0.07), only the fuels those fires burned were tested, and the Rocky Mountain and Eastern regions
+  and Northern California were not tested at all ("Accuracy not yet tested here"). Outside California the model usually
+  forecasts too little new spread.
+- **Evacuation zones in two states only.** Official evacuation zones come from Cal OES in California and Oregon's
+  Department of Emergency Management in Oregon, current status only. Every other state says "Evacuation zones: not
+  available in this state", never an all-clear: Fire-3d found no other free, official, public, machine-readable state
+  feed. Washington has one, but its terms require users to "hold harmless, defend, and indemnify the State of
+  Washington", so by your decision it is not used; Florida publishes county status only. County and vendor
+  evacuation systems are out of scope. Everywhere, the local officials' messages that the NWS relays still show, but
+  most local alerts are never relayed.
+- **Cameras are California only** (ALERTCalifornia, Caltrans); elsewhere "Not available in this state".
+- **Records outside California have no change history yet.** Fire-3d records every change of a CAL FIRE record;
+  NIFC WFIGS records show their latest numbers with their own update time only. NIFC's current list sometimes answers
+  two different snapshots within minutes; Fire-3d shows what it gets, with the record's time.
+- **Not done yet:** GOES-East satellite images (recent imagery uses GOES-West), and recorded change history for NIFC
+  WFIGS records.
 - **Fixed analysis area.** Each fire's model area is set when it is built. Panning beyond it shows "Outside modeled
-  area", which means unknown, not low risk.
+  area", which means unknown, not low.
 - **Coarse observations.** Satellite detections are 375 m (VIIRS), 1 km (MODIS) or 2–3 km (GOES) across, with a few
   polar-orbiting passes a day. The replay is interpolated between them. 27 of the 78 past fires of 300 acres or
   more have no agency perimeter, so they rely on detections alone, and perimeter times are best estimates.
@@ -633,19 +699,23 @@ seconds. To reproduce the numbers, see [docs/validation.md, section 9](docs/vali
   smoldering can hide a burning fire. Passes are looked up at the fire's center, so a very large fire can lie partly
   outside a pass. A live forecast's start moves forward only when its bundle refreshes (new detections, or every
   3 hours for a quiet fire), so it can trail the newest pass by a few hours.
-- **Search** finds US street addresses with house numbers (approximate pins), California towns and ZIP codes
-  (approximate centers; the map moves there and asks for an address or a click), coordinates and fire names; no
-  landmarks, businesses or street names without a house number. A town search never opens a fire, but if the town
+- **Search** finds US street addresses with house numbers (approximate pins), US towns, counties and ZIP codes
+  (approximate centers; the map moves there and asks for an address or a click; PO-box-only ZIP codes are missing),
+  coordinates and fire names; no landmarks, businesses or street names without a house number. A ZIP area is described
+  as "near" the closest town to its center, which can be a neighboring place. A town search never opens a fire, but if the town
   lies in a prepared fire's area, zooming there shows that fire's spread (for example "Malibu" shows the Bryson Fire),
   as any zoom does.
-- **Evacuation data** is current status only, and only as complete as the counties that feed the Cal OES layer. Cal
-  OES gives no issue time (Fire-3d shows when Cal OES listed the zone) and does not say which fire a zone belongs to;
-  zones within 15 km of a fire are shown with their distance.
+- **Evacuation data** is current status only, and only as complete as the counties that feed the Cal OES and Oregon
+  OEM layers. Cal OES gives no issue time (Fire-3d shows when Cal OES listed the zone), and neither layer says which
+  fire a zone belongs to; zones within 15 km of a fire are shown with their distance. Oregon's past zones are not
+  shown: past days show the archived FEMA messages instead.
 - **CAL FIRE history** exists only from Oct 18, 2026, when Fire-3d started recording it, and only while a backend
   checks CAL FIRE (the live loop does so every 15 minutes). Past fires show CAL FIRE's final record, and a record CAL
   FIRE edited long after containment (Eaton, Aug 2026) says that its update time is that edit, not news from the fire.
-- **NWS alerts:** live alerts come from the NWS API (no live Red Flag Warning was in effect in California during the
-  final test, so live outlines were checked only with recorded samples and Eaton's archived warning). Past alerts come
+- **Local officials' alerts** relayed by the NWS reach Fire-3d only when local officials send them through the NWS
+  (about 1 in 20 fire and evacuation alerts in 2024-26); FEMA's archive for past days is about a day late and is
+  matched to a fire by county, so a message can be about another fire in the same county (the card says so).
+- **NWS alerts:** live alerts come from the NWS API, for all lower-48 states in one request. Past alerts come
   from the Iowa Environmental Mesonet archive, an archived copy and not an official NWS source; its search samples 5
   points (the reported location and the corners of the analysis area) and looks back 14 days, so an alert covering
   only another part of the area, or one that began more than about 13 days earlier, could be missed. Zone outlines on
@@ -659,8 +729,18 @@ seconds. To reproduce the numbers, see [docs/validation.md, section 9](docs/vali
 - **Performance.** On a 1440 × 900 window at pixel ratio 2, Forensic's default (high quality with depth of field)
   runs at about 50 frames per second (about 37 uncapped in the realistic style); high without depth of field, medium
   and low hold 60. The map draws 2D at well over 200 frames per second; in 3D it reaches about 60–70 at pixel ratio 2
-  (about 105 at pixel ratio 1), measured without the browser's frame cap.
+  (about 105 at pixel ratio 1), measured without the browser's frame cap. These numbers are from brief 2 on a Mac;
+  brief 3 ran in a cloud session without a graphics card, so frame rates were not measured again (with many more
+  markers on the national overview, check them on your Mac).
 - **Free public map services** (OpenFreeMap, Mapterhorn, USGS) have no service-level guarantee.
+- **Weather quota.** Open-Meteo's free API allows fewer than 10,000 calls a day, 5,000 an hour and 600 a minute per
+  internet address. On a shared address (a cloud machine, an office network) other users count too: "Prepare
+  analysis" then fails with "Open-Meteo daily request limit reached; retry after the reset (00:00 UTC)", and Fire-3d
+  stops asking until the reset. This happened during the final check of brief 3, on Oct 23, 2026.
+- **When a fire list cannot be reached.** If NIFC's or CAL FIRE's list does not answer, the overview says which one,
+  and a list that could not be refreshed is shown with the time of the copy ("could not be refreshed right now;
+  showing the copy fetched 47 min ago"). If both are down, only fires already prepared on your machine are listed,
+  with their records as saved, and the overview says so; it never says "no active fires".
 - **Local only.** There is no deployment, user accounts or authentication.
 - **Known advisory:** maplibre-gl 5.24.0 carries advisory GHSA-jrc7-96c5-q579 (a cross-site scripting bypass in the
   sanitizer behind MapLibre's built-in attribution control). Fire-3d keeps that control off and renders credits and
@@ -677,10 +757,13 @@ seconds. To reproduce the numbers, see [docs/validation.md, section 9](docs/vali
 | Aircraft are missing or slow to appear | Aircraft are tracked for live fires only and shown in Forensic only (the map workspace does not ask for them). When adsb.lol cannot be reached, Fire-3d falls back to adsb.fi automatically; the first request after each 5-minute retry window can wait about 17 seconds for the timeout. |
 | The map says "Street map unavailable", "Roads and place names unavailable", "3D terrain unavailable … showing a flat map" or "Aerial photos are not loading (USGS); showing the street map" | That map service is down. The fire layers keep working; after a USGS failure the map uses the dark map until you press "Try aerial again". Try another basemap, or point `VITE_OPENFREEMAP_STYLE_BASE`, `VITE_MAPTERHORN_TILEJSON` or `VITE_USGS_IMAGERY_SERVICE` at another server. |
 | Zooming in on a fire shows only its marker | Its analysis is not prepared yet: the chip under the marker says "Spread not prepared yet · Prepare analysis (1-3 min)". Click it and press the button on the fire's card. With `./dev.sh`, the live loop prepares up to 4 active live fires after startup. |
-| A row of "Official now" says "Unavailable right now" | That official source (Cal OES, CAL FIRE or the NWS) did not answer; Fire-3d never fills in a quiet state for it. "Not available for past dates" means the source publishes current status only (Cal OES), or the archive could not be reached. |
-| Town or ZIP code searches fail | The local index `backend/fire3d/data/gazetteer_ca.json` is missing: rebuild it with `uv run python scripts/build_gazetteer.py` (see Run). |
+| A row of "Official now" says "Unavailable right now" | That official source (Cal OES, Oregon OEM, CAL FIRE, NIFC, the NWS, the Iowa Environmental Mesonet or FEMA's archive) did not answer; Fire-3d never fills in a quiet state for it. "Not available for past dates" means the source publishes current status only (Cal OES, Oregon OEM). "Not available in this state" means Fire-3d has no official evacuation source for that state. |
+| The overview says a fire list "could not be reached" or "could not be refreshed" | NIFC's or CAL FIRE's list did not answer. Fire-3d tries that list again a minute later; the reload button next to the source line reloads the overview. |
+| "Prepare analysis" fails with "Open-Meteo daily request limit reached" | The free weather quota of your internet address is used up (see Limitations). Try again after 00:00 UTC; `uv run python -m fire3d.cli weather-probe` (from `backend/`) says when the weather service answers again. |
+| Town or ZIP code searches fail | The local index `backend/fire3d/data/gazetteer_us.json` is missing: rebuild it with `uv run python scripts/build_gazetteer.py` (see Run). |
 | An optional source says "unavailable" | The official source did not answer; the panel gives the reason. Fire-3d never fills in invented data. |
-| A build ends with an error | A required step failed, for example the CAL FIRE list, USGS elevation, LANDFIRE fuels or Open-Meteo weather. The message says which; retry later from the app or with `build <id> --force`. If CAL FIRE is down, its last cached list is used. Optional parts (aerial photo, burn severity, trees) only add a warning. |
+| A build ends with an error | A required step failed, for example the fire lists, USGS elevation, LANDFIRE fuels or Open-Meteo weather. The message says which; retry later from the app or with `build <id> --force`. If the lists cannot be reached at all, a build is refused with "The fire lists could not be reached right now; try again later." Optional parts (aerial photo, burn severity, trees) only add a warning. |
+| A fire in Alaska or Hawaii cannot be prepared | Fire-3d supports the lower 48 states and DC only, for now. |
 | `uv sync` fails while building pyretechnics | Install a C compiler (on macOS: `xcode-select --install`) and run it again. |
 | Live data is marked STALE | The newest observation is more than 6 hours old. It means "check the time", not "the fire is out". |
 | A live forecast shows no growth | Its whole perimeter is held: satellites saw no new fire near it for 12 hours or more, or CAL FIRE reports it fully contained. That means no modeled growth, not that the fire is out; check official sources. |
@@ -693,7 +776,9 @@ you share or publish anything made with Fire-3d.
 
 > [!WARNING]
 > **Some sources are for non-commercial use only:** Open-Meteo's free API, adsb.fi and ALERTCalifornia camera images
-> (CC BY-NC-ND 4.0). Newer pyretechnics releases may also be non-commercial (see below). Commercial use would need an
+> (CC BY-NC-ND 4.0). **One source requires a notice:** anything that shows FEMA's archived alerts must say "This
+> product uses the Federal Emergency Management Agency's OpenFEMA API, but is not endorsed by FEMA" and must not use
+> FEMA or DHS logos (Fire-3d shows the notice next to the archived alerts and in the map credits). Newer pyretechnics releases may also be non-commercial (see below). Commercial use would need an
 > Open-Meteo API subscription, permission from adsb.fi, a license from UC San Diego for ALERTCalifornia, and a check
 > of the pyretechnics license, or those features turned off.
 
@@ -701,15 +786,17 @@ you share or publish anything made with Fire-3d.
 
 | Source | Used for | License and terms | Credit |
 |---|---|---|---|
-| [CAL FIRE incidents](https://www.fire.ca.gov/incidents) | incident lists, reported location, acres, containment, and the change history Fire-3d records | public website data. fire.ca.gov refuses automated requests (HTTP 403), so CAL FIRE's own conditions of use could not be read; the [State of California conditions of use](https://www.ca.gov/use/) treat information on state websites as public domain unless marked otherwise (photographs may need permission) | CAL FIRE |
+| [CAL FIRE incidents](https://www.fire.ca.gov/incidents) | California's incident lists, reported location, acres, containment, and the change history Fire-3d records | public website data. fire.ca.gov refuses automated requests (HTTP 403), so CAL FIRE's own conditions of use could not be read; the [State of California conditions of use](https://www.ca.gov/use/) treat information on state websites as public domain unless marked otherwise (photographs may need permission) | CAL FIRE |
 | [NASA FIRMS](https://www.earthdata.nasa.gov/data/tools/firms) | satellite fire detections (VIIRS, MODIS, GOES, Landsat) | NASA open data, [no restrictions on use](https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance); optional free [MAP_KEY](https://firms.modaps.eosdis.nasa.gov/api/map_key/) | "We acknowledge the use of data and/or imagery from NASA's Fire Information for Resource Management System (FIRMS), part of NASA's Land, Atmosphere Near real-time Capability for Earth observations (LANCE) and NASA's Earth Science Data and Information System (ESDIS)." |
 | [NASA CMR](https://cmr.earthdata.nasa.gov/search/site/docs/search/api.html) (Common Metadata Repository) | times of the VIIRS and MODIS passes over a live fire, which set where its forecast starts; pass times for recent imagery | NASA open data, no key, [no restrictions on use](https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance) | NASA Earthdata (CMR) |
-| [NIFC WFIGS perimeters](https://data-nifc.opendata.arcgis.com/) | agency-mapped fire perimeters | open federal interagency data, no login; the public ArcGIS items (owner NIFC_Authoritative) carry only NIFC's disclaimer (no warranty; the data are not legal documents) and no use restrictions | Wildland Fire Interagency Geospatial Services (WFIGS) Group, NIFC |
+| [NIFC WFIGS Incident Locations](https://data-nifc.opendata.arcgis.com/datasets/nifc::wildland-fire-incident-locations) (current, this year, all years; IRWIN) | the national fire list, each fire's record outside California (and California fires CAL FIRE does not list), the protecting agency and its numbers | open federal interagency data, no login; the ArcGIS items (owner NIFC_Authoritative) carry only NIFC's disclaimer (no warranty; not legal documents) and no use restrictions (checked 2026-10-22 and 23) | "NIFC WFIGS (IRWIN)" |
+| [NWCG Unit Identifiers, PMS 931](https://www.nwcg.gov/publications/pms931) (Sep 2022) | plain names of the protecting agencies' codes ("USFS" → "USDA Forest Service"), stored in `backend/fire3d/data/nwcg_agency_codes.json` | "Publications and training materials produced by NWCG are in the public domain … permitted if NWCG information is accurately credited to NWCG" (the PDF, checked 2026-10-23) | "Agency names: NWCG unit identifiers" |
+| [NIFC WFIGS perimeters](https://data-nifc.opendata.arcgis.com/) | agency-mapped fire perimeters (outside California matched by the fire's IRWIN id) | open federal interagency data, no login; the public ArcGIS items (owner NIFC_Authoritative) carry only NIFC's disclaimer (no warranty; the data are not legal documents) and no use restrictions | Wildland Fire Interagency Geospatial Services (WFIGS) Group, NIFC |
 | [USGS 3DEP](https://www.usgs.gov/3d-elevation-program) | elevation for the model and the Forensic terrain | U.S. public domain ([USGS copyrights and credits](https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits)) | U.S. Geological Survey |
-| [LANDFIRE](https://landfire.gov/) (LF2024, LF2025) | fuels and canopy for the model | U.S. Government data (U.S. Department of the Interior and USDA Forest Service), public domain with no use constraints in the USGS metadata; landfire.gov itself states no license and asks to be cited | cite as on [landfire.gov/data/citation](https://landfire.gov/data/citation) |
+| [LANDFIRE](https://landfire.gov/) (LF2023, LF2024, LF2025: the edition before each fire) | fuels and canopy for the model | U.S. Government data (U.S. Department of the Interior and USDA Forest Service), public domain with no use constraints in the USGS metadata; landfire.gov itself states no license and asks to be cited | cite as on [landfire.gov/data/citation](https://landfire.gov/data/citation) |
 | [NAIP](https://naip-usdaonline.hub.arcgis.com/) (USDA), served by [The National Map](https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer) | aerial photo in Forensic, water mask | U.S. public domain, credit requested ([USDA FSA policy](https://www.fsa.usda.gov/help/policies-and-links)) | USGS, USDA, The National Map: Orthoimagery |
 | [Sentinel-2 L2A](https://registry.opendata.aws/sentinel-2-l2a-cogs/) via [Element 84 Earth Search](https://www.element84.com/earth-search/) | burn severity (dNBR); recent images | [Copernicus Sentinel data legal notice](https://sentinels.copernicus.eu/documents/247904/690755/Sentinel_Data_Legal_Notice): free, full and open access, modification allowed | "Contains modified Copernicus Sentinel data <year>" |
-| [Open-Meteo](https://open-meteo.com/) | weather: HRRR, GFS and ECMWF ensembles, archived forecasts, ERA5 | data [CC BY 4.0](https://open-meteo.com/en/licence); the free API is for **non-commercial use only**, under 10,000 calls a day ([terms](https://open-meteo.com/en/terms)) | "Weather data by Open-Meteo.com", linked to open-meteo.com |
+| [Open-Meteo](https://open-meteo.com/) | weather: HRRR, GFS and ECMWF ensembles, archived forecasts, ERA5 (also the daily weather behind the growing-season index outside California) | data [CC BY 4.0](https://open-meteo.com/en/licence); the free API is for **non-commercial use only**, under 10,000 calls a day, 5,000 an hour and 600 a minute per internet address ([terms](https://open-meteo.com/en/terms), checked 2026-10-23) | "Weather data by Open-Meteo.com", linked to open-meteo.com |
 
 ### Map, search and aircraft
 
@@ -718,11 +805,13 @@ you share or publish anything made with Fire-3d.
 | [OpenFreeMap](https://openfreemap.org/) | dark and roads basemaps, labels | free, commercial use allowed, no service-level guarantee ([terms of service](https://openfreemap.org/tos/)) | OpenFreeMap |
 | [OpenMapTiles](https://openmaptiles.org/) | vector tile schema and style design | design [CC BY 4.0, code BSD-3-Clause](https://github.com/openmaptiles/openmaptiles/blob/master/LICENSE.md) | © OpenMapTiles |
 | [OpenStreetMap](https://www.openstreetmap.org/copyright) | roads, places and labels, and the 3D building shapes (served by OpenFreeMap) | [ODbL 1.0](https://www.openstreetmap.org/copyright) | © OpenStreetMap contributors |
-| [Mapterhorn](https://mapterhorn.com/) | 3D terrain and hillshade | code BSD-3-Clause; tiles built from open data, listed on its [attribution page](https://mapterhorn.com/attribution/). In California: USGS 3DEP (public domain) and Copernicus GLO-30 (Copernicus free and open license) | © Mapterhorn; U.S. Geological Survey; Copernicus GLO-30: © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA |
+| [Mapterhorn](https://mapterhorn.com/) | 3D terrain and hillshade | code BSD-3-Clause; tiles built from open data, listed on its [attribution page](https://mapterhorn.com/attribution/). In the United States: USGS 3DEP (public domain) and Copernicus GLO-30 (Copernicus free and open license) | © Mapterhorn; U.S. Geological Survey; Copernicus GLO-30: © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA |
 | [USGS Imagery Only](https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer) | aerial basemap (dated photos, not live) | U.S. public domain ([USGS](https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits)) | USDA, USGS The National Map: Orthoimagery |
 | [MapLibre GL JS](https://maplibre.org/) 5.24.0 | map renderer | [BSD-3-Clause](https://github.com/maplibre/maplibre-gl-js/blob/main/LICENSE.txt) | MapLibre |
 | [US Census Geocoder](https://geocoding.geo.census.gov/geocoder/Geocoding_Services_API.html) | street-address search (`Public_AR_Current` benchmark) | free U.S. government service, no key; no separate terms page | U.S. Census Bureau |
-| [U.S. Census Bureau Gazetteer Files](https://www.census.gov/geographies/reference-files/time-series/geo/gazetteer-files.html) (2026: California places and ZIP Code Tabulation Areas) | town and ZIP code search, from a local index (no request at search time) | U.S. public domain (a U.S. Government work, 17 U.S.C. 105) | U.S. Census Bureau Gazetteer Files |
+| [U.S. Census Bureau Gazetteer Files](https://www.census.gov/geographies/reference-files/time-series/geo/gazetteer-files.html) (2026: places, counties and ZIP Code Tabulation Areas of every state) | town, county and ZIP code search, from a local index (no request at search time) | the page states no license; a U.S. Government work (17 U.S.C. 105), so public domain | U.S. Census Bureau Gazetteer Files |
+| [Census TIGERweb](https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/State_County/MapServer) (states, counties; American Indian areas for the Navajo Nation and Hopi Reservation) | the state, county and accuracy region at a point, from local files (simplified, retrieved 2026-10-23) | U.S. public domain; the service's credit text is "Source: U.S. Census Bureau" | "Boundaries: U.S. Census Bureau TIGERweb" |
+| [USDOT BTS NTAD Time Zones](https://services.arcgis.com/xOi1kZaI0eWDREZv/arcgis/rest/services/NTAD_Time_Zones/FeatureServer/0) | the time zone at a point (every fire's and place's local time), from a local file | "available for unrestricted public use" (17 U.S.C. § 101 government work; the layer's own text, checked 2026-10-23) | "Time zones: USDOT BTS NTAD" |
 | [adsb.lol](https://www.adsb.lol/docs/open-data/api/) | live aircraft positions | ODbL 1.0 | adsb.lol |
 | [adsb.fi](https://github.com/adsbfi/opendata) | aircraft fallback when adsb.lol cannot be reached | **personal, non-commercial use only**; about 1 request per second | adsb.fi, with a link to its home page |
 
@@ -730,14 +819,21 @@ you share or publish anything made with Fire-3d.
 
 | Source | Used for | License and terms | Credit |
 |---|---|---|---|
-| [National Weather Service API](https://www.weather.gov/documentation/services-web-api) | current Red Flag Warnings and Fire Weather Watches in California and their fire-weather zone outlines | U.S. public domain, open data ([NWS disclaimer](https://www.weather.gov/disclaimer)); no key; Fire-3d sends the User-Agent "Fire-3d/0.1 (research prototype)" and limits itself to 30 requests a minute | National Weather Service |
+| [National Weather Service API](https://www.weather.gov/documentation/services-web-api) | current Red Flag Warnings and Fire Weather Watches in the lower 48 and their fire-weather zone outlines; the local officials' messages the NWS relays (Fire Warning, Evacuation Immediate, Shelter In Place Warning, Civil Danger Warning; Civil Emergency Message and Local Area Emergency when they mention fire, smoke or evacuation), quoted verbatim with the sender's name | U.S. public domain, open data ([NWS disclaimer](https://www.weather.gov/disclaimer), checked 2026-10-23: free for any lawful purpose as long as the use does not claim it as one's own, imply NWS endorsement, or present modified content as official); no key; Fire-3d sends the User-Agent "Fire-3d/0.1 (research prototype)" and limits itself to 30 requests a minute | "National Weather Service"; local messages also name their sender ("relayed by NWS") |
+| [OpenFEMA IPAWS Archived Alerts v1](https://www.fema.gov/openfema-data-page/ipaws-archived-alerts-v1) | the local officials' messages of past days (about a day late), labelled archived, with their own times and a link to the record | [OpenFEMA terms](https://www.fema.gov/about/openfema/terms-conditions) (last updated Jan 22, 2025; read by the brief-3 build and its review): products "must clearly state" the notice below, FEMA and DHS logos need written permission, and users should cite the date the data were accessed (Fire-3d shows when it fetched them). fema.gov refuses automated requests (HTTP 403), so the page was not re-read automatically | "FEMA IPAWS archive via OpenFEMA" and "This product uses the Federal Emergency Management Agency's OpenFEMA API, but is not endorsed by FEMA" |
 | [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/) (Iowa State University) NWS product archive | past Red Flag Warnings and Fire Weather Watches for replays | public domain ([IEM disclaimer](https://mesonet.agron.iastate.edu/disclaimer.php)); an archived copy of NWS products, not an official NWS source | National Weather Service, archived copy via the Iowa Environmental Mesonet (Iowa State University) |
-| [Cal OES California Evacuation Aggregation Layer](https://data.ca.gov/dataset/california-evacuation-aggregation-layer) (with the County Evacuation Inventory) | official evacuation zones | public, "No restrictions on public use"; Cal OES disclaimer: "This information is constantly changing, and Cal OES does not verify or certify the information contained herein." | Evacuation zones: local officials via Cal OES |
+| [Cal OES California Evacuation Aggregation Layer](https://data.ca.gov/dataset/california-evacuation-aggregation-layer) (with the County Evacuation Inventory) | official evacuation zones in California | public, "No restrictions on public use"; Cal OES disclaimer: "This information is constantly changing, and Cal OES does not verify or certify the information contained herein." | Evacuation zones: local officials via Cal OES |
+| [Oregon OEM "Evacuation Areas Public"](https://www.arcgis.com/home/item.html?id=dd2bee51e3004dc4b1004df34fbd9e29) (Oregon Department of Emergency Management) | official evacuation zones in Oregon (current status only) | the item's license field is "Public", its access information "Oregon Department of Emergency Management", with no use restrictions or further terms published (checked 2026-10-22 and 23) | Evacuation zones: local officials via Oregon Department of Emergency Management |
 | [Cal OES California Webcams](https://www.arcgis.com/home/item.html?id=5b4040338d704693994d5682ab2747c5) | camera locations | public use | Cal OES California Webcams |
 | [ALERTCalifornia](https://alertcalifornia.org/terms/) (UC San Diego) | wildfire camera images | **CC BY-NC-ND 4.0: non-commercial, no derivatives**; never crop the information bar or partner logos ([crediting rules](https://alertcalifornia.org/crediting-and-branding/)) | ALERTCalifornia \| UC San Diego, with every image |
 | [Caltrans CCTV](https://cwwp2.dot.ca.gov/documentation/cctv/cctv.htm) | traffic camera images | no charge; public domain ([conditions of use](https://dot.ca.gov/conditions-of-use)) | Caltrans |
 | [NASA GIBS](https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api) | Landsat (HLS), VIIRS and GOES-West image tiles (their pass times come from NASA CMR, above) | NASA open data, [no restrictions on use](https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance); GOES is NOAA public domain | the product's credit plus "NASA GIBS (ESDIS)" and the GIBS acknowledgement |
 | [Element 84 Earth Search](https://www.element84.com/earth-search/) | Sentinel-2 scene search | free public STAC API; the images follow the Copernicus terms above | Earth Search by Element 84 |
+
+**Not used, and why:** FEMA's live IPAWS feed (needs registration; the NWS relay and the public archive are used
+instead); Washington's evacuation layer (its terms require users to indemnify the State of Washington; you declined
+it); Florida's statewide status (county status only, not zones); Arizona's planning zones (not maintained); county and
+vendor evacuation systems (need agreements, out of scope); Google data, paid map services and Nominatim (never used).
 
 ### Software
 

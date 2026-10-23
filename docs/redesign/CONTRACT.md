@@ -1677,7 +1677,8 @@ export interface ListSource {
   name: string                          // "CAL FIRE" | "NIFC WFIGS (IRWIN)"
   status: 'available' | 'unavailable'
   retrieved_ms: number | null           // when Fire-3d fetched that list (never an issue time)
-  reason: string | null                 // plain words when unavailable
+  reason: string | null                 // plain words when unavailable, or when stale (14.16)
+  stale?: boolean                       // 14.16 (final verification): could not be refreshed; an older copy is shown
 }
 export interface IncidentListResponse { mode: Mode; updated_ms: number; incidents: IncidentListRow[]; year?: number; sources: ListSource[] }   // sources: (R), required since the integration
 // Python: IncidentListResponse.incidents stays list[IncidentListRow]; sources: list[ListSource] (required since the integration; Optional_() in wave 1)
@@ -1688,7 +1689,8 @@ export interface IncidentListResponse { mode: Mode; updated_ms: number; incident
   FIRE) are listed." (14.14). CAL FIRE down: California's WFIGS rows still list, with the same kind of notice.
 - **`LiveStatus`** gains `detections_24h: number | null` ((R), required in both since the integration; Python
   `Optional_()` in wave 1; FIRMS feed rows of the last 24 h inside the lower-48 state polygons); `detections_24h_ca`
-  stays for one release. `active_incidents` = the live list length.
+  stays for one release. `active_incidents` = the live list length (`number | null` since final verification: null
+  when the lists could not be read, never 0; 14.16).
 
 #### 14.1 as built
 
@@ -3049,3 +3051,66 @@ summarised in the "14.0 as built" to "14.14 as built" sub-headings above (what d
 and the integration's own changes). The role notes stay in `docs/redesign/contract3/` as the detailed record (file
 lists, measurements, review fixes). `validation.md` (GSI, the regional results, `regional_accuracy.json`) was folded
 in part 2 ("14.4 as built", "14.12 as built" 14.12.10 and 14.12.13).
+
+### 14.16 Final verification (as built 2026-10-23)
+
+The final check's fixes, from an independent review panel's findings (report
+`docs/redesign/reports/final-verification-3.json`). Shapes are additive; texts are exact.
+
+- **Request-path budget for the source lists** (panel F1, SR-M2). `fire3d.http.DownMemo` (`DOWN_HOLD_S` 60 s): a
+  failed list request is remembered, per list key after an HTTP error, per source (CAL FIRE, NIFC WFIGS, the FIRMS
+  live feeds) after a connection error or timeout; until then the list answers from its cached copy (any age), or
+  fails, without a request. A success clears it; a 2xx body that is not usable is not remembered (it answers fast).
+  List requests use a 5 s connect timeout, a 12 s read timeout (answers take about 1 s) and one retry when no copy
+  is cached (none when one is), so even a host that accepts and never answers costs about 25 s once, under the web's
+  30 s. CAL FIRE's and WFIGS's lists and the FIRMS live feeds (same bounds) are fetched side by side
+  (`catalog._side_by_side`). A base list built while a
+  source failed or was stale is rebuilt after 60 s (`DEGRADED_CACHE_S`), not 5-60 min. Measured with every host
+  refusing and an empty cache: a prepared fire's `GET /api/incidents/{id}` 2.1 s (then 0.01 s), a listed fire without
+  a bundle 503 in 0.01 s, every list 0.01-0.4 s (before: 45-273 s).
+- **`fire3d.http.request(expect_json=True)`** (the lists): a 2xx body that is not JSON (an HTML maintenance page) is
+  returned but never cached, and `evict_bad_answer` evicts only an unusable answer that is the cached one, so the last
+  good copy survives for stale-if-error.
+- **`ListSource.stale`** (Python `stale: bool = False`, TS `stale?: boolean`; panel SR-M1, F2): true when the list
+  could not be refreshed and an older cached copy was used; `retrieved_ms` is that copy's fetch time; `reason`
+  "The national fire list (NIFC) could not be refreshed right now; the copy shown was fetched earlier." or "CAL
+  FIRE's list could not be refreshed right now; the copy shown was fetched earlier." (`catalog.WFIGS_STALE`,
+  `CALFIRE_STALE`). A copy within its normal cache time (5 min live, 30 min this year, 24 h past years) is not stale.
+- **Both lists down** (panel SR-B1, F4, F6): `GET /api/incidents` answers 200 with the bundles on disk of listed
+  fires only (an id of the form `<year>-<name>-<uid6>`, not a failed build): never `fixture-*` or other synthetic
+  bundles. A historical list without `year` uses the default year. Both sources carry status `unavailable` and the
+  reason "The fire lists (CAL FIRE and NIFC) could not be reached right now; only fires prepared on this server are
+  listed, with their records as saved when each was prepared." (`api/app.py` `LISTS_DOWN_FALLBACK`).
+- **Web list states** (`state/overview.ts`): `listHealth(sources)` (`allDown`, `down`, `stale`, `fetchedMs`). Every
+  source of the lists shown unavailable: one notice `ALL_LISTS_DOWN` "The fire lists (CAL FIRE and NIFC) could not be
+  reached right now. Only fires prepared on this server are listed, with their records as saved when each was
+  prepared. Not an all-clear: follow local officials." (never the two per-source 14.14 notices); the source line
+  "Fire lists unavailable · prepared fires' saved records"; the empty list "No fires prepared on this server to show
+  while the fire lists are unavailable." (one source down: "No fires listed by the lists that could be reached; the
+  others are unavailable right now."); the phone peek `ALL_LISTS_DOWN_SHORT` "Fire lists unavailable right now"
+  (with "· N prepared fires"); Forensic's banner `noLiveText` names the open replay's own year. A stale source:
+  "The national fire list (NIFC) could not be refreshed right now; showing the copy fetched 47 min ago. Newer fires
+  may be missing." (`staleListText`); the source line says "fetched <age>" instead of "checked"; the peek "<N> active
+  fires · not refreshed (47 min ago)". "Checked" is always the oldest `retrieved_ms` of the available sources shown
+  (overview, picker, location card), never the answer's `updated_ms`. A list that never loaded says "Could not load
+  the 2026 list: <error>."; one with an earlier copy "Could not refresh the 2026 list: <error>. Showing the copy
+  loaded <age>." (`listErrorLines`).
+- **`LiveStatus.active_incidents: int | null`** (panel SR-m2): null when the live list could not be read (a failed
+  cycle or count); Settings → Service shows "unknown (fire lists unavailable)" (`activeCountText`).
+- **Query bounds** (panel F5): every `at_ms` query parameter is `0 <= at_ms <= timeutil.MAX_QUERY_MS`
+  (4,102,444,800,000 = 2100-01-01T00:00Z); larger values answer 422, never 500.
+- **Region files missing or unreadable** (panel SR-m3): `regions.RegionsUnavailable`, answered by the API as HTTP 503
+  "Fire-3d's region files (states, counties and time zones) could not be read on this server, so the state, county
+  and time zone are unknown here. Reinstall Fire-3d." (`regions.REGIONS_UNAVAILABLE_TEXT`), never a 500; `zone_of`
+  still falls back to UTC, labelled, never Pacific.
+- **Official wording** (panel SR-m1): local officials' alerts with status `unavailable` read "Unavailable right now."
+  (Official now) and "Local officials' alerts: unavailable right now" (location card); fire weather answered
+  `not_available_for_past_dates` with `reason_code` `upstream_error` (the IEM archive could not be reached) reads
+  "Unavailable right now." (compact line, panel and legend status), not "Not available for this time"; the sentence
+  "That does not mean there were none" is said once (a reason that already ends with it is trimmed).
+- **Units** (panel SR-m4): `fmtAcresShort(acres, units)`; the overview list and the picker show hectares in metric
+  ("70.0k ha"), as the map's labels do; the picker's column reads "Hectares".
+- **Wording** (panel F7): "Unknown, not low." (location card, legend), never "not low risk".
+- **Live summary sync**: `live.sync_live_summaries` skips synthetic and local bundles (an id that is not a listed
+  fire's, such as `fixture-live`): they have no agency record to follow.
+
