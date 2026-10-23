@@ -103,6 +103,12 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
   designed; README rewritten for the lower 48; gates: pytest 1005, vitest 1,197. Clean re-check: 9 minor findings
   (official record time label, README accuracy, agency names, list wording, chip overlap): last fix round runs.
 - ~17:40 UTC: a third usage limit stopped the last fix round before it edited anything (reset 18:00); resumed 18:05.
+- ~18:50 UTC: final fixes done (df5da76; all 9 re-check findings fixed). The re-check left 2 minor items, fixed by
+  the orchestrator (c8ea3be: freshness wording for one list with two sources; fixture-east contained_kind).
+- BUILD FINISHED 2026-10-23 ~19:00 UTC. Final gates: clean worktree of c8ea3be: web typecheck 0, lint 55 (all
+  src/scene), 76 files 1,205 passed + 3 skipped (1,206 + 2 with data/), build OK; main checkout: backend 1,009 passed;
+  check-time-api 0 deprecated, 0 Pacific literals; FIRMS key: 0 tracked files, 0 in branch history. Hourly safety
+  check deleted. Remaining issues: docs/redesign/reports/final-verification-3.json user_summary.
 - Lesson: never SendMessage a workflow agent (it starts a second copy); relay through files or Agent-tool agents.
 
 ## Carry-over items for later stages (integration unless a role owns the file)
@@ -126,6 +132,8 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
   "Decisions round 2", with the defaults taken. Validation is now 12 fires (task D).
 
 ## Gates
+- Final (2026-10-23 ~19:00 UTC): backend 1,009 passed; web 1,206 passed + 2 skipped (with data/); typecheck 0;
+  lint 55 (all src/scene); build OK.
 - After restore (2026-10-22): backend 585 passed (your Mac ~605: test_official_real_bundles and test_endpoint_contracts run once per bundle in data/incidents; the cloud has 4 bundles); web 56 files, 694 passed + 2 skipped; typecheck 0; lint 55 warnings, all in src/scene; build OK.
 
 - Build done (wave 1 reviewed and fixed), clean worktree of 7166a7f, 2026-10-23 ~06:40 UTC: backend 892 passed,
