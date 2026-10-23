@@ -305,8 +305,8 @@ Horse Gulch (rebuild, 2026-10-23T02:03Z):
 - warnings: 3 WFIGS perimeters dated after growth stopped (final extent only) and the interim live fuel moisture text.
 
 Black Cove checks that need no build (API on 8714): the catalog summary resolves (NC, America/New_York, "DFR via NIFC
-WFIGS", 3,502 ac); `/api/official/local-alerts` at 2025-03-21 18:00Z answers the archive channel with two "Civil
-Emergency Message" evacuation alerts from "North Carolina EOC - SWP" (polygon match, ET, ended); fire weather answers
+WFIGS", 3,502 ac); `/api/official/local-alerts` at 2025-03-21 18:00Z answers the archive channel with two CEM evacuation alerts
+(`event` "civil emergency message", verbatim) from "North Carolina EOC - SWP" (polygon match, ET, ended); fire weather answers
 `available` with `states_checked` NC and SC; `/api/official/calfire` answers `not_covered`. The LANDFIRE switch at Black
 Cove (LF2025 all NoData there, so LF2024) is proved on recorded windows by
 `test_recorded_black_cove_window_switches_lf2025_to_lf2024`.
@@ -336,8 +336,8 @@ edition of a fiscal-year-2025 fire, America/New_York, 0 "CAL FIRE"), then `uv ru
     names): show "issuer not named" then.
   - `wea_text` holds the short WEA text (CMAMtext); about half of the archived messages have an empty `description`, so
     show `headline`, else `wea_text`, else `description`.
-  - Real example (archive, `?incident=2025-black-cove-95c3c8&at_ms=1742580000000`): two "Civil Emergency Message"
-    alerts from "North Carolina EOC - SWP", `match: "polygon"`, `time_zone` America/New_York, phase `ended`, WEA text
+  - Real example (archive, `?incident=2025-black-cove-95c3c8&at_ms=1742580000000`): two CEM alerts (`event` verbatim
+    "civil emergency message", the sender's own casing) from "North Carolina EOC - SWP", `match: "polygon"`, `time_zone` America/New_York, phase `ended`, WEA text
     "Polk CO Mandatory Evacuation ALL Piney Gate Leave Now …". The first request for a fire's archive answers
     `pending` (about 10-20 s of background fetch), later ones `available` from the disk cache.
   - `/api/official/calfire` for a WFIGS fire: `unavailable` + `not_covered`, reason "CAL FIRE does not list this fire;

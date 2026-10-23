@@ -1,0 +1,127 @@
+{
+  "role": "us-pipeline",
+  "summary": "Fires anywhere in the lower 48 can now be prepared, and NWS / local officials' alerts are national. M1 weather quota: Open-Meteo limit answers are never retried or cached, there is a per-host block until the reset, `weather-probe`, `build --require-hrrr`, and a refused refresh keeps the old weather with a plain warning. M2 build anywhere: the build gate uses catalog.resolve_listed + is_supported (404/409/422 texts as the API), LANDFIRE editions LF2023/LF2024/LF2025 with an older-only NoData switch and an 'unknown, not low' outside-coverage label, perimeters matched by IRWIN id (California path proven unchanged on recorded answers), fire-local time everywhere in build/spread (no Pacific default), the issuer's own name in every record-derived text, and the interim live fuel moisture warning outside California. M3 national NWS: one request for the 49 areas, local officials' messages (NWEM) from the NWS API, and an OpenFEMA IPAWS archive channel for past dates. Cut-line items (a) OpenFEMA prefetch, (b) weighted counter + soft cap + hourly refetch and (d) growth_sorensen are done; (c) used its fallback test (no active Southern/Eastern fire of 1,000 ac or more). M4: Horse Gulch (MT) built with HRRR only and passes check_bundle with 0 problems; Black Cove (NC) is pending (quota): the Open-Meteo historical-forecast daily limit was reached at 02:04Z and resets at 2026-10-24T00:00Z, 22 h away, so under the stop rule it was not waited for.",
+  "files": {
+    "backend_source": [
+      "backend/fire3d/http.py",
+      "backend/fire3d/config.py",
+      "backend/fire3d/types.py",
+      "backend/fire3d/timeutil.py",
+      "backend/fire3d/cli.py",
+      "backend/fire3d/build/pipeline.py",
+      "backend/fire3d/build/weather_bundle.py",
+      "backend/fire3d/build/aoi.py",
+      "backend/fire3d/build/observed.py",
+      "backend/fire3d/build/live_observation.py",
+      "backend/fire3d/sources/weather.py",
+      "backend/fire3d/sources/landfire.py",
+      "backend/fire3d/sources/perimeters.py",
+      "backend/fire3d/sources/overpass.py",
+      "backend/fire3d/sources/nws.py",
+      "backend/fire3d/sources/openfema.py (new)",
+      "backend/fire3d/spread/ensemble.py",
+      "backend/fire3d/spread/behavior.py",
+      "backend/fire3d/spread/validate.py",
+      "backend/fire3d/api/official.py"
+    ],
+    "backend_scripts": [
+      "backend/scripts/record_test_samples_official.py (modes national, perimeters, landfire)"
+    ],
+    "backend_tests": [
+      "backend/tests/test_us_pipeline_quota.py (new, 38)",
+      "backend/tests/test_us_pipeline_build.py (new, 26)",
+      "backend/tests/test_us_pipeline_perimeters.py (new, 8)",
+      "backend/tests/test_local_alerts_nws.py (new, 18)",
+      "backend/tests/test_openfema_parse.py (new, 12)",
+      "backend/tests/test_official_nws.py, test_official_calfire.py, test_official_real_bundles.py, test_weather_bundle.py, test_pipeline_support.py (updated)"
+    ],
+    "test_data": [
+      "backend/tests/data/official/nws_alerts_national.json, nws_nwem_cem_la.json, openfema_window_frw.json (+ PROVENANCE.md)",
+      "backend/tests/data/pipeline_us/perimeters_{eaton,palisades,madre,tcu}.json, landfire_black_cove_{lf2025,lf2024}_fbfm40.tif, PROVENANCE.md"
+    ],
+    "docs": [
+      "docs/redesign/contract3/us-pipeline.md (as-built note, deviations, notes for the web)",
+      "docs/redesign/progress/brief3-us-pipeline.md",
+      "docs/redesign/reports/brief3-us-pipeline.json"
+    ],
+    "screenshots": [
+      "docs/screenshots/brief3-us-pipeline-horse-gulch-command-desktop.png",
+      "docs/screenshots/brief3-us-pipeline-horse-gulch-public-desktop.png",
+      "docs/screenshots/brief3-us-pipeline-black-cove-public-desktop.png"
+    ],
+    "commits": [
+      "71cb24c M1 weather quota",
+      "b12dd1e M3 national NWS and local alerts",
+      "4329f42 M3 OpenFEMA archive channel",
+      "58298a9 M2 build anywhere",
+      "192a534 M4 cut-line b and d",
+      "570ebc4 as-built note",
+      "3fb2eba archive windows bounded",
+      "f98cc76 cut-line c fallback",
+      "52db9ce as-built note for web consumers",
+      "brief 3 us-pipeline: M4 smoke builds (this report)"
+    ]
+  },
+  "verification": [
+    "Backend: cd backend && uv run pytest -q -> 870 passed (shared tree, 2026-10-23 ~02:10Z; baseline before my work 585). My new tests: 102 (quota 38, build 26, perimeters 8, local alerts 18, OpenFEMA 12).",
+    "Web gates on the shared tree: typecheck exit 0; lint exit 0 with 55 warnings, all in src/scene (baseline); build ok. npm test: 1028 passed, 2 skipped, 3 failed in src/extras/evacuation.test.ts and src/official/model.test.ts; those files are being edited (uncommitted) by us-official, and both pass on committed HEAD in a clean worktree (27/27). I changed no web file.",
+    "California regression: recorded WFIGS answers for Eaton, Palisades, Madre and TCU replayed through the new perimeter code give identical OBJECTID sets and identical query keys (test_us_pipeline_perimeters.py).",
+    "Weather probe 02:01:12Z: forecast, historical-forecast, archive, ensemble ok (overall ok, live ok). Probe 02:04:08Z: historical-forecast daily_limit (HTTP 429 'Daily API request limit exceeded'), forecast unreachable (connect timeout), archive and ensemble ok -> overall daily_limit, exit 1.",
+    "Smoke build 2024-horse-gulch-889237 (--require-hrrr; first 01:21-01:26Z 322 s, rebuild --force 02:03Z 17 s from cache): EPSG:32612 (UTM 12N), AOI 20 km, 512² at 39.1 m, LANDFIRE LF2023, weather open-meteo:historical-forecast:gfs_hrrr 346 h all HRRR (0 GFS fill, 0 ERA5), 2,937 FIRMS detections from the keyed area API (VIIRS 942, GOES 1,507, MODIS 127, Landsat 361), 20 WFIGS perimeters by IRWIN id, observed 15,321 ac vs record 15,167 ac (ratio 1.01), time_zone America/Denver, ignition 'Reported by USFS via NIFC WFIGS Jul 09, 13:32 MDT', data_sources[0] 'NIFC WFIGS incident record (IRWIN)', 0 'CAL FIRE' in the bundle JSON, scripts/check_bundle.py: 0 problems.",
+    "Smoke build 2025-black-cove-95c3c8: pending (quota). Not built (stop rule: the reset 2026-10-24T00:00Z was 22 h away).",
+    "API on 8714 (FIRE3D_LIVE=0): /api/official/fire-weather overview -> states_checked 49, alert_states MT and WY, 3 Red Flag Warnings with America/Denver; Horse Gulch at 2024-07-10T00:00Z -> archived IEM answer, states_checked ['MT']; Black Cove fire weather at 2025-03-21T18:00Z -> available, states_checked NC and SC, 0 alerts; /api/official/local-alerts Black Cove at 1742580000000 -> nws_api not_checked ('NWS keeps about 7 days of alerts.'), openfema archive pending on the first ask then available with 2 CEM evacuation messages from 'North Carolina EOC - SWP' (polygon match, America/New_York, ended); /api/official/calfire Black Cove -> unavailable/not_covered with the WFIGS reason.",
+    "Browser runs (3 final screenshots plus 1 scratch): API log 72 GET, 0 non-GET. 'Prepare analysis' was never pressed.",
+    "Wording scan (git diff 02a4e00 over my non-test source and docs | grep '^+' | grep -inE '\\bsafe\\b|low risk|all[- ]clear|Fire[T]race'): 7 hits, all justified: 4 'not an all-clear' negations (two caveats in backend/fire3d/api/official.py, two quotes of them in docs/redesign/contract3/us-pipeline.md) and 3 urllib quote(..., safe=...) parameters (two in backend/fire3d/sources/nws.py, one in backend/fire3d/sources/openfema.py). No hit for the reference demo's name.",
+    "Key scan (count-only): 239 changed/committed files since the planner commit, 0 contain FIRMS_MAP_KEY; scratch logs 0; Horse Gulch bundle JSON 0."
+  ],
+  "screenshots": [
+    {
+      "path": "docs/screenshots/brief3-us-pipeline-horse-gulch-command-desktop.png",
+      "url": "http://localhost:5184/?incident=2024-horse-gulch-889237&preset=command&t=1720656000000 (1440x900, swiftshader)",
+      "shows": "Command preset: timeline 'Jul 10, 18:00 MDT', location card MDT and 'UTM 12N 446769 E 5170807 N', the observed fire and perimeters aligned with the terrain and the place labels (York, Hauser Lake, Canyon Ferry Lake). The official panel says 'Fire weather NWS, archived copy ... Not an all-clear.' Data status still shows PDT (us-web/us-official issue, below)."
+    },
+    {
+      "path": "docs/screenshots/brief3-us-pipeline-horse-gulch-public-desktop.png",
+      "url": "http://localhost:5184/?incident=2024-horse-gulch-889237&preset=public&t=1720656000000",
+      "shows": "Public preset, 12-hour clock in the fire's zone: 'Jul 10, 6:00 PM MDT'; overlays aligned with the aerial imagery. Added because the Black Cove 12-hour EDT check needs its bundle."
+    },
+    {
+      "path": "docs/screenshots/brief3-us-pipeline-black-cove-public-desktop.png",
+      "url": "http://localhost:5184/?incident=2025-black-cove-95c3c8&preset=public&t=1742580000000 (official panel 'Details' opened)",
+      "shows": "Unbuilt Black Cove (build pending quota): the not-prepared banner credits 'DFR (Division of Forest Resources) via NIFC WFIGS', the official panel says evacuations 'Not available in these states (North Carolina, South Carolina) Follow local officials.' No timeline yet, so the 12-hour EDT check is still to do after the build."
+    }
+  ],
+  "contract_deviations": [
+    "§14.12.2 probe_open_meteo returns an extra `detail` key; every request-limit period (daily, hourly, per-minute) is reported as status `daily_limit`, with the period named in `detail`.",
+    "§14.12.2 'no retries': a per-minute Open-Meteo refusal is waited out once inside om_request (next minute + 1 s, at most 65 s), because other tenants of the shared IP pushed the archive host over its 600-a-minute limit and a whole build failing on a one-minute limit wastes every other request. Daily and hourly refusals are never retried.",
+    "§14.7 OpenFEMA: the server-side $filter is by date window and status only (event and area filters are applied locally after parsing), windows are bounded to 22 days, and `references` come from a second query (originalMessage) for non-Alert messages only.",
+    "§14.7 a county match has `covers_reported_location` and `nearest_km` null (only polygon matches fill them), so a county-wide message is never presented as covering the fire's point.",
+    "§14.7 `polygon` may be a GeoJSON MultiPolygon when an archived message had several areas.",
+    "§14.7 the archive channel waits up to openfema.REQUEST_WAIT_S = 3 s before answering `pending` (a catalog lookup of an unbuilt fire can add about 2 s).",
+    "observed.SOURCE_PREFIXES is now ('NASA FIRMS', 'NIFC WFIGS fire perimeters', 'NASA CMR') so the observed step no longer removes the pipeline's 'NIFC WFIGS incident record (IRWIN)' data source."
+  ],
+  "known_issues": [
+    "Black Cove smoke build pending (quota): after 2026-10-24T00:00Z run `cd backend && uv run python -m fire3d.cli weather-probe` (overall ok), then `uv run python -m fire3d.cli build 2025-black-cove-95c3c8 --require-hrrr` (expect EPSG:32617, LF2024, America/New_York, 0 'CAL FIRE'), `uv run python scripts/check_bundle.py 2025-black-cove-95c3c8`, and re-take docs/screenshots/brief3-us-pipeline-black-cove-public-desktop.png to show 12-hour EDT on the timeline.",
+    "Open-Meteo on this shared IP is unreliable: connect timeouts via the proxy, a per-minute 429 (archive), an hourly 429 (historical-forecast, 01:28Z) and the daily limit (historical-forecast, 02:04Z). Other roles' and agents' requests count against the same daily limit; the weighted counter in data/cache/open_meteo_usage.json counts only this checkout's requests.",
+    "Horse Gulch has no forecast run (smoke builds do not run one); the timeline says 'No hindcast run for this fire'.",
+    "Live fuel moisture outside California uses California's seasonal values (interim, warned in every bundle and forecast).",
+    "Web (other roles' files), seen in the Horse Gulch screenshots: Data status panel prints PDT for a Montana fire (ui/shell data status); the evacuation card repeats its text ('Not available in this state. Not available in this state (Montana) Follow local officials.', missing a period); the panel still shows a 'CAL FIRE incident record' card for WFIGS fires instead of the §14.5 incident-record; the address placeholder is an Altadena address. us-official / us-web are still working on these files.",
+    "Web tests: 3 failures in us-official's uncommitted edits (src/extras/evacuation.test.ts, src/official/model.test.ts) at the time of my gate run; HEAD passes."
+  ],
+  "notes_for_integrator": [
+    "test_api.py was not edited: the orchestrator had not yet said us-catalog's review was committed. FakeBuild in tests/test_pipeline_support.py fakes catalog.resolve_listed, so test_api.py passes unchanged with the new gate.",
+    "SPEC §2 (us-catalog owns SPEC.md), replace in the 'NIFC daily perimeters' row the sentence starting 'Always filter on state = US-CA' with: 'California fires (CAL FIRE records) keep this path exactly: state = US-CA, time window [start − 2 d, start + 120 d], distance (< 30 km from the CAL FIRE point). Fires elsewhere (NIFC WFIGS records) match by IRWIN id: `UPPER(attr_IrwinID) IN (...) OR UPPER(poly_IRWINID) IN (...)`, else by name in `US-<state>`; the time window, distance and size checks stay; a WFIGS record with neither IRWIN id nor state is not matched (warning).'",
+    "SPEC §2 'LANDFIRE' row: ED ∈ {`LF2023`,`LF2024`,`LF2025`} (LF2023 added in brief 3, same service); replace 'Use LF2024 (pre-fire fuels) for 2025 incidents and LF2025 for live incidents' with 'Historical: the pre-fire edition LF{federal fiscal year of the start − 1}, at least LF2023 (a fire before October 2023 is refused with 422 unless forced); live: LF2025. LF2025 has no data in parts of the South and East (none at Black Cove, NC, checked 2026-10-23).'",
+    "SPEC §2 'Weather historical' row: replace 'Free tier is ~10k calls/day, so cache everything.' with 'Free tier limits per IP: daily (~10k), hourly (~5k) and per-minute (~600) weighted calls; a refusal is HTTP 429 with a JSON body such as {\"error\":true,\"reason\":\"Daily API request limit exceeded. Please try again tomorrow.\"} (resets 00:00 UTC). Cache everything; never cache an error body (§8.4).'",
+    "SPEC §8.2, replace the LANDFIRE 'Edition' bullet with: '- Edition (`landfire.edition_for`): historical = the pre-fire edition LF{FY − 1} of the start's federal fiscal year, at least LF2023 (`landfire_gate`: before October 2023 → 422 unless forced; forced builds use LF2023 with a \"LANDFIRE:\" warning); live = LF2025. A failed edition falls back to the next older one only (LF2025 → LF2024 → LF2023, never forward). An edition with no fuel code in the AOI, or with no fuel code on more than 2 % of the land cells (inside the lower-48 + DC state polygons, elevation above 0.5 m), switches the whole bundle to the next older edition with the warning \"LANDFIRE: LANDFIRE 2025 is not released here yet; LANDFIRE 2024 used\" (other editions: \"LANDFIRE <E> has no fuel data for <p>% of the land here; LANDFIRE <older> used\"). Ground outside the US without fuel data stays fuel 99 and is labelled \"outside fuel data coverage: not modeled (unknown, not low)\"; stats gain `nodata_land_frac` and `outside_coverage_cells`.'",
+    "SPEC §8.3: in step 2 (Perimeters) add first: '- Fetch: California records as §2; other fires by IRWIN id, else name + state (§2).' Replace step 6's first bullet with '- Use the fire record's point (CAL FIRE in California, NIFC WFIGS/IRWIN elsewhere) at its start time, snapped into the earliest burned region; every text names the record's issuer (`record_issuer`, e.g. \"Reported by USFS via NIFC WFIGS Jul 09, 13:32 MDT\"), times in the fire's own zone (`summary.time_zone`).' and its second bullet's wording 'If that point' unchanged. In step 8 containment: 'from WFIGS `attr_ContainmentDateTime`, or the record at 100% (\"{issuer} (100% contained)\")'. In the now_ms bullet replace 'CAL FIRE acreage' with 'the record's acreage (CAL FIRE or NIFC WFIGS)'. Add: 'The data sources list the fire's own record first: \"CAL FIRE incidents\" or \"NIFC WFIGS incident record (IRWIN)\" (IRWIN id and issuer in `detail`).'",
+    "SPEC §8.4, add after 'Historical:' bullet: '- **Fire-local time:** month-dependent values (live fuel moisture rows) use the month in the fire's zone (`timeutil.local_month(ms, summary.time_zone)`), never Pacific. - **Open-Meteo limits** (`sources/weather.py`, `fire3d.http`): a 429 naming a daily, hourly or per-minute limit is never retried (a per-minute one is waited out once) and blocks that host in the process until the reset; a blocked host answers from the cache or raises `WeatherQuotaExceeded` (\"Open-Meteo daily request limit reached; retry after the reset (00:00 UTC)\"); error bodies (stream errors, cut-off JSON, `{\"error\": true}`) are never cached and are evicted when found. A refused deterministic request fails the build (never ERA5-filled); `build --require-hrrr` also refuses ERA5-filled hours and, in California, a missing water-year total. `weather-probe` sends one tiny uncached request per host.' And in 'Live fuel moisture', add: 'Outside California these California values are used as an interim with the manifest warning \"Live fuel moisture outside California uses California's seasonal values until a regional method is tested; experimental.\" and the forecast note prefix \"Live fuel moisture: California's seasonal values (regional method not tested yet); experimental.\"'",
+    "SPEC §8.5: in 'Held perimeter' replace '- CAL FIRE containment:' with '- the record's containment (CAL FIRE or NIFC WFIGS, note \"{issuer} reports N% containment\"):'. In 'Historical runs' add: 'Each skill entry also carries `growth_sorensen` (Sørensen of the new growth only, `validate.skill_entry`).'",
+    "SPEC §8.7, add after the refresh bullets: '- Weather in a live refresh is refetched at most hourly (`config.LIVE_WEATHER_REFETCH_S = 3600`) and not at all once the day's weighted Open-Meteo usage passes `config.OPEN_METEO_DAILY_SOFT_CAP = 6000` (`weather.open_meteo_usage()`, persisted in `data/cache/open_meteo_usage.json`; cost = locations × max(1, series/10) × max(1, days/14)); the bundle then keeps its weather with \"Weather not refreshed: daily request budget reached.\"; a refused refresh keeps it with \"Weather not refreshed: Open-Meteo daily request limit reached.\" (removed by the next successful refresh). A refresh without supplied detections loads `firms.load_live_us(days=2)`. After a successful build, the OpenFEMA archive window of the fire is prefetched in the background (`openfema.prefetch`).'",
+    "SPEC §10 'Network smoke scripts': add '- `… weather-probe` (one uncached request per Open-Meteo host; exit 0 only when historical builds can run)' and change the build line to '- `… build <id-or-name> [--force] [--require-hrrr]` (`--require-hrrr` fails instead of filling with ERA5; prints the HRRR / GFS / ERA5 hour counts)'.",
+    "SPEC §2 'NWS API alerts, national' row (already added by us-catalog) could add: 'also `event=` the local officials' NWEM types (Fire Warning FRW, Evacuation Immediate EVI, Shelter In Place Warning SPW, Civil Danger Warning CDW always; Civil Emergency Message CEM and Local Area Emergency LAE only when the text mentions fire, smoke or evacuation); NWS keeps about 7 days, so past dates use the OpenFEMA IPAWS archive.'",
+    "CONTRACT §14 fold-in: docs/redesign/contract3/us-pipeline.md has one 'as built' sub-heading per item (§14.12.2, §14.6, §14.5 CAL FIRE endpoint, §14.7, §14.2, §14.9.7, §14.12.3, §14.12.5/6, §14.12.8, §14.12.10, §14.12.7, §14.12.11) and the deviations list.",
+    "For us-official / us-web (owners of the web files): (1) Data status panel times must use the fire's zone (shows PDT for Horse Gulch); (2) evacuation card text duplicates 'Not available in this state' and lacks a period before 'Follow local officials'; (3) for WFIGS fires show §14.5 /api/official/incident-record instead of the CAL FIRE card (the CAL FIRE endpoint answers not_covered for them); (4) /api/official/local-alerts: read channels[], county matches have null covers/nearest, polygon may be MultiPolygon, show headline else wea_text else description, `sender_is_platform` → 'issuer not named'; the OpenFEMA notice 'This product uses the Federal Emergency Management Agency's OpenFEMA API, but is not endorsed by FEMA' must be shown wherever archived messages are shown (the archive channel's caveats carry it as 'FEMA IPAWS archive via OpenFEMA: <notice>.').",
+    "Process: API 8714 and Vite 5184 were started by me and are stopped at the end of this run. No fire build other than Horse Gulch (twice: build and --force rebuild) was triggered; Black Cove was not built."
+  ]
+}
