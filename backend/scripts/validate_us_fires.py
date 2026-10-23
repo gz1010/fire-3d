@@ -287,7 +287,7 @@ def bundle_checks(fid: str, fire: TestFire | None = None) -> dict:
                                                 "days": len(doc.get("days") or [])}
     if fire is not None:
         lm = []
-        for s0 in fire.main_starts_utc + fire.ignition_starts_utc():
+        for s0 in dict.fromkeys(fire.main_starts_utc + fire.ignition_starts_utc()):     # unique, in order
             d = WB.live_moisture_detail(b, man, to_ms(s0), fetch=False)
             lm.append({"start": s0, "method": d["method"], "gsi": d["gsi"], "herb": round(d["herb"], 3),
                        "woody": round(d["woody"], 3)})
@@ -310,14 +310,16 @@ def _iso(ms: float) -> str:
 # ----------------------------------------------------------------------------------------------------------------
 # Protocol steps 4-7: hindcasts (rows written to --out-dir as <id>.<what>.json)
 # ----------------------------------------------------------------------------------------------------------------
-WHATS = ("main", "main_det", "ignition", "ablation_det", "main_det_gsi")
+WHATS = ("main", "main_det", "ignition", "ablation_det", "sens_det")
+SENS_ADJUSTMENTS = (0.5, 1.0, 2.0)   # sensitivity only (reported, never adopted unless California improves too)
 
 
 def run_hindcast(fid: str, what: str, out_dir: Path, workers: int | None = None) -> list[dict]:
     """``main``: 31-member perturbed p50 at the pre-registered label starts; ``main_det``: the deterministic member at
     the same starts; ``ignition``: p50 at WFIGS discovery + 6/12/24 h; ``ablation_det``: the deterministic member at
-    the label starts with California's moisture rule forced (config.LFM_FORCE_CALIFORNIA). Operational settings,
-    multiplier 0.5. California ids run their docs/validation.md offsets (``main``) instead."""
+    the label starts with California's moisture rule forced (config.LFM_FORCE_CALIFORNIA); ``sens_det``: the
+    deterministic member at the label starts with start multipliers 0.5, 1 and 2 (a sensitivity check, not a tuning).
+    Operational settings, multiplier 0.5. California ids run their docs/validation.md offsets (``main``) instead."""
     from fire3d import bundle as fb
     from fire3d import config
     from fire3d.spread import validate as V
@@ -330,13 +332,14 @@ def run_hindcast(fid: str, what: str, out_dir: Path, workers: int | None = None)
     if what == "ablation_det":
         config.LFM_FORCE_CALIFORNIA = True
     try:
+        adjustments = SENS_ADJUSTMENTS if what == "sens_det" else (0.5,)
         if fid in ca:
-            offs = ca[fid] if what in ("main", "main_det") else (6.0, 12.0, 24.0)
-            rows = V.batch_hindcast([b], offs, (0.5,), **kw)
+            offs = ca[fid] if what in ("main", "main_det", "sens_det") else (6.0, 12.0, 24.0)
+            rows = V.batch_hindcast([b], offs, adjustments, **kw)
         else:
             f = fire_by_id(fid)
             starts = f.ignition_starts_utc() if what == "ignition" else f.main_starts_utc
-            rows = V.batch_hindcast([b], (), (0.5,), start_times_ms=[to_ms(x) for x in starts], **kw)
+            rows = V.batch_hindcast([b], (), adjustments, start_times_ms=[to_ms(x) for x in starts], **kw)
     finally:
         config.LFM_FORCE_CALIFORNIA = False
     for r in rows:
@@ -451,7 +454,8 @@ def tables_markdown(run_dir: Path, checks: list[dict]) -> str:
         og = _mean(main_rows, "observed_growth_acres")
         fg = _mean(main_rows, "forecast_growth_acres")
         ratio = _median([float(r["area_ratio"]) for r in sc if r.get("area_ratio") is not None])
-        lm = [x for x in (by_check.get(f.id) or {}).get("live_fuel_moisture") or [] if x["start"] in f.main_starts_utc]
+        lm = list({x["start"]: x for x in (by_check.get(f.id) or {}).get("live_fuel_moisture") or []
+                   if x["start"] in f.main_starts_utc}.values())
         gsi = ", ".join(_fmt(x["gsi"], 2) for x in lm) or "–"
         hw = ", ".join(f"{x['herb']:.0%}/{x['woody']:.0%}" for x in lm) or "–"
         out.append(f"| {f.n} | {f.name} ({f.state}, {f.region}; {f.time_zone}) | {len(f.main_starts_utc)} / {len(sc)} | "

@@ -45,6 +45,12 @@ Role `validation` (wave 2). Ports: API 8716, no Vite. Scratch: session scratchpa
 | 06:43:52 | probe (hf, archive ok) -> Emigrant | **ready** in 48 s; 424 h HRRR, 33,132 ac |
 | 06:45:01 | probe (archive unreachable; hf ok) -> Island Creek | **ready** in 1,095 s (slow FIRMS 504 retries); 937 h HRRR |
 | 07:03:39 | probe (hf unreachable, archive ok) -> France Canyon | **ready** in 1,342 s; 529 h HRRR, 35,251 ac |
+| 07:26:24 | probe (hf unreachable, archive ok) -> Cottonwood Peak | **ready** in 852 s; 332 h HRRR, 134,176 ac |
+| 07:40:45 | probe -> Trout (queue q3 stopped 07:4x to keep Horse Gulch for a swap build; q4 started) | **ready** in 574 s; 363 h HRRR, 47,684 ac |
+
+Horse Gulch plan: the integration agent screenshots it, so it is rebuilt into a scratch DATA_DIR on the same
+filesystem (data/_hg_tmp) and swapped in with two renames (no error window), after queue q4 (Greer, Windy Deuce,
+Table Rock, Rush).
 
 Hindcast log: scratchpad validation/logs/hq.log (runner hq2.sh, jobs from mkjobs.py; checks via refresh.sh).
 - 06:53 CA step 1 (pre-GSI worktree 29f0e2d) = section 5.1 exactly; 07:14 step 2 (post-GSI) = step 1 (max |d| 0.0).
