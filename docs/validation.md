@@ -1,6 +1,6 @@
 # Fire-3d forecast validation
 
-Last updated 2026-10-17 (evening) by the backend follow-up run, which added the live forecast start (section 6);
+Section 10 (outside California, brief 3) was added on 2026-10-23 by the brief-3 validation run. Sections 1-9: last updated 2026-10-17 (evening) by the backend follow-up run, which added the live forecast start (section 6);
 sections 5.2, 5.3 and 6.3 were re-checked against the code and the published bundles on 2026-10-18. It
 covers the spread forecast in `backend/fire3d/spread/` with the defaults in `backend/fire3d/config.py`
 (`FORECAST_*`, `DROUGHT_ADJUSTED_LFM`, `LIVE_START_LATEST_PASS`). All numbers come from the published bundles in
@@ -630,3 +630,124 @@ uv run python -m fire3d.spread.validate live-start 2025-eaton-fire-dbfa57 2025-p
     2025-madre-fire-01e7e8 2025-lidia-fire-83adc9 2025-camino-fire-c606c9 --every 6 --first 6 --latency 1 \
     --leads 12 24 48 --json live-start.json
 ```
+
+## 10. Outside California (brief 3)
+
+Section 10.1 was written and committed on 2026-10-23, before any hindcast of a fire outside California (protocol of
+`docs/redesign/audit-3/validation.md` §4-§5, CONTRACT §14.4 and §14.12.10). Nothing in it is changed after the first
+score outside California; later sections report the results against it.
+
+### 10.1 Pre-registration (written before any score outside California)
+
+**Fires.** The 12 fires of `docs/redesign/audit-3/validation.md` §3, two per region (BRIEF-3 round 2, item 3), by
+their proposed ids. Regions are the WFIGS GACC of the incident record, with the Southern Area split into Southern
+Plains (`SACC-SP`, TX and OK) and Southeast (`SACC-SE`). California (`OSCC`: Eaton, Madre, Palisades) is the
+baseline, re-measured in this session; Rocky Mountain, Eastern and Northern California have no test fire.
+
+**Starts (absolute UTC).** Label starts are the audit's times; for Horse Gulch, Greer and Rush (listed there as
+"ignition + 6, 12, 24 h", Greer also 72 h) they are the WFIGS `FireDiscoveryDateTime` plus those offsets, written
+out here. The ignition-relative secondary score uses WFIGS discovery + 6, 12 and 24 h for every fire, also written
+out. No start depends on a built bundle's `ignition.t_ms`. Local times are in each fire's own zone (IANA zone of the
+point of origin; Island Creek, Idaho, is on Pacific time; Arizona has no daylight time). The same data are in
+`backend/scripts/validate_us_fires.py` (`FIRES`), which the runs read.
+
+| # | fire (state, region) | WFIGS discovery (UTC) | label starts (UTC; local) | ignition + 6/12/24 h (UTC) |
+|---|---|---|---|---|
+| 1 | Emigrant (OR, NWCC) | 2025-08-24T19:30Z (Aug 24 12:30 PDT) | 2025-08-25T19:30Z (Aug 25 12:30 PDT)<br>2025-08-26T19:30Z (Aug 26 12:30 PDT)<br>2025-08-28T19:30Z (Aug 28 12:30 PDT) | 2025-08-25T01:30Z, 2025-08-25T07:30Z, 2025-08-25T19:30Z |
+| 2 | Lower Sugarloaf (WA, NWCC) | 2025-09-01T16:21Z (Sep 01 09:21 PDT) | 2025-09-16T16:00Z (Sep 16 09:00 PDT)<br>2025-09-17T16:00Z (Sep 17 09:00 PDT)<br>2025-09-18T16:00Z (Sep 18 09:00 PDT) | 2025-09-01T22:21Z, 2025-09-02T04:21Z, 2025-09-02T16:21Z |
+| 3 | Island Creek (ID, NRCC) | 2025-08-01T05:36Z (Jul 31 22:36 PDT) | 2025-08-19T06:00Z (Aug 18 23:00 PDT)<br>2025-08-20T06:00Z (Aug 19 23:00 PDT)<br>2025-08-21T06:00Z (Aug 20 23:00 PDT) | 2025-08-01T11:36Z, 2025-08-01T17:36Z, 2025-08-02T05:36Z |
+| 4 | Horse Gulch (MT, NRCC) | 2024-07-09T19:32Z (Jul 09 13:32 MDT) | 2024-07-10T01:32Z (Jul 09 19:32 MDT)<br>2024-07-10T07:32Z (Jul 10 01:32 MDT)<br>2024-07-10T19:32Z (Jul 10 13:32 MDT) | 2024-07-10T01:32Z, 2024-07-10T07:32Z, 2024-07-10T19:32Z |
+| 5 | France Canyon (UT, GBCC) | 2025-06-11T22:05Z (Jun 11 16:05 MDT) | 2025-06-16T22:00Z (Jun 16 16:00 MDT)<br>2025-06-18T22:00Z (Jun 18 16:00 MDT)<br>2025-06-20T22:00Z (Jun 20 16:00 MDT) | 2025-06-12T04:05Z, 2025-06-12T10:05Z, 2025-06-12T22:05Z |
+| 6 | Cottonwood Peak (NV, GBCC) | 2025-08-16T02:02Z (Aug 15 19:02 PDT) | 2025-08-16T14:00Z (Aug 16 07:00 PDT)<br>2025-08-17T02:00Z (Aug 16 19:00 PDT)<br>2025-08-18T02:00Z (Aug 17 19:00 PDT)<br>2025-08-19T02:00Z (Aug 18 19:00 PDT) | 2025-08-16T08:02Z, 2025-08-16T14:02Z, 2025-08-17T02:02Z |
+| 7 | Trout (NM, SWCC) | 2025-06-12T13:24Z (Jun 12 07:24 MDT) | 2025-06-13T13:30Z (Jun 13 07:30 MDT)<br>2025-06-14T13:30Z (Jun 14 07:30 MDT)<br>2025-06-15T13:30Z (Jun 15 07:30 MDT)<br>2025-06-17T13:30Z (Jun 17 07:30 MDT) | 2025-06-12T19:24Z, 2025-06-13T01:24Z, 2025-06-13T13:24Z |
+| 8 | Greer (AZ, SWCC) | 2025-05-13T17:47:56Z (May 13 10:47 MST) | 2025-05-13T23:47:56Z (May 13 16:47 MST)<br>2025-05-14T05:47:56Z (May 13 22:47 MST)<br>2025-05-14T17:47:56Z (May 14 10:47 MST)<br>2025-05-16T17:47:56Z (May 16 10:47 MST) | 2025-05-13T23:47:56Z, 2025-05-14T05:47:56Z, 2025-05-14T17:47:56Z |
+| 9 | Windy Deuce (TX, SACC-SP) | 2024-02-27T00:23:16Z (Feb 26 18:23 CST) | 2024-02-27T06:30Z (Feb 27 00:30 CST)<br>2024-02-27T12:30Z (Feb 27 06:30 CST)<br>2024-02-27T18:30Z (Feb 27 12:30 CST) | 2024-02-27T06:23:16Z, 2024-02-27T12:23:16Z, 2024-02-28T00:23:16Z |
+| 10 | Table Rock (SC, SACC-SE) | 2025-03-22T13:26Z (Mar 22 09:26 EDT) | 2025-03-25T13:30Z (Mar 25 09:30 EDT)<br>2025-03-26T13:30Z (Mar 26 09:30 EDT)<br>2025-03-27T13:30Z (Mar 27 09:30 EDT) | 2025-03-22T19:26Z, 2025-03-23T01:26Z, 2025-03-23T13:26Z |
+| 11 | Rush (OK, SACC-SP) | 2024-10-24T20:17Z (Oct 24 15:17 CDT) | 2024-10-25T02:17Z (Oct 24 21:17 CDT)<br>2024-10-25T08:17Z (Oct 25 03:17 CDT)<br>2024-10-25T20:17Z (Oct 25 15:17 CDT) | 2024-10-25T02:17Z, 2024-10-25T08:17Z, 2024-10-25T20:17Z |
+| 12 | Black Cove (NC, SACC-SE) | 2025-03-19T19:00Z (Mar 19 15:00 EDT) | 2025-03-20T19:00Z (Mar 20 15:00 EDT)<br>2025-03-22T19:00Z (Mar 22 15:00 EDT)<br>2025-03-23T19:00Z (Mar 23 15:00 EDT) | 2025-03-20T01:00Z, 2025-03-20T07:00Z, 2025-03-20T19:00Z |
+
+Windy Deuce's starts are moved to its first perimeter (65 % of the final area already burned, audit §3.1): it tests
+the second day of a plains grass fire only. Rush's +6 h and +12 h starts begin before its first perimeter (46 %), so
+their first leads are timed by VIIRS; Lower Sugarloaf's run (no perimeter from Sep 17 16:00 to Sep 21 17:48 UTC) is
+timed by VIIRS at every lead.
+
+**Scoring** (as docs/validation.md §2 and §5): operational settings (`config.FORECAST_*`, spread multiplier 0.5 with
+the 12 h decay, held inactive perimeter, growth-coincident activity); leads 12, 24, 48 and 72 h, each scored only when
+`start + lead` is before the bundle's `data_end_ms`; truth = the observed reconstruction. The label value is the
+**31-member perturbed p50** growth Sørensen; the deterministic member is reported beside it. Per fire: the mean over
+its scored leads. Per region: the **mean of the fire means** (`mean_of_fire_means`), with the pooled mean over all
+leads, the per-lead means (`by_lead` "12"/"24"/"48"/"72"), the min-max range of the fire means, the median growth
+ratio (forecast / observed growth) and the ignition-relative value (WFIGS discovery + 6/12/24 h, the same p50 metric,
+never in the label). Status (CONTRACT §14.4): `tested` with >= 2 fires and >= 16 scored leads; otherwise `limited`
+with at least 1 fire; `untested` with none. Pseudo-live checks (`validate live-start`) are reported where FIRMS and
+NASA CMR allow, never in the label. Ablation, outside the label: the fires outside California re-run with
+California's month table (`lfm_method` forced to `ca_month_table`), to show what GSI changed.
+
+**Live fuel moisture outside California: the NFDRS 2016 Growing Season Index** (pre-registered method; CONTRACT
+§14.12.10, audit V-R5).
+- **Switch.** `summary.state`: `"CA"` keeps today's method exactly (the month table with the water-year drought
+  adjustment, `lfm_method` `ca_month_table_drought`; `ca_month_table` when the bundle has no water-year total). Any
+  other state uses GSI (`gsi_nfdrs2016`).
+- **Method.** The Growing Season Index of Jolly, Nemani and Running (2005), *A generalized, bioclimatic index to
+  predict foliar phenology in response to climate*, Global Change Biology 11: 619-632
+  (doi:10.1111/j.1365-2486.2005.00930.x), as implemented for the US National Fire Danger Rating System 2016 in the
+  US Forest Service Missoula Fire Sciences Laboratory's reference code NFDRS4 (`github.com/firelab/NFDRS4`,
+  `lib/NFDRS4/src/livefuelmoisture.cpp`, its default parameters; read on 2026-10-23). For each local day D (the
+  fire's IANA zone):
+  - daily inputs: Tmin and Tmax = the minimum and maximum hourly 2 m temperature of D, RHmin = the minimum hourly 2 m
+    relative humidity of D;
+  - vapour pressure deficit VPD = es(Tmax) · (1 − max(RHmin, 5 %) / 100), es(T) = 610.7 · exp(17.38 · T / (239 + T))
+    Pa (T in °C), NFDRS4's default (`CalcGSI`: maximum temperature and minimum RH);
+  - day length: NFDRS4's `CalcDayl` (MT-CLIM) at the fire's latitude and the day of year (declination −0.4092797 ·
+    cos((yday + 10.25) · 0.017214) rad; day length = 2 · acos(−tan(lat) · tan(decl)) · 13750.9871 s);
+  - indicators, each linear between its limits and clamped to 0..1: iTmin = 0 at −2 °C .. 1 at 5 °C; iVPD = 1 at
+    900 Pa .. 0 at 4100 Pa; iDayl = 0 at 36,000 s (10 h) .. 1 at 39,600 s (11 h); no precipitation indicator
+    (NFDRS4 default `UseRTPrecip` false);
+  - daily GSI = iTmin · iVPD · iDayl.
+- **GSI at a forecast start t** = the mean of the daily GSI of the 21 local days before the day of t (NFDRS4's
+  21-day moving average, `MAPeriod` 21), all 21 days required; scaled by `MaxGSI` = 1.0 (NFDRS4 default) and clamped to
+  0..1.
+- **Herb and woody mapping** (NFDRS4 defaults, `SetLFMParameters`, green-up threshold 0.5): below 0.5, herb 30 %
+  and woody 60 %; at or above it, linear to the maximum at GSI 1: herb = 30 + (GSI − 0.5) / 0.5 · 220 % (250 % at 1),
+  woody = 60 + (GSI − 0.5) / 0.5 · 140 % (200 % at 1). Passed to the model as fractions (herb 0.30-2.50, woody
+  0.60-2.00), held constant over a forecast, as the California values are. Simplifications, stated: the herb is
+  treated as perennial (NFDRS4's annual-curing state, which needs a full year of daily values, is not used) and there is
+  no snow-day flag. The 2016 overview by the Eastern Area (gacc.nifc.gov/eacc, "Overview of NFDRS2016") gives the
+  woody minimum as 50 %; the reference code's 60 % is used.
+- **Inputs** (start − 28 d to start, and on to the end of the bundle's weather window, so every hindcast start inside
+  the window has its 21 days): hourly `temperature_2m` and `relative_humidity_2m` at the fire point, local days
+  (`timezone` = the fire's zone), plus daily `daylight_duration` stored for audit (the method uses `CalcDayl`).
+  - **historical builds:** the Open-Meteo archive host (`archive-api.open-meteo.com/v1/archive`, `models=era5`: ERA5
+    reanalysis, Hersbach et al. 2020, Copernicus Climate Change Service), one request per bundle (about 3-6 weighted
+    call units), ending at least 6 days before the request (`ERA5_DELAY_DAYS`);
+  - **live builds:** the same hourly variables from the forecast host (`api.open-meteo.com/v1/forecast`) with
+    `past_days=28` (ERA5 lags about 6 days), re-fetched on each live weather refresh.
+  - The series is stored in the bundle as the backend-only `sim/lfm_gsi.json` (`method: "gsi_nfdrs2016"`, `source`,
+    the daily values); hindcasts never fetch.
+- **Never silent.** A bundle outside California without the series (request refused or failed, or fewer than 21 days
+  before a start) uses California's values with the warning "Live fuel moisture outside California uses California's
+  seasonal values until a regional method is tested; experimental." and the moisture note "Live fuel moisture:
+  California's seasonal values (GSI series unavailable); experimental." (`lfm_method` `ca_month_table` or
+  `ca_month_table_drought`). With `--require-hrrr` (every validation build) a refused or failed GSI series fails the
+  build. California's (herb, woody) values and notes are unchanged (unit test on Eaton, Palisades, Madre and
+  `fixture-demo`), and the California hindcasts are re-run after the GSI code lands (they must equal the baseline:
+  |Δ| < 0.001 per fire and over the 32 leads).
+- No GSI parameter is fitted to these fires.
+
+**Bundle checks before any score** (protocol step 2, recorded per fire): observed final area / WFIGS `IncidentSize`
+within 0.8-1.25; perimeters used and how many fall in the growth window; the fire inside the AOI; `fuels_edition` as
+listed in the audit (LF2023 for Horse Gulch and Windy Deuce, LF2024 for the other ten) with no fallback note; the UTM
+zone listed there; weather source `open-meteo:historical-forecast:gfs_hrrr` with 0 ERA5 hours (any GFS fill hours
+are reported with where they fall relative to the scored windows); no observed pixel more than 2 km outside the
+fire's own final WFIGS perimeter; `sim/lfm_gsi.json` present with `method` `gsi_nfdrs2016`.
+
+**Replacement rule.** A fire is replaced only when it fails a bundle check, before any of its scores exist, by the
+next reserve of the same region in the audit's order (Southwest: South Fork; Great Basin: Monroe Canyon, then
+Forsyth; Northwest: Pioneer; Northern Rockies: Daly); the failed check is recorded (`replaced` in
+`backend/fire3d/data/regional_accuracy.json`). The Southern Plains has no reserve: if Windy Deuce or Rush fails, that
+region is `limited` (or `untested`). A weather quota refusal is not a failed check: the build waits and is retried.
+Nothing else justifies a replacement, and no fire is dropped after it has a score.
+
+**No tuning to these fires.** Any change tried after the first score outside California is reported with its
+values on every fire and on California's 32 leads; a change is adopted only if it also improves the California
+result, and then every region whose fires informed it is marked `in_sample: true`.
