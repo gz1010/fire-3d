@@ -113,3 +113,36 @@ fetching, envelope).
   this state (Montana) Follow local officials."); reasons end with a full stop before "Follow local officials."
 - Fixtures: `web/src/extras/__fixtures__/samplesUs.ts` (`OR_EVAC_MEDFORD` from the recorded OEM sample,
   `OR_EVAC_KLAMATH_NONE`, `EVAC_RENO_NOT_AVAILABLE`), generated offline from the backend with simplified outlines.
+
+## 14.5 Official fire records, web (M4)
+
+- Types (`official/types.ts`): `OfficialKind`, `OfficialReasonCode` (+ `state_not_available`), `IncidentRecordCurrent`,
+  `IncidentRecordResponse` (exactly §14.5, plus the envelope `kind` / `incident_id` / `caveats` the backend sends).
+- `official/client.ts`: `incidentRecordUrl(id)`, **`recordUrl(summary)`** (CAL FIRE for `record_source 'calfire'` or a
+  summary without it; the incident record for `'wfigs'`) and `secondaryRecordUrl(summary)` (a California fire with
+  `irwin_id` and `active_sources.length === 1`; never a complex row (`complex_members` non-empty or no `irwin_id`),
+  never a WFIGS row).
+- `official/runtime.ts`: `record: QueryState<IncidentRecordResponse>`; both queries wait for the open fire's summary;
+  a WFIGS fire never asks `/api/official/calfire`.
+- `official/record.ts` (new): `RecordStatus` (a superset of `CalFireStatus`: `source`, `issuer` from
+  `recordIssuerLabel`, `linkLabel` "CAL FIRE" / "NIFC WFIGS", `blocks` from `recordBlocks` when the agencies
+  disagree (the matched WFIGS block refreshed from its endpoint; CAL FIRE's block keeps CAL FIRE's own status, never
+  the summary's merged flag; a block name equal to the fire's name is not repeated), `members` of a CAL FIRE complex
+  row (names verbatim with their `other_records` links; the numbers stay CAL FIRE's), `complexName`, `synthetic`,
+  `notChecked`), `recordStatus(...)`, `recordBlockText` ("Active (USFS (USDA Forest Service) via NIFC WFIGS, updated Oct
+  22, 9:05 AM PDT)"), `partOfComplex` (never "Complex Complex"), `wfigsRecordFeedItems` (topic `'record'`, kind
+  official, labelled from the issuer), `SYNTHETIC_RECORD_REASON` ("Not available: synthetic or local data."),
+  `RECORD_NOT_CHECKED_REASON` (HTTP 404 from an older backend: "Agency record not checked: …").
+- `official/hooks.ts`: **`useRecord()`** (exported) replaces the internal `useCalfire` (kept as a `@deprecated` alias);
+  `OfficialInfo.calfire` holds the `RecordStatus` (field name kept for us-web's call sites; `CalFireOfficial` is the
+  superset type). `calfireStatus` takes the summary fallback only when `record_source === 'calfire'` (the
+  `calfire.ts:89` mislabel).
+- Feed: `FeedTopic` + `'record'` (`'calfire'` kept, `@deprecated`) and `'local-alert'`; CAL FIRE rows use `'record'`;
+  "Updated by <issuer>" in the details; the filter tip says "agency record changes".
+- Official now: `RecordRow` (label = the issuer; "NIFC WFIGS record" link; protecting agency; "NIFC WFIGS publishes
+  the current record only; Fire-3d does not record changes to it yet."; the disagreement blocks; "Includes (NIFC WFIGS
+  names): …"; "Part of the X Complex"; synthetic and not-checked lines). Compact summary and data status rows are
+  labelled from the issuer; a synthetic fire has no record row; the location card's record link is "NIFC WFIGS" for
+  a WFIGS fire.
+- Tests: `official/record.test.ts` (11), `location/official.test.ts` (record link/line). `calfire.test.ts`: one
+  expectation changed by the contract (feed `topic: 'calfire'` → `'record'`); its California strings are unchanged.

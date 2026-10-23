@@ -186,3 +186,13 @@ describe('evacuation lines outside California (brief 3)', () => {
     expect(far.evacuation[0].sub).toContain('Oregon OEM does not say which fire this is for')
   })
 })
+
+describe('the fire record link and line (brief 3, CONTRACT §14.5)', () => {
+  it('a NIFC WFIGS record is linked and worded from its issuer, never as CAL FIRE', () => {
+    const rec = { state: 'available' as const, acres: 9450, percentContained: 100, updatedMs: Date.UTC(2024, 7, 2, 15, 30), url: 'https://nifc.example/horse-gulch', source: 'wfigs' as const, issuer: 'USFS (USDA Forest Service) via NIFC WFIGS', linkLabel: 'NIFC WFIGS' }
+    const b = officialBlock({ ...info({ state: 'not-available', checkedMs: null, sourceUrl: null, reason: 'Not available in this state (Montana)', notAvailableIn: ['Montana'], sources: [] }), calfire: rec }, { ...CTX, incidentUrl: null })
+    expect(b.links).toEqual([{ label: 'NIFC WFIGS', url: 'https://nifc.example/horse-gulch' }])
+    expect(calfireLine(rec, 'us', timeFmt('America/Denver', '24h'))).toBe('USFS (USDA Forest Service) via NIFC WFIGS: 9,450 acres, 100% contained · updated Aug 2, 09:30 MDT')
+    expect(JSON.stringify(b)).not.toMatch(/CAL FIRE|Cal OES/)
+  })
+})

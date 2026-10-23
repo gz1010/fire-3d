@@ -16,8 +16,14 @@ Started 2026-10-23 ~01:45 UTC (late start; us-catalog finished, us-web past M5, 
 - Orchestrator relay (us-pipeline finished): fix data status PDT for Horse Gulch (M6), the repeated not-available
   text (done M3), WFIGS record card (M4), OpenFEMA notice on archived alerts (M5). Check on 2024-horse-gulch-889237.
 
+- M3 committed 1c14914. M4: records (record.ts, recordUrl/secondaryRecordUrl, runtime record query, useRecord,
+  RecordRow, feed topic 'record', summary/data status labels). Gates: tc 0, lint 55, 66 files / 1067, build OK.
+- Orchestrator relay (us-web finished): migrate remaining time calls (OfficialNow, officialSummary, dataStatus,
+  calfire.ts:192, fireWeather.ts:178-184) in M6; Official now header must follow states_checked ("lower 48
+  states") in M5; restart API after backend commits before screenshots.
+
 ## Next
-- M4 records (recordUrl, useRecord, record model, Official now row, complex, synthetic, feed kind 'record').
+- M5 NWS national + local alerts UI, dev preset us-official.
 
 ## Decisions
 - State check before the past-date check (a Nevada replay says not available, not 'past dates').

@@ -187,7 +187,8 @@ export function officialBlock(info: OfficialInfo, ctx: OfficialContext): Officia
   const fireWeather = alertsInEffect(info.fireWeather).map((a) => alertLine(a, info.fireWeather))
   const links: OfficialLink[] = []
   const cf = calfireUrl(info.calfire, c.incidentUrl)
-  if (cf) links.push({ label: 'CAL FIRE', url: cf })
+  // the fire's agency record, labelled from its publisher ("CAL FIRE", "NIFC WFIGS"; CONTRACT §14.5)
+  if (cf) links.push({ label: info.calfire.linkLabel && info.calfire.linkLabel !== 'Agency record' ? info.calfire.linkLabel : 'CAL FIRE', url: cf })
   // the state evacuation source(s) checked here; none for a state without a feed (never a Cal OES link outside California)
   for (const s of evacuationLinks(info.evacuation)) if (!links.some((x) => x.url === s.url)) links.push(s)
   for (const l of info.evacuation.links ?? []) if (https(l.url) && !links.some((x) => x.url === l.url)) links.push({ label: l.label, url: l.url })
@@ -208,10 +209,12 @@ export function officialFireWeatherNote(fw: FireWeatherOfficial, _tf?: TimeFmt):
   return a ? `NWS ${a.event} in effect` : null
 }
 
-/** CAL FIRE's own record, one line ("CAL FIRE: 14,021 acres, 100% contained · updated Jan 31, 2025, 10:48 PST"). */
+/** The fire's agency record, one line ("CAL FIRE: 14,021 acres, 100% contained · updated Jan 31, 2025, 10:48 PST";
+ *  "USFS (USDA Forest Service) via NIFC WFIGS: …"), labelled from the issuer. */
 export function calfireLine(cf: CalFireOfficial, units: Units, tf: TimeFmt = getTimeFormat()): string | null {
   if (cf.state !== 'available') return null
+  const issuer = cf.issuer && cf.issuer !== 'Agency record' ? cf.issuer : 'CAL FIRE'
   const parts = [cf.acres != null ? area(cf.acres, units).text : null, cf.percentContained != null ? `${Math.round(cf.percentContained)}% contained` : null]
   const facts = parts.filter(Boolean).join(', ')
-  return facts ? `CAL FIRE: ${facts}${cf.updatedMs != null ? ` · updated ${at(cf.updatedMs, tf)}` : ''}` : null
+  return facts ? `${issuer}: ${facts}${cf.updatedMs != null ? ` · updated ${at(cf.updatedMs, tf)}` : ''}` : null
 }

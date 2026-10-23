@@ -60,7 +60,7 @@ describe('CAL FIRE feed rows', () => {
     const items = calfireFeedItems(WITH_CHANGE, live)
     expect(items.map((i) => i.title)).toEqual(['CAL FIRE: 65 % contained (was 50 %)', 'CAL FIRE: 3,300 acres (was 3,160) · no longer listed as active'])
     const [a, b] = items
-    expect(a).toMatchObject({ topic: 'calfire', kind: 'official', automated: false, key: true, issuer: 'CAL FIRE', source: 'CAL FIRE incident record', tMs: 1792335669000, updatedMs: 1792335669000, checkedMs: WITH_CHANGE.changes[0].seen_ms, timeNotGiven: false, url: 'https://www.fire.ca.gov/incidents/2026/10/15/henderson-fire/', approximate: true })
+    expect(a).toMatchObject({ topic: 'record', kind: 'official', automated: false, key: true, issuer: 'CAL FIRE', source: 'CAL FIRE incident record', tMs: 1792335669000, updatedMs: 1792335669000, checkedMs: WITH_CHANGE.changes[0].seen_ms, timeNotGiven: false, url: 'https://www.fire.ca.gov/incidents/2026/10/15/henderson-fire/', approximate: true })
     expect(a.seekable).toBe(true) // inside the observed record
     expect(a.location).not.toBeNull()
     expect(b).toMatchObject({ tMs: WITH_CHANGE.changes[1].seen_ms, timeNotGiven: true, updatedMs: null, seekable: false })

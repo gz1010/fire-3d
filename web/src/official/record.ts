@@ -57,6 +57,12 @@ export interface RecordStatus extends CalFireStatus {
 export const SYNTHETIC_RECORD_REASON = 'Not available: synthetic or local data.'
 export const RECORD_NOT_CHECKED_REASON = 'Agency record not checked: this Fire-3d server does not offer it.'
 
+const fireWords = (n: string) => n.toLowerCase().replace(/\b(fire|incident)\b/g, '').replace(/[^a-z0-9]+/g, ' ').trim()
+/** "TIMBER" and "Timber Fire" name the same fire. */
+export function sameFireName(a: string, b: string): boolean {
+  return fireWords(a) === fireWords(b)
+}
+
 const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
 
 /** "CAL FIRE" / "NIFC WFIGS": the short name of a record's publisher (links, tags). */
@@ -145,13 +151,18 @@ export function recordStatus(i: RecordInput): RecordStatus {
       return {
         source: b.source,
         issuer: other ? otherRecordIssuerLabel(other) : b.issuer,
-        name: b.name,
+        // the same fire under its own record name ("Timber" for the "Timber Fire") is not named again
+        name: b.name && sameFireName(b.name, s.name) ? null : b.name,
         isActive: fresh ? fresh.is_active : b.is_active,
         updatedMs: fresh?.updated_ms ?? b.updated_ms,
         url: httpsUrl(fresh && w ? w.incident_url : null) ?? httpsUrl(b.url),
       }
     })
-    if (cf.state === 'available') base.blocks[0] = { ...base.blocks[0], isActive: cf.isActive ?? base.blocks[0].isActive, updatedMs: cf.updatedMs ?? base.blocks[0].updatedMs }
+    // CAL FIRE's own answer refreshes its block; the summary's `is_active` is the merged flag (active if either agency
+    // says so), never CAL FIRE's own status
+    const own = i.calfire?.data?.current
+    if (own && cf.state === 'available') base.blocks[0] = { ...base.blocks[0], isActive: own.is_active ?? base.blocks[0].isActive, updatedMs: cf.updatedMs ?? base.blocks[0].updatedMs }
+    base.isActive = base.blocks[0].isActive
   }
   return base
 }

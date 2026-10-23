@@ -2,7 +2,7 @@
 // the top of the updates panel and the phone sheet (mounted by shell). Three compact rows, each with its issuer, the
 // issuer's own time, a source link and an explicit quiet state that says it is not an all-clear:
 //   evacuations (the state source: Cal OES, Oregon OEM; zones within 15 km with their distance; "not available in this
-//   state" elsewhere), the fire's agency record, NWS fire weather.
+//   state" elsewhere), the fire's agency record (CAL FIRE's or NIFC WFIGS's, labelled from its issuer), NWS fire weather.
 // Extras (agencies, county maps, recording notes, ended alerts) sit behind each row's "More". Shown whatever the map
 // layers show; "Show" fits and highlights the official area. Official wording is verbatim, and the block never mixes
 // in observations, estimates or model output.
@@ -16,6 +16,7 @@ import { distanceText } from '../../official/geo'
 import { useOfficialNow, type CalFireOfficial, type EvacuationOfficial, type FireWeatherOfficial } from '../../official/hooks'
 import { forIncident } from '../../official/guard'
 import { evacuationWho, groupZones } from '../../official/model'
+import { partOfComplex, recordBlockText, recordLinkLabel } from '../../official/record'
 import { useOfficialRuntime } from '../../official/runtime'
 import { showOfficialArea } from '../../official/select'
 import { useStore } from '../../state/store'
@@ -222,8 +223,11 @@ function EvacuationRow({ e, nowMs, wallMs, metric }: { e: EvacuationOfficial; no
   )
 }
 
-function CalfireRow({ c, nowMs, wallMs, live }: { c: CalFireOfficial; nowMs: number; wallMs: number; live: boolean }) {
-  const label = 'CAL FIRE'
+function RecordRow({ c, nowMs, wallMs, live }: { c: CalFireOfficial; nowMs: number; wallMs: number; live: boolean }) {
+  const tf = useTimeFormat()
+  // labelled from the record's issuer (CONTRACT §14.5): "CAL FIRE", "USFS (USDA Forest Service) via NIFC WFIGS"
+  const issuer = c.issuer ?? 'CAL FIRE'
+  const label = issuer
   const source = 'incident record'
   const icon = <ShieldAlert size={13} />
   const mode = useStore((s) => (s.manifest?.status === 'ready' ? s.manifest.mode : (s.summary?.mode ?? s.mode)))
@@ -235,31 +239,40 @@ function CalfireRow({ c, nowMs, wallMs, live }: { c: CalFireOfficial; nowMs: num
   })
   if (c.state === 'loading')
     return (
-      <Row icon={icon} label={label} source={source} tone="muted">
-        <p className="on-line">Checking CAL FIRE…</p>
+      <Row icon={icon} label={issuer === 'Agency record' ? 'Fire record' : label} source={source} tone="muted">
+        <p className="on-line">Checking the agency record…</p>
       </Row>
     )
   if (c.state === 'unavailable')
     return (
-      <Row icon={icon} label={label} source={source} tone="muted">
+      <Row icon={icon} label={issuer === 'Agency record' ? 'Fire record' : label} source={source} tone="muted">
         <p className="on-line">
-          <strong>No record shown.</strong> {c.reason ?? ''}
+          {c.synthetic ? (
+            <strong>Not available: synthetic or local data.</strong>
+          ) : c.notChecked ? (
+            <strong>Agency record not checked.</strong>
+          ) : (
+            <>
+              <strong>No record shown.</strong> {c.reason ?? ''}
+            </>
+          )}
         </p>
       </Row>
     )
+  const cf = c.source !== 'wfigs'
   const status = c.final ? 'final record' : c.isActive === false ? 'not active' : c.isActive ? 'active' : null
-  const note = calfireHistoryNote(c, mode)
+  const note = cf ? calfireHistoryNote(c, mode) : 'NIFC WFIGS publishes the current record only; Fire-3d does not record changes to it yet.'
   const lagged = laggedEditNote(c)
-  const lastParts = last ? changeTitleParts(last) : []
+  const lastParts = cf && last ? changeTitleParts(last) : []
   const extra =
     c.agencies || note ? (
       <>
-        {c.agencies && <p className="on-meta">Agencies: {c.agencies}</p>}
+        {c.agencies && <p className="on-meta">{cf ? 'Agencies' : 'Protecting agency'}: {c.agencies}</p>}
         {note && <p className="on-meta">{note}</p>}
       </>
     ) : undefined
   return (
-    <Row icon={icon} label={label} source={source} tone="info" aside={<SourceLink href={c.url}>Incident page</SourceLink>} more={extra}>
+    <Row icon={icon} label={label} source={source} tone="info" aside={<SourceLink href={c.url}>{cf ? 'Incident page' : 'NIFC WFIGS record'}</SourceLink>} more={extra}>
       <p className="on-line">
         <strong className="on-official">
           {join([
@@ -269,13 +282,35 @@ function CalfireRow({ c, nowMs, wallMs, live }: { c: CalFireOfficial; nowMs: num
           ])}
         </strong>
       </p>
+      {c.complexName && <p className="on-meta">{partOfComplex(c.complexName)}</p>}
+      {c.members && c.members.length > 0 && (
+        <p className="on-meta">
+          Includes (NIFC WFIGS names):{' '}
+          {c.members.map((m, k) => (
+            <span key={m.name}>
+              {k > 0 ? ', ' : ''}
+              {m.url ? <SourceLink href={m.url}>{m.name}</SourceLink> : m.name}
+            </span>
+          ))}
+        </p>
+      )}
+      {c.blocks && c.blocks.length > 1 && (
+        <>
+          <p className="on-meta">The agencies&apos; records differ on whether the fire is active; each is shown as published:</p>
+          {c.blocks.map((b) => (
+            <p key={`${b.source}|${b.name ?? ''}`} className="on-meta">
+              {recordBlockText(b, tf)} {b.url && <SourceLink href={b.url}>{recordLinkLabel(b.source)}</SourceLink>}
+            </p>
+          ))}
+        </>
+      )}
       {live && lastParts.length > 0 && <p className="on-meta">Last change: {lastParts.join(' · ')}</p>}
       {c.reason && <p className="on-meta">{c.reason}</p>}
       {lagged && <p className="on-meta">{lagged}</p>}
       <p className="on-meta">
         {join([
-          c.updatedMs != null ? `Updated by CAL FIRE ${fmtWhen(c.updatedMs, nowMs)}` : 'CAL FIRE gives no update time',
-          !live && c.containedMs != null ? `contained ${fmtWhen(c.containedMs, nowMs)}` : null,
+          c.updatedMs != null ? `Updated by ${issuer} ${fmtWhen(c.updatedMs, nowMs, tf)}` : `${issuer} gives no update time`,
+          !live && c.containedMs != null ? `contained ${fmtWhen(c.containedMs, nowMs, tf)}` : null,
           checked(c.checkedMs, wallMs),
         ])}
       </p>
@@ -417,7 +452,7 @@ export function OfficialNow() {
       </header>
       <ul className="on-rows">
         <EvacuationRow e={evacuation} nowMs={nowMs} wallMs={wallMs} metric={metric} />
-        <CalfireRow c={calfire} nowMs={nowMs} wallMs={wallMs} live={live} />
+        <RecordRow c={calfire} nowMs={nowMs} wallMs={wallMs} live={live} />
         <FireWeatherRow f={fireWeather} nowMs={nowMs} wallMs={wallMs} metric={metric} />
       </ul>
       <p className="on-foot">{NOT_AN_ORDER}</p>

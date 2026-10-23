@@ -9,6 +9,7 @@ import { useMemo } from 'react'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import { calfireFeedItems } from '../official/calfire'
+import { wfigsRecordFeedItems } from '../official/record'
 import { forIncident } from '../official/guard'
 import { useOfficialContext } from '../official/context'
 import { fireWeatherCredits, fireWeatherFeedItems, fireWeatherLegend } from '../official/fireWeather'
@@ -113,15 +114,16 @@ export function useExtrasCredits(): ExtrasCredit[] {
 const NO_ITEMS: FeedItem[] = []
 
 /**
- * Feed items for UpdatesFeed `extraItems` (memoised; CONTRACT §12.3 item 5, §13): official evacuation status (whatever
- * the layer toggle says), CAL FIRE record changes, NWS fire weather alerts, and the camera / imagery items of their
- * visible layers.
+ * Feed items for UpdatesFeed `extraItems` (memoised; CONTRACT §12.3 item 5, §13, §14.5): official evacuation status
+ * (whatever the layer toggle says), the agency record (CAL FIRE's changes, or a NIFC WFIGS fire's record), NWS fire
+ * weather alerts, and the camera / imagery items of their visible layers.
  */
 export function useExtrasFeedItems(): FeedItem[] {
   const v = useVisibleExtras()
   const ctx = useOfficialContext()
   const evac = useExtrasRuntime((s) => forIncident(s.evac.data, ctx.incidentId))
   const calfire = useOfficialRuntime((s) => forIncident(s.calfire.data, ctx.incidentId))
+  const record = useOfficialRuntime((s) => forIncident(s.record.data, ctx.incidentId))
   const fw = useFireWeatherData()
   const metric = useWorkspace((s) => s.units === 'metric')
   const { manifest, summary, startMs, endMs, startedMs } = useStore(
@@ -137,12 +139,14 @@ export function useExtrasFeedItems(): FeedItem[] {
     const items = [
       ...evacuationFeedItems(evac, manifest, { fire: ctx.fire, metric }),
       ...(ctx.demo ? [] : calfireFeedItems(calfire, { mode, manifest, summary })),
+      // a NIFC WFIGS fire's own record (a California fire's matched record stays on the card, not in the feed)
+      ...(ctx.demo || (summary?.record_source ?? 'calfire') !== 'wfigs' ? [] : wfigsRecordFeedItems(record, { mode, manifest, summary })),
       ...(ctx.demo ? [] : fireWeatherFeedItems(fw, { mode, refMs: ctx.refMs, manifest, metric })),
       ...cameraFeedItems(v.cams),
       ...imageryFeedItems(v.imgs, range, startedMs),
     ]
     return items.length ? items : NO_ITEMS
-  }, [evac, calfire, fw, ctx, metric, v.cams, v.imgs, manifest, summary, startMs, endMs, startedMs])
+  }, [evac, calfire, record, fw, ctx, metric, v.cams, v.imgs, manifest, summary, startMs, endMs, startedMs])
 }
 
 /** The optional layers, in legend order ('fireWeather' = the NWS outlines, which have no toggle). */
