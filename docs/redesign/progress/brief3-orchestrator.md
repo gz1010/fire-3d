@@ -102,6 +102,7 @@ Branch: `claude/cool-mayer-ki7to6`. Runbook: `docs/redesign/RUNBOOK-3.md`.
   nationally) but Open-Meteo's daily limit refused all four builds and the one Prepare press (Sand Creek, MT), as
   designed; README rewritten for the lower 48; gates: pytest 1005, vitest 1,197. Clean re-check: 9 minor findings
   (official record time label, README accuracy, agency names, list wording, chip overlap): last fix round runs.
+- ~17:40 UTC: a third usage limit stopped the last fix round before it edited anything (reset 18:00); resumed 18:05.
 - Lesson: never SendMessage a workflow agent (it starts a second copy); relay through files or Agent-tool agents.
 
 ## Carry-over items for later stages (integration unless a role owns the file)
