@@ -1,0 +1,205 @@
+{
+ "step": "brief4-h3h4-fix",
+ "summary": "Fixes for the two H3+H4 reviews (design fidelity DF-H34-1..11; behaviour/features/safety R1..R9). The blocker and every major and minor were fixed; two nits fixed (R8 with DF-H34-10, R9); DF-H34-11 (nit, optional polish) skipped. Safety: the fire view's bottom bar now carries 'Not an all-clear. Follow local officials.' in every state (H, phone Layers drawer, search); list-down / list-failure notices show as a top-centre banner while the list is not open; locate-me keeps the device location in the browser (map flight + a 'YOU' marker) until the user presses 'Check this spot', whose prompt says what a check sends; the Public card shows no model output at all (weather-model wind/dryness, forecast caveats and model sources left out). Behaviour: a group click zooms at least one level; an old ?t= hold is dropped when the fire closes; Public search results and nearest-fire rows say they open the fire view. Design: group counts no longer overlap (collision, larger group first); leader lines never cross, are capped at 140 px (90 on phones), avoid other markers' centres, counts, chrome and the dark style's place names; circle small text >= 10 px with a two-line status on smaller circles; long names wrap over up to 3-4 lines down to 28 px without losing middle words; the facts column steps snug/tight/tighter so every row and the foot fit at 1440x1000 (More below when they still scroll); the key keeps the time and Stale whole and names the publisher (full source in the tooltip); the update row shows its year; the evacuation sub-line no longer repeats; 44 px phone targets.",
+ "findings": [
+  {
+   "id": "R1",
+   "severity": "blocker",
+   "outcome": "fixed",
+   "how": "PublicFireChrome: <FixedCopy variant=\"bar\" extra={NOT_ALL_CLEAR} /> (fixedCopy.ts frozen, untouched); the bar note wraps onto two short lines (view-public.css .pfv-note flex 0 0 auto, max-width min(440px, 38%); phones full width). Browser: H on Lower Sugarloaf and the phone Layers drawer both keep 'Not an all-clear. Follow local officials.' visible (brief4-h3h4-fix-public-fire-collapsed.png, -phone-fire-layers.png)."
+  },
+  {
+   "id": "R2",
+   "severity": "major",
+   "outcome": "fixed",
+   "how": "ui/shell/useOverviewData.ts (useOverviewData + LIST_OF moved out of OverviewPanel.tsx; new useListNotices) and ui/public/ListNoticeBanner.tsx, mounted by OverviewChrome while the list is not open (Public minimal, phones with the sheet closed), portalled into App.tsx's .top-center slot (App.tsx unchanged): the panel's own NIFC_LIST_DOWN / ALL_LISTS_DOWN / stale-copy / 'Could not load the 2026 list' lines, Retry for a failed list, dismissable, back when the words change. Browser 6/6 (wfigs unavailable, historical 500, dismiss, phone; banner gone while the panel shows the notice)."
+  },
+  {
+   "id": "R3",
+   "severity": "major",
+   "outcome": "fixed",
+   "how": "Settled as the reviewer's option a, which keeps PLAN-4 §11 i-7 ('device location stays in the browser') and BRIEF-4 decision 5 true without a backend change: LocateButton sets workspace.device and requestMapFlyTo only; map/DeviceMarker.tsx draws the location ('YOU', dashed ring when coarse); a prompt says it stays in this browser and that 'Check this spot' sends the point to Fire-3d's server (which asks official sources about the area around it); only that button calls selectLocation(deviceSelection(d)); 'Stop showing my location' clears device. The card line now reads 'checked at your request (not added to the link)'. Browser 18/18 in the Public and Command overviews: no request carries the position before the check, the check then sends it, marker gives way to the selection pin, hide forgets it. No PLAN or §15.3 text needed changing (i-7 holds); CONTRACT 15.5 records it. The server-side access log and HTTP cache of a checked point are unchanged (backend out of scope; the prompt says the point is sent)."
+  },
+  {
+   "id": "R4",
+   "severity": "major",
+   "outcome": "fixed",
+   "how": "location/publicCard.ts withoutModel (tested in publicCard.test.ts) also drops Model-tagged reasons and details lines (weather-model wind, wind here, dryness), the forecast caveats (locationCheck.ts isModelCaveat / ensembleCaveat / MODEL_SPOTTING_CAVEAT / MODEL_EDGE_CAVEAT, same strings as before) and every model source; MODEL_IN_COMMAND names 'Model weather (wind, dryness)'. The NWS line stays in the official block. Browser: fixture-live card has no MODEL tag, model runs, ember spotting or weather grid text (brief4-h3h4-fix-public-card-no-model.png)."
+  },
+  {
+   "id": "R5",
+   "severity": "minor",
+   "outcome": "fixed",
+   "how": "SearchBox Results gets fireView (workspace map + Public): '· opens the fire view' and tooltip 'Open the fire view of …'; OverviewCard nearest-fire rows the same tooltip in Public. Command and Forensic keep the card wording."
+  },
+  {
+   "id": "R6",
+   "severity": "minor",
+   "outcome": "fixed",
+   "how": "overviewLayers.clusterClickZoom = max(current, min(8, max(expansion, current + 1))); tests for 3.92 -> 4.92 and the cap. Browser: 3.92 -> 4.92 on the '119 FIRES' group."
+  },
+  {
+   "id": "R7",
+   "severity": "minor",
+   "outcome": "fixed",
+   "how": "usePublicFireTime.ts leaveHold(held, {incidentId, preset}): given back on a switch to Command in the same fire, dropped when the fire closes (X, Back, another fire), kept while the same fire stays open in Public (dev double mount). Tests added; browser: link ?t= then X then reopen then Command = Command's own time; link ?t= then Command = the link time."
+  },
+  {
+   "id": "R8",
+   "severity": "nit",
+   "outcome": "fixed",
+   "how": "fireView.ts evacReasonRest(reason, value): a reason that only repeats 'Not available in this state (<State>)' is dropped (the state is in the label); a further explanation is kept. Same fix as DF-H34-10."
+  },
+  {
+   "id": "R9",
+   "severity": "nit",
+   "outcome": "fixed",
+   "how": "fireView.ts fireLabel(name) in FireTitle's hidden prefix and HazardCircle's aria-label ('Cedar Canyon Fire: simulated fire, demo. More in Command view')."
+  },
+  {
+   "id": "DF-H34-1",
+   "severity": "major",
+   "outcome": "fixed",
+   "how": "Count layers: text/icon-allow-overlap false, icon-optional, text-padding 2, symbol-sort-key -point_count (larger group placed first; the active layer above the other is placed first). A blocked count is left out (circle size and hover still give it). LeaderLabels counts as obstacles only the placed counts (queryRenderedFeatures on the count layers) with a width from the digits. Screens: no merged counts in Public minimal, the Command overview or the phone overview."
+  },
+  {
+   "id": "DF-H34-2",
+   "severity": "major",
+   "outcome": "fixed",
+   "how": "leaderLayout.ts: segmentsCross, segmentHitsCircle, LINE_CLEAR_PX 4, LEADER_MAX_LEN 140 / LEADER_MAX_LEN_NARROW 90, options lineObstacles and maxLen; candidates whose leader is too long, crosses a placed leader, passes within 4 px of another marker's or group's centre (circles under the item's own marker ignored) or crosses chrome or a placed count are skipped. Tests for crossings, length and line obstacles. Measured (Public minimal 1440x1144): 8 labels, 0 crossings (was 5), segments 54-149 px from the centre (was up to 268). The gutter keeps the markers' order through the crossing test rather than a separate y-sort."
+  },
+  {
+   "id": "DF-H34-3",
+   "severity": "major",
+   "outcome": "fixed",
+   "how": "view-public.css: status and MORE IN COMMAND font max(10px, 12/11px * k); the circle is a size container and below 300 px the status is two lines ('WILDFIRE' / 'DECLARED OUT') with tighter tracking; phones 9 px, chevron hidden so it fits the 120 px circle. Measured 10 px at 1366x768 (184 px circle), 1024x768 and 1280x780 (160 px), 9 px on phones; all text inside the circle."
+  },
+  {
+   "id": "DF-H34-4",
+   "severity": "major",
+   "outcome": "fixed",
+   "how": "ui/public/useFactsFit.ts (layout-effect measurement, keyed on window size and the facts' words so it never flip-flops): .pfv-left.is-snug (gap 28, row padding 7) -> .is-tight (circle 248) -> .is-tighter (circle 200, gap 18, padding 5), per media size; when the facts still scroll, the sticky foot shows 'More below' (.pfv-more, scrolls them). Eaton with its local alert at 1440x1000: every row and the foot in view (tighter); Lower Sugarloaf: snug with the 312 px circle; Eaton at 1366x768: foot in view + More below."
+  },
+  {
+   "id": "DF-H34-5",
+   "severity": "minor",
+   "outcome": "fixed",
+   "how": "leaderLayout.ts placeLabelLayers(style layers): every symbol layer of the 'place' and 'water_name' source layers of the current style (dark place_* and aerial label_* alike). Command overview: Timber's label no longer sits on a city name."
+  },
+  {
+   "id": "DF-H34-6",
+   "severity": "minor",
+   "outcome": "fixed",
+   "how": "fitName(…, floorPx 28): below 40 px a long name wraps greedily over up to three lines (four at 28-30 px), every word in order; still too long -> one block clamped to four lines (FittedName.clamp, .is-clamped, ellipsis at the end). The circle's tooltip gives the full name when shortened. 'Campbell -N / Cumberland / Wildlife Mgt Area' (brief4-h3h4-fix-public-fire-long-name.png). Tests updated deliberately (the old 'never under 40 px' test described the bug)."
+  },
+  {
+   "id": "DF-H34-7",
+   "severity": "minor",
+   "outcome": "fixed",
+   "how": "Phones: overview and fire-view bar .tb-icon 44x44; the pill's Search button and '© Credits' get a transparent ::before hit area (44 px tall) without changing their look. Measured: every target >= 44 px."
+  },
+  {
+   "id": "DF-H34-8",
+   "severity": "minor",
+   "outcome": "fixed",
+   "how": "perimeterKey: text 'Latest perimeter · <publisher>' (shortPerimeterSource: notes in brackets and '(daily) perimeters' removed) + source (the whole string, the key text's tooltip); .pfv-key-time and the Stale tag nowrap; key max width 900 px. One line at 1440 for Lower Sugarloaf and fixture-live (with Stale)."
+  },
+  {
+   "id": "DF-H34-9",
+   "severity": "minor",
+   "outcome": "fixed",
+   "how": "fireView.ts updateYear(start, updated, now, tz): the update row shows its year whenever the start shows one or the years differ ('May 7, 2026' under 'Sep 1, 2025')."
+  },
+  {
+   "id": "DF-H34-10",
+   "severity": "minor",
+   "outcome": "fixed",
+   "how": "Same fix as R8 (evacReasonRest): the sub-line is 'follow local officials'; test updated deliberately (it asserted the repeated state name)."
+  },
+  {
+   "id": "DF-H34-11",
+   "severity": "nit",
+   "outcome": "skipped",
+   "how": "Optional polish, not done: the overview's bottom row positions follow the measured bottom stack shared by the list panel, readout and legend (raising the pill, disclaimer and legend separately would push the list panel's bottom further from the screen's 236), and the scale bar's form is the shared ScaleBar used by Command's legend row and the fire view's key."
+  }
+ ],
+ "files_changed": [
+  "web/src/ui/shell/PublicFireChrome.tsx",
+  "web/src/ui/shell/OverviewChrome.tsx",
+  "web/src/ui/shell/OverviewPanel.tsx",
+  "web/src/ui/shell/useOverviewData.ts (new)",
+  "web/src/ui/public/ListNoticeBanner.tsx (new)",
+  "web/src/ui/public/useFactsFit.ts (new)",
+  "web/src/ui/public/FireFacts.tsx",
+  "web/src/ui/public/FireKey.tsx",
+  "web/src/ui/public/FireTitle.tsx",
+  "web/src/ui/public/HazardCircle.tsx",
+  "web/src/ui/public/fireView.ts",
+  "web/src/ui/public/fireView.test.ts",
+  "web/src/ui/public/usePublicFireTime.ts",
+  "web/src/ui/public/usePublicFireTime.test.ts",
+  "web/src/location/LocateButton.tsx",
+  "web/src/location/locate.ts",
+  "web/src/location/locate.test.ts",
+  "web/src/location/LocationCard.tsx",
+  "web/src/location/publicCard.ts (new)",
+  "web/src/location/publicCard.test.ts (new)",
+  "web/src/location/locationCheck.ts",
+  "web/src/location/OverviewCard.tsx",
+  "web/src/location/SearchBox.tsx",
+  "web/src/location/location.css",
+  "web/src/map/DeviceMarker.tsx (new)",
+  "web/src/map/LeaderLabels.tsx",
+  "web/src/map/leaderLayout.ts",
+  "web/src/map/leaderLayout.test.ts",
+  "web/src/map/overviewLayers.ts",
+  "web/src/map/overviewLayers.test.ts",
+  "web/src/map/map.css",
+  "web/src/styles/view-public.css",
+  "web/src/styles/overview.css",
+  "docs/redesign/CONTRACT.md (15.5 H3+H4 'Review fixes' paragraph)",
+  "docs/redesign/progress/brief4-h3h4-fix.md",
+  "docs/redesign/reports/brief4-h3h4-fix.json",
+  "docs/screenshots/brief4-h3h4-fix-*.png"
+ ],
+ "screenshots": [
+  "docs/screenshots/brief4-h3h4-fix-public-overview-minimal.png",
+  "docs/screenshots/brief4-h3h4-fix-command-overview.png",
+  "docs/screenshots/brief4-h3h4-fix-list-down-banner.png",
+  "docs/screenshots/brief4-h3h4-fix-locate-prompt.png",
+  "docs/screenshots/brief4-h3h4-fix-locate-checked.png",
+  "docs/screenshots/brief4-h3h4-fix-public-fire-lower-sugarloaf.png",
+  "docs/screenshots/brief4-h3h4-fix-public-fire-eaton-local-alert.png",
+  "docs/screenshots/brief4-h3h4-fix-public-fire-1366.png",
+  "docs/screenshots/brief4-h3h4-fix-public-fire-fixture-live.png",
+  "docs/screenshots/brief4-h3h4-fix-public-fire-long-name.png",
+  "docs/screenshots/brief4-h3h4-fix-public-fire-collapsed.png",
+  "docs/screenshots/brief4-h3h4-fix-public-card-no-model.png",
+  "docs/screenshots/brief4-h3h4-fix-phone-fire.png",
+  "docs/screenshots/brief4-h3h4-fix-phone-fire-layers.png",
+  "docs/screenshots/brief4-h3h4-fix-command-fire-unchanged.png"
+ ],
+ "measured": {
+  "browser_checks": "scratch Playwright (not in the repo): overview 31/31 (leaders no crossing and within the cap x6, R6, R2 x6, R3 x18), fire view 27/27 (R1 x4, DF-3 x5, DF-4 x3, DF-6/8/9/10, R4 x3, R5, R7 x2, R9 x2, DF-7 x2), no console errors on 8 views (1440, 1024, 390).",
+  "leaders_public_minimal_1440x1144": "8 labels, 0 crossings, 54-149 px from the marker centre",
+  "command_in_a_fire": "brief4-h3h4-fix-command-fire-unchanged.png matches brief4-h2 Command (fixture-live, sel) apart from clock-dependent ages; no Command file changed"
+ },
+ "gates": "typecheck ok / lint 55 warnings, all in src/scene (none added) / tests 101 files: 1383 passed, 2 skipped, 0 failed / build ok",
+ "commits": [
+  "2bf1a83 brief 4 H3+H4/H5 fixes: work-in-progress snapshot (orchestrator; most of this step's code)",
+  "b8b91db brief 4 H3+H4/H5 fixes: work-in-progress snapshot (orchestrator)",
+  "8a5755b brief 4 H3+H4/H5 fixes: work-in-progress snapshot (orchestrator; it caught a temporary debug line in LeaderLabels.tsx, removed in 695072d)",
+  "695072d brief 4 H3+H4 fix: review fixes for the Public overview and fire view (R1-R9, DF-H34-1..10)",
+  "(this commit) brief 4 H3+H4 fix: report commit list"
+ ],
+ "known_issues": [
+  "A phone's national overview now names no fire with a leader (no spot passes the no-crossing / short-leader rules in the few hundred pixels the lower 48 take there); the map's own labels of the candidates stay hidden below z5 as before, so the names come from the fire list (Show details).",
+  "With counts colliding, some groups at the national zoom show no 'N FIRES' (the circle's size and the hover still give the count).",
+  "Locate-me: once the user checks the spot, the point reaches Fire-3d's server like a map click (the uvicorn access log and, for evacuation zones, the HTTP disk cache keep the query box); the prompt says the point is sent. Keeping device points out of server logs would need a backend change (out of scope).",
+  "The device marker shows on the overview only (the fire view's distance chip uses the same location without a marker).",
+  "useFactsFit decides from the window size and the facts' words; a font that loads after the decision with very different metrics would only be re-measured on the next size or text change.",
+  "DF-H34-11 (overview bottom offsets, scale bar form) left as H3 built them.",
+  "Screenshots and measurements were taken with SwiftShader (software rendering) while another chain rendered Forensic on the same machine; leader labels then appeared 15-20 s after load in the Command overview."
+ ],
+ "notes_for_others": "Orchestrator: R3 was settled as option a (device location stays in the browser until 'Check this spot'); revisit if you prefer option b. No H2 frozen file was changed: fixedCopy.ts is only imported (NOT_ALL_CLEAR passed as the bar's extra) and App.tsx's top-centre slot is reached by a portal from ui/public/ListNoticeBanner.tsx (query '.mw .top-center'). New shared helpers: leaderLayout segmentsCross / segmentHitsCircle / placeLabelLayers, location/publicCard.ts withoutModel, locationCheck isModelCaveat, ui/shell/useOverviewData.ts (OverviewPanel imports from it). Final check: Public fire facts now step snug/tight/tighter (classes on .pfv-left); the 312 px circle shows for the usual 7-row fires at 1440x1000."
+}

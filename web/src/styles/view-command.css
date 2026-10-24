@@ -1,0 +1,1166 @@
+/* Command inside a fire (brief 4 H2b; docs/redesign/handoff-4/screens/CommandView.dc.html; PLAN-4 §3.2; CONTRACT §15.2,
+   frozen after H2). Every rule is scoped to the map workspace root of that chrome, .mw[data-view='command-fire'], so the
+   overview and Public stay as they are. No panels on the map: the readout (left) and "Official now" (right) are text
+   on the map's edge gradients (map/MapAtmosphere.tsx edges="command"); the bottom row holds the map controls bar (left)
+   and the legend chips with the scale (right) above the slim full-width timeline, then the fixed copy and the credits.
+   Values are the screen's: readout left 40 / top 100 / 420 wide, official right 40 / top 100 / 380 wide, timeline left
+   40 / right 40, 72 px high. 1024-1279 px: 360 / 320 px columns (decision h). Phones (<= 760 px): the readout is a
+   bottom sheet with a one-line peek, "Official now" the Updates sheet, the timeline full width. */
+
+.mw[data-view='command-fire'] {
+  --cmd-x: 40px;
+  --cmd-top: calc(var(--m-chrome-top) + 16px);
+  --cmd-left-w: 420px;
+  --cmd-right-w: 380px;
+  --cmd-hair: rgba(200, 200, 200, 0.12);
+  --cmd-hair-2: rgba(200, 200, 200, 0.22);
+}
+
+/* ------------------------------------------------------------------------------------------------ top bar */
+/* the place gives way first; the demo badge follows it (amber, short below 1280 px) */
+.mw[data-view='command-fire'] .mw-header .tb-left .mw-demo-badge {
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font: 600 10px / 1 var(--m-font-mono);
+  letter-spacing: 0.12em;
+  text-shadow: none;
+}
+.mw[data-view='command-fire'] .cmd-status {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* the demo badge says "Demo" in Command's bar at every width, so the place keeps its room (the full wording is in its
+   tooltip, its accessible text and the readout's demo note; review DF-15) */
+.mw[data-view='command-fire'] .mw-header .mw-demo-long {
+  display: none;
+}
+.mw[data-view='command-fire'] .mw-header .mw-demo-short {
+  display: inline;
+}
+
+/* the satellite status line (extras/ImageryChip.tsx variant="status") */
+.xs-statusbox {
+  min-width: 0;
+}
+.xs-status {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+}
+.xs-status-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.xs-status-text {
+  display: flex;
+  min-width: 0;
+}
+.xs-status-head {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+.xs-status-tail {
+  flex: none;
+}
+.xs-status-icon {
+  flex: none;
+  color: var(--m-text-3);
+}
+.xs-status.is-on .xs-status-main,
+.xs-status.is-on .xs-status-icon {
+  color: var(--m-text);
+}
+.xs-status.is-on .xs-status-main {
+  text-decoration: underline;
+  text-decoration-color: var(--m-accent);
+  text-underline-offset: 4px;
+}
+.xs-status-more {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--m-text-3);
+  cursor: pointer;
+}
+.xs-status-more:hover,
+.xs-status-more[aria-expanded='true'] {
+  background: var(--m-hover);
+  color: var(--m-text);
+}
+.xs-status-more:focus-visible {
+  outline: 2px solid var(--m-accent);
+  outline-offset: 1px;
+}
+
+/* "Check an address": the search in a popover under the bar, right-aligned, 400 px (location/CommandSearch.tsx). The
+   wrapper stays static so the popover is placed against the bar itself. */
+.cmd-search {
+  display: inline-flex;
+  flex: none;
+}
+.cmd-search-pop {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  width: min(400px, calc(100vw - 2 * var(--m-topbar-x)));
+  z-index: 2;
+  text-shadow: none;
+  pointer-events: auto;
+}
+/* the box fills the popover (the generic box is --m-search-w, 360 px; review DF-10) */
+.cmd-search-pop .loc-search {
+  width: 100%;
+}
+.cmd-search-pop .loc-search-box {
+  background: var(--m-panel-strong);
+}
+.cmd-search-pop .loc-search-below {
+  margin-top: 6px;
+}
+.cmd-search-pop :is(.loc-search-hint, .loc-search-status, .loc-results) {
+  background: var(--m-panel-raised);
+}
+
+/* ------------------------------------------------------------------------------------------------ columns */
+.mw[data-view='command-fire'] .mw-top {
+  top: var(--cmd-top);
+  left: var(--cmd-x);
+  right: var(--cmd-x);
+  grid-template-columns: minmax(0, var(--cmd-left-w)) minmax(0, 1fr) minmax(0, var(--cmd-right-w));
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: 'card . updates';
+  gap: 24px;
+}
+.mw[data-view='command-fire'] .mw-card,
+.mw[data-view='command-fire'] .mw-firecard {
+  width: 100%;
+  scrollbar-width: thin;
+}
+.mw[data-view='command-fire'] .mw-card {
+  /* the readout scrolls when the window is short; its edge stays transparent and fades while more is below */
+  border-radius: 0;
+}
+.mw[data-view='command-fire'] .mw-card.is-overflowing {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+  padding-bottom: 24px;
+}
+.mw[data-view='command-fire'] .mw-updates,
+.mw[data-view='command-fire'].has-updates .mw-updates {
+  width: 100%;
+}
+/* panels hidden (H): the readout keeps the coordinates (brief 2 decision 7); the right column and the status go */
+.mw[data-view='command-fire'].is-collapsed .mw-card {
+  display: block;
+}
+.mw[data-view='command-fire'].is-collapsed .cro :is(.cro-official, .cro-more, .cro-model) {
+  display: none;
+}
+
+/* Text on the map (no panel): a soft dark halo under the readout, the right column and the bottom line keeps meta
+   text at 4.5:1 or more where bright map labels or aerial photos show through the edge gradients at low zoom (decision
+   l; measured on Lower Sugarloaf and Eaton with the aerial basemap). Glass panels opened from them drop it. */
+.mw[data-view='command-fire'] :is(.cro:not(.is-sheet), .mw-updates-panel.is-column) {
+  text-shadow:
+    0 0 3px rgba(12, 12, 12, 0.95),
+    0 0 8px rgba(12, 12, 12, 0.9),
+    0 1px 2px rgba(12, 12, 12, 0.9);
+}
+.mw[data-view='command-fire'] :is(.cro:not(.is-sheet), .mw-updates-panel.is-column) :is(.popover, [data-popover], .on-btn, .mw-chip) {
+  text-shadow: none;
+}
+/* buttons drop the inherited shadow by default (browser style): the text-only ones keep the halo */
+.mw[data-view='command-fire'] :is(.on-row-toggle, .cmd-view-all, .cmd-hide, .on-more) {
+  text-shadow: inherit;
+}
+
+/* ------------------------------------------------------------------------------------------------ readout */
+.cro {
+  color: var(--m-text-body);
+  font: 400 14px / 21px var(--m-font-ui);
+}
+.cro p {
+  margin: 0;
+}
+.cro-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 30px;
+}
+.mw .cro-eyebrow {
+  margin: 0;
+  font: 400 10.5px / 1.3 var(--m-font-mono);
+  letter-spacing: var(--m-label-track);
+  text-transform: uppercase;
+  color: var(--m-text-3);
+}
+.cro-actions {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+.cro .cro-btn,
+.cro-actions .loc-copy {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--m-text-3);
+}
+.cro-point {
+  margin-top: 4px !important;
+  font-size: var(--m-coord-xl);
+  line-height: 36px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--m-text);
+}
+.cro-point > span {
+  display: block;
+}
+.cro-coords {
+  margin-top: 8px !important;
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0;
+  color: var(--m-text-4);
+}
+.cro-place {
+  margin-top: 8px !important;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--m-text-2);
+}
+.cro-place-name {
+  font-weight: 600;
+  color: var(--m-text);
+}
+.cro-place-type {
+  color: var(--m-text-3);
+}
+.cro .loc-coverage {
+  margin-top: 10px;
+}
+.cro-near-block {
+  margin-top: 12px;
+}
+.cro-near {
+  font-size: 14px;
+  line-height: 21px;
+  color: var(--m-text-body);
+}
+.cro-near.is-muted {
+  margin-top: 14px !important;
+  color: var(--m-text-2);
+}
+.cro-near-block.is-muted .cro-near,
+.cro-near-block.is-unknown .cro-near {
+  color: var(--m-text-2);
+}
+.cro-near-block.is-warn .cro-near {
+  color: var(--m-warn);
+}
+.cro .cro-area-note {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 19px;
+  color: var(--m-warn);
+}
+.cro-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px !important;
+}
+.cro-tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--m-text-3);
+  font: 600 9.5px / 14px var(--m-font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--m-text-3);
+  white-space: normal;
+  vertical-align: 1px;
+}
+.cro-tag.is-mapped,
+.cro-tag.is-observed {
+  border-color: var(--m-fire-3);
+  color: var(--m-fire-3);
+}
+.cro-tag.is-estimate {
+  border-color: var(--m-fire-4);
+  border-style: dashed;
+  color: var(--m-fire-4);
+}
+.cro-tag.is-stale,
+.cro-tag.is-unknown {
+  border-color: var(--m-stale);
+  color: var(--m-stale);
+}
+.cro-tag.is-model {
+  margin-right: 2px;
+  border-style: dashed;
+  border-color: var(--m-forecast);
+  color: var(--m-forecast);
+  white-space: nowrap;
+}
+.cro-model {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 19px;
+  color: var(--m-text-2b);
+}
+.cro-model.is-unknown p:first-child {
+  color: var(--m-warn);
+}
+.cro .cro-model-sub {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--m-text-3);
+}
+/* the official information at the point: compact, no frame; its own green eyebrow */
+.cro-official {
+  margin-top: 12px;
+}
+.cro .loc-official {
+  gap: 4px;
+  padding-top: 0;
+  border-top: 0;
+}
+.mw .cro .loc-block-title {
+  font: 600 10.5px / 1.3 var(--m-font-mono);
+  letter-spacing: var(--m-label-track);
+  color: var(--m-official-ink);
+}
+.cro .loc-official-text {
+  font-size: 13px;
+  line-height: 19px;
+}
+.mw .cro .loc-official-sub,
+.cro .loc-follow,
+.cro .cro-official-more {
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--m-text-2b);
+}
+.cro .loc-follow {
+  margin-top: 2px;
+}
+.cro .cro-official-more {
+  margin-top: 4px;
+}
+/* record rows */
+.cro-rows {
+  margin-top: 14px;
+  padding-top: 2px;
+  border-top: 1px solid var(--cmd-hair-2);
+}
+/* Command's record rows: a little tighter than the shared row; long issuers wrap instead of being cut */
+.cro-rows .ro-row {
+  padding: 6px 0;
+  white-space: normal;
+  line-height: normal;
+  align-items: baseline;
+  column-gap: 10px;
+  row-gap: 2px;
+}
+.cro-rows .ro-label {
+  color: var(--m-text-3);
+}
+.cro-rows .ro-17 {
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+.cro-rows .ro-sub {
+  font-family: var(--m-font-mono);
+  font-size: 11px;
+  color: var(--m-text-3);
+}
+.cro-rows-loading {
+  padding: 8px 0;
+  color: var(--m-text-3);
+}
+.cro-reported .ro-label {
+  flex-basis: 100%;
+}
+.cro-row-btns {
+  display: inline-flex;
+  align-self: center;
+  gap: 2px;
+}
+.cro-row-btns .cro-btn,
+.cro-row-btns .loc-copy {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  color: var(--m-text-3);
+}
+.mw-link-btn.cmd-hide {
+  padding: 2px 0;
+  font: 400 10px / 1.3 var(--m-font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--m-text-4);
+}
+.mw-link-btn.cmd-hide:hover {
+  color: var(--m-text);
+}
+.cro .cro-demo-note {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--m-demo);
+}
+.cro-empty {
+  margin-top: 8px !important;
+  font-size: 14px;
+  color: var(--m-text-2b);
+}
+/* "More about this spot" */
+.cro-more {
+  margin-top: 10px;
+  border-top: 1px solid var(--cmd-hair);
+}
+.cro-more > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 10px 0 4px;
+  list-style: none;
+  font-size: 12px;
+  color: var(--m-text-2);
+  cursor: pointer;
+}
+.cro-more > summary::-webkit-details-marker {
+  display: none;
+}
+.cro-more > summary:hover {
+  color: var(--m-text);
+}
+.cro-more-chev {
+  flex: none;
+  transform: rotate(-90deg);
+  transition: transform 0.15s ease;
+}
+.cro-more[open] .cro-more-chev {
+  transform: none;
+}
+.cro-more-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 6px 0 4px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.cro-more-body .loc-block {
+  border-top-color: var(--cmd-hair);
+}
+/* the section titles inside ("Sources and freshness", "Scientific values"): small uppercase labels are mono with
+   tracking, as the readout's own eyebrows (HANDOFF fonts; review DF-19) */
+.cro-more-body .mw-eyebrow {
+  font: 600 10.5px / 1.3 var(--m-font-mono);
+  letter-spacing: var(--m-label-track);
+  text-transform: uppercase;
+  color: var(--m-text-3);
+}
+.cro-more-body .loc-section + .loc-section {
+  margin-top: 8px;
+}
+.cro-run {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--m-text-2b);
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------------------------------------------ official now */
+.mw-updates-panel.is-column {
+  background: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+/* the column keeps its head, its foot and "View all updates" in view; only the rows scroll (with a fade while more is
+   below) when open rows need more room than the window leaves */
+.mw-updates-panel.is-column {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.mw-updates-panel.is-column > .on.is-command {
+  flex: 0 1 auto;
+  min-height: 0;
+}
+.mw-updates-panel.is-column .on.is-command > :not(.on-rows),
+.mw-updates-panel.is-column > .cmd-col-foot {
+  flex: none;
+}
+.mw-updates-panel.is-column .on-rows {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.mw-updates-panel.is-column.has-more .on-rows {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+}
+.on.is-command {
+  gap: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 13px;
+}
+.on.is-command .on-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding-bottom: 8px;
+  color: var(--m-official-ink);
+}
+.on.is-command .on-head h3 {
+  font: 600 10.5px / 1.3 var(--m-font-mono);
+  letter-spacing: var(--m-label-track);
+  text-transform: uppercase;
+}
+.on.is-command .on-head-sub {
+  font: 400 10px / 1.3 var(--m-font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--m-text-3);
+}
+.on-head-zone {
+  margin-left: auto;
+  font: 400 10px / 1.3 var(--m-font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--m-text-4);
+  white-space: nowrap;
+}
+.on.is-command .on-rows {
+  gap: 0;
+}
+.on-row.is-line {
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--cmd-hair);
+  border-radius: 0;
+  background: none;
+}
+.on-row-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.on-row-toggle:hover .on-row-title strong {
+  text-decoration: underline;
+  text-decoration-color: var(--m-border-strong);
+  text-underline-offset: 3px;
+}
+.on-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-top: 6px;
+  border-radius: 999px;
+  background: var(--m-text-3);
+}
+.on-row.is-info .on-dot {
+  background: var(--m-accent);
+}
+.on-row.is-quiet .on-dot {
+  background: var(--m-official-ink);
+}
+.on-row.is-alert .on-dot {
+  background: var(--m-alert);
+  box-shadow: 0 0 0 3px rgba(238, 122, 160, 0.22);
+}
+.on-row-sum {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.on-row-title {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--m-text-body);
+  overflow-wrap: anywhere;
+}
+.on-row-title strong {
+  font-weight: 600;
+  color: var(--m-text);
+}
+.on-row-meta {
+  font: 400 10px / 1.45 var(--m-font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--m-text-4);
+  overflow-wrap: anywhere;
+}
+.on-row-chev {
+  flex: none;
+  margin-top: 4px;
+  color: var(--m-text-4);
+  transition: transform 0.15s ease;
+}
+.on-row.is-open .on-row-chev {
+  transform: rotate(90deg);
+}
+.on-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: -4px 0 12px 17px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--m-text-2b);
+}
+.on.is-command .on-line {
+  font-size: 12.5px;
+  line-height: 18px;
+}
+.on.is-command .on-meta {
+  font-size: 11.5px;
+  line-height: 17px;
+  color: var(--m-text-2b);
+}
+.on-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-top: 4px;
+}
+.on-row.is-line.is-alert {
+  border-color: var(--cmd-hair);
+}
+.on.is-command .on-foot {
+  padding-top: 12px;
+  border-top: 1px solid var(--cmd-hair);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--m-text-2b);
+}
+.cmd-col-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+.mw-link-btn.cmd-view-all {
+  padding: 2px 0;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--m-accent-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+/* "View all updates": the column opens into a glass panel (Official now, data status, the feed); the phones' Updates
+   sheet shows the same rows */
+.mw-official-slot > .on.is-command {
+  padding: 10px 14px 8px;
+}
+.mw-updates-panel.is-command-panel .mw-official-slot {
+  border-bottom: 1px solid var(--m-border);
+}
+.mw-updates-panel.is-command-panel .mw-panel-head h2 {
+  font: 600 10.5px / 1.3 var(--m-font-mono);
+  letter-spacing: var(--m-label-track);
+  text-transform: uppercase;
+  color: var(--m-text-2);
+}
+
+/* ------------------------------------------------------------------------------------------------ bottom */
+.mw[data-view='command-fire'] .mw-bottom {
+  left: var(--cmd-x);
+  right: var(--cmd-x);
+  bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+.cmd-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  min-width: 0;
+  pointer-events: none;
+}
+.cmd-row > * {
+  pointer-events: auto;
+  min-width: 0;
+}
+.mw[data-view='command-fire'] .cmd-controls {
+  --chrome-side: bottom;
+  flex: none;
+  justify-self: auto;
+}
+.mw[data-view='command-fire'] .cmd-legend {
+  flex: 1 1 auto;
+  justify-self: auto;
+  display: flex;
+  justify-content: flex-end;
+  max-width: none;
+}
+.mw[data-view='command-fire'] .mw-timeline {
+  width: 100%;
+  justify-self: stretch;
+}
+.cmd-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 24px;
+  min-width: 0;
+  pointer-events: none;
+}
+.cmd-foot > * {
+  pointer-events: auto;
+  min-width: 0;
+}
+.mw[data-view='command-fire'] .cmd-note {
+  flex: none;
+  margin: 0 !important;
+  white-space: nowrap;
+}
+.mw[data-view='command-fire'] .mw-note > .fxc {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  font: 400 10px / 14px var(--m-font-mono);
+  letter-spacing: 0.04em;
+  color: var(--m-text-4);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+.mw[data-view='command-fire'] .mw-footer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.mw[data-view='command-fire'] .mw-footer-attrib {
+  background: none;
+  font: 400 10px / 14px var(--m-font-mono);
+  color: var(--m-text-4);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+.mw[data-view='command-fire'] .mw-footer .fxm-attrib {
+  padding: 0;
+  background: none;
+  color: inherit;
+}
+
+/* legend chips + scale (map/MapLegend.tsx variant="chips"): plain chips on the map, no box */
+.fxm-legend.is-chips {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+  font-size: 12px;
+  color: var(--m-text-2);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+.fxm-legend.is-chips .fxm-legend-anchor {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+.fxm-legend.is-chips .fxm-legend-row {
+  justify-content: flex-end;
+  gap: 6px 16px;
+}
+.fxm-legend.is-chips .fxm-sw {
+  width: 14px;
+  height: 9px;
+  border-radius: 1px;
+}
+.fxm-legend.is-chips .fxm-sw-observed {
+  background: rgba(170, 55, 20, 0.7);
+  border: 1px solid var(--m-fire-2);
+  box-shadow: none;
+}
+.fxm-legend.is-chips :is(.fxm-sw-forecast, .fxm-sw-fc50) {
+  background: repeating-linear-gradient(45deg, var(--m-forecast) 0 2px, rgba(0, 0, 0, 0) 2px 4px);
+  border: 1px solid var(--m-forecast);
+}
+.fxm-legend.is-chips .fxm-sw-forecast-off {
+  border: 1px dashed var(--m-text-3);
+}
+.fxm-legend.is-chips .fxm-sw-perimeter {
+  height: 0;
+  border-top: 1.5px solid var(--m-fire-2);
+}
+.fxm-legend.is-chips .fxm-sw-selection {
+  width: 9px;
+  height: 9px;
+  margin: 0;
+  border-radius: 999px;
+  box-shadow: none;
+}
+.fxm-legend.is-chips .fxm-scale {
+  flex-direction: column-reverse;
+  align-items: flex-end;
+  gap: 2px;
+  margin-left: 6px;
+  padding: 0;
+  background: none;
+  color: var(--m-text-2b);
+}
+.fxm-legend.is-chips .fxm-scale-bar {
+  height: 4px;
+  border-width: 1.5px;
+  border-color: var(--m-text-2);
+  box-shadow: none;
+}
+.fxm-legend.is-chips .fxm-scale-label {
+  font-size: 10.5px;
+}
+.fxm-legend.is-chips .fxm-legend-toggle {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border-color: rgba(200, 200, 200, 0.18);
+  background: rgba(14, 14, 14, 0.6);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  color: var(--m-text-2);
+  font-size: 12px;
+  text-shadow: none;
+}
+.fxm-legend.is-chips .fxm-legend-pop {
+  right: 0;
+  bottom: calc(100% + 12px);
+  text-shadow: none;
+}
+
+/* ------------------------------------------------------------------------------------------------ map labels */
+/* "Observed fire" / "Modeled spread" with hairline leaders (location/CommandAreaLabels.tsx): over the map, under the
+   chrome; name Inter 13 / 600, meta mono 10.5 in the layer's colour (HANDOFF "Map labels") */
+.cmd-labels {
+  position: absolute;
+  inset: 0;
+  z-index: calc(var(--m-z-map) + 2);
+  pointer-events: none;
+}
+.cmd-labels-lines {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+.cmd-labels-lines path {
+  fill: none;
+  stroke-width: 0.9;
+  stroke-opacity: 0.75;
+}
+.cmd-labels-lines path.is-observed {
+  stroke: var(--m-fire-3);
+}
+.cmd-labels-lines path.is-modeled {
+  stroke: var(--m-forecast);
+}
+.cmd-label {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  white-space: nowrap;
+  /* a denser version of the readout's halo (decision l): the meta stays at 4.5:1 or more over bright aerial roads and
+     the AOI line at low zoom (review DF-12; measured on Eaton aerial at z9) */
+  text-shadow:
+    0 0 2px rgba(12, 12, 12, 1),
+    0 0 4px rgba(12, 12, 12, 0.95),
+    0 0 8px rgba(12, 12, 12, 0.9),
+    0 1px 2px rgba(12, 12, 12, 0.9);
+}
+.cmd-label.is-left {
+  align-items: flex-end;
+  text-align: right;
+}
+.cmd-label-name {
+  font: 600 13px / 16px var(--m-font-ui);
+  color: var(--m-text);
+}
+.cmd-label-meta {
+  font: 400 10.5px / 15px var(--m-font-mono);
+  text-transform: uppercase;
+  /* a soft dark plate under the coloured line: over bright aerial roads the halo alone left it at 3.8:1 (decision l;
+     review DF-12). Invisible over the dimmed map. */
+  align-self: flex-start;
+  border-radius: 3px;
+  background: rgba(12, 12, 12, 0.6);
+  box-shadow: 0 0 5px 2px rgba(12, 12, 12, 0.6);
+}
+.cmd-label.is-left .cmd-label-meta {
+  align-self: flex-end;
+}
+.cmd-label.is-observed .cmd-label-meta {
+  color: var(--m-fire-3);
+}
+.cmd-label.is-modeled .cmd-label-meta {
+  color: var(--m-forecast);
+}
+
+/* ------------------------------------------------------------------------------------------------ medium widths */
+@media (max-width: 1279px) {
+  .mw[data-view='command-fire'] {
+    --cmd-x: 28px;
+    --cmd-left-w: 360px;
+    --cmd-right-w: 320px;
+  }
+  .mw[data-view='command-fire'] .mw-top {
+    gap: 16px;
+  }
+  .cro-point {
+    font-size: 26px;
+    line-height: 32px;
+  }
+}
+/* below 1280 px the credits fold behind "© Credits" (App.tsx CreditsFooter fold; decision i-9, review DF-11): five
+   wrapped lines pushed the controls and the timeline up and the readout's rows off screen. The full credits open
+   above the bottom row, every text kept. Phones use the same fold (overview.css). */
+@media (min-width: 761px) and (max-width: 1279px) {
+  .mw[data-view='command-fire'] .mw-footer.is-fold {
+    position: relative;
+    display: flex;
+    justify-content: flex-end;
+  }
+  .mw[data-view='command-fire'] .mw-credits-toggle {
+    --chrome-side: bottom;
+    flex: none;
+    height: 20px;
+    padding: 0 8px;
+    border: 1px solid var(--m-border);
+    border-radius: 4px;
+    background: var(--m-panel);
+    color: var(--m-text-2);
+    font: 400 10px / 18px var(--m-font-mono);
+    letter-spacing: 0.04em;
+    text-shadow: none;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .mw[data-view='command-fire'] .mw-credits-toggle:hover,
+  .mw[data-view='command-fire'] .mw-credits-toggle[aria-expanded='true'] {
+    color: var(--m-text);
+  }
+  .mw[data-view='command-fire'] .mw-credits-toggle:focus-visible {
+    outline: none;
+    box-shadow: var(--m-focus-ring);
+  }
+  .mw[data-view='command-fire'] .mw-footer.is-open .mw-footer-attrib {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 6px);
+    width: min(440px, calc(100vw - 2 * var(--cmd-x)));
+    padding: 8px 10px;
+    border: 1px solid var(--m-border);
+    border-radius: var(--m-radius-sm);
+    background: var(--m-panel-raised);
+    box-shadow: var(--m-shadow);
+    text-align: left;
+    text-shadow: none;
+    z-index: 2;
+  }
+  .mw[data-view='command-fire'] .mw-footer-attrib[hidden] {
+    display: none;
+  }
+}
+@media (max-width: 1023px) {
+  .mw[data-view='command-fire'] {
+    --cmd-x: 20px;
+    --cmd-left-w: 320px;
+    --cmd-right-w: 290px;
+  }
+}
+
+/* ------------------------------------------------------------------------------------------------ phones */
+@media (max-width: 760px) {
+  .mw[data-view='command-fire'] {
+    --cmd-x: var(--m-gap);
+    --cmd-top: var(--m-chrome-top);
+  }
+  .mw[data-view='command-fire'] .mw-top {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      'badges controls'
+      'chip   chip';
+    gap: var(--m-gap);
+  }
+  /* LIVE (or the year) and the demo badge under the bar, left of the map controls */
+  .cmd-badges {
+    --chrome-side: top;
+    grid-area: badges;
+    align-self: center;
+    justify-self: start;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    text-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.8),
+      0 0 10px rgba(0, 0, 0, 0.6);
+  }
+  .cmd-badges .mw-demo-badge {
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 999px;
+    font: 600 10px / 1 var(--m-font-mono);
+    letter-spacing: 0.12em;
+    text-shadow: none;
+  }
+  /* the fire's name keeps a readable width */
+  .mw[data-view='command-fire'] .mw-header .picker-btn.is-title {
+    min-width: 88px;
+  }
+  /* the readout is a sheet above the timeline: its peek line always, the whole readout when opened */
+  .mw[data-view='command-fire'] .mw-card {
+    height: auto;
+    border-radius: var(--m-radius);
+  }
+  .cro.is-sheet {
+    display: flex;
+    flex-direction: column;
+    max-height: 100%;
+    padding: 0 6px 0 14px;
+    border: 1px solid var(--m-border);
+    border-radius: var(--m-radius);
+    background: var(--m-panel-strong);
+    -webkit-backdrop-filter: var(--m-panel-blur);
+    backdrop-filter: var(--m-panel-blur);
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.55);
+  }
+  .cro-peek {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+    flex: none;
+  }
+  .cro-peek-label {
+    flex: none;
+    font: 600 10px / 1 var(--m-font-mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--m-text-3);
+  }
+  .cro-peek-label.is-selected {
+    color: var(--m-select);
+  }
+  .cro-peek-value {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    color: var(--m-text);
+  }
+  .cro-peek .loc-copy,
+  .cro-peek-toggle {
+    width: 44px;
+    height: 44px;
+    flex: none;
+  }
+  .cro-body {
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: 0 8px 12px 0;
+  }
+  .cro.is-sheet:not(.is-open) .mw-sheet-handle {
+    display: none;
+  }
+  .cro-point {
+    font-size: 22px;
+    line-height: 28px;
+  }
+  .mw[data-view='command-fire'] .cro .cro-btn,
+  .mw[data-view='command-fire'] .cro-actions .loc-copy {
+    width: 40px;
+    height: 40px;
+  }
+  .mw[data-view='command-fire'] .mw-bottom {
+    bottom: 2px;
+    gap: 6px;
+  }
+  .cmd-foot {
+    justify-content: flex-start;
+    gap: 4px 10px;
+    flex-wrap: wrap;
+  }
+  /* both fixed lines stay whole (they wrap; the credits toggle keeps the end of the line) */
+  .mw[data-view='command-fire'] .cmd-note {
+    flex: 1 1 0;
+    white-space: normal;
+  }
+  .mw[data-view='command-fire'] .mw-note > .fxc {
+    white-space: normal;
+  }
+  .mw[data-view='command-fire'] .cmd-foot > .mw-footer {
+    flex: none;
+    align-self: flex-end;
+  }
+  .cmd-search-pop {
+    position: fixed;
+    top: calc(var(--m-chrome-top) + 4px);
+    left: var(--m-gap);
+    right: var(--m-gap);
+    width: auto;
+  }
+}
+
+/* ------------------------------------------------------------------------------------------------ motion */
+@media (prefers-reduced-motion: reduce) {
+  .cro-more-chev,
+  .on-row-chev {
+    transition: none;
+  }
+}

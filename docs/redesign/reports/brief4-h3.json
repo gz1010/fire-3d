@@ -1,0 +1,100 @@
+{
+  "step": "brief4-h3",
+  "summary": "H3 built the Public and Command overviews of brief 4 (PLAN-4 3.3, 6 b-e, h, 11) on H2's foundation without changing any H2 frozen file, the backend or the HTTP contract. Public opens minimal: the floating bar (logo, 'United States · all fires', view pill, '<local date> · <N> ACTIVE' with the list-absence tooltip), a centred search pill ('Check an address, town, ZIP or coordinates', its label kept for screen readers, results under it) with a separate locate-me button, compact map controls on the right, the fixed copy line ('RESEARCH PROTOTYPE · Not for operational use. ' + LIST_ABSENCE) bottom centre and a 'Show details' pill (ui/public/ShowDetailsPill.tsx, overviewDetails). Details add the Main-details panels: the controls bar (2D/3D, basemap, rotate, zoom, All states, Layers icon), 'Fires in the lower 48' (Official now, filters, list), the overview readout, scale and legend with the new swatches; medium and short screens move the legend left of the list (below 1080 px high) or into the Layers panel (below 1200 px wide). Command's overview uses the same layout with details always on, no pill, and the fire card on a click. Locate-me (location/LocateButton.tsx, locate.ts) asks the browser only on a click, selects 'Your location' (approximate over 100 m), flies there, keeps it in memory only and shows plain messages when denied, unavailable or timed out. Markers were restyled in MapLibre (sizes by type 7/11/15 and 4.5 hollow, centre dots, groups 10 + 4.2·√n capped at 36 with '28 FIRES' in Noto Sans, smaller on a phone's national view). In Public a list row, marker, label, leader label, search fire result or nearest-fire row opens the fire view (state/fireCard.ts openFireView / pickFire); zoom focus and its chips are off in Public; Command keeps the fire card; group clicks zoom; Back and browser Back return to the overview. P1 leader-line labels (map/leaderLayout.ts pure + tests, map/LeaderLabels.tsx) name up to 12 large fires below z5 with hairline leaders, a west-coast gutter column, no overlaps with chrome, markers, counts or place names, following their markers during pans. H2 known issues: controls compact / bar per view, the rotate hint floats beside the controls over no chrome (map/hintPlacement.ts + tests), soft plates behind the bar's logo/title and status, contrast measured (min 4.94:1). Labels now keep clear of their marker when zoomed in and of the card's selection ring (feature property lr). For H4: map/useMapAnchor.ts and the leaderLayout helpers for the circle-to-point leader.",
+  "files_changed": [
+    "web/src/state/fireCard.ts",
+    "web/src/state/fireCard.test.ts",
+    "web/src/state/history.test.ts",
+    "web/src/ui/shell/fireActions.ts",
+    "web/src/ui/shell/OverviewChrome.tsx",
+    "web/src/ui/shell/OverviewPanel.tsx",
+    "web/src/ui/shell/OverviewPanel.test.ts",
+    "web/src/ui/shell/PublicFireChrome.tsx",
+    "web/src/ui/shell/LayersPanel.tsx",
+    "web/src/ui/public/ShowDetailsPill.tsx (new)",
+    "web/src/ui/public/OverviewStatus.tsx (new)",
+    "web/src/ui/public/overviewText.ts (new)",
+    "web/src/ui/public/overviewText.test.ts (new)",
+    "web/src/ui/public/useOverviewCount.ts (new)",
+    "web/src/ui/public/overviewLayout.ts (new)",
+    "web/src/location/SearchBox.tsx",
+    "web/src/location/OverviewCard.tsx",
+    "web/src/location/LocateButton.tsx (new)",
+    "web/src/location/locate.ts (new)",
+    "web/src/location/locate.test.ts (new)",
+    "web/src/location/locationCheck.ts",
+    "web/src/location/location.css",
+    "web/src/map/mapController.ts",
+    "web/src/map/mapStore.ts",
+    "web/src/map/overviewLayers.ts",
+    "web/src/map/overviewLayers.test.ts",
+    "web/src/map/MapControls.tsx",
+    "web/src/map/MapLegend.tsx",
+    "web/src/map/map.css",
+    "web/src/map/leaderLayout.ts (new)",
+    "web/src/map/leaderLayout.test.ts (new)",
+    "web/src/map/LeaderLabels.tsx (new)",
+    "web/src/map/hintPlacement.ts (new)",
+    "web/src/map/hintPlacement.test.ts (new)",
+    "web/src/map/useMapAnchor.ts (new)",
+    "web/src/styles/view-public.css (new)",
+    "web/src/styles/overview.css",
+    "web/src/styles/atmosphere.css",
+    "docs/redesign/CONTRACT.md (15.5 'H3' paragraph)",
+    "docs/redesign/progress/brief4-h3.md",
+    "docs/redesign/reports/brief4-h3.json",
+    "docs/screenshots/brief4-h3-*.png"
+  ],
+  "screenshots": [
+    "docs/screenshots/brief4-h3-public-overview-minimal.png",
+    "docs/screenshots/brief4-h3-public-overview-details.png",
+    "docs/screenshots/brief4-h3-public-minimal-vs-render.png",
+    "docs/screenshots/brief4-h3-public-details-vs-render.png",
+    "docs/screenshots/brief4-h3-public-overview-details-1440x1000.png",
+    "docs/screenshots/brief4-h3-public-overview-details-1024.png",
+    "docs/screenshots/brief4-h3-command-overview.png",
+    "docs/screenshots/brief4-h3-locate-me.png",
+    "docs/screenshots/brief4-h3-locate-denied.png",
+    "docs/screenshots/brief4-h3-click-public-fire.png",
+    "docs/screenshots/brief4-h3-click-command-card.png",
+    "docs/screenshots/brief4-h3-rotate-hint-command.png",
+    "docs/screenshots/brief4-h3-rotate-hint-overview.png",
+    "docs/screenshots/brief4-h3-phone-minimal.png",
+    "docs/screenshots/brief4-h3-phone-details-sheet.png"
+  ],
+  "comparison": {
+    "public_minimal_vs_render": "Matches Main.jpg's layout at 1440x1144: bar with logo, title, view pill and 'date · N ACTIVE'; centred search pill and a separate locate button; leader labels down the west coast and over the interior; groups with 'N FIRES'; the fixed copy line bottom centre and 'Show details' bottom right. Differences: the live lists hold far more fires than the mockup (1,361 this season), so there are more groups; compact map controls sit on the right edge (H2 known issue a).",
+    "public_details_vs_render": "Matches Main-details.jpg: controls bar under the search with the Layers icon, 'Fires in the lower 48' with Official now, filters and the list on the right, the overview readout bottom left, scale, the legend bottom centre, 'Hide details' with the count. Extra versus the mockup, kept on purpose: the rotate buttons in the bar, the list-absence foot of the list, the legend's 'Details' toggle."
+  },
+  "measured": {
+    "unobstructed_1440x1000": {
+      "public_minimal": 0.897,
+      "public_details": 0.546,
+      "command_overview": 0.557
+    },
+    "contrast_min": "4.94:1 (every overview text run, text made transparent with halos kept, 90th-percentile background: Public minimal and details over aerial at the national zoom, the Bonneville salt flats at z10, White Sands at z11, Command overview on the dark basemap)",
+    "browser_checks": {
+      "clicks": "9/9 (list row, marker, leader label open the fire view in Public; Back and browser Back; zooming out keeps the fire view; details kept; Command row opens the fire card)",
+      "locate_me": "7/7 (memory only, 'Your location' not approximate at 30 m, never in the URL or storage, flies there, no outside location service, the card shows the point, denied gives a plain message and no point)"
+    },
+    "firms_key_scan": "0 occurrences in the working-tree diff and untracked files (count only)"
+  },
+  "gates": "typecheck ok / lint 55 warnings, all in src/scene (none added) / tests 96 files: 1338 passed, 2 skipped, 0 failed / build ok. No backend file changed.",
+  "commits": [
+    "bfd3739 brief 4 H3: work-in-progress snapshot (overview chrome, locate-me, markers, click to fire view)",
+    "e6abf32 brief 4 H3: work-in-progress snapshot (leader labels, rotate hint placement, medium screens)",
+    "7af3b08 brief 4 H3: finished (leader labels settle, label clearance, screenshots, CONTRACT 15.5, report)",
+    "brief 4 H3: report commit list (this commit)"
+  ],
+  "known_issues": [
+    "Leader labels (deviation from decision e's fallback): below z5 the MapLibre labels of every leader candidate are hidden, named or not, because MapLibre cannot keep its labels clear of the DOM overlay. A large fire past the 12th or with no free spot has no name on the map until z5 (the list names every fire).",
+    "The one-time rotate hint floats over the free map for up to 12 s (or until closed); it never covers chrome, but it can cover leader labels and MapLibre labels, which do not treat it as an obstacle.",
+    "Public minimal shows the markers of the list's current filter (the 2026 season by default: about 1,361 fires), so it is busier than Main.jpg, which shows about 200 active fires.",
+    "At street zoom (locate-me flies to z14) the simple selected-point label ('Your location / SELECTED') can overlap basemap POI or transit labels; the selected-point marker was kept simple as asked.",
+    "The Public fire view only gets the compact controls from H3; its layout (search panel, 'not prepared' notice, official block) is still the H2 one until H4.",
+    "Command on phones keeps the default MapControls row (not the compact column); the details sheet on phones is the list sheet with a peek.",
+    "Below 1280 px wide (or 1400 px wide and under 1080 px high) the scale bar is hidden in Public details to leave room for the readout and legend; the legend moves into the Layers panel below 1200 px wide.",
+    "Contrast, unobstructed shares and screenshots were measured with SwiftShader (no GPU); a GPU render can differ by a few levels of anti-aliasing."
+  ],
+  "notes_for_others": "H4: PublicFireChrome's body is yours (H3 only set <MapControls variant=\"compact\" />). Use map/useMapAnchor.ts (useMapAnchor([lon, lat]) -> { x, y, inView } | null, per frame while the map moves) and map/leaderLayout.ts (segmentHitsRect, circleHitsRect, rectsOverlap, labelBox) for the hazard-circle -> reported-point leader. SearchBox variant=\"pill\" and LocateButton are reusable. pickFire / openFireView / opensFireView live in state/fireCard.ts (re-exported by ui/shell/fireActions.ts). Append fire-view rules to styles/view-public.css under .mw[data-view='public-fire']. Overview markers: PALETTE, markerRadius, groupRadius are exported from map/overviewLayers.ts; features carry kind, r, lr (label radius) and dot. CONTRACT 15.5 ends with '_H4: to be filled._'. No H2 frozen file was changed."
+}

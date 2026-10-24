@@ -1,8 +1,8 @@
 // Header menus (SPEC 9.4): View (style, lattice field, 2D/3D, exaggeration, tree scale, DOF, quality), Analysis,
-// Share (copies ?incident=&t=&mode=) and Settings.
+// Share (copies ?incident=&t=&mode=) and Settings. Brief 4 (H5): each opens from a round icon pill of the floating
+// top bar (ui/shell/TopBar.tsx IconPill: the label is the accessible name and the tooltip; open = accent).
 import {
   BarChart3,
-  ChevronDown,
   Crosshair,
   Database,
   Eye,
@@ -18,7 +18,7 @@ import {
   SlidersHorizontal,
   TrendingUp,
 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { getHealth } from '../api/client'
 import type { HealthResponse } from '../api/types'
@@ -32,16 +32,12 @@ import { useTimeFormat, useZoneSource } from '../state/timeZone'
 import { MenuItem, MenuSection, MenuSeparator, Popover, Segmented, Slider, Switch } from './controls'
 import { useNow } from './hooks'
 import { EXAGGERATIONS, LATTICE_FIELDS, STYLE_OPTIONS } from './options'
+import { IconPill } from './shell/TopBar'
 import { toast } from './toast'
 
-function MenuButton({ label, icon, open, setOpen, anchor }: { label: string; icon: React.ReactNode; open: boolean; setOpen: (v: boolean) => void; anchor: React.RefObject<HTMLButtonElement | null> }) {
-  return (
-    <button ref={anchor} type="button" className={`hdr-menu-btn ${open ? 'is-open' : ''}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
-      {icon}
-      <span>{label}</span>
-      <ChevronDown size={12} className="caret" />
-    </button>
-  )
+/** A menu's round icon pill in the top bar (accent while its menu is open). */
+function MenuButton({ label, tip, icon, open, setOpen, anchor }: { label: string; tip?: string; icon: ReactNode; open: boolean; setOpen: (v: boolean) => void; anchor: RefObject<HTMLButtonElement | null> }) {
+  return <IconPill ref={anchor} icon={icon} label={label} tip={open ? undefined : (tip ?? label)} expanded={open} aria-haspopup="menu" className="fx-tool" onClick={() => setOpen(!open)} />
 }
 
 
@@ -63,7 +59,7 @@ export function ViewMenu() {
   const set = useStore.getState
   return (
     <>
-      <MenuButton label="View" icon={<Eye size={14} />} open={open} setOpen={setOpen} anchor={anchor} />
+      <MenuButton label="View options" tip="View options: visual style, lattice field, camera, quality" icon={<Eye size={15} />} open={open} setOpen={setOpen} anchor={anchor} />
       <Popover anchor={anchor} open={open} onClose={() => setOpen(false)} placement="bottom-end" width={320} label="View options" className="menu-pop">
         <MenuSection label="Visual style">
           <div className="style-cards">
@@ -175,7 +171,7 @@ export function AnalysisMenu() {
   const busy = s.job != null && (s.job.status === 'queued' || s.job.status === 'running')
   return (
     <>
-      <MenuButton label="Analysis" icon={<BarChart3 size={14} />} open={open} setOpen={setOpen} anchor={anchor} />
+      <MenuButton label="Analysis" tip="Analysis: forecasts, jumps in time, profile path, bundle" icon={<BarChart3 size={15} />} open={open} setOpen={setOpen} anchor={anchor} />
       <Popover anchor={anchor} open={open} onClose={() => setOpen(false)} placement="bottom-end" width={292} label="Analysis" className="menu-pop">
         <MenuSection label="Forecast">
           <MenuItem
@@ -260,10 +256,16 @@ export function ShareButton() {
     }
   }
   return (
-    <button type="button" className="hdr-menu-btn" onClick={() => void copy()} disabled={!id} data-tip="Copy a link to this incident at the current time">
-      <Share2 size={14} />
-      <span>Share</span>
-    </button>
+    <IconPill
+      icon={<Share2 size={15} />}
+      label="Share"
+      tip="Copy a link to this incident at the current time"
+      aria-disabled={!id}
+      className="fx-tool"
+      onClick={() => {
+        if (id) void copy()
+      }}
+    />
   )
 }
 
@@ -272,17 +274,7 @@ export function SettingsMenu() {
   const anchor = useRef<HTMLButtonElement | null>(null)
   return (
     <>
-      <button
-        ref={anchor}
-        type="button"
-        className={`icon-btn hdr-icon ${open ? 'is-active' : ''}`}
-        aria-label="Settings"
-        aria-expanded={open}
-        data-tip={open ? undefined : 'Settings'}
-        onClick={() => setOpen(!open)}
-      >
-        <Settings size={15} />
-      </button>
+      <IconPill ref={anchor} icon={<Settings size={15} />} label="Settings" tip={open ? undefined : 'Settings'} expanded={open} className="fx-tool" onClick={() => setOpen(!open)} />
       <Popover anchor={anchor} open={open} onClose={() => setOpen(false)} placement="bottom-end" width={330} label="Settings" className="menu-pop">
         {open && <SettingsBody />}
       </Popover>
@@ -356,6 +348,14 @@ function SettingsBody() {
             <kbd>←</kbd> <kbd>→</kbd>
           </dt>
           <dd>Step 1 h (Shift: 6 h)</dd>
+          <dt>
+            <kbd>Q</kbd> <kbd>E</kbd>
+          </dt>
+          <dd>Turn the view 15° left / right</dd>
+          <dt>
+            <kbd>N</kbd>
+          </dt>
+          <dd>North up</dd>
           <dt>
             <kbd>Esc</kbd>
           </dt>

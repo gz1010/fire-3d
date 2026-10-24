@@ -1,0 +1,154 @@
+{
+  "summary": "Planner for brief 4 (handoff restyle). Wrote docs/redesign/PLAN-4.md (token strategy, what H2 must leave for the parallel steps, element-by-element mapping for the top bar, Command, Main, Fire view and Forensic, file ownership for H2 / H3+H4 / H5 with disjoint lists, decisions a-m with a recommendation each, the Command feature table, tests at risk, screenshot recipe, risks), appended CONTRACT.md section 15 (tokens, runtime CSS vars, shared components, shared state, fixed wording, As built placeholders) and saved 8 'before' screenshots (6 at 1440x1000, 2 phones) as JPEG q85 in docs/redesign/handoff-4/before/. No app code changed. Key findings: rotation gestures already work in 2D MapLibre but nothing visible offers them, 2D resets the bearing and Forensic 2D disables rotation; the handoff's CSS colour tint would grey the fire layers (same WebGL canvas), so the tint must be basemap paint; map labels cannot use JetBrains Mono (OpenFreeMap glyphs are Noto Sans only); real local bundles have no forecast run (only fixtures do); Forensic screenshots need a longer screenshot timeout and low quality under SwiftShader (worked in ~50-65 s with a scratch script).",
+  "decisions_needed": [
+    {
+      "id": "a",
+      "question": "Public inside a fire: what the fire view shows and what happens to the location card, search, updates feed, timeline and modeled spread; unprepared fires; fires without a perimeter.",
+      "options": [
+        "A: fire view per the screen: newest perimeter only (any time, own source + time, Stale tag), reported point, official layers kept; facts from the agency record + Official now; search icon opens the centred pill; location card without the model block (link to Command); no feed, timeline, Analysis or picker; time pinned to the latest observation; unprepared: reported point + 'Prepare map data (1-3 min)'; no perimeter: say so, do not substitute the estimated raster",
+        "B: today's Public in-fire layout restyled (timeline, updates, card) plus the hazard circle",
+        "C: as A but keep the model sentence in the location card"
+      ],
+      "recommendation": "A"
+    },
+    {
+      "id": "b",
+      "question": "Clicking a fire in the Public overview (list row, marker, label, search result, location-card row): today showFireCard() opens the fire card and flies there (prepared fires then open by zoom focus). New flow?",
+      "options": [
+        "A: open the fire view directly (openFireView = selectIncident(id, {source:'card'}), one history push, no build); zoom focus off in Public (no chrome swap while zooming); 'not prepared' chips hidden in Public; Command and Forensic keep the fire card",
+        "B: fire card first, then 'Open'",
+        "C: card only for unprepared fires, fire view for prepared ones"
+      ],
+      "recommendation": "A"
+    },
+    {
+      "id": "c",
+      "question": "Command overview (no fire, no mockup): what does it look like, and who builds it?",
+      "options": [
+        "A: Main's layout with details shown by default (no 'Show details' pill), Command density, fire clicks open the fire card as today; built by H3+H4, who own the overview chrome",
+        "B: Command-style floating readouts (national counts as number - LABEL rows, Official now right) without the list",
+        "C: identical to Public minimal"
+      ],
+      "recommendation": "A"
+    },
+    {
+      "id": "d",
+      "question": "Which overview panels go behind 'Show details', and which count is on the pill?",
+      "options": [
+        "A: behind details: controls bar, 'Fires in the lower 48' panel (national Official now, filters, sources, list, footer), overview readout, scale bar, legend; always visible: bar, search + locate, compact compass cluster, disclaimer, credits, location card when a point is picked, list-down and missing-fire banners; count = fires the map shows for the current filter (the 'Show all N' number)",
+        "B: same panels, count = active fires only (the mockup's 203)"
+      ],
+      "recommendation": "A"
+    },
+    {
+      "id": "e",
+      "question": "Marker restyle, '28 FIRES' group labels and leader-line labels: how to build them within a few thousand markers?",
+      "options": [
+        "A: keep MapLibre GL layers and clustering; transparent circles + centre-dot layer, radius by type (small r7, active r11, pinned r15, other ring r4.5, groups 10+3*sqrt(n) capped 34); group labels as MapLibre symbols in Noto Sans Bold (JetBrains Mono not available in OpenFreeMap glyphs); leader labels as a DOM/SVG overlay for at most 12 large named fires with a greedy collision layout",
+        "B: as A but group labels in the DOM overlay too (JetBrains Mono, more per-frame work)",
+        "C: everything as DOM markers (too slow for thousands)"
+      ],
+      "recommendation": "A (and choose the group size formula: the render fits ~3*sqrt(n), HANDOFF text says 4.2*sqrt(n))"
+    },
+    {
+      "id": "f",
+      "question": "Rotation (compass heading) in all modes, including a Mac trackpad: which controls?",
+      "options": [
+        "A: visible rotate buttons (15 deg) beside the compass in every view (bar, compact cluster, Forensic), drag the compass to set the heading (click = north up), Q / E / N keys routed to the visible view, Safari trackpad rotate via gesture events (untestable in the cloud), Forensic 2D rotation enabled (right-drag, modifier-drag, two-finger twist), heading kept on 2D/3D and map/Forensic switches",
+        "B: buttons and keys only",
+        "C: gestures only plus a hint"
+      ],
+      "recommendation": "A"
+    },
+    {
+      "id": "g",
+      "question": "Globe-like dimming as you zoom in: implementation and where it applies.",
+      "options": [
+        "A: CSS overlay between the map canvas and the chrome: a circular radial vignette centred on the safe area (radius = half its shorter side), opacity from the zoom (z3 .25 to z10 1), plus the screens' static edge gradients; Public and Command, 2D and 3D; not Forensic",
+        "B: MapLibre fog/sky (3D only)",
+        "C: WebGL post-processing pass"
+      ],
+      "recommendation": "A"
+    },
+    {
+      "id": "h",
+      "question": "Narrow screens and phones: how does each view adapt?",
+      "options": [
+        "A: keep today's model (one bottom sheet at a time, peek bar, compact bar + menu under 1024 px); overview: full-width search + locate, 'Show details' opens the list sheet; fire view: small circle in a header strip, facts in a bottom sheet; Command: readout and Official now as sheets, full-width timeline; Forensic as today",
+        "B: hide the hazard circle and readouts on phones"
+      ],
+      "recommendation": "A"
+    },
+    {
+      "id": "i",
+      "question": "Handoff copy that conflicts with the safety rules: replace it as listed?",
+      "options": [
+        "A: 'N/A' evacuations -> 'Not available in this state'; 'None' Red Flag -> 'None in effect' + not an all-clear; 'Fire area now' -> 'Latest perimeter · source · own time (age)' + Stale; 203 ACTIVE with the list-absence tooltip; Main disclaimer uses the 14.14 LIST_ABSENCE string; Command official rows keep issuer + time when collapsed and open by default when an order, warning or alert is in effect; distance chip says what it measures and stays in the browser; add 'Not an all-clear. Follow local officials.' to Command and Forensic; keep full credit texts; active view tab accent everywhere (Main shows #e6e6e6)",
+        "B: copy the mockups' wording verbatim"
+      ],
+      "recommendation": "A"
+    },
+    {
+      "id": "j",
+      "question": "Map tint (#333 mix-blend-mode: color in the screens): CSS overlay or basemap paint?",
+      "options": [
+        "A: basemap paint (aerial raster-saturation / brightness per view, neutral grey dark basemap), so fire, official and marker layers keep their colour",
+        "B: CSS blend overlay (greys the fire layers too, since they share the WebGL canvas)"
+      ],
+      "recommendation": "A"
+    },
+    {
+      "id": "k",
+      "question": "Keep the user's heading when switching 2D/3D and between the map and Forensic (today 2D resets to north and the hand-off drops it)?",
+      "options": [
+        "A: keep the heading; north up only on request (compass click, N, North up)",
+        "B: keep today's reset"
+      ],
+      "recommendation": "A"
+    },
+    {
+      "id": "l",
+      "question": "Lighter glass (.62-.74 alpha) versus brief 2's 4.5:1 contrast rule for meta text over aerial photos.",
+      "options": [
+        "A: keep the handoff values, measure composited contrast over bright aerial bundles and raise a panel's alpha or edge gradient where it fails",
+        "B: keep today's .94 panels"
+      ],
+      "recommendation": "A"
+    },
+    {
+      "id": "m",
+      "question": "The brief 1/2 target of >= 75 % unobstructed map (Public, 1440x900): the fire view's left column leaves about 68 %.",
+      "options": [
+        "A: drop the target for the handoff layouts (the user's design), keep the map full-bleed, frame the fire in the free area, record __mapChrome().unobstructed per view",
+        "B: keep the target and narrow the columns"
+      ],
+      "recommendation": "A"
+    }
+  ],
+  "risks": [
+    "Contrast: lighter glass and text on gradients over bright aerial photos may fall below 4.5:1 for meta text (decision l).",
+    "Hidden official information: Command's collapsed official rows and Public's minimal overview hide the national NWS list and the legend for the pink NWS polygons by default (decisions d, i).",
+    "H3+H4 is the largest step (two views, markers, leader labels, locate-me, Public fire map profile, phones); PLAN-4 section 4 gives a P0/P1 cut line.",
+    "Global Forensic CSS (theme.css, controls.css, overlays.css, header.css incl. the picker popover) is edited by H5 while H3+H4 works on the map workspace; map-bridge.css protects the map, and H5 must post Public + Command screenshots after changing them.",
+    "Source-regex tests over mapController.ts (userInput.test.ts, fireCard.test.ts) make rotation and click-flow changes brittle; every camera call must stay inside this.input.ours(...).",
+    "The animated feTurbulence hazard circle repaints its filter every frame (CPU cost); freeze under reduced motion and pause when hidden.",
+    "DOM leader labels over WebGL must follow pans, rotation and 3D tilt; hide during zoom gestures.",
+    "Safari trackpad rotation cannot be verified in the cloud (Chrome only); Chrome on a Mac has no trackpad rotate gesture at all.",
+    "Forensic screenshots time out under SwiftShader with the stock shot.mjs; H2 adds --shot-timeout and --quality low.",
+    "Changing Public's click flow and turning zoom focus off in Public changes brief-2 decision 10 behaviour; Back/history must stay correct.",
+    "Real local bundles have no forecast run; only the synthetic fixtures (demo badge) show modeled spread and the forecast part of the timeline."
+  ],
+  "files_written": [
+    "docs/redesign/PLAN-4.md",
+    "docs/redesign/CONTRACT.md (section 15 appended after section 14)",
+    "docs/redesign/handoff-4/before/public-overview.jpg",
+    "docs/redesign/handoff-4/before/public-fire-lower-sugarloaf.jpg",
+    "docs/redesign/handoff-4/before/command-fire-fixture-live.jpg",
+    "docs/redesign/handoff-4/before/command-overview.jpg",
+    "docs/redesign/handoff-4/before/forensic-fixture-live.jpg",
+    "docs/redesign/handoff-4/before/forensic-lower-sugarloaf.jpg",
+    "docs/redesign/handoff-4/before/phone-public-overview.jpg",
+    "docs/redesign/handoff-4/before/phone-public-fire-lower-sugarloaf.jpg",
+    "docs/redesign/reports/brief4-planner.json"
+  ]
+}

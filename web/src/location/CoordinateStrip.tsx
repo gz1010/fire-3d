@@ -15,6 +15,7 @@ import { useStore } from '../state/store'
 import { useTimeFormat } from '../state/timeZone'
 import { useWorkspace, type SelectedLocation } from '../state/workspace'
 import { useCoordsVariant } from '../ui/shell/coordsVariant'
+import { selectedLabel } from './readoutText'
 import './location.css'
 
 /** Copy text; falls back to a hidden textarea where the async clipboard is unavailable. */
@@ -43,7 +44,7 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-function CopyButton({ text, label }: { text: string; label: string }) {
+export function CopyButton({ text, label }: { text: string; label: string }) {
   const [state, setState] = useState<'idle' | 'ok' | 'fail'>('idle')
   const timer = useRef<number | undefined>(undefined)
   useEffect(() => () => window.clearTimeout(timer.current), [])
@@ -71,13 +72,6 @@ function CopyButton({ text, label }: { text: string; label: string }) {
   )
 }
 
-function selectedLabel(sel: SelectedLocation): string {
-  if (sel.source === 'address') return sel.adjusted ? 'Selected address · pin moved' : 'Selected address · approximate'
-  if (sel.source === 'event') return sel.approximate ? 'Event location · estimated' : 'Event location'
-  if (sel.source === 'incident') return 'Selected · incident reported location'
-  if (sel.source === 'coords') return sel.adjusted ? 'Entered point · moved' : 'Entered point'
-  return sel.adjusted ? 'Selected point · moved' : 'Selected point'
-}
 
 function Coord(props: { kind: 'incident' | 'selected'; label: string; hint: string; lat: number; lon: number; zone: number | null; command: boolean; onLocate: () => void }) {
   const { kind, label, hint, lat, lon, zone, command, onLocate } = props

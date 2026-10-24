@@ -4,6 +4,7 @@
 // for opening and leaving fires are written by state/history.ts.
 import { useEffect } from 'react'
 import type { Mode } from '../api/types'
+import { popoverOpen, rotationKey, runRotationKey } from './rotation'
 import { defaultTimeFor, getTimeBounds, useStore } from './store'
 
 const HOUR = 3_600_000
@@ -164,15 +165,20 @@ function isTypingTarget(el: EventTarget | null): boolean {
   return e.tagName === 'INPUT' || e.tagName === 'TEXTAREA' || e.tagName === 'SELECT' || e.isContentEditable
 }
 
-/** Shortcuts: H panels, Space play/pause, ←/→ step 1 h (Shift 6 h), Esc stops path drawing. Ignored while typing;
- *  Space/arrows only act when focus is not on another control. */
+/** Shortcuts: H panels, Space play/pause, ←/→ step 1 h (Shift 6 h), Esc stops path drawing, Q / E turn the visible
+ *  view 15° left / right and N puts north up (brief 4; state/rotation.ts routes them to the map or the Forensic camera;
+ *  not while a popover is open). Ignored while typing; Space/arrows only act when focus is not on another control. */
 export function useHotkeys(): void {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || isTypingTarget(e.target)) return
       const s = useStore.getState()
       const onControl = (e.target as HTMLElement | null)?.closest?.('button, [role="slider"], a, [tabindex]') != null
-      if (e.key === 'h' || e.key === 'H') {
+      const turn = rotationKey(e)
+      if (turn) {
+        // a held key repeats the turn; an open menu or list keeps its letters (type-ahead)
+        if (!popoverOpen(document, e.target) && runRotationKey(turn)) e.preventDefault()
+      } else if (e.key === 'h' || e.key === 'H') {
         s.togglePanelsCollapsed()
         e.preventDefault()
       } else if (e.key === ' ' && !onControl) {

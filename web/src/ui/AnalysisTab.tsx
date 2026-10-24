@@ -87,7 +87,7 @@ function Runner({ manifest, job }: { manifest: IncidentManifest; job: JobStatus 
         <div className="runner-row">
           <span className="label">Start</span>
           <span className="runner-start">
-            <span className="mono gold">
+            <span className="mono runner-time">
               {fmtAt(startMs, tf, { zone: true })}
             </span>
             {manifest.ignition && <span className="mono muted">{fmtTPlus((startMs - manifest.ignition.t_ms) / HOUR_MS)}</span>}
@@ -141,7 +141,14 @@ function RunList({ manifest }: { manifest: IncidentManifest }) {
   const now = useNow(30_000)
   const runs = manifest.forecasts
   return (
-    <Section title="Runs" aside={<span className="mono muted">{runs.length}</span>}>
+    <Section
+      title={
+        <>
+          Runs <span className="exp-tag">experimental model</span>
+        </>
+      }
+      aside={<span className="mono muted">{runs.length}</span>}
+    >
       {runs.length === 0 ? (
         <EmptyNote icon={<Flame size={15} />} title="No forecast runs yet">
           Run one above. Each run simulates every ensemble member and stores arrival-time quantiles.
@@ -209,7 +216,7 @@ function RunSummary({ manifest, forecast }: { manifest: IncidentManifest; foreca
     <Section
       title={
         <>
-          Selected run · <span className="mono run-id-inline">{forecast.run_id}</span>
+          Selected run · <span className="mono run-id-inline">{forecast.run_id}</span> <span className="exp-tag">experimental</span>
         </>
       }
       aside={<span className="mono muted">{forecast.weather.members} members</span>}

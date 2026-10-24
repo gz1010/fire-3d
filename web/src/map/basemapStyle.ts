@@ -1,9 +1,12 @@
 // The three Public/Command basemaps (BRIEF §3, §5), derived at runtime from OpenFreeMap's published styles:
-//   dark    OpenFreeMap "dark" restyled to the chrome's navy palette (Image 1): subdued land, water and roads,
+//   dark    OpenFreeMap "dark" restyled to the chrome's neutral greys (brief 4 handoff): subdued land, water and roads,
 //           brighter place labels with halos, plus light terrain shading from Mapterhorn.
 //   roads   OpenFreeMap "liberty" (road / navigation style) with the same terrain shading.
 //   aerial  USGS Imagery Only (dated orthoimagery), desaturated and darkened (Image 2), with liberty's roads as thin
-//           translucent lines and its road / place / water labels in white with dark halos.
+//           translucent lines and its road / place / water labels in white with dark halos. Brief 4 (decision j): how
+//           grey and dark the photos are is the map tint (AERIAL_TINT: stronger on the national overview, as today
+//           inside a fire); it is paint on the photo layer only, so fire, official and selection layers keep their
+//           colours. The dark basemap is neutral grey already; Roads stay as published.
 // Every derived style also carries the Mapterhorn raster-dem source used for 3D terrain (two separate DEM sources:
 // MapLibre advises against sharing one between hillshade and terrain). Symbol layers are moved after all other basemap
 // layers (stable order), so wildfire overlays can be inserted directly below the labels and stay above roads.
@@ -39,7 +42,7 @@ export const BUILDINGS_3D_LAYER = 'fx-buildings-3d'
 export const BUILDINGS_MINZOOM = 15
 const BUILDINGS_FADE_FROM = 14.5
 /** Muted building colours per basemap (never coloured by fire state) and their opacity. */
-export const BUILDING_COLORS: Record<Basemap, string> = { dark: '#4a5566', roads: '#a8a095', aerial: '#c3c9d1' }
+export const BUILDING_COLORS: Record<Basemap, string> = { dark: '#555555', roads: '#a8a095', aerial: '#c3c9d1' }
 export const BUILDING_OPACITY = 0.6
 
 /** The legend caveat for today's OpenStreetMap shapes over a burned area (brief 2, decision 8). */
@@ -47,34 +50,52 @@ export function buildingsCaveat(hasFire: boolean): string {
   return `3D shapes: today's OpenStreetMap; buildings destroyed by ${hasFire ? 'this fire' : 'a fire'} may be missing; not a damage assessment`
 }
 
-/** Navy palette of the dark basemap (kept close to the --m-bg / --m-text tokens in styles/map-tokens.css). */
+/** Neutral grey palette of the dark basemap (brief 4: greys plus hazard colour; kept close to the --m-bg / --m-text
+ *  tokens in styles/map-tokens.css). Water keeps a faint cool tint so it still reads as water. */
 export const DARK = {
-  background: '#0b1119',
-  water: '#0c2134',
-  waterway: '#12304a',
-  waterLabel: '#6f8fb3',
-  residential: '#131c27',
-  wood: '#0e1915',
-  park: '#0f1c18',
-  building: '#17202b',
-  buildingOutline: '#212c39',
-  aeroway: '#18222e',
-  path: '#253244',
-  minor: '#212c3a',
-  majorCasing: 'rgba(72,88,108,0.85)',
-  majorInner: '#2a3647',
-  motorwayCasing: 'rgba(92,108,128,0.9)',
-  motorwayInner: '#394656',
-  rail: '#263140',
-  boundary: '#3d4c5e',
-  roadLabel: '#98a5b3',
-  motorwayLabel: '#b9c4cf',
-  halo: 'rgba(8,12,18,0.92)',
-  cityLabel: '#e6ebf1',
-  townLabel: '#cfd8e2',
-  villageLabel: '#b7c3cf',
-  minorPlaceLabel: '#9aa8b7',
+  background: '#0c0c0c',
+  water: '#161b20',
+  waterway: '#1d242b',
+  waterLabel: '#8b949d',
+  residential: '#151515',
+  wood: '#111311',
+  park: '#121412',
+  building: '#1a1a1a',
+  buildingOutline: '#252525',
+  aeroway: '#1b1b1b',
+  path: '#2b2b2b',
+  minor: '#262626',
+  majorCasing: 'rgba(98,98,98,0.85)',
+  majorInner: '#303030',
+  motorwayCasing: 'rgba(120,120,120,0.9)',
+  motorwayInner: '#404040',
+  rail: '#2d2d2d',
+  boundary: '#4a4a4a',
+  roadLabel: '#a3a3a3',
+  motorwayLabel: '#c4c4c4',
+  halo: 'rgba(10,10,10,0.92)',
+  cityLabel: '#ececec',
+  townLabel: '#d6d6d6',
+  villageLabel: '#bfbfbf',
+  minorPlaceLabel: '#a6a6a6',
 } as const
+
+/** The basemap tint (brief 4 decision j; MapActions.setTint): 'overview' (the national map, the handoff's .75 grey
+ *  overlay), 'fire' (a fire view and Command, .35; today's aerial look), 'none' (the photos as published). */
+export type TintLevel = 'overview' | 'fire' | 'none'
+
+/** Aerial photo paint per tint level: raster-saturation and raster-brightness-max of the photo layer. */
+export const AERIAL_TINT: Record<TintLevel, { saturation: number; brightnessMax: number }> = {
+  overview: { saturation: -0.85, brightnessMax: 0.64 },
+  fire: { saturation: -0.6, brightnessMax: 0.68 },
+  none: { saturation: 0, brightnessMax: 1 },
+}
+
+/** The photo layer's paint properties for a tint level. */
+export function aerialTintPaint(level: TintLevel): { 'raster-saturation': number; 'raster-brightness-max': number } {
+  const t = AERIAL_TINT[level] ?? AERIAL_TINT.fire
+  return { 'raster-saturation': t.saturation, 'raster-brightness-max': t.brightnessMax }
+}
 
 export interface DerivedStyle {
   style: StyleSpecification
@@ -108,7 +129,7 @@ function hillshadeLayer(kind: 'dark' | 'light'): LayerSpecification {
         ? {
             'hillshade-exaggeration': 0.5,
             'hillshade-shadow-color': 'rgba(0,0,0,0.6)',
-            'hillshade-highlight-color': 'rgba(150,178,208,0.13)',
+            'hillshade-highlight-color': 'rgba(190,190,190,0.12)',
             'hillshade-accent-color': 'rgba(0,0,0,0.2)',
           }
         : {
@@ -176,7 +197,7 @@ function insertAfterLast(layers: LayerSpecification[], layer: LayerSpecification
 /** Terrain shading goes above land cover / land use areas and below water lines, buildings, roads and labels. */
 const isLandArea = (l: LayerSpecification) => (l.type === 'fill' || l.type === 'raster') && /^(natural_earth|landuse|landcover|park|water$)/.test(l.id)
 
-/** OpenFreeMap "dark" in the navy palette. Unknown layers are kept as published. */
+/** OpenFreeMap "dark" in the neutral grey palette. Unknown layers are kept as published. */
 export function deriveDark(base: StyleSpecification): DerivedStyle {
   const s = clone(base)
   const layers = (s.layers as AnyLayer[]).map((l) => {
@@ -272,9 +293,9 @@ const AERIAL_DROP = /^(natural_earth|park|landuse|landcover|water$|aeroway_fill|
 export const AERIAL_MAJOR_ROAD = 'rgba(255,238,205,0.45)'
 export const AERIAL_MINOR_ROAD = 'rgba(236,241,247,0.34)'
 
-/** USGS imagery, desaturated and darkened, with liberty's roads and labels on top. The photos have no 2D building
- *  footprints of their own (roofs are in the photo); the muted 3D buildings show in 3D only. */
-export function deriveAerial(base: StyleSpecification): DerivedStyle {
+/** USGS imagery, desaturated and darkened (the tint level), with liberty's roads and labels on top. The photos have no
+ *  2D building footprints of their own (roofs are in the photo); the muted 3D buildings show in 3D only. */
+export function deriveAerial(base: StyleSpecification, tint: TintLevel = 'fire'): DerivedStyle {
   const s = clone(base)
   guardFilters(s.layers as AnyLayer[])
   const kept: AnyLayer[] = []
@@ -304,7 +325,7 @@ export function deriveAerial(base: StyleSpecification): DerivedStyle {
     id: IMAGERY_LAYER,
     type: 'raster',
     source: IMAGERY_SOURCE,
-    paint: { 'raster-saturation': -0.6, 'raster-brightness-max': 0.68, 'raster-contrast': 0.06, 'raster-fade-duration': 150 },
+    paint: { ...aerialTintPaint(tint), 'raster-contrast': 0.06, 'raster-fade-duration': 150 },
   }
   const withImagery = insertBefore(kept, imagery, (l) => l.id !== 'background')
   const { layers, labelLayerId } = labelsLast(withImagery)
@@ -312,13 +333,13 @@ export function deriveAerial(base: StyleSpecification): DerivedStyle {
   return { style: s, labelLayerId, overlayBeforeId: BUILDINGS_3D_LAYER, vector: true }
 }
 
-/** Without OpenFreeMap: navy background (+ the imagery for aerial, + terrain shading otherwise). Overlays still work. */
-export function fallbackStyle(basemap: Basemap): DerivedStyle {
+/** Without OpenFreeMap: dark background (+ the imagery for aerial, + terrain shading otherwise). Overlays still work. */
+export function fallbackStyle(basemap: Basemap, tint: TintLevel = 'fire'): DerivedStyle {
   const layers: LayerSpecification[] = [{ id: 'background', type: 'background', paint: { 'background-color': DARK.background } }]
   const sources: Record<string, SourceSpecification> = { [TERRAIN_SOURCE]: demSource() }
   if (basemap === 'aerial') {
     sources[IMAGERY_SOURCE] = imagerySource()
-    layers.push({ id: IMAGERY_LAYER, type: 'raster', source: IMAGERY_SOURCE, paint: { 'raster-saturation': -0.6, 'raster-brightness-max': 0.68 } })
+    layers.push({ id: IMAGERY_LAYER, type: 'raster', source: IMAGERY_SOURCE, paint: aerialTintPaint(tint) })
   } else {
     sources[HILLSHADE_SOURCE] = demSource()
     layers.push(hillshadeLayer(basemap === 'dark' ? 'dark' : 'light'))
@@ -326,8 +347,8 @@ export function fallbackStyle(basemap: Basemap): DerivedStyle {
   return { style: { version: 8, glyphs: OPENFREEMAP_GLYPHS, sources, layers }, labelLayerId: null, overlayBeforeId: null, vector: false }
 }
 
-export function deriveBasemap(basemap: Basemap, base: StyleSpecification): DerivedStyle {
-  return basemap === 'dark' ? deriveDark(base) : basemap === 'roads' ? deriveRoads(base) : deriveAerial(base)
+export function deriveBasemap(basemap: Basemap, base: StyleSpecification, tint: TintLevel = 'fire'): DerivedStyle {
+  return basemap === 'dark' ? deriveDark(base) : basemap === 'roads' ? deriveRoads(base) : deriveAerial(base, tint)
 }
 
 /** Minimal shape check of a fetched style document. */
@@ -354,11 +375,12 @@ export function fetchStyle(url: string): Promise<StyleSpecification> {
   return p
 }
 
-/** The derived style for a basemap, or the fallback (vector: false) when OpenFreeMap's style cannot be loaded. */
-export async function loadBasemap(basemap: Basemap, styleUrl: string = BASEMAP_STYLE[basemap]): Promise<DerivedStyle> {
+/** The derived style for a basemap (photos at the given tint), or the fallback (vector: false) when OpenFreeMap's style
+ *  cannot be loaded. */
+export async function loadBasemap(basemap: Basemap, styleUrl: string = BASEMAP_STYLE[basemap], tint: TintLevel = 'fire'): Promise<DerivedStyle> {
   try {
-    return deriveBasemap(basemap, await fetchStyle(styleUrl))
+    return deriveBasemap(basemap, await fetchStyle(styleUrl), tint)
   } catch {
-    return fallbackStyle(basemap)
+    return fallbackStyle(basemap, tint)
   }
 }

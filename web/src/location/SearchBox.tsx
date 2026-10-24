@@ -16,7 +16,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type 
 import type { IncidentSummary } from '../api/types'
 import { distanceM, formatLat, formatLon, type ParsedLatLon } from '../lib/geodesy'
 import { distance } from '../lib/plainLanguage'
-import { showFireCard } from '../state/fireCard'
+import { pickFire } from '../state/fireCard'
 import { useStore } from '../state/store'
 import { useWorkspace, type PanelKey } from '../state/workspace'
 import { addressDetails, addressRange, prettyAddress, useAddressDetails } from './addressStore'
@@ -48,7 +48,7 @@ import {
   type SearchPlan,
   type SearchState,
 } from './search'
-import { useSearchUi } from './searchUi'
+import { freshCarry, useSearchUi } from './searchUi'
 import type { GeocodeMatch, GeocodeResponse } from './types'
 import { useNarrow } from './useNarrow'
 import './location.css'
@@ -64,12 +64,29 @@ function flyZoom(): number {
 
 const fireName = (s: Pick<IncidentSummary, 'name'>) => (/\bfire$/i.test(s.name) ? `the ${s.name}` : s.name)
 
-export function SearchBox() {
-  const [text, setText] = useState('')
+/** The text and popover the previous chrome's box handed over (searchUi.ts carry), read when this box first renders. */
+function readCarry(): { text: string; state: SearchState } | null {
+  const c = freshCarry(useSearchUi.getState().carry, Date.now())
+  return c ? { text: c.text, state: { ...INITIAL_SEARCH, popover: c.popover } } : null
+}
+
+/** `panel` (default): the labelled box of the fire chromes and Command's popover. `pill` (brief 4, Main.dc.html): the
+ *  overview's centred 52 px pill; its label is kept for screen readers only and the placeholder names what it takes. */
+export type SearchBoxVariant = 'panel' | 'pill'
+
+export const PILL_PLACEHOLDER = 'Check an address, town, ZIP or coordinates'
+/** Phones: the same, short enough for a 390 px screen beside the Search button. */
+export const PILL_PLACEHOLDER_SHORT = 'Address, town or ZIP'
+
+export function SearchBox({ variant = 'panel' }: { variant?: SearchBoxVariant } = {}) {
+  const pill = variant === 'pill'
+  const [carried] = useState(readCarry)
+  const [text, setText] = useState(carried?.text ?? '')
   const [focused, setFocused] = useState(false)
-  const [state, setState] = useState<SearchState>(INITIAL_SEARCH)
+  const [state, setState] = useState<SearchState>(carried?.state ?? INITIAL_SEARCH)
   const units = useWorkspace((s) => s.units)
   const hasSelection = useWorkspace((s) => s.selection != null)
+  const fireView = useWorkspace((s) => s.workspace === 'map' && s.preset === 'public')
   const summary = useStore((s) => s.summary)
   const incidentId = useStore((s) => s.incidentId)
   const narrow = useNarrow()
@@ -94,6 +111,32 @@ export function SearchBox() {
     }
     stateRef.current = next
     setState(next)
+  }, [])
+
+  // a fire opening or closing, or another preset, swaps the chrome and with it this box: hand the text and an open
+  // message or result list to the next box (searchUi.ts carry). Zustand calls these before React renders the next
+  // chrome, whose box reads the carry when it first renders and clears it once mounted.
+  const textRef = useRef(text)
+  useEffect(() => {
+    textRef.current = text
+  }, [text])
+  useEffect(() => {
+    useSearchUi.getState().setCarry(null) // taken (or stale)
+    const save = () => {
+      const p = stateRef.current.popover
+      if (stateRef.current.pending == null && (p.kind === 'message' || p.kind === 'results'))
+        useSearchUi.getState().setCarry({ text: textRef.current, popover: p, atMs: Date.now() })
+    }
+    const offFire = useStore.subscribe((s, p) => {
+      if ((s.incidentId == null) !== (p.incidentId == null)) save()
+    })
+    const offPreset = useWorkspace.subscribe((s, p) => {
+      if (s.preset !== p.preset) save()
+    })
+    return () => {
+      offFire()
+      offPreset()
+    }
   }, [])
 
   // "/" focuses the box (not while typing elsewhere); unmount cancels a lookup in flight
@@ -231,10 +274,11 @@ export function SearchBox() {
   }
 
   /** Fly to a fire and open its card (I3) the way the overview list does (state/fireCard.ts: an unprepared fire holds
-   *  the map's zoom focus, so a nearby prepared fire does not open instead), then close the popover. */
+   *  the map's zoom focus, so a nearby prepared fire does not open instead), then close the popover. Public opens the
+   *  fire view instead (brief 4 decision b, pickFire). */
   const pickFireCard = (s: IncidentSummary) => {
     dispatch({ type: 'close' })
-    showFireCard(s.id, s)
+    pickFire(s.id, s)
     afterPick()
   }
 
@@ -315,7 +359,7 @@ export function SearchBox() {
   return (
     <form
       ref={rootRef}
-      className={`loc-search${open ? ' is-open' : ''}`}
+      className={`loc-search${pill ? ' is-pill' : ''}${open ? ' is-open' : ''}`}
       role="search"
       aria-label="Check an address"
       onSubmit={(e) => {
@@ -325,11 +369,17 @@ export function SearchBox() {
       onKeyDown={onKeyDown}
     >
       <div className="mw-panel loc-search-box">
-        <label className="loc-search-label" htmlFor={inputId}>
-          Check an address <span className="loc-search-label-sub">street, town, ZIP code or coordinates</span>
-        </label>
+        {pill ? (
+          <label className="loc-sr" htmlFor={inputId}>
+            Check an address: street, town, ZIP code or coordinates
+          </label>
+        ) : (
+          <label className="loc-search-label" htmlFor={inputId}>
+            Check an address <span className="loc-search-label-sub">street, town, ZIP code or coordinates</span>
+          </label>
+        )}
         <div className="loc-search-bar">
-          <Search size={15} aria-hidden="true" className="loc-search-icon" />
+          <Search size={pill ? 18 : 15} aria-hidden="true" className="loc-search-icon" />
           <input
             ref={inputRef}
             id={inputId}
@@ -343,7 +393,7 @@ export function SearchBox() {
             maxLength={200}
             aria-describedby={statusId}
             aria-controls={lists ? listId : undefined}
-            placeholder="e.g. 150 N Capitol Blvd, Boise, ID"
+            placeholder={pill ? (narrow ? PILL_PLACEHOLDER_SHORT : PILL_PLACEHOLDER) : 'e.g. 150 N Capitol Blvd, Boise, ID'}
             value={text}
             onFocus={() => {
               setFocused(true)
@@ -420,6 +470,7 @@ export function SearchBox() {
               onAddress={(res, m) => chooseAddress(res, m)}
               onArea={(m) => chooseArea(m, null)}
               onIncident={(h) => actOnIncident(h)}
+              fireView={fireView}
             />
           </div>
         )}
@@ -439,9 +490,11 @@ interface ResultsProps {
   onAddress: (res: GeocodeResponse, m: GeocodeMatch) => void
   onArea: (m: GeocodeMatch) => void
   onIncident: (h: IncidentHit) => void
+  /** Public on the map: a fire result opens the fire view, not a card (brief 4 decision b; review R5). */
+  fireView: boolean
 }
 
-function Results({ lists, response, others, units, near, currentId, onAddress, onArea, onIncident }: ResultsProps) {
+function Results({ lists, response, others, units, near, currentId, onAddress, onArea, onIncident, fireView }: ResultsProps) {
   const areas = [...lists.places, ...lists.zips]
   return (
     <>
@@ -499,9 +552,11 @@ function Results({ lists, response, others, units, near, currentId, onAddress, o
               const current = s.id === currentId
               const facts = fireResultFacts(s, units)
               const opensCard = !current && (r === 'not-prepared' || r === 'failed')
+              // Public: every result opens the fire view (preparing the map data is offered there); Command: the card
+              const tip = fireView ? (current ? undefined : `Open the fire view of ${fireName(s)}`) : opensCard ? 'Shows the fire and its card; preparing the analysis is asked there' : undefined
               return (
                 <li key={s.id}>
-                  <button type="button" className="loc-result" onClick={() => onIncident(h)} title={opensCard ? 'Shows the fire and its card; preparing the analysis is asked there' : undefined}>
+                  <button type="button" className="loc-result" onClick={() => onIncident(h)} title={tip}>
                     <Flame size={14} aria-hidden="true" className="loc-result-icon is-fire" />
                     <span className="loc-result-text">
                       <span className="loc-result-title">
@@ -510,7 +565,7 @@ function Results({ lists, response, others, units, near, currentId, onAddress, o
                       </span>
                       <span className="loc-result-sub">
                         {facts.join(' · ')}
-                        {opensCard && ' · opens its card'}
+                        {opensCard && (fireView ? ' · opens the fire view' : ' · opens its card')}
                       </span>
                     </span>
                   </button>

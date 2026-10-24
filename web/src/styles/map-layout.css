@@ -37,17 +37,17 @@
   margin: 0;
 }
 .mw ::selection {
-  background: rgba(91, 157, 255, 0.35);
+  background: rgba(255, 122, 61, 0.35);
 }
 .mw :focus-visible {
   outline: none;
   box-shadow: var(--m-focus-ring);
 }
 .mw * {
-  scrollbar-color: rgba(148, 178, 210, 0.22) transparent;
+  scrollbar-color: var(--m-border-strong) transparent;
 }
 .mw *::-webkit-scrollbar-thumb {
-  background: rgba(148, 178, 210, 0.2);
+  background: var(--m-border-strong);
 }
 
 /* ------------------------------------------------------------------------------------------------ primitives */
@@ -127,13 +127,19 @@
 .mw-btn.is-active,
 .mw-btn[aria-pressed='true'] {
   background: var(--m-accent-bg);
-  border-color: rgba(91, 157, 255, 0.6);
-  color: #fff;
+  border-color: var(--m-accent);
+  color: var(--m-accent-ink);
 }
 .mw-btn.is-primary {
   background: var(--m-accent-bg);
-  border-color: rgba(91, 157, 255, 0.6);
-  color: #fff;
+  border-color: var(--m-accent);
+  color: var(--m-accent-ink);
+}
+.mw-btn.is-active:hover:not(:disabled),
+.mw-btn[aria-pressed='true']:hover:not(:disabled) {
+  background: var(--m-accent-bg-hover);
+  border-color: var(--m-accent-bg-hover);
+  color: var(--m-accent-ink);
 }
 .mw-btn.is-primary:hover:not(:disabled) {
   background: var(--m-accent-bg-hover);
@@ -173,11 +179,11 @@
 }
 .mw-chip-stale {
   color: var(--m-stale);
-  border-color: rgba(251, 191, 36, 0.5);
+  border-color: var(--m-stale);
 }
 .mw-chip-live {
-  color: var(--m-fire-observed);
-  border-color: rgba(255, 90, 31, 0.5);
+  color: var(--m-fire-3);
+  border-color: var(--m-fire-3);
 }
 .mw kbd {
   height: 16px;
@@ -302,48 +308,38 @@
 }
 
 /* ------------------------------------------------------------------------------------------------ header */
+/* Brief 4: the floating top bar (ui/shell/TopBar.tsx, styles/topbar.css positions it from --m-topbar-*). Each chrome
+   renders it as <header class="tb mw-header" data-chrome="header">; these rules only dock it and size the items the
+   map workspace puts in it. */
 .mw-header {
   --chrome-side: top;
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
   z-index: var(--m-z-header);
 }
-.mw-hdr {
-  position: relative;
-  height: var(--m-header-h);
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: center;
-  gap: var(--m-gap);
-  padding: 0 var(--m-gap) 0 16px;
-  background: var(--m-panel-strong);
-  -webkit-backdrop-filter: var(--m-panel-blur);
-  backdrop-filter: var(--m-panel-blur);
-  border-bottom: 1px solid var(--m-border);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+.mw-header .picker-btn {
+  flex: 0 1 auto;
+  min-width: 96px;
 }
-.mw-hdr-start,
-.mw-hdr-end {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+/* the place takes only the room left (basis 0), so it gives way first and never makes the name or the identifier
+   shrink by a fraction (which would ellipsize them) */
+.mw-header .tb-place {
+  flex: 1 1 0;
   min-width: 0;
 }
-.mw-hdr-end {
-  justify-content: flex-end;
-  gap: 8px;
+.mw-header .mw-hdr-chip {
+  flex: 0 1 var(--m-chip-w);
+  min-width: 120px;
 }
-.mw-hdr-mid {
-  justify-self: center;
+.mw-header .mw-id-chip {
+  flex: 0 0 auto;
+  max-width: 200px;
 }
-.mw-hdr-sep {
-  width: 1px;
-  height: 22px;
-  background: var(--m-border);
-  flex: none;
+.mw-header .mw-hdr-title {
+  flex: 0 1 auto;
 }
+.mw-show-panels kbd {
+  margin-left: 2px;
+}
+/* brand on the map (Forensic's "Open a fire first" page) */
 .mw-brand {
   display: inline-flex;
   align-items: center;
@@ -358,20 +354,6 @@
   font-weight: 600;
   letter-spacing: -0.01em;
 }
-.mw-hdr .picker-btn {
-  height: 34px;
-  min-width: 0;
-  max-width: 300px;
-  flex: 0 1 auto;
-}
-.mw-hdr-toggle {
-  height: 32px;
-}
-.mw-hdr-toggle.is-icon {
-  width: 34px;
-  padding: 0;
-}
-.mw-hdr-toggle.is-icon .mw-btn-label,
 .mw-sr-only {
   position: absolute;
   width: 1px;
@@ -380,14 +362,13 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
-.mw-hdr-toggle kbd {
-  margin-left: 2px;
-}
+/* the loading line along the top edge (App.tsx LoadingLine) */
 .mw-hdr-loading {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: -1px;
+  top: 0;
+  z-index: calc(var(--m-z-header) + 1);
   height: 2px;
   overflow: hidden;
   opacity: 0;
@@ -446,7 +427,7 @@
   padding: 0 4px 0 9px;
   border: 1px solid var(--m-border);
   border-radius: var(--m-radius-sm);
-  background: rgba(5, 9, 14, 0.45);
+  background: var(--m-panel-soft);
 }
 .mw-id-label {
   font-size: 11px;
@@ -517,7 +498,7 @@
 /* ------------------------------------------------------------------------------------------------ top region */
 .mw-top {
   position: absolute;
-  top: calc(var(--m-header-h) + var(--m-gap));
+  top: var(--m-chrome-top);
   left: var(--m-gap);
   right: var(--m-gap);
   bottom: calc(var(--mw-bottom-stack) + var(--mw-drawer-space) + var(--m-gap));
@@ -784,14 +765,24 @@
   --chrome-side: bottom;
   grid-area: note;
   justify-self: start;
+  max-width: 100%;
   margin: 0 0 2px 0 !important;
-  padding: 1px 7px;
-  border-radius: 4px;
+  white-space: nowrap;
+}
+/* the fixed copy (ui/shell/FixedCopy.tsx, pill) at the note's chip size, on an opaque chip */
+.mw-note > .fxc {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 1px 8px;
+  border-radius: var(--m-radius-pill);
   background: var(--m-chip-opaque);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   font-size: var(--m-fs-sm);
   line-height: 16px;
   color: var(--m-text-2);
-  white-space: nowrap;
 }
 .mw-footer-attrib {
   min-width: 0;
@@ -820,7 +811,7 @@
 .mw-layers-slot {
   --chrome-side: none;
   /* below the top-docked row (search, map controls): zoom, compass and "Return to incident" stay usable */
-  --mw-layers-top: var(--safe-top, calc(var(--m-header-h) + var(--m-gap)));
+  --mw-layers-top: var(--safe-top, var(--m-chrome-top));
   position: absolute;
   top: var(--mw-layers-top);
   right: var(--m-gap);
@@ -888,8 +879,8 @@
   gap: 4px;
   padding: 6px;
   border: 1px solid var(--m-border);
-  border-radius: 8px;
-  background: rgba(5, 9, 14, 0.35);
+  border-radius: var(--m-radius-sm);
+  background: var(--m-panel-soft);
   text-align: left;
   color: var(--m-text);
 }
@@ -899,18 +890,18 @@
 .mw-basemap[aria-checked='true'] {
   border-color: var(--m-accent);
   box-shadow: inset 0 0 0 1px var(--m-accent);
-  background: rgba(39, 71, 107, 0.35);
+  background: var(--m-accent-soft);
 }
 .mw-basemap-swatch {
   height: 38px;
   border-radius: 5px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--m-border);
 }
 .mw-basemap-dark .mw-basemap-swatch {
   background:
-    linear-gradient(115deg, transparent 0 46%, #3a4656 46% 50%, transparent 50%),
-    linear-gradient(25deg, transparent 0 60%, #2c3644 60% 63%, transparent 63%),
-    #121820;
+    linear-gradient(115deg, transparent 0 46%, #464646 46% 50%, transparent 50%),
+    linear-gradient(25deg, transparent 0 60%, #343434 60% 63%, transparent 63%),
+    var(--m-bg-2);
 }
 .mw-basemap-roads .mw-basemap-swatch {
   background:
@@ -987,7 +978,7 @@
 }
 .mw-source-panel .xs-panel {
   padding: 10px 10px 8px;
-  background: rgba(5, 9, 14, 0.4);
+  background: var(--m-panel-soft);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   box-shadow: none;
@@ -1003,7 +994,7 @@
   padding: 0 8px;
   border: 1px solid var(--m-border);
   border-radius: var(--m-radius-sm);
-  background: rgba(5, 9, 14, 0.55);
+  background: var(--m-panel-soft);
   color: var(--m-text);
   font: 400 var(--m-fs-sm) var(--m-font-ui);
 }
@@ -1062,7 +1053,7 @@
   gap: 10px;
   padding: 8px 14px;
   border-bottom: 1px solid var(--m-border);
-  background: rgba(39, 71, 107, 0.3);
+  background: var(--m-accent-soft);
   font-size: var(--m-fs-sm);
 }
 .mw-drawer-notice > span {
@@ -1102,32 +1093,16 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
-:root[data-preset='command'] .mw-brand-name {
-  font-size: var(--m-fs-lg);
-}
 
 /* ------------------------------------------------------------------------------------------------ medium widths */
 @media (max-width: 1279px) {
-  /* Analysis / Layers: icon only (the label stays the accessible name; the tooltip names them) */
-  .mw-hdr-toggle[data-panel-toggle] {
-    width: 34px;
-    padding: 0;
-  }
-  .mw-hdr-toggle[data-panel-toggle] .mw-btn-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-  }
   .mw-demo-long {
     display: none;
   }
   .mw-demo-short {
     display: inline;
   }
-  .mw-hdr .picker-btn {
+  .mw-header .picker-btn {
     max-width: 220px;
   }
   /* the incident name keeps the room; Command still shows the identifier in the coordinate strip */
@@ -1137,9 +1112,17 @@
 }
 
 /* ------------------------------------------------------------------------------------------------ compact header */
+/* the place only where it gets a readable width */
+@media (max-width: 1179px) {
+  .mw-header .tb-place {
+    display: none;
+  }
+}
+
 @media (max-width: 1023px) {
-  .mw-hdr {
-    grid-template-columns: minmax(0, 1fr) auto;
+  /* no centre pill (it moves into the menu): the right side takes only its buttons, the name keeps the rest */
+  .mw-header .tb-right {
+    flex: 0 0 auto;
   }
   .mw-wide-only {
     display: none !important;
@@ -1157,10 +1140,10 @@
   .mw-hide-narrow {
     display: none !important;
   }
-  .mw-hdr {
-    padding: 0 var(--m-gap);
+  .mw-header .tb-side {
     gap: 8px;
   }
+  .mw-header .tb-brand-name,
   .mw-brand-name {
     position: absolute;
     width: 1px;
@@ -1168,10 +1151,10 @@
     overflow: hidden;
     clip: rect(0 0 0 0);
   }
-  .mw-hdr-sep {
+  .mw-header .tb-sep {
     display: none;
   }
-  .mw-hdr .picker-btn {
+  .mw-header .picker-btn {
     max-width: none;
     flex: 1 1 auto;
   }
@@ -1222,7 +1205,7 @@
     right: var(--m-gap);
     width: auto;
     bottom: calc(var(--mw-bottom-stack) + var(--m-gap));
-    max-height: calc(100% - var(--m-header-h) - var(--mw-bottom-stack) - 56px - 2 * var(--m-gap));
+    max-height: calc(100% - var(--m-chrome-top) - var(--mw-bottom-stack) - 56px - var(--m-gap));
   }
   .mw-drawer-slot {
     display: flex;
@@ -1338,42 +1321,6 @@
     width: 100%;
     opacity: 0.6;
   }
-}
-
-/* ------------------------------------------------------------------------------------------------ Forensic */
-/* the way back to the map: a small labelled switch under the scene compass */
-.fx-ws {
-  position: absolute;
-  top: calc(var(--safe-top) + 120px);
-  left: var(--safe-left);
-  z-index: var(--z-scene-ui);
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-}
-.fx-ws-switch {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 4px 4px 10px;
-}
-.fx-demo-badge {
-  display: inline-flex;
-  align-items: center;
-  height: 24px;
-  padding: 0 10px;
-  border-radius: var(--radius-sm);
-  border: 1px solid rgba(245, 184, 61, 0.5);
-  background: rgba(30, 22, 6, 0.82);
-  color: #f5b83d;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.fx-ws-label {
-  font-size: 9.5px;
 }
 
 /* phones: the location card and the bottom sheets sit right above the bottom row, where the scale bar floats; the

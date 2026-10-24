@@ -1,10 +1,12 @@
 /* Forensic workspace on phones (owner: shell). Desktop and tablet keep the SPEC 9.4 layout untouched; below 761 px the
    floating panels would cover the whole scene, so they are rearranged (layout only, same controls):
-     - header: logo, incident picker and icon-only tool menus;
+     - header (brief 4: the floating top bar): back, the incident picker and the round tool pills; a second row under
+       it holds the view pill (left) and "Hide panels" (right), and the compass starts below that row (H5 review
+       fixes: no overlap at 320-430 px, 44 px touch targets);
      - right column (Layers / Analysis / Evidence / Notes, overview, weather): a scrollable bottom sheet;
      - bottom dock: the timeline only, above that sheet (the three charts and Key Events need a wider screen; on phones
        they are in the Public/Command Analysis drawer and updates panel);
-     - the workspace switch sits top right under the header.
+     - the compass, its ⟲ ⟳ and the entry controls stay at the top left.
    --chrome-side tells the Forensic safe-area measurement (ForensicWorkspace.tsx) which edge each panel docks to, so the
    camera framing and scene overlays use the scene area above the sheet. Loaded with the lazy Forensic chunk. */
 
@@ -21,39 +23,97 @@
 @media (max-width: 760px) {
   .app {
     --fx-sheet-h: min(42vh, 360px);
+    --bar-top: 8px;
+    --header-h: 44px;
+    --fx-view-row: 46px;
   }
+  /* the floating bar: back, the fire's name (picker), four tool pills; under it a row with the view pill (left, as on
+     tablets: header.css ≤ 1023 px) and "Hide panels" (right), counted in the header's box so the compass row starts
+     below it (on a 360-375 px phone the pill used to cover ⟲ ⟳: review H5-DF-4). The logo, the place, the dates and
+     the Incident | Aircraft tabs need a wider screen (the Aircraft list stays in the panel sheet's header tab on wider
+     screens only, as before). Every control here has a 44 px touch target (PLAN-4 decision h, review H5-m3): the
+     look stays compact and a transparent ::before takes the rest, never into a neighbour's. */
   .app .app-header {
-    top: 8px;
+    top: var(--bar-top);
     left: 8px;
     right: 8px;
-    height: 48px;
   }
-  .app .hdr {
+  .app .fx-bar {
     gap: 6px;
-    padding: 0 4px 0 10px;
   }
-  .app .brand-name,
-  .app .brand-sep,
-  .app .brand-tag,
-  .app .hdr > .hdr-divider,
-  .app .hdr-actions > .hdr-divider,
-  .app .hdr-meta,
-  .app .hdr-tabs {
+  .app .fx-bar .tb-side {
+    gap: 8px;
+  }
+  .app .fx-bar .tb-brand,
+  .app .fx-bar .tb-left > .tb-sep,
+  .app .fx-bar .tb-place,
+  .app .fx-bar .hdr-tabs {
     display: none;
   }
-  .app .hdr .picker-btn {
-    min-width: 0;
-    max-width: none;
+  .app .fx-bar .tb-left {
     flex: 1 1 auto;
   }
-  /* View / Analysis / Share: icon and caret only (the text stays the accessible name) */
-  .app .hdr-menu-btn {
-    font-size: 0;
-    gap: 2px;
-    padding: 0 6px;
+  .app .fx-bar .tb-right {
+    flex: 0 0 auto;
   }
-  .app .hdr-spacer {
-    display: none;
+  .app .fx-bar .picker-btn:not(.is-title) {
+    min-width: 0;
+    max-width: none;
+    flex: 0 1 auto;
+    padding: 0 10px;
+  }
+  .app .fx-bar .picker-btn:not(.is-title) .picker-name {
+    font-size: 15px;
+  }
+  /* the LIVE dot stays; its word gives the name room (still read out) */
+  .app .fx-bar .picker-btn:not(.is-title) .live-chip {
+    font-size: 0;
+    letter-spacing: 0;
+    gap: 0;
+  }
+  .app .fx-bar .hdr-actions {
+    gap: 10px;
+  }
+  .app .fx-bar .tb-icon.fx-tool {
+    width: 34px;
+    height: 34px;
+  }
+  /* (insets count from the padding box, inside the 1 px border: 34 px pills → 32 + 2 × 6) */
+  .app .fx-bar .tb-icon::before {
+    content: '';
+    position: absolute;
+    inset: -6px;
+  }
+  .app .fx-bar .tb-back::before {
+    inset: -5px;
+  }
+  .app .fx-bar .picker-btn:not(.is-title) {
+    position: relative;
+  }
+  .app .fx-bar .picker-btn:not(.is-title)::before {
+    content: '';
+    position: absolute;
+    inset: -5px 0;
+  }
+  /* the second row: the view pill on the left, "Hide panels" on the right */
+  .app .fx-bar .tb-centre {
+    top: calc(100% + 8px);
+    left: 0;
+  }
+  .app .fx-bar .fx-bar-view .tb-view-btn {
+    position: relative;
+    height: 30px;
+    padding: 0 12px;
+  }
+  .app .fx-bar .fx-bar-view .tb-view-btn::before {
+    content: '';
+    position: absolute;
+    inset: -7px 0;
+  }
+  .app .fx-bar .fx-hide {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
   }
   .app .minibar {
     max-width: calc(100vw - 16px);
@@ -106,17 +166,30 @@
   .app .tl-track {
     height: 54px;
   }
-
-  .app .fx-ws {
-    top: calc(var(--safe-top) + 2px);
-    left: auto;
-    right: 8px;
-    align-items: flex-end;
+  .app .tl-play {
+    width: 32px;
+    height: 32px;
   }
-  .app .fx-ws-switch {
-    padding: 3px;
+  .app .tl-now {
+    margin-left: 2px;
+    font-size: 13px;
   }
-  .app .fx-ws-label {
+  .app .tl-now .muted {
     display: none;
+  }
+
+  /* the entry controls in a row under the compass; the disclaimer pill above the timeline, wrapping */
+  .app .fx-ws {
+    top: calc(var(--safe-top) + 96px);
+  }
+  .app .fx-note {
+    left: 8px;
+    right: 8px;
+    bottom: calc(var(--safe-bottom) + 48px);
+    max-width: none;
+  }
+  .app .fx-note > .fxc-pill {
+    border-radius: 12px;
+    font-size: 10.5px;
   }
 }

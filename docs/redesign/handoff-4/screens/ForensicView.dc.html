@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fire-3d · Willow · Forensic</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0c0c0c}
+a{color:#e0e0e0}a:hover{color:#ffffff}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,a:focus-visible{outline:2px solid #ff7a3d;outline-offset:2px}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 1000px; overflow: hidden; background: #0c0c0c; color: #e6e6e6; font-family: Inter, system-ui, sans-serif; font-size: 13px;">
+
+<!-- 3D map -->
+<img src="../assets/forensic-map-green.jpg" alt="3D terrain view of the Willow fire with its ignition point, isochrones and perimeter" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;">
+<div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 120px; background: linear-gradient(180deg, rgba(12,12,12,0.85) 0%, rgba(12,12,12,0) 100%); pointer-events: none;"></div>
+
+<!-- Top bar -->
+<header style="position: absolute; top: 20px; left: 20px; right: 20px; height: 40px; display: flex; align-items: center; gap: 14px;">
+<div style="flex: 1 1 0; display: flex; align-items: center; gap: 12px; min-width: 0;">
+<a href="Main.dc.html" aria-label="Back to all fires" style="width: 36px; height: 36px; flex-shrink: 0; border-radius: 999px; display: flex; align-items: center; justify-content: center; background: rgba(14,14,14,0.6); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid rgba(200,200,200,0.18);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e6e6e6" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 5 L8 12 L15 19"></path></svg></a>
+<span style="display: flex; align-items: center; gap: 7px; flex-shrink: 0;"><svg width="22" height="18" viewBox="0 0 26 22" aria-hidden="true"><path d="M1 20 L9 6 L14 13 L18 7 L25 20 Z" fill="none" stroke="#e6e6e6" stroke-width="1.8" stroke-linejoin="round"></path><path d="M13 20 C10 17 12 14 14 12 C14 15 17 16 16 20 Z" fill="#ff6a2a"></path></svg><span style="font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: #f0f0f0;">Fire-3d</span></span>
+<span style="width: 1px; height: 18px; flex-shrink: 0; background: rgba(200,200,200,0.22);"></span>
+<button type="button" style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border-radius: 999px; background: rgba(14,14,14,0.6); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid rgba(200,200,200,0.18);">
+<span style="display: flex; align-items: center; gap: 5px; font-family: JetBrains Mono, monospace; font-size: 10px; letter-spacing: 0.14em; color: #ff9a5a;"><span style="width: 7px; height: 7px; border-radius: 999px; background: #ff6a2a; box-shadow: 0 0 8px #ff6a2a;"></span>LIVE</span>
+<span style="font-size: 16px; font-weight: 600; color: #f0f0f0;">Willow</span>
+<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#9a9a9a" stroke-width="2.2" aria-hidden="true"><path d="M6 9 L12 15 L18 9"></path></svg>
+</button>
+<span style="font-size: 12px; color: #9a9a9a; white-space: nowrap;">Lake County · <span style="font-family: JetBrains Mono, monospace; font-size: 11px;">Jun 28, 2026 – present</span></span>
+</div>
+<div role="group" aria-label="View" style="display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: rgba(14,14,14,0.6); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid rgba(200,200,200,0.18);">
+<a href="FireView.dc.html" style="padding: 7px 16px; border-radius: 999px; font-size: 13px; color: #cfcfcf; text-decoration: none;">Public</a>
+<a href="CommandView.dc.html" style="padding: 7px 16px; border-radius: 999px; font-size: 13px; color: #cfcfcf; text-decoration: none;">Command</a>
+<span aria-current="page" style="padding: 7px 16px; border-radius: 999px; font-size: 13px; font-weight: 600; background: #ff7a3d; color: #1a0a03;">Forensic</span>
+</div>
+<div style="flex: 1 1 0; display: flex; justify-content: flex-end; align-items: center; gap: 8px;">
+<div role="group" aria-label="Mode" style="display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: rgba(14,14,14,0.6); border: 1px solid rgba(200,200,200,0.18);">
+<span style="display: flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; background: rgba(240,240,240,0.12); font-size: 12px; color: #f0f0f0;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f0f0f0" stroke-width="1.8" aria-hidden="true"><path d="M3 6 L9 4 L15 6 L21 4 V18 L15 20 L9 18 L3 20 Z M9 4 V18 M15 6 V20"></path></svg>Incident</span>
+<span style="display: flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; font-size: 12px; color: #bdbdbd;">Aircraft <span style="font-family: JetBrains Mono, monospace; font-size: 10px; padding: 0 5px; border-radius: 999px; background: rgba(200,200,200,0.14);">0</span></span>
+</div>
+<button type="button" aria-label="View options" style="width: 34px; height: 34px; border-radius: 999px; display: flex; align-items: center; justify-content: center; background: rgba(14,14,14,0.6); border: 1px solid rgba(200,200,200,0.18);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#e6e6e6" stroke-width="1.8" aria-hidden="true"><path d="M2 12 C5 6 9 4 12 4 C15 4 19 6 22 12 C19 18 15 20 12 20 C9 20 5 18 2 12 Z"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+<button type="button" aria-label="Analysis" style="width: 34px; height: 34px; border-radius: 999px; display: flex; align-items: center; justify-content: center; background: rgba(14,14,14,0.6); border: 1px solid rgba(200,200,200,0.18);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#e6e6e6" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 20 V10 M10 20 V4 M16 20 V13 M22 20 H2"></path></svg></button>
+<button type="button" aria-label="Share" style="width: 34px; height: 34px; border-radius: 999px; display: flex; align-items: center; justify-content: center; background: rgba(14,14,14,0.6); border: 1px solid rgba(200,200,200,0.18);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#e6e6e6" stroke-width="1.8" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="M8.2 10.8 L15.8 6.2 M8.2 13.2 L15.8 17.8"></path></svg></button>
+<button type="button" aria-label="Settings" style="width: 34px; height: 34px; border-radius: 999px; display: flex; align-items: center; justify-content: center; background: rgba(14,14,14,0.6); border: 1px solid rgba(200,200,200,0.18);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#e6e6e6" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2 V5 M12 19 V22 M2 12 H5 M19 12 H22 M4.9 4.9 L7 7 M17 17 L19.1 19.1 M4.9 19.1 L7 17 M17 7 L19.1 4.9"></path></svg></button>
+</div>
+</header>
+
+<!-- Left tools: compass + frame/charts -->
+<div style="position: absolute; left: 20px; top: 80px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start;">
+<button type="button" aria-label="Reset bearing (heading 0°, tilt 29°)" style="width: 60px; height: 60px; border-radius: 999px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(14,14,14,0.6); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid rgba(200,200,200,0.18);"><svg width="18" height="26" viewBox="0 0 14 20" aria-hidden="true"><path d="M7 1 L11 10 L3 10 Z" fill="#ff7a3d"></path><path d="M7 19 L11 10 L3 10 Z" fill="#9a9a9a"></path></svg></button>
+<span style="font-family: JetBrains Mono, monospace; font-size: 10px; color: #9a9a9a; padding-left: 4px;">000° · 29°</span>
+<div style="display: flex; flex-direction: column; padding: 4px; border-radius: 14px; background: rgba(14,14,14,0.6); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid rgba(200,200,200,0.16);">
+<button type="button" style="display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; font-size: 13px; color: #e6e6e6;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#e6e6e6" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 2 V6 M12 18 V22 M2 12 H6 M18 12 H22"></path></svg>Frame fire</button>
+<button type="button" style="display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; font-size: 13px; color: #e6e6e6;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#e6e6e6" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 20 V10 M10 20 V4 M16 20 V13 M22 20 H2"></path></svg>Charts &amp; key events</button>
+</div>
+</div>
+
+<!-- Map controls -->
+<div style="position: absolute; right: 368px; bottom: 140px; display: flex; align-items: center; gap: 8px;">
+<div style="height: 40px; box-sizing: border-box; padding: 6px 12px; display: flex; flex-direction: column; justify-content: center; gap: 3px; border-radius: 12px; background: rgba(14,14,14,0.6); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid rgba(200,200,200,0.16);">
+<span style="display: flex; justify-content: space-between; width: 90px; font-family: JetBrains Mono, monospace; font-size: 9.5px; color: #bdbdbd;"><span>0</span><span>1 km</span></span>
+<span style="width: 90px; height: 4px; box-sizing: border-box; border: 1.2px solid #cfcfcf; border-top: 0;"></span>
+</div>
+<div role="group" aria-label="Map mode" style="display: flex; gap: 2px; padding: 3px; border-radius: 12px; background: rgba(14,14,14,0.6); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid rgba(200,200,200,0.16);">
+<button type="button" onClick="{{set2d}}" aria-pressed="{{is2dStr}}" style="height: 32px; padding: 0 12px; border: 0; border-radius: 9px; font-size: 13px; font-weight: 600; background: {{bg2d}}; color: {{fg2d}};">2D</button>
+<button type="button" onClick="{{set3d}}" aria-pressed="{{is3dStr}}" style="height: 32px; padding: 0 12px; border: 0; border-radius: 9px; font-size: 13px; font-weight: 600; background: {{bg3d}}; color: {{fg3d}};">3D</button>
+</div>
+<div style="height: 40px; box-sizing: border-box; display: flex; align-items: center; gap: 4px; padding: 0 4px; border-radius: 12px; background: rgba(14,14,14,0.6); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid rgba(200,200,200,0.16);">
+<button type="button" style="height: 32px; padding: 0 10px; border: 0; border-radius: 9px; background: transparent; font-family: JetBrains Mono, monospace; font-size: 12px; color: #e6e6e6;">1.5× ▾</button>
+<span style="width: 1px; height: 18px; background: rgba(200,200,200,0.18);"></span>
+<button type="button" style="height: 32px; padding: 0 10px; border: 0; border-radius: 9px; background: transparent; font-family: JetBrains Mono, monospace; font-size: 12px; color: #e6e6e6;">High ▾</button>
+<span style="width: 1px; height: 18px; background: rgba(200,200,200,0.18);"></span>
+<button type="button" aria-label="Lighting" style="width: 32px; height: 32px; border: 0; border-radius: 9px; background: rgba(240,240,240,0.12); display: flex; align-items: center; justify-content: center;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f0f0f0" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 3 L15 12 L12 21 M3 12 L12 9 L21 12"></path></svg></button>
+<button type="button" aria-label="Recenter" style="width: 32px; height: 32px; border: 0; border-radius: 9px; background: transparent; display: flex; align-items: center; justify-content: center;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#e6e6e6" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="7"></circle><path d="M12 2 V6 M12 18 V22 M2 12 H6 M18 12 H22"></path></svg></button>
+<button type="button" aria-label="Full screen" style="width: 32px; height: 32px; border: 0; border-radius: 9px; background: transparent; display: flex; align-items: center; justify-content: center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e6e6e6" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M14 4 H20 V10 M20 4 L13 11 M10 20 H4 V14 M4 20 L11 13"></path></svg></button>
+</div>
+</div>
+
+<!-- Right panel -->
+<aside aria-label="Layers and analysis" style="position: absolute; top: 76px; right: 16px; bottom: 16px; width: 336px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px;">
+<div style="flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: column; border-radius: 16px; background: rgba(14,14,14,0.62); backdrop-filter: blur(22px) saturate(140%); -webkit-backdrop-filter: blur(22px) saturate(140%); border: 1px solid rgba(200,200,200,0.16);">
+<div role="tablist" style="display: flex; gap: 18px; padding: 14px 18px 0; border-bottom: 1px solid rgba(200,200,200,0.12);">
+<span role="tab" aria-selected="true" style="padding-bottom: 10px; border-bottom: 2px solid #ff7a3d; font-size: 14px; font-weight: 500; color: #f0f0f0;">Layers</span>
+<span role="tab" aria-selected="false" style="padding-bottom: 10px; font-size: 14px; color: #bdbdbd;">Analysis <span style="font-family: JetBrains Mono, monospace; font-size: 10px; padding: 0 5px; border-radius: 999px; background: rgba(200,200,200,0.14);">1</span></span>
+<span role="tab" aria-selected="false" style="padding-bottom: 10px; font-size: 14px; color: #bdbdbd;">Evidence <span style="display: inline-block; width: 6px; height: 6px; border-radius: 999px; background: #ff7a3d; vertical-align: middle;"></span></span>
+<span role="tab" aria-selected="false" style="padding-bottom: 10px; font-size: 14px; color: #bdbdbd;">Notes</span>
+</div>
+<div style="padding: 4px 18px 10px; overflow: hidden;">
+<sc-for list="{{groups}}" as="g" hint-placeholder-count="2">
+<div style="display: flex; align-items: center; gap: 8px; padding: 14px 0 6px;">
+<span style="font-family: JetBrains Mono, monospace; font-size: 10.5px; letter-spacing: 0.16em; color: #9a9a9a;">{{g.name}}</span>
+<span style="font-family: JetBrains Mono, monospace; font-size: 10.5px; color: #7a7a7a;">{{g.count}}</span>
+<span style="flex-grow: 1; height: 1px; background: rgba(200,200,200,0.12);"></span>
+<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7a7a7a" stroke-width="1.8" aria-hidden="true"><path d="M2 12 C5 6 9 4 12 4 C15 4 19 6 22 12 C19 18 15 20 12 20 C9 20 5 18 2 12 Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+</div>
+<sc-for list="{{g.layers}}" as="l" hint-placeholder-count="5">
+<div style="display: flex; align-items: center; gap: 10px; height: 30px; opacity: {{l.opacity}};">
+<button type="button" role="checkbox" aria-checked="{{l.checkedStr}}" aria-label="{{l.name}}" onClick="{{l.toggle}}" style="width: 18px; height: 18px; flex-shrink: 0; box-sizing: border-box; padding: 0; border-radius: 5px; border: 1.5px solid {{l.boxBorder}}; background: {{l.boxBg}}; display: flex; align-items: center; justify-content: center;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="{{l.tick}}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12 L10 17 L19 7"></path></svg></button>
+<span style="width: 26px; height: 18px; flex-shrink: 0; border-radius: 4px; background: {{l.swatch}}; border: 1px solid rgba(200,200,200,0.2);"></span>
+<span style="flex-grow: 1; min-width: 0; font-size: 13px; color: #e6e6e6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{l.name}} <span style="font-family: JetBrains Mono, monospace; font-size: 9.5px; color: #8a8a8a;">{{l.note}}</span></span>
+<span style="position: relative; width: 64px; height: 3px; flex-shrink: 0; border-radius: 3px; background: rgba(200,200,200,0.2);"><span style="position: absolute; left: 0; top: 0; bottom: 0; width: {{l.pct}}; border-radius: 3px; background: #cfcfcf;"></span><span style="position: absolute; top: -4px; left: {{l.pct}}; width: 11px; height: 11px; margin-left: -5px; border-radius: 999px; background: #f0f0f0;"></span></span>
+<span style="width: 34px; text-align: right; font-family: JetBrains Mono, monospace; font-size: 10.5px; color: #9a9a9a;">{{l.pct}}</span>
+</div>
+</sc-for>
+<sc-if value="{{g.legend}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; align-items: flex-start; gap: 10px; padding: 4px 0 2px 64px;">
+<div style="display: flex; flex-direction: column; gap: 3px;"><span style="width: 120px; height: 5px; border-radius: 3px; background: linear-gradient(90deg, #f5d77a, #f2a541, #ff7a2e, #e8401c);"></span><span style="display: flex; justify-content: space-between; width: 120px; font-family: JetBrains Mono, monospace; font-size: 9px; color: #8a8a8a;"><span>10</span><span>50</span><span>90%</span></span></div>
+<span style="font-size: 11px; color: #9a9a9a;">P(burned by t)</span>
+</div>
+</sc-if>
+</sc-for>
+<div style="display: flex; align-items: center; gap: 8px; padding: 14px 0 0;">
+<span style="font-family: JetBrains Mono, monospace; font-size: 10.5px; letter-spacing: 0.16em; color: #9a9a9a;">PARAMETRIC</span>
+<span style="font-family: JetBrains Mono, monospace; font-size: 10.5px; color: #7a7a7a;">4/4</span>
+<span style="flex-grow: 1; height: 1px; background: rgba(200,200,200,0.12);"></span>
+<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#7a7a7a" stroke-width="2" aria-hidden="true"><path d="M9 6 L15 12 L9 18"></path></svg>
+</div>
+</div>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 16px; flex-shrink: 0; border-radius: 14px; background: rgba(14,14,14,0.62); backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px); border: 1px solid rgba(200,200,200,0.16);">
+<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9a9a9a" stroke-width="2" aria-hidden="true"><path d="M9 6 L15 12 L9 18"></path></svg>
+<span style="flex-grow: 1; font-size: 14px; font-weight: 600; color: #f0f0f0;">Incident Overview</span>
+<a href="https://data-nifc.opendata.arcgis.com" style="font-size: 12px; color: #bdbdbd;">NIFC WFIGS ↗</a>
+</div>
+<div style="flex-shrink: 0; padding: 12px 14px; border-radius: 14px; background: rgba(14,14,14,0.62); backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px); border: 1px solid rgba(200,200,200,0.16);">
+<div style="display: flex; align-items: center; gap: 8px; padding-bottom: 10px;">
+<span style="font-size: 14px; font-weight: 600; color: #f0f0f0;">Weather &amp; Fire Behavior</span>
+<span style="font-size: 11px; color: #8a8a8a; flex-grow: 1;">at fire front</span>
+<span style="font-family: JetBrains Mono, monospace; font-size: 10px; padding: 1px 6px; border-radius: 999px; border: 1px solid rgba(200,200,200,0.3); color: #bdbdbd;">ANL</span>
+<span style="font-family: JetBrains Mono, monospace; font-size: 11px; color: #bdbdbd;">14:00</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid rgba(200,200,200,0.12); border-radius: 10px; overflow: hidden;">
+<sc-for list="{{wx}}" as="w" hint-placeholder-count="6">
+<div style="padding: 8px 10px; border-right: 1px solid rgba(200,200,200,0.1); border-bottom: 1px solid rgba(200,200,200,0.1);">
+<div style="display: flex; align-items: center; gap: 5px; font-size: 11px; color: #9a9a9a;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="{{w.iconColor}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{w.icon}}"></path></svg>{{w.label}}</div>
+<div style="font-family: JetBrains Mono, monospace; font-size: 18px; font-weight: 500; color: {{w.color}};">{{w.value}}<span style="font-size: 10px; color: #9a9a9a; margin-left: 3px;">{{w.unit}}</span></div>
+<div style="font-family: JetBrains Mono, monospace; font-size: 9.5px; color: #8a8a8a; white-space: nowrap;">{{w.sub}}</div>
+</div>
+</sc-for>
+</div>
+<div style="display: flex; justify-content: space-between; padding-top: 8px; font-family: JetBrains Mono, monospace; font-size: 10px; color: #8a8a8a;"><span>gusts 30 mph · ROS potential 3.6 ch/h</span><a href="https://open-meteo.com" style="font-family: Inter, sans-serif; font-size: 10.5px; color: #bdbdbd;">Open-Meteo</a></div>
+</div>
+</aside>
+
+<!-- Timeline -->
+<section aria-label="Timeline" style="position: absolute; left: 16px; right: 368px; bottom: 16px; height: 112px; box-sizing: border-box; padding: 12px 18px; border-radius: 16px; background: rgba(14,14,14,0.62); backdrop-filter: blur(22px) saturate(140%); -webkit-backdrop-filter: blur(22px) saturate(140%); border: 1px solid rgba(200,200,200,0.16);">
+<div style="display: flex; align-items: center; gap: 10px;">
+<span style="font-size: 14px; font-weight: 600; color: #f0f0f0; margin-right: 6px;">Timeline</span>
+<button type="button" aria-label="Step back" style="width: 28px; height: 28px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#cfcfcf" stroke-width="2.2" aria-hidden="true"><path d="M15 5 L8 12 L15 19"></path></svg></button>
+<button type="button" aria-label="Play" style="width: 36px; height: 36px; border: 0; border-radius: 999px; background: #ff7a3d; box-shadow: 0 0 14px rgba(255,122,61,0.45); display: flex; align-items: center; justify-content: center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="#1a0a03" aria-hidden="true"><path d="M7 4 L20 12 L7 20 Z"></path></svg></button>
+<button type="button" aria-label="Step forward" style="width: 28px; height: 28px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#cfcfcf" stroke-width="2.2" aria-hidden="true"><path d="M9 5 L16 12 L9 19"></path></svg></button>
+<button type="button" style="height: 28px; padding: 0 10px; border-radius: 8px; border: 1px solid rgba(200,200,200,0.18); background: transparent; font-family: JetBrains Mono, monospace; font-size: 11.5px; color: #cfcfcf;">6 h/s ▾</button>
+<span style="font-family: JetBrains Mono, monospace; font-size: 15px; color: #f0f0f0; margin-left: 6px;">Oct 23, 14:30 <span style="font-size: 11px; color: #9a9a9a;">MDT</span> <span style="font-size: 11px; color: #7a7a7a;">T+2807:03</span></span>
+<span style="flex-grow: 1;"></span>
+<div role="group" aria-label="Range" style="display: flex; gap: 2px; padding: 2px; border-radius: 9px; background: rgba(0,0,0,0.25); border: 1px solid rgba(200,200,200,0.12);">
+<sc-for list="{{ranges}}" as="r" hint-placeholder-count="3">
+<button type="button" onClick="{{r.pick}}" aria-pressed="{{r.pressed}}" style="height: 26px; padding: 0 10px; border: 0; border-radius: 7px; font-family: JetBrains Mono, monospace; font-size: 11.5px; font-weight: 600; background: {{r.bg}}; color: {{r.fg}};">{{r.label}}</button>
+</sc-for>
+</div>
+<span style="font-family: JetBrains Mono, monospace; font-size: 11px; color: #9a9a9a; white-space: nowrap;">Jun 28, 14:00 – Oct 26, 14:30</span>
+</div>
+<div style="position: relative; height: 54px; margin-top: 4px;">
+<!-- event marks -->
+<div style="position: absolute; left: 0; top: 6px; display: flex; gap: 8px; align-items: center;">
+<span style="width: 8px; height: 8px; border-radius: 999px; background: #ff6a2a;"></span>
+<svg width="10" height="9" viewBox="0 0 10 9" aria-hidden="true"><path d="M5 0 L10 9 H0 Z" fill="#e6e6e6"></path></svg>
+<svg width="8" height="10" viewBox="0 0 8 10" aria-hidden="true"><path d="M4 0 C6 3 8 4 8 7 A4 4 0 0 1 0 7 C0 5 2 4 4 0 Z" fill="#ff7a3d"></path></svg>
+<span style="width: 1.5px; height: 10px; background: #e6e6e6;"></span>
+</div>
+<svg width="8" height="10" viewBox="0 0 8 10" aria-hidden="true" style="position: absolute; left: 9.6%; top: 6px;"><path d="M4 0 C6 3 8 4 8 7 A4 4 0 0 1 0 7 C0 5 2 4 4 0 Z" fill="#ff7a3d"></path></svg>
+<svg width="10" height="9" viewBox="0 0 10 9" aria-hidden="true" style="position: absolute; left: 15.5%; top: 6px;"><path d="M5 0 L10 9 H0 Z" fill="#e6e6e6"></path></svg>
+<span style="position: absolute; left: 68%; top: 4px; width: 1.5px; height: 12px; background: #e6e6e6;"></span>
+<!-- track -->
+<div style="position: absolute; left: 1%; right: 2%; top: 24px; height: 4px; border-radius: 2px; background: rgba(200,200,200,0.22);"></div>
+<div style="position: absolute; left: 1%; width: 25%; top: 23px; height: 6px; background: repeating-linear-gradient(90deg, rgba(255,106,42,0.85) 0 2px, rgba(255,106,42,0.25) 2px 4px);"></div>
+<div style="position: absolute; left: 96%; top: 18px; width: 4%; height: 14px; background: repeating-linear-gradient(135deg, rgba(200,200,200,0.4) 0 2px, rgba(0,0,0,0) 2px 5px);"></div>
+<div style="position: absolute; left: 96%; top: 17px; width: 16px; height: 16px; margin-left: -8px; border-radius: 999px; background: #f0f0f0; box-shadow: 0 0 0 3px rgba(255,122,61,0.8);"></div>
+<span style="position: absolute; left: 96%; top: -2px; font-family: JetBrains Mono, monospace; font-size: 9px; letter-spacing: 0.1em; color: #ff9a5a;">NOW</span>
+<!-- month labels -->
+<div style="position: absolute; left: 0; right: 0; top: 36px; display: flex; justify-content: space-between; font-size: 10.5px; color: #9a9a9a;">
+<sc-for list="{{months}}" as="m" hint-placeholder-count="17"><span>{{m}}</span></sc-for>
+</div>
+</div>
+</section>
+
+<!-- Disclaimer -->
+<div style="position: absolute; right: 368px; bottom: 132px; transform: translateY(-56px); display: none;"></div>
+<div style="position: absolute; left: 16px; bottom: 136px; padding: 5px 12px; border-radius: 999px; background: rgba(14,14,14,0.6); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(200,200,200,0.16); font-size: 11px; color: #bdbdbd;">Research prototype — not for operational use</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+constructor(props) {
+super(props);
+this.state = {
+mode: '3d',
+range: 'All',
+on: { terrain: true, aerial: true, trees: true, fuels: false, dnbr: false, observed: true, iso: true, forecast: true, detections: false, perimeters: true, ignition: true }
+};
+}
+renderVals() {
+const on = this.state.on;
+const mk = (id, name, note, pct, swatch, dim) => ({
+name: name, note: note, pct: pct, swatch: swatch,
+checkedStr: on[id] ? 'true' : 'false',
+boxBg: on[id] ? '#ff7a3d' : 'transparent',
+boxBorder: on[id] ? '#ff7a3d' : 'rgba(200,200,200,0.4)',
+tick: on[id] ? '#1a0a03' : 'transparent',
+opacity: dim && !on[id] ? '0.45' : '1',
+toggle: () => this.setState({ on: { ...this.state.on, [id]: !this.state.on[id] } })
+});
+const is3d = this.state.mode === '3d';
+return {
+groups: [
+{ name: 'BASE', count: '3/5', legend: false, layers: [
+mk('terrain', 'Terrain (3D)', '', '100%', 'linear-gradient(135deg, #7d8f5a, #3f5230 55%, #26331c)'),
+mk('aerial', 'Aerial imagery', '', '100%', 'radial-gradient(circle at 30% 35%, #9fb37a 0 3px, rgba(0,0,0,0) 4px), radial-gradient(circle at 72% 60%, #b9c49a 0 3px, rgba(0,0,0,0) 4px), linear-gradient(135deg, #5d7046, #34452a)'),
+mk('trees', 'Trees', '', '100%', 'radial-gradient(circle at 28% 45%, #4f8a3c 0 4px, rgba(0,0,0,0) 5px), radial-gradient(circle at 70% 50%, #3f7a33 0 4px, rgba(0,0,0,0) 5px), #1f3a1a'),
+mk('fuels', 'Fuels (FBFM40)', 'LF2025', '70%', 'linear-gradient(90deg, #f2d35a 0 20%, #9cc95a 20% 40%, #e8743a 40% 60%, #5aa0d8 60% 80%, #c9a26a 80%)'),
+mk('dnbr', 'Burn scar (dNBR)', '', '90%', 'linear-gradient(90deg, #4a2a14, #8a3a18, #d2501f, #f08a3a)')
+] },
+{ name: 'FIRE', count: '5/6', legend: true, layers: [
+mk('observed', 'Observed fire', '', '100%', 'linear-gradient(90deg, #1a0d08 0 45%, #ff5a1f 45% 65%, #f5c060 65% 80%, #6a8a4a 80%)'),
+mk('iso', 'Isochrones', '', '80%', 'repeating-linear-gradient(120deg, #f0dcb0 0 1.5px, rgba(0,0,0,0) 1.5px 4px), #2a2418'),
+mk('forecast', 'Forecast probability', '', '85%', 'linear-gradient(90deg, #f5d77a, #f2a541, #ff7a2e, #e8401c)'),
+mk('detections', 'Detections', '', '90%', 'linear-gradient(#e8401c, #e8401c) 20% 30%/5px 5px no-repeat, linear-gradient(#ff7a2e, #ff7a2e) 60% 70%/5px 5px no-repeat, linear-gradient(#f2a541, #f2a541) 80% 25%/4px 4px no-repeat, #221a16', true),
+mk('perimeters', 'Perimeters', '33', '60%', 'linear-gradient(#141414, #141414) center/70% 46% no-repeat, linear-gradient(#e6e6e6, #e6e6e6) center/80% 62% no-repeat, #141414'),
+mk('ignition', 'Ignition', '', '100%', 'radial-gradient(circle, #fff1dc 0 2px, #ff5a1f 3px, #c0301a 5px, #1a1210 7px)')
+] }
+],
+is2dStr: is3d ? 'false' : 'true', is3dStr: is3d ? 'true' : 'false',
+bg2d: is3d ? 'transparent' : '#ff7a3d', fg2d: is3d ? '#cfcfcf' : '#1a0a03',
+bg3d: is3d ? '#ff7a3d' : 'transparent', fg3d: is3d ? '#1a0a03' : '#cfcfcf',
+set2d: () => this.setState({ mode: '2d' }), set3d: () => this.setState({ mode: '3d' }),
+ranges: ['All', '7 d', '72 h'].map((r) => ({ label: r, pressed: this.state.range === r ? 'true' : 'false', bg: this.state.range === r ? '#ff7a3d' : 'transparent', fg: this.state.range === r ? '#1a0a03' : '#bdbdbd', pick: () => this.setState({ range: r }) })),
+months: ['Jun 29', 'Jul 6', 'Jul 13', 'Jul 20', 'Jul 27', 'Aug 3', 'Aug 10', 'Aug 17', 'Aug 24', 'Aug 31', 'Sep 7', 'Sep 14', 'Sep 21', 'Sep 28', 'Oct 5', 'Oct 12', 'Oct 19', 'Oct 26'],
+wx: [
+{ label: 'Wind', value: '16', unit: 'mph', sub: 'SSW (203°)', color: '#f0f0f0', iconColor: '#bdbdbd', icon: 'M5 20 L12 3 L19 20 L12 15 Z' },
+{ label: 'Temp', value: '9', unit: '°C', sub: 'dew -5 °C', color: '#f0f0f0', iconColor: '#bdbdbd', icon: 'M10 14 V5 A2 2 0 0 1 14 5 V14 A4 4 0 1 1 10 14 Z M12 9 V16' },
+{ label: 'RH', value: '38', unit: '%', sub: 'rain 0.0 mm', color: '#f0f0f0', iconColor: '#bdbdbd', icon: 'M12 3 C9 8 6 11 6 14.5 A6 6 0 0 0 18 14.5 C18 11 15 8 12 3 Z' },
+{ label: 'Fuel moisture', value: '7.8', unit: '%', sub: '1-h dead fuel', color: '#f0f0f0', iconColor: '#bdbdbd', icon: 'M5 19 C5 10 11 5 20 4 C19 13 14 19 5 19 Z M5 19 L13 11' },
+{ label: 'FFWI', value: '31', unit: '', sub: 'of 100 (Fosberg)', color: '#f0f0f0', iconColor: '#bdbdbd', icon: 'M4 17 A8 8 0 0 1 20 17 M12 17 L16 10' },
+{ label: 'Flame length', value: '4.7', unit: 'ft', sub: 'head fire', color: '#ff9a5a', iconColor: '#ff9a5a', icon: 'M12 3 C14 7 18 9 18 14 A6 6 0 0 1 6 14 C6 11 8 9 9 7 C10 10 11 11 12 11 C12 8 11 6 12 3 Z' }
+]
+};
+}
+}
+</script>
+</body>
+</html>

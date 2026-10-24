@@ -24,6 +24,15 @@
 //     (useStore.focusIncidentFromMap, map/focus.ts) and zooming out returns to the overview, without moving the camera;
 //     the markers stay at every zoom (lighter while a fire is open), other prepared fires in view show their latest
 //     perimeter (map/nearbyPerimeters.ts), and unprepared fires a "Spread not prepared yet" chip.
+// Brief 4 (H2c, decisions f, j, k): the map turns in 2D as in 3D and keeps its heading when 2D / 3D changes; it is
+// the rotation target of state/rotation.ts (Q / E / N), takes Safari's two-finger trackpad twist (lib/rotateGesture.ts,
+// counted as the user's own move) and the compass drag (actions.setBearing); the aerial photos' tint follows the view
+// (actions.setTint, basemapStyle.ts AERIAL_TINT), never the fire, official or selection layers.
+// Brief 4 (H4, decision a): in Public with a fire open the map draws the fire view's profile (map/fireProfile.ts): the
+// newest perimeter whatever the timeline time (filled), the official layers and the other fires; no modeled spread,
+// observed burned-area raster, detections, modeled-area boundary or event markers, and the reported location is drawn
+// by the fire view's own overlay (ui/public/ReportedPoint.tsx) instead of the map's ring and label. The user's layer
+// choices are kept for Command.
 import {
   Map as MapLibreMap,
   LngLat,
@@ -42,25 +51,31 @@ import type { ForecastLayerName, ForecastManifest, IncidentManifest, IncidentSum
 import { HOUR_MS, loadRasterSet, type LoadedLayer, type RasterSet } from '../data/rasters'
 import { aoiBounds, fireBounds, type LonLatBox } from '../lib/fireBounds'
 import { aoiCornersLonLat, localToLonLat, overlayMapping } from '../lib/reproject'
+import { stepDeg } from '../lib/compass'
+import { attachRotateGesture } from '../lib/rotateGesture'
 import { fmtAt, timeFmt, type TimeFmt } from '../lib/time'
 import { mountOfficialLayers, type OfficialLayersHandle } from '../official/mapLayer'
 import { useAnnotations } from '../state/annotations'
-import { showFireCard } from '../state/fireCard'
+import { openFireView, opensFireView, pickFire } from '../state/fireCard'
 import { findFire, overviewFires, PAST_YEAR, SEASON_YEAR, type OverviewCatalog } from '../state/overview'
+import { registerRotation } from '../state/rotation'
 import { readUrlParams } from '../state/runtime'
 import { useStore } from '../state/store'
 import { getTimeFormat } from '../state/timeZone'
 import { pendingMapFlyTo, useWorkspace, type Basemap, type MapFlyTo, type MapLayerKey, type Perspective, type SafeInsets } from '../state/workspace'
 import { buildFeedItems, selectFeedItem } from '../ui/feed/feedModel'
 import type { FeedItem } from '../ui/feed/types'
-import { BUILDINGS_3D_LAYER, HILLSHADE_SOURCE, IMAGERY_SOURCE, loadBasemap, TERRAIN_SOURCE, VECTOR_SOURCE, type DerivedStyle } from './basemapStyle'
+import { aerialTintPaint, BUILDINGS_3D_LAYER, DARK, HILLSHADE_SOURCE, IMAGERY_LAYER, IMAGERY_SOURCE, loadBasemap, TERRAIN_SOURCE, VECTOR_SOURCE, type DerivedStyle, type TintLevel } from './basemapStyle'
 import { maskGeometry } from './contours'
 import { MapInput } from './userInput'
 import { allFocusCandidates, CENTRAL_FRACTION, chipTargets, FocusHold, focusUnlessHeld, FOCUS_DEBOUNCE_MS, FOCUS_OUT_ZOOM, type FocusCurrent, type FocusView } from './focus'
 import { boundsCenter, Framing, goalFor, latestPerimeter, LOWER48_BOUNDS, LOWER48_START, mapCovered, zoomForBounds, type CameraPose, type FrameGoal } from './framing'
-import { drapedLayers, HATCH_IMAGE, hatchImage, LAYER_GROUPS, LYR, SRC, topLayers, type MapTheme } from './layers'
+import { mapProfileOf, newestPerimeter, profileLayers, type MapProfile } from './fireProfile'
+import { drapedLayers, HATCH_IMAGE, hatchImage, incidentLabelField, LAYER_GROUPS, LYR, SRC, topLayers, type MapTheme } from './layers'
 import { recordHoverLines, zoneHoverLines } from './hoverText'
 import { fmtLatLon, SelectionPin } from './markers'
+import { COVERS_POINT_COST, COVERS_TEXT_COST, type ScreenBox } from './pinLabel'
+import { aoiSidesInside, type AoiSide } from './aoiLabels'
 import { EMPTY_OVERLAYS, motionMs, patchOverlays, setProvider, useMapRuntime, type MapActions } from './mapStore'
 import {
   aoiFeatures,
@@ -75,6 +90,7 @@ import {
   forecastPixels,
   lines,
   observedPixels,
+  perimeterArea,
   perimeterFeatures,
   polygons,
   type FeatureCollection,
@@ -87,6 +103,8 @@ import {
   chipImage,
   clusterClickZoom,
   clusterHoverText,
+  GROUP_TICK_IMAGE,
+  groupTickImage,
   OVERVIEW_CHIP_LAYERS,
   OVERVIEW_CLUSTER_LAYERS,
   OVERVIEW_FIRE_LAYERS,
@@ -97,6 +115,7 @@ import {
   NARROW_PX,
   narrowLabelAnchorOffset,
   overviewData,
+  labelFilters,
   overviewFilters,
   overviewLayers,
   overviewPaint,
@@ -135,7 +154,12 @@ const RASTER_WAIT_MS = 6000
 /** A safe-area change this soon after a completed fit (the layout still settling as data arrives) fits the goal again,
  *  so an instant fit (reduced motion) ends where an animated one does. */
 const SETTLE_MS = 2000
-const CANVAS_LABEL = 'Map. Arrow keys pan, plus and minus zoom, Shift + arrow keys rotate (and tilt in 3D); click to select a location or a fire.'
+const CANVAS_LABEL = 'Map. Arrow keys pan, plus and minus zoom, Shift + arrow keys rotate (and tilt in 3D), Q and E turn the map, N puts north up; click to select a location or a fire.'
+/** Durations of the rotate buttons / keys and of north up (0 with reduced motion). */
+const ROTATE_MS = 300
+const NORTH_MS = 450
+/** How long the aerial photos take to change tint when the view changes (0 with reduced motion). */
+const TINT_MS = 400
 
 /** Update counters for verification (window.__mapStats): how often overlays were recomputed and how long it took.
  *  Development builds only: every use sits behind import.meta.env.DEV, which production builds compile out. */
@@ -165,7 +189,7 @@ const catalogOf = (): OverviewCatalog => {
 }
 
 function initialStyle(): StyleSpecification {
-  return { version: 8, glyphs: OPENFREEMAP_GLYPHS, sources: {}, layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#0b1119' } }] }
+  return { version: 8, glyphs: OPENFREEMAP_GLYPHS, sources: {}, layers: [{ id: 'background', type: 'background', paint: { 'background-color': DARK.background } }] }
 }
 
 /** Point the providers listed in the dev-only ?mapfail= at an unreachable host (compiled out of production). */
@@ -195,6 +219,9 @@ export class MapController {
   private styleReady = false
   /** The overview labels use a narrow map's anchors (onStyleLoad, updateLabelAnchors). */
   private narrowLabels = false
+  /** "Outside modeled area" label anchors (lon/lat per side) and the label layer's current filter (sides shown). */
+  private aoiAnchors: { side: AoiSide; lon: number; lat: number }[] = []
+  private aoiFilterKey = ''
   private rasters: RasterSet | null = null
   private rasterKey = ''
   private bufs: Buffers | null = null
@@ -204,6 +231,10 @@ export class MapController {
   private lastRun = 0
   private dirty = { observed: true, forecast: true, vectors: true, statics: true }
   private keys = { obs: '', fc: '', det: '', perim: '', ev: '' }
+  /** What the map draws per layer key as last applied (the user's choices less the profile's; null: not applied yet). */
+  private shownLayers: Record<MapLayerKey, boolean> | null = null
+  /** The profile the profile-only layers (modeled area, reported ring and label) were last set for. */
+  private shownProfile: MapProfile | null = null
   private feed = new Map<string, FeedItem>()
   private tiles: Record<ProviderKey, { ok: number; err: number }> = { vector: { ok: 0, err: 0 }, imagery: { ok: 0, err: 0 }, terrain: { ok: 0, err: 0 } }
   private terrainBroken = false
@@ -261,6 +292,11 @@ export class MapController {
   private nearbyList: NearbyFire[] = []
   private nearbyKey = ''
   private readonly nearbyLoader = new NearbyLoader(fetchJson, bundleUrl)
+  /** The aerial photos' tint (decision j); kept across basemap switches. */
+  private tint: TintLevel = useMapRuntime.getState().tint
+  /** The heading the rotate buttons / keys are easing to: a second press while the first still turns adds 15° to it,
+   *  not to wherever the animation happens to be. */
+  private rotGoal: number | null = null
 
   constructor(container: HTMLElement) {
     const ws = useWorkspace.getState()
@@ -290,6 +326,7 @@ export class MapController {
 
     this.bindMapEvents()
     this.bindInputEvents(container)
+    this.bindRotation(container)
     this.subscribe()
     this.extras = bindExtrasLayers(this.map)
     // NWS outlines below the evacuation zones and fire layers; their labels and the highlight below map-core's top layers
@@ -344,11 +381,19 @@ export class MapController {
     this.unsubs.push(
       useWorkspace.subscribe((s, p) => {
         if (s.basemap !== p.basemap) void this.applyBasemap(s.basemap)
+        if (s.preset !== p.preset && this.styleReady && this.map.getLayer(LYR.incidentLabel)) this.map.setLayoutProperty(LYR.incidentLabel, 'text-field', incidentLabelField(s.preset) as never)
+        // zoom focus and the "Spread not prepared yet" chips are Command's (brief 4 decision b): re-evaluate the view
+        if (s.preset !== p.preset) this.scheduleFocus()
+        // Public in a fire draws the fire view's profile (brief 4 H4, decision a)
+        if (s.preset !== p.preset) this.applyLayerVisibility()
         if (s.perspective !== p.perspective) this.applyPerspective(s.perspective, true)
         if (s.selection !== p.selection || s.mapLayers.selection !== p.mapLayers.selection) this.updatePin()
         if (s.mapFlyTo && s.mapFlyTo.nonce !== this.flyNonce) this.flyRequested(s.mapFlyTo)
-        if (s.mapLayers !== p.mapLayers) this.applyLayerVisibility(p.mapLayers)
-        if (s.safeInsets !== p.safeInsets) this.applySafeInsets(true)
+        if (s.mapLayers !== p.mapLayers) this.applyLayerVisibility()
+        if (s.safeInsets !== p.safeInsets) {
+          this.applySafeInsets(true)
+          this.placeScreenLabels()
+        }
         if (s.fireCardId !== p.fireCardId) this.updateFireCardRing()
         if (s.overviewFilter !== p.overviewFilter || s.units !== p.units) {
           this.updateOverview()
@@ -384,6 +429,8 @@ export class MapController {
           this.keys.ev = ''
           this.nearbyKey = ''
           this.markDirty('vectors')
+          // opening or leaving a fire changes the profile in Public
+          this.applyLayerVisibility()
         }
         const manifestChanged = s.manifest !== p.manifest
         if (manifestChanged || s.forecast !== p.forecast) this.loadRasters()
@@ -407,6 +454,7 @@ export class MapController {
           this.keys.fc = ''
           this.markDirty('forecast')
         }
+        if (s.leaderIds !== p.leaderIds) this.applyLabelFilters()
       }),
     )
     this.unsubs.push(
@@ -423,7 +471,7 @@ export class MapController {
   private async applyBasemap(basemap: Basemap): Promise<void> {
     const seq = ++this.basemapSeq
     const url = import.meta.env.DEV && this.devFail.has('basemap') ? `${UNREACHABLE}/style.json` : BASEMAP_STYLE[basemap]
-    const derived = applyDevFailures(await loadBasemap(basemap, url), this.devFail)
+    const derived = applyDevFailures(await loadBasemap(basemap, url, this.tint), this.devFail)
     if (this.destroyed || seq !== this.basemapSeq) return
     this.derived = derived
     setProvider('basemap', derived.vector ? 'ok' : 'failed', derived.vector ? null : 'OpenFreeMap style did not load')
@@ -461,12 +509,16 @@ export class MapController {
     const empty = (id: string) => {
       if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: EMPTY as never, tolerance: 0.2 })
     }
-    for (const id of [SRC.observedEdge, SRC.forecastLines, SRC.forecastHatch, SRC.perimeters, SRC.nearby, SRC.detections, SRC.detectionPoints, SRC.aoi, SRC.aoiLabels, SRC.events, SRC.incident])
+    for (const id of [SRC.observedEdge, SRC.forecastLines, SRC.forecastHatch, SRC.perimeters, SRC.perimeterArea, SRC.nearby, SRC.detections, SRC.detectionPoints, SRC.aoi, SRC.aoiLabels, SRC.events, SRC.incident])
       empty(id)
     // the overview's three sources: pinned (never grouped), active and other fires (grouped in MapLibre's worker)
     const width = map.getContainer().clientWidth
     for (const g of OVERVIEW_GROUPS) if (!map.getSource(OVERVIEW_SOURCES[g])) map.addSource(OVERVIEW_SOURCES[g], overviewSourceOptions(g, width) as never)
     for (const tone of ['dark', 'light'] as const) {
+      if (!map.hasImage(GROUP_TICK_IMAGE[tone])) {
+        const t = groupTickImage(tone)
+        map.addImage(GROUP_TICK_IMAGE[tone], t.image, t.options)
+      }
       if (map.hasImage(CHIP_IMAGE[tone])) continue
       const c = chipImage(tone)
       map.addImage(CHIP_IMAGE[tone], c.image, c.options)
@@ -484,8 +536,13 @@ export class MapController {
     // grows each label towards the middle of the country (overviewLayers.ts LABEL_ANCHORS)
     this.narrowLabels = width < NARROW_PX
     for (const layer of overviewLayers(theme, { narrow: this.narrowLabels })) map.addLayer(layer)
-    for (const layer of topLayers(theme)) map.addLayer(layer)
-    this.applyLayerVisibility(null)
+    for (const layer of topLayers(theme, useWorkspace.getState().preset)) map.addLayer(layer)
+    this.aoiFilterKey = '' // the new label layer has no filter yet
+    this.shownLayers = null
+    this.shownProfile = null
+    this.applyLayerVisibility()
+    // a tint asked for while this style was loading
+    this.applyTint(false)
     if (useWorkspace.getState().perspective === '3d') this.enableTerrain()
     else useMapRuntime.setState({ terrainOn: false })
     this.updateBuildings()
@@ -499,6 +556,7 @@ export class MapController {
     this.markDirty('observed', 'forecast', 'vectors', 'statics')
     this.updateOverview()
     this.updateFireCardRing()
+    this.applyLabelFilters()
     this.updatePin()
     if (useWorkspace.getState().basemap === 'aerial') this.watchImagery()
     // chips and outlines need the new style's layers: evaluate the view again
@@ -525,7 +583,8 @@ export class MapController {
     // keep the declared stacking order: insert below the next draped layer that exists, else below the buildings / labels
     const next = order.slice(i + 1).find((l) => map.getLayer(l.id))
     map.addLayer(order[i], next?.id ?? this.derived.overlayBeforeId ?? this.derived.labelLayerId ?? undefined)
-    this.applyLayerVisibility(null)
+    this.shownLayers = null
+    this.applyLayerVisibility()
   }
 
   private setData(id: string, fc: FeatureCollection): void {
@@ -534,9 +593,23 @@ export class MapController {
     if (import.meta.env.DEV) mapStats.vectorSets++
   }
 
-  private applyLayerVisibility(prev: Record<MapLayerKey, boolean> | null): void {
+  /** Public with a fire open (the fire view) or the full map (decision a). */
+  private profile(): MapProfile {
+    return mapProfileOf(useWorkspace.getState().preset, useStore.getState().incidentId != null)
+  }
+
+  /** What the map draws per layer key: the user's choices less what the profile leaves out. */
+  private effectiveLayers(): Record<MapLayerKey, boolean> {
+    return profileLayers(this.profile(), useWorkspace.getState().mapLayers)
+  }
+
+  /** Show / hide the layer groups for what the map draws now (the user's choices and the profile), and the
+   *  profile-only layers: the modeled-area boundary and the map's own reported-location ring and label (the fire view
+   *  draws its own point). Only what changed since the last call is touched. */
+  private applyLayerVisibility(): void {
     if (!this.styleReady) return
-    const layers = useWorkspace.getState().mapLayers
+    const prev = this.shownLayers
+    const layers = this.effectiveLayers()
     for (const [key, ids] of Object.entries(LAYER_GROUPS) as [keyof typeof LAYER_GROUPS, readonly string[]][]) {
       if (prev && prev[key] === layers[key]) continue
       for (const id of ids) if (this.map.getLayer(id)) this.map.setLayoutProperty(id, 'visibility', layers[key] ? 'visible' : 'none')
@@ -544,6 +617,19 @@ export class MapController {
       // the forecast leaves out what the observed layer shows, so it follows the observed layer both ways
       if (key === 'observed') this.markDirty('observed', 'forecast')
       else if (layers[key]) this.markDirty(key === 'forecast' ? 'forecast' : 'vectors')
+    }
+    this.shownLayers = layers
+    const profile = this.profile()
+    if (profile !== this.shownProfile) {
+      const fireView = profile === 'public-fire'
+      for (const id of [LYR.aoiCasing, LYR.aoiLine, LYR.aoiLabel, LYR.incidentCircle, LYR.incidentLabel])
+        if (this.map.getLayer(id)) this.map.setLayoutProperty(id, 'visibility', fireView ? 'none' : 'visible')
+      // the perimeters switch between "by the timeline time" and "the newest" (and its fill)
+      if (this.shownProfile != null) {
+        this.keys.perim = ''
+        this.markDirty('vectors')
+      }
+      this.shownProfile = profile
     }
     if (prev && prev.selection !== layers.selection) this.updatePin()
   }
@@ -593,7 +679,7 @@ export class MapController {
     const dataKey = `${this.overviewVersion}|${ws.units}|${cardId ?? ''}|${hidden.join(',')}`
     if (dataKey !== this.overviewDataKey) {
       this.overviewDataKey = dataKey
-      const data = overviewData(splitOverview(this.overviewSet, { hidden, cardId }), ws.units)
+      const data = overviewData(splitOverview(this.overviewSet, { hidden, cardId }), ws.units, cardId)
       for (const g of OVERVIEW_GROUPS) this.setData(OVERVIEW_SOURCES[g], data[g])
     }
     const chipKey = this.chipIds.join(',')
@@ -606,6 +692,12 @@ export class MapController {
       this.overviewDim = dim
       for (const [id, props] of Object.entries(overviewPaint(dim))) if (map.getLayer(id)) for (const [k, v] of Object.entries(props)) map.setPaintProperty(id, k, v)
     }
+  }
+
+  /** The overview's MapLibre labels leave out the fires the leader-line overlay names (brief 4 H3, decision e). */
+  private applyLabelFilters(): void {
+    if (!this.styleReady) return
+    for (const [id, f] of Object.entries(labelFilters(useMapRuntime.getState().leaderIds))) if (this.map.getLayer(id)) this.map.setFilter(id, f as FilterSpecification)
   }
 
   /** The card's selection ring; the fire moves into the pinned source (never inside a group). */
@@ -687,9 +779,10 @@ export class MapController {
 
   /** Open a fire's card from the overview map and fly to its area (decision 1: clicking a fire flies to it). The same
    *  path as the list and the picker (state/fireCard.ts): an unprepared fire holds the zoom focus, so a nearby prepared
-   *  fire does not open instead (brief-3 integration review R1). */
+   *  fire does not open instead (brief-3 integration review R1). Public opens the fire view instead (brief 4 decision
+   *  b): pickFire(id). */
   private openFireFromOverview(id: string): void {
-    showFireCard(id)
+    pickFire(id)
   }
 
   // ------------------------------------------------------------------------------------------------ camera
@@ -895,15 +988,27 @@ export class MapController {
       } else this.pendingPadding = true
       return
     }
+    const settling = this.framing.phase === 'done' && g != null && performance.now() - this.framedAt < SETTLE_MS
+    // the national overview keeps the map where it is when its panels come and go (brief 4, Main.dc.html: "Show
+    // details", a location card): the point at the middle of the new free area stays under the same pixel, so nothing
+    // on the map moves; the padding still applies to the next framing ("All states", a search)
+    if (!settling && useStore.getState().incidentId == null) {
+      const c = this.map.getContainer()
+      const center = this.map.unproject([(c.clientWidth + padding.left - padding.right) / 2, (c.clientHeight + padding.top - padding.bottom) / 2])
+      this.input.ours(() => this.map.jumpTo({ center, padding }))
+      return
+    }
     // a goal framed moments ago (the layout still settling), and the lower-48 overview as framed, follow the safe area
     // while the user has not moved: fit them again
-    if (this.framing.phase === 'done' && g && (performance.now() - this.framedAt < SETTLE_MS || (g.kind === 'overview' && g.bounds === LOWER48_BOUNDS))) {
+    if (this.framing.phase === 'done' && g && (settling || (g.kind === 'overview' && g.bounds === LOWER48_BOUNDS))) {
       this.issueFit(g, animate, false)
       return
     }
     this.input.ours(() => this.map.easeTo({ padding, duration: animate ? motionMs(250) : 0 }))
   }
 
+  /** 2D / 3D: the camera tilts (3D) or looks straight down (2D) and keeps its heading both ways (brief 4 decision k;
+   *  north up only on request: the compass, N, "North up"). */
   private applyPerspective(p: Perspective, animate: boolean): void {
     const map = this.map
     const duration = animate ? motionMs(900) : 0
@@ -912,7 +1017,7 @@ export class MapController {
       this.enableTerrain()
       this.input.ours(() => map.easeTo({ pitch: Math.max(map.getPitch(), PITCH_3D), duration }))
     } else {
-      this.input.ours(() => map.easeTo({ pitch: 0, bearing: 0, duration }))
+      this.input.ours(() => map.easeTo({ pitch: 0, duration }))
       const done = () => {
         if (useWorkspace.getState().perspective !== '2d' || this.destroyed) return
         map.setTerrain(null)
@@ -973,13 +1078,15 @@ export class MapController {
     if (this.framing.viewIsSettled()) {
       const p = this.pose()
       useWorkspace.getState().setView({ centerLon: p.lon, centerLat: p.lat, zoom: p.zoom, bearing: p.bearing, pitch: p.pitch })
-      // the overview view Back returns to: never one zoomed in far enough to focus a fire again
-      if (useStore.getState().incidentId == null && !this.overviewFireFly && p.zoom < FOCUS_OUT_ZOOM) this.overviewView = { lon: p.lon, lat: p.lat, zoom: p.zoom }
+      // the overview view Back returns to: never one zoomed in far enough to focus a fire again (Public has no zoom
+      // focus: any zoom the user left, brief 4)
+      if (useStore.getState().incidentId == null && !this.overviewFireFly && (p.zoom < FOCUS_OUT_ZOOM || useWorkspace.getState().preset === 'public')) this.overviewView = { lon: p.lon, lat: p.lat, zoom: p.zoom }
       this.scheduleFocus()
     }
     this.updateCamera()
     this.updateAoiInView()
     this.updateViewBox()
+    this.placeScreenLabels()
     this.publishFraming()
   }
 
@@ -1061,11 +1168,18 @@ export class MapController {
     const v = this.focusView()
     this.updateNearby(v)
     const st = useStore.getState()
+    // Public (brief 4 decision b): no zoom focus (a fire opens by a click and stays open while zooming out) and no
+    // "Spread not prepared yet" chips (the fire view has the prepare link); a focus change still pending is cancelled
+    const publicView = useWorkspace.getState().preset === 'public'
     // chips for the unprepared fires the view is zoomed in on (never the open one)
-    const chips = chipTargets(v, this.overviewSet, st.incidentId ? [st.incidentId] : [])
+    const chips = publicView ? [] : chipTargets(v, this.overviewSet, st.incidentId ? [st.incidentId] : [])
     if (chips.join(',') !== this.chipIds.join(',')) {
       this.chipIds = chips
       this.applyOverviewState()
+    }
+    if (publicView) {
+      this.keepShownFocus()
+      return
     }
     // any prepared fire can be focused, whatever the overview filter (it only decides the markers and the list); while
     // an official area is shown, what is open stays
@@ -1109,13 +1223,29 @@ export class MapController {
       frameFire: () => this.frameRequest('fire'),
       frameArea: () => this.frameRequest('area'),
       frameOverview: () => this.frameRequest('overview'),
-      rotateBy: (deg) => ease({ bearing: this.map.getBearing() + deg }, 300),
+      rotateBy: (deg) => {
+        if (!Number.isFinite(deg)) return
+        // a press while the previous turn still runs continues from that turn's end
+        const from = this.rotGoal != null && this.map.isRotating() ? this.rotGoal : this.map.getBearing()
+        const to = stepDeg(from, deg)
+        this.rotGoal = to
+        ease({ bearing: to }, ROTATE_MS)
+      },
       tiltBy: (deg) => {
         if (useWorkspace.getState().perspective !== '3d') return
         ease({ pitch: Math.max(0, Math.min(MAX_PITCH_3D, this.map.getPitch() + deg)) }, 300)
       },
       topDown: () => ease({ pitch: 0 }, 450),
-      northUp: () => ease({ bearing: 0 }, 450),
+      northUp: () => {
+        this.rotGoal = 0
+        ease({ bearing: 0 }, NORTH_MS)
+      },
+      setBearing: (deg) => this.turnTo(deg),
+      setTint: (level) => {
+        if (level === this.tint) return
+        this.tint = level
+        this.applyTint(true)
+      },
       zoomBy: (delta) => {
         // the zoom buttons are the user's move: an official area's focus hold ends
         this.focusHold.release()
@@ -1131,6 +1261,53 @@ export class MapController {
         setProvider('imagery', 'idle')
         useWorkspace.getState().setBasemapFallback(null)
       },
+    }
+  }
+
+  /** Set the heading at once (the compass drag, Safari's trackpad twist). `gesture`: the browser event of a user's
+   *  gesture, passed to MapLibre as the move's originalEvent, so the move is the user's (it ends the opening framing
+   *  and a focus hold, like a drag on the map); without it the move is one of our own commands, like the buttons. */
+  private turnTo(deg: number, gesture?: Event): void {
+    if (!Number.isFinite(deg) || this.destroyed) return
+    this.rotGoal = null
+    if (gesture) this.input.input()
+    this.input.ours(() => this.map.jumpTo({ bearing: deg }, gesture ? { originalEvent: gesture } : undefined))
+  }
+
+  /** The visible view's rotation for Q / E / N (state/rotation.ts), and Safari's trackpad twist on the map. */
+  private bindRotation(container: HTMLElement): void {
+    const actions = useMapRuntime.getState().actions
+    if (actions) {
+      this.domUnsubs.push(
+        registerRotation({
+          rotateBy: (deg) => actions.rotateBy(deg),
+          northUp: () => actions.northUp(),
+          setBearing: (deg) => actions.setBearing(deg),
+          bearing: () => this.map.getBearing(),
+        }),
+      )
+    }
+    let start = 0
+    this.domUnsubs.push(
+      attachRotateGesture(container, {
+        start: () => {
+          start = this.map.getBearing()
+        },
+        // the content turns with the fingers: heading = heading at start − twist
+        rotate: (delta, e) => this.turnTo(stepDeg(start, -delta), e),
+        end: () => {},
+      }),
+    )
+  }
+
+  /** Paint the aerial photos at the current tint (decision j); a no-op on the other basemaps. */
+  private applyTint(animate: boolean): void {
+    if (useMapRuntime.getState().tint !== this.tint) useMapRuntime.setState({ tint: this.tint })
+    if (!this.styleReady || !this.map.getLayer(IMAGERY_LAYER)) return
+    const ms = animate ? motionMs(TINT_MS) : 0
+    for (const [k, v] of Object.entries(aerialTintPaint(this.tint))) {
+      this.map.setPaintProperty(IMAGERY_LAYER, `${k}-transition`, { duration: ms, delay: 0 })
+      this.map.setPaintProperty(IMAGERY_LAYER, k, v)
     }
   }
 
@@ -1209,12 +1386,16 @@ export class MapController {
       this.focusTimer = 0
       // a gesture (drag, wheel, keys, touch, double click) takes the camera
       if (e.originalEvent == null) return
+      // and the heading: the next ⟲ ⟳ / Q / E turns from where the gesture leaves the map
+      this.rotGoal = null
       this.focusHold.release()
       this.framing.userGesture()
       if (useStore.getState().incidentId == null) this.overviewFireFly = false
       this.publishFraming()
     })
     map.on('moveend', (e: { originalEvent?: unknown }) => this.onMoveEnd(e.originalEvent != null))
+    // the selection label's corner and the modeled area's labels once the map (and the fire's labels) settle
+    map.on('idle', () => this.placeScreenLabels())
     map.on('click', (e) => this.onClick(e))
     map.on('mousemove', (e) => this.onHover(e))
     map.on('mouseout', () => this.hideHover())
@@ -1338,10 +1519,12 @@ export class MapController {
     // a camera icon opens that camera (extras/cameras.ts handles the click); it never selects a location
     const camLayers = present(EXTRAS_HOVER_LAYERS.cameras)
     if (camLayers.length && map.queryRenderedFeatures(e.point, { layers: camLayers }).length) return
-    // an unprepared fire's chip, or another fire's perimeter outline: its card (I3), no camera move, never a build
+    // an unprepared fire's chip, or another fire's perimeter outline: its card (I3), no camera move, never a build;
+    // Public opens that fire's view (brief 4 decision b)
     const cardId = this.cardTargetAt(e.point)
     if (cardId) {
-      ws.setFireCard(cardId)
+      if (opensFireView()) openFireView(cardId)
+      else ws.setFireCard(cardId)
       return
     }
     const evLayers = present([LYR.eventsCircle])
@@ -1366,11 +1549,11 @@ export class MapController {
       this.zoomToCluster(group)
       return
     }
-    // inside a fire: its own marker or label opens its card
+    // inside a fire: its own marker or label opens its card (Command); the Public fire view already shows the fire
     if (incidentId != null) {
       const own = present([LYR.incidentHit, LYR.incidentCircle, LYR.incidentLabel])
       if (own.length && map.queryRenderedFeatures(e.point, { layers: own }).length) {
-        ws.setFireCard(incidentId)
+        if (!opensFireView()) ws.setFireCard(incidentId)
         return
       }
     }
@@ -1572,6 +1755,48 @@ export class MapController {
   private updatePin(): void {
     const ws = useWorkspace.getState()
     this.pin.update(this.map, ws.selection, ws.mapLayers.selection, (lat, lon) => useWorkspace.getState().moveSelection(lat, lon))
+    this.placePinLabel()
+  }
+
+  /** Labels kept inside the free map area once the map settles (moveend, idle, a safe-area change). */
+  private placeScreenLabels(): void {
+    this.placeAoiLabels()
+    this.placePinLabel()
+  }
+
+  /** "Outside modeled area": only the sides whose label stays inside the free map area (map/aoiLabels.ts; review
+   *  DF-14), so none shows through the chrome's text. A filter on the label layer, changed only when the set changes. */
+  private placeAoiLabels(): void {
+    const map = this.map
+    if (!this.styleReady || !map.getLayer(LYR.aoiLabel)) return
+    const c = map.getContainer()
+    const i = useWorkspace.getState().safeInsets
+    const free = { left: i.left, top: i.top, right: c.clientWidth - i.right, bottom: c.clientHeight - i.bottom }
+    const size = this.theme() === 'aerial' ? 12 : 10.5
+    const anchors = this.aoiAnchors.map((a) => {
+      const p = map.project([a.lon, a.lat])
+      return { side: a.side, x: p.x, y: p.y }
+    })
+    const sides = aoiSidesInside(anchors, free, size)
+    const key = sides.join(',')
+    if (key === this.aoiFilterKey) return
+    this.aoiFilterKey = key
+    map.setFilter(LYR.aoiLabel, ['in', ['get', 'side'], ['literal', sides]])
+  }
+
+  /** The selection label's corner (pinLabel.ts pinLabelLayout; one line, or the coordinates stacked): inside the free map
+   *  area (the safe area) and the map, off the fire's own point and label and the key events. Runs when the map
+   *  settles, the safe area changes or the pin does. */
+  private placePinLabel(): void {
+    if (!this.styleReady) return
+    const map = this.map
+    const c = map.getContainer()
+    const i = useWorkspace.getState().safeInsets
+    const free = { left: i.left, top: i.top, right: c.clientWidth - i.right, bottom: c.clientHeight - i.bottom }
+    const text = [LYR.incidentLabel, LYR.eventsLabel].filter((id) => map.getLayer(id))
+    const points = [LYR.incidentCircle, LYR.eventsCircle].filter((id) => map.getLayer(id))
+    const hits = (b: ScreenBox, layers: string[]) => layers.length > 0 && map.queryRenderedFeatures([[b.left, b.top], [b.right, b.bottom]], { layers }).length > 0
+    this.pin.place(map, free, (b) => (hits(b, text) ? COVERS_TEXT_COST : 0) + (hits(b, points) ? COVERS_POINT_COST : 0))
   }
 
   // ------------------------------------------------------------------------------------------------ data
@@ -1672,10 +1897,15 @@ export class MapController {
       const a = aoiFeatures(m)
       this.setData(SRC.aoi, a.outline)
       this.setData(SRC.aoiLabels, a.labels)
+      this.aoiAnchors = a.labels.features.flatMap((f) =>
+        f.geometry.type === 'Point' ? [{ side: f.properties?.side as AoiSide, lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] }] : [],
+      )
     } else {
       this.setData(SRC.aoi, EMPTY)
       this.setData(SRC.aoiLabels, EMPTY)
+      this.aoiAnchors = []
     }
+    this.placeAoiLabels()
     const sum: IncidentSummary | null = s.summary
     this.setData(
       SRC.incident,
@@ -1697,7 +1927,7 @@ export class MapController {
     const s = useStore.getState()
     const m = readyManifest(s.manifest)
     const b = this.bufs
-    const layers = useWorkspace.getState().mapLayers
+    const layers = this.effectiveLayers()
     const obs = this.layer('observed_arrival')
     const map = this.map
     if (!m || !b) {
@@ -1784,18 +2014,24 @@ export class MapController {
   private updateVectors(): void {
     const s = useStore.getState()
     const m = readyManifest(s.manifest)
-    const layers = useWorkspace.getState().mapLayers
+    const layers = this.effectiveLayers()
     const t = s.timeMs
-    // perimeters
-    const per = m && layers.perimeters ? (s.perimeters?.perimeters ?? []) : []
-    const shownPer = per.filter((p) => p.t_ms <= t).length
+    // perimeters: those published by the timeline time; the Public fire view shows the newest only, whatever the time,
+    // filled (decision a)
+    const fireView = this.profile() === 'public-fire'
+    const all = m && layers.perimeters ? (s.perimeters?.perimeters ?? []) : []
+    const newest = fireView ? newestPerimeter(all) : null
+    const per = fireView ? (newest ? [newest] : []) : all
+    const perT = fireView ? Infinity : t
+    const shownPer = per.filter((p) => p.t_ms <= perT).length
     const tf = getTimeFormat()
     // the labels carry times in the fire's zone and the preset's clock: a preset switch relabels them
-    const perKey = `${m?.id}|${per.length}|${shownPer}|${tf.tz}|${tf.clock}`
+    const perKey = `${m?.id}|${fireView ? 'newest' : 'by-time'}|${per.length}|${shownPer}|${tf.tz}|${tf.clock}`
     if (perKey !== this.keys.perim) {
       this.keys.perim = perKey
-      const { fc, latest } = m ? perimeterFeatures(per, m.grid, t, tf) : { fc: EMPTY, latest: null }
+      const { fc, latest } = m ? perimeterFeatures(per, m.grid, perT, tf) : { fc: EMPTY, latest: null }
       this.setData(SRC.perimeters, fc)
+      this.setData(SRC.perimeterArea, m && newest ? perimeterArea(newest, m.grid) : EMPTY)
       patchOverlays({ perimeter: { latestMs: latest?.t_ms ?? null, count: fc.features.length } })
     }
     // detections

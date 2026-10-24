@@ -79,6 +79,9 @@ export interface FlyTo {
   x: number
   z: number
   distance?: number
+  /** Brief 4 (CONTRACT §15.3): the compass heading (degrees clockwise from north) the camera should keep on the
+   *  map -> Forensic hand-off; absent = keep the camera's own heading. */
+  bearingDeg?: number
   nonce: number
 }
 
@@ -233,8 +236,9 @@ export interface AppState {
   setDrawingPath: (v: boolean) => void
   setSelectedEventId: (id: string | null) => void
   setFlyTo: (f: FlyTo | null) => void
-  /** Animate the camera to local (x, z); a fresh nonce is generated. */
-  flyToLocal: (x: number, z: number, distance?: number) => void
+  /** Animate the camera to local (x, z); a fresh nonce is generated. `bearingDeg` (brief 4) asks for that compass
+   *  heading too (the map -> Forensic hand-off); omitted = keep the camera's heading. */
+  flyToLocal: (x: number, z: number, distance?: number, bearingDeg?: number) => void
   /** Alias of flyToLocal (UI wording). */
   requestFlyTo: (x: number, z: number, distance?: number) => void
   setRightTab: (t: RightTab) => void
@@ -760,7 +764,8 @@ export const useStore = create<AppState>()((set, get) => {
     setDrawingPath: (drawingPath) => set({ drawingPath }),
     setSelectedEventId: (selectedEventId) => set({ selectedEventId }),
     setFlyTo: (flyTo) => set({ flyTo }),
-    flyToLocal: (x, z, distance) => set((s) => ({ flyTo: { x, z, distance, nonce: (s.flyTo?.nonce ?? 0) + 1 } })),
+    flyToLocal: (x, z, distance, bearingDeg) =>
+      set((s) => ({ flyTo: { x, z, distance, ...(bearingDeg != null && Number.isFinite(bearingDeg) ? { bearingDeg } : {}), nonce: (s.flyTo?.nonce ?? 0) + 1 } })),
     requestFlyTo: (x, z, distance) => get().flyToLocal(x, z, distance),
     setRightTab: (rightTab) => set({ rightTab }),
     setIncidentError: (incidentError) => set({ incidentError }),

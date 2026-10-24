@@ -22,22 +22,54 @@ Alaska and Hawaii are not supported yet. Fire-3d is a **research prototype, not 
 
 ## Screenshots
 
-![The national overview in Public: every active fire of the lower 48, grouped where they crowd (the number is how many), this year's large fires as outlined markers, the NWS Red Flag Warning outlines, "Official now · lower 48 states" and the list of fires in the map view with each one's county and state](docs/screenshots/brief3-final-overview-public-desktop.png)
+The current look (brief 4, Oct 2026): greys with one orange accent, a floating top bar, and map edges that dim like the
+edge of a globe as you zoom in.
 
-| A fire outside California: Horse Gulch, Montana (2024) | A California fire: the 2025 Eaton Fire |
-|---|---|
-| ![Horse Gulch on aerial photos: the burned area reconstructed from satellite detections and perimeters, the fire card with the Forest Service's record via NIFC WFIGS, the accuracy label for the Northern Rockies region, Official now ("Evacuations: not available in this state (Montana)", an archived local officials' alert from the FEMA archive, the NWS line) and the timeline in Mountain time](docs/screenshots/brief3-final-horse-gulch-public-desktop.png) | ![Public view on aerial photos with road and place labels: zooming in on the 2025 Eaton Fire shows its spread without a click, with the burned area, satellite heat detections, the hatched modeled spread, the archived NWS Red Flag Warning outline, the "Official now" block (evacuations, CAL FIRE's record, fire weather), the timeline and the coordinate strip](docs/screenshots/brief2-final-zoom-focus-eaton-1440.png) |
+![The Public overview as it opens: the floating top bar (Fire-3d, the Public · Command · Forensic switch, today's date and the number of active fires), the centred "Check an address" search pill with the locate-me button, every listed fire of the lower 48 as an outlined orange circle (groups read "28 FIRES"), the largest fires named with leader lines, the compact map controls with the turn buttons and compass, the "Show details" pill and the research-prototype line](docs/screenshots/brief4-final-public-overview-minimal.png)
 
-| Command preset: the location card of an address | Forensic workspace: the 3D analysis scene |
+| Public: clicking a fire opens its fire view | Command: the same tools and data as before, re-laid out |
 |---|---|
-| ![Command preset on the dark map: the four-part location card for 600 E Mariposa St, Altadena, inside the Eaton Fire's burned area, with the model's 0 % figure and run, official information at the replay time, coordinates in decimal degrees, DMS and UTM, the incident ID and the full Official now panel](docs/screenshots/brief2-final-card-eaton-burned-home-command-1440.png) | ![Forensic workspace: the Eaton Fire on photographic 3D terrain with arrival-time lines and the forecast field, the layer panel, Key Events, the weather card and the fire-area, spread-rate and elevation-profile charts](docs/screenshots/brief2-final-forensic-key-events-1440.png) |
+| ![The Public fire view of the 2025 Lower Sugarloaf Fire: the place and dates at the top, the share-your-location distance chip, the hazard circle ("WILDFIRE · DECLARED OUT", the name, "MORE IN COMMAND"), a leader line to the reported location, the newest NIFC WFIGS perimeter only, the official facts as "value — LABEL" rows with the OFFICIAL badge, and the map key with the perimeter's own time](docs/screenshots/brief4-final-public-fire-lower-sugarloaf.png) | ![Command in the synthetic fixture-live fire: the selected point's readout on the left (decimal, DMS and UTM, inside the mapped fire area with Mapped and Stale tags, the MODEL line, official information and the record rows), "Official now" as one-line rows on the right, labelled observed fire and modeled spread on the map, the controls bar, legend chips and the slim timeline](docs/screenshots/brief4-final-command-fire-fixture-live.png) |
+
+| Public overview after "Show details" | Forensic: the 3D analysis scene |
+|---|---|
+| ![The Public overview with details: the map controls bar, the "Fires in the lower 48" panel (Official now for the lower 48, Active / 2026 season / 2025 tabs, the list), the overview readout, the scale bar and the legend](docs/screenshots/brief4-final-public-overview-details.png) | ![Forensic on the fixture-live fire: green 3D terrain with arrival-time lines and telemetry labels, the floating top bar with the view switch, the compass with turn buttons, the layer panel, the weather card, the disclaimer pill and the timeline dock](docs/screenshots/brief4-final-forensic-fixture-live.png) |
 
 ## What you can do
 
 Fire-3d has two workspaces. **Public / Command** is one map of the lower 48 states with the fires drawn on top; its
 two presets, Public and Command, share the same map and data. **Forensic** is a 3D analysis scene with the scientific
-detail. The header switch reads "Public · Command · Forensic". Switching keeps the fire, the timeline time, the
-forecast and your selected point.
+detail. The switch in the middle of the top bar reads "Public · Command · Forensic". Switching keeps the fire, the
+timeline time, the forecast, your selected point and the map's heading.
+
+### The three views at a glance (the brief 4 design)
+
+- **Public overview.** It opens simple: the top bar (logo, today's date and how many fires are listed as active), a
+  centred search pill with a locate-me button, the map controls and a one-line disclaimer. Locate-me asks your browser
+  for your location only when you click it; the location stays in your browser until you choose "Check this spot".
+  "Show details" adds the controls bar, the "Fires in the lower 48" list with Official now, the overview readout, the
+  scale and the legend. The largest fires are named on the map with leader lines; groups read "28 FIRES".
+- **Public fire view.** Clicking a fire in Public (a marker, its name or a list row) opens its fire view: a round
+  "hazard circle" with the agency record's status (ACTIVE, CONTAINED, DECLARED OUT, …; a demo fire says SIMULATED
+  FIRE · DEMO) and the fire's name, the official facts as "value — LABEL" rows (burned, contained, started, reported
+  location, NWS fire weather, evacuation zones, a local officials' alert while one is in effect, last official
+  update), a chip that tells you how far you are once you share your location, and the map with the newest perimeter
+  only. There is no modeled spread and no timeline here: "MORE IN COMMAND ›" opens them. A fire that is not prepared
+  yet offers "Prepare map data (1-3 min)".
+- **Command.** Every tool and datum Command had, in a new layout: the selected point's readout on the left, "Official
+  now" on the right as one-line rows that open to the full official wording, labelled observed fire and modeled spread
+  on the map, the controls bar and legend chips, and a slim timeline across the bottom. "Check an address" is the search
+  icon in the top bar. With no fire open, Command uses the overview with the details always shown, and a click opens
+  the fire's card.
+- **Forensic.** The same 3D scene and tools, in the greys and orange of the other views; the view switch is in the top
+  bar, and the compass sits top left with "Frame fire" and "Charts & key events" under it.
+- **Turning the map (all three views, 2D and 3D).** Press `Q` or `E` (15° left or right) or the ⟲ ⟳ buttons beside
+  the compass; drag the compass around its centre; or right-drag, Ctrl + drag, or twist two fingers on a touch screen or
+  a Safari trackpad (Chrome on a Mac has no trackpad twist). `N` or a click on the compass turns north up. The heading
+  stays when you switch 2D ↔ 3D or Command ↔ Forensic.
+- **Globe-like dimming.** In Public and Command the edges of the map darken in a circle as you zoom in, so the middle,
+  where the fire is framed, stays bright.
+- Every view keeps "Research prototype — not for operational use" and "Not an all-clear. Follow local officials."
 
 ### Start on the national map
 
@@ -60,17 +92,19 @@ forecast and your selected point.
   Service) via NIFC WFIGS"), with a link to the record and the agency's plain name where NWCG's unit-identifier
   standard names its code; the few codes it does not name (for example "TRIBE", "SHP" or "DFFM") are shown as NIFC
   sends them.
-- **Zoom in to see the spread.** Zooming in on a fire whose analysis is prepared (from about zoom 8.5) shows it without
-  a click and without moving the camera: the burned area colored by when it burned, perimeters, satellite detections
+- **Zoom in to see the spread (Command).** In Command, zooming in on a fire whose analysis is prepared (from about
+  zoom 8.5) shows it without a click and without moving the camera (in Public, zooming never opens or closes a fire;
+  a click opens its fire view): the burned area colored by when it burned, perimeters, satellite detections
   and the selected forecast appear, and the timeline, the updates panel and the location card switch to that fire.
   Panning to a neighboring prepared fire switches to it; zooming out (below about zoom 7) returns to the overview.
   Other prepared fires in view show their latest perimeter as a dashed outline. Opening a fire explicitly (its card, a
   search result or a link) frames it and adds a browser history step, so Back returns to the overview.
-- **The fire card.** Clicking a marker opens the fire's card: the agency's record (acres, containment, status, the
-  record's own update time and a link to it), the fire's region accuracy label, Play spread, Check a location and Open
-  in 3D. For a fire that is not prepared yet (zoomed in, a chip under its marker reads "Spread not prepared yet"), the
-  card offers **Prepare analysis (1-3 min)**: the only way the Public and Command views start a build. A progress card
-  shows each step (terrain, observations, weather, forecast).
+- **The fire card (Command and Forensic).** In Command, clicking a marker opens the fire's card: the agency's record
+  (acres, containment, status, the record's own update time and a link to it), the fire's region accuracy label, Play
+  spread, Check a location and Open in 3D. For a fire that is not prepared yet (zoomed in, a chip under its marker reads
+  "Spread not prepared yet"), the card offers **Prepare analysis (1-3 min)**; in Public the fire view's "Prepare map
+  data (1-3 min)" does the same. These are the only ways the map views start a build. A progress line shows each step
+  (terrain, observations, weather, forecast).
 - **Times in the fire's own zone.** Every time is shown in the fire's local time zone with its abbreviation, for
   example "3:40 PM MDT" in Public (12-hour clock) and "15:40 MDT" in Command and Forensic (24-hour clock). Arizona's
   fires use Arizona's time (no daylight saving), and the Idaho panhandle uses Pacific time. A place you check uses the
@@ -84,6 +118,12 @@ forecast and your selected point.
 
 ### Public (the default view)
 
+Since brief 4, Public inside a fire is the simple fire view described above. The parts below that are model output
+or the detailed record (the modeled spread, the burned-area estimate from satellite detections, the detections
+themselves, the timeline and the updates feed, the location card's model part) are now in Command, one click away
+("MORE IN COMMAND ›" or the view switch). The overview, search and location checks, aerial photos, 2D / 3D, the
+satellite image and the official information stay in Public.
+
 - **See where the fire is** on a continuous map with roads, towns and landmarks: the burned area reconstructed from
   satellite detections and perimeters, agency-mapped perimeters (with the time they were mapped), satellite heat
   detections, and the incident's reported location (the agency's point, not the exact ignition point).
@@ -91,8 +131,8 @@ forecast and your selected point.
   The legend says when they were taken: "Photos: June 2024 or earlier", so they show the land *before* recent fires,
   and they are not live satellite images. Dark and roads maps are one click away, and a map you pick wins. If the USGS
   photos stop loading, the map switches to the dark map and offers "Try aerial again".
-- **Switch between 2D and 3D:** a north-up map, or tilted 3D terrain. In 3D, buttons rotate and tilt the view
-  (also Shift + arrow keys), and "Top-down" and "North up" reset it. From zoom 15, plain 3D building shapes from
+- **Switch between 2D and 3D:** a flat map, or tilted 3D terrain. Both can be turned (see "Turning the map" above);
+  in 3D, buttons tilt the view, and "Top-down" and "North up" reset it. From zoom 15, plain 3D building shapes from
   OpenStreetMap appear (no photo textures), with the caveat "today's OpenStreetMap; buildings destroyed by this fire may
   be missing; not a damage assessment". If the terrain service is down, the map stays usable as a flat map and says so.
 - **Read the forecast in plain words.** The modeled spread is shaded by the share of model runs that reached each spot
@@ -117,7 +157,8 @@ forecast and your selected point.
      or an Evacuation Immediate, quoted word for word), or exactly why nothing is shown: "No evacuation order or
      warning listed here · not an all-clear", "Evacuation zones: not available in this state", "not checked here",
      "not shown for past dates" or "unavailable right now". Then "Follow local officials." with links.
-  3. **What could bring fire here:** in Public a dated sentence, for example "In the experimental model, 0 of 31
+  3. **What could bring fire here** (in the Public fire view this part reads "Model weather (wind, dryness) and the
+     experimental spread model for this spot are in Command"): a dated sentence, for example "In the experimental model, 0 of 31
      simulated fires reached here by Oct 21, 10:00 PDT (72 h). Not a safety guarantee." (Command shows the figure,
      the model run and the arrival times.) Up to three reasons, each tagged: the wind blowing from the fire toward or
      away from the spot (Model), dryness (Model, or an NWS Red Flag Warning: Official) and lying uphill of the fire
@@ -130,8 +171,10 @@ forecast and your selected point.
 - **Follow the timeline:** past observations (solid line), NOW for live fires, and +24 h / +48 h / +72 h where the
   selected forecast covers them (dashed). Periods without data are disabled, with the reason. Live data older than
   6 hours is flagged STALE, and the current time is shown separately from the latest observation.
-- **Official now.** The top of the updates panel (and of the phone's "Updates" sheet, whose button shows a badge)
-  has the official rows, each with its issuer, its own times and a link, kept apart from the model:
+- **Official now.** Command's right column (the phone's "Updates" sheet, whose button shows a badge) has the official
+  rows, each a one-line row (status dot, title — verdict, issuer and its own time) that opens to the full wording and a
+  link, kept apart from the model; rows with an order, a warning or an alert in effect start open. The Public fire view
+  shows the same official items as its facts:
   - **Evacuations:** orders and warnings from local officials within 15 km of the fire, with their distance: via Cal
     OES in California and Oregon's Department of Emergency Management (OEM) in Oregon. In every other state the row
     says "Not available in this state (Montana)": Fire-3d found no free, official, machine-readable state feed there
@@ -157,12 +200,13 @@ forecast and your selected point.
   source and kind (observation, estimate, model output, official update or your own note), filtered by Official · All
   · Key events. Automated items carry an "Automated" label. Clicking an item moves the timeline to its time (official
   items only within the observed record) and flies the map to its location or official area.
-- **See the newest satellite image.** A "Satellite" chip in the header names the newest image of the fire, for example
-  "newest 23 h ago · 375 m · VIIRS NOAA-21 · Oct 17, 14:30 PDT". One click lays it on the map with a caption: platform,
+- **See the newest satellite image.** A mono status line at the top right names the newest image of the fire, for
+  example "VIIRS NOAA-21 · 375 M · 16 H AGO" (the age in amber when it is old). One click lays it on the map with a caption: platform,
   acquisition time, age, pixel size, cloud cover and "not live". "More images" lists the others (Sentinel-2,
   Landsat, VIIRS, GOES-West).
-- **Copy coordinates at any time.** The coordinate strip is always visible (compact in Public, one line on phones):
-  the incident's reported location and your selected point in WGS84 latitude and longitude, with copy buttons.
+- **Copy coordinates.** The incident's reported location and your selected point in WGS84 latitude and longitude,
+  with copy buttons: in Command's readout (also in degrees-minutes-seconds and UTM), in the Public fire view's facts
+  (the reported location) and in the overview's readout.
 - **Turn on official and public sources** in the Layers panel:
   - evacuation orders and warnings from local officials (California via Cal OES, Oregon via Oregon OEM; "not
     available in this state" elsewhere), with the official wording, the issuing authority and the update time; the
@@ -176,7 +220,8 @@ forecast and your selected point.
   on request. The three analysis charts (fire
   area, rate of spread and elevation profile) open in an Analysis drawer.
 - **Keyboard and phone friendly:** `/` focuses the search box, `H` hides the panels, `Space` plays the timeline and the
-  arrow keys step it (Shift: 6 hours). On the map, the arrow keys pan, `+` and `-` zoom and Shift + arrows rotate.
+  arrow keys step it (Shift: 6 hours), `Q` / `E` turn the view 15° and `N` turns it north up (in all three views). On
+  the map, the arrow keys pan, `+` and `-` zoom and Shift + arrows rotate.
   Reduced-motion settings are respected. On phones the panels become bottom sheets and the map stays visible above an
   open card.
 
@@ -191,7 +236,7 @@ the evacuation source, NWS and the fire's record). Times use the 24-hour clock i
 ### Forensic (the 3D analysis scene)
 
 The original React Three Fiber scene, with all the scientific tools. It opens map-first: the fire framed, the timeline,
-a "Frame fire" button and "Charts & key events" for the rest; your selected point is drawn as a cyan pin, and clicking
+a "Frame fire" button and "Charts & key events" for the rest; your selected point is drawn as a light-blue pin, and clicking
 the terrain selects a point.
 
 - photographic terrain (NAIP aerial photos on USGS elevation) in three visual styles: hybrid, realistic and parametric;
@@ -484,7 +529,7 @@ flowchart TB
 | `api/` | typed API client |
 | `map/` | the MapLibre map: basemaps, terrain, reprojected fire overlays, vector layers, fire markers, zoom focus, fire framing, 3D buildings, controls, legend and credits |
 | `location/` | search (addresses, towns, ZIP codes, coordinates, fire names), the location card and the coordinate strip |
-| `ui/shell/`, `ui/timeline/`, `ui/feed/` | the map workspace layout (header, overview panel, fire card, panels, drawers, safe area, workspace switching), the compact timeline, Official now and the updates feed |
+| `ui/shell/`, `ui/public/`, `ui/timeline/`, `ui/feed/` | the map workspace layout (floating top bar, the overview, Public fire view and Command chromes, overview panel, fire card, panels, drawers, safe area, workspace switching), the Public fire view (hazard circle, facts, distance chip), the compact timeline, Official now and the updates feed |
 | `official/` | official information: evacuations at a point, the fire's records (CAL FIRE and NIFC WFIGS), NWS alerts and their map layer, local officials' alerts |
 | `extras/` | optional sources: evacuation zones, cameras, recent satellite imagery and the satellite chip |
 | `scene/` and the other `ui/` files | the Forensic workspace: 3D scene, effects, panels, full timeline, charts, Key Events |
@@ -499,7 +544,9 @@ Design documents: [SPEC.md](SPEC.md) (data contracts and HTTP API), [docs/redesi
 (the map-first redesign), [docs/redesign/BRIEF-2.md](docs/redesign/BRIEF-2.md) and
 [docs/redesign/PLAN-2.md](docs/redesign/PLAN-2.md) (the California overview, civilian search and official
 information), [docs/redesign/BRIEF-3.md](docs/redesign/BRIEF-3.md) and [docs/redesign/PLAN-3.md](docs/redesign/PLAN-3.md)
-(the lower 48 states), [docs/redesign/CONTRACT.md](docs/redesign/CONTRACT.md) (interfaces between the parts),
+(the lower 48 states), [docs/redesign/BRIEF-4.md](docs/redesign/BRIEF-4.md),
+[docs/redesign/PLAN-4.md](docs/redesign/PLAN-4.md) and [docs/redesign/handoff-4/HANDOFF.md](docs/redesign/handoff-4/HANDOFF.md)
+(the brief 4 restyle from the design handoff), [docs/redesign/CONTRACT.md](docs/redesign/CONTRACT.md) (interfaces between the parts),
 [docs/validation.md](docs/validation.md) (forecast validation), [PLAN.md](PLAN.md) and
 [docs/dev/module-reports.md](docs/dev/module-reports.md) (build notes).
 

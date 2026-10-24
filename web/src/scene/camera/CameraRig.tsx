@@ -1,25 +1,36 @@
 // Camera rig (SPEC 9.3): map-style controls with damping (left-drag pan, right-drag orbit/tilt, wheel zooms toward
-// the cursor), an initial oblique view from the south-south-east framing the fire, 2D = animated top-down north-up,
+// the cursor), an initial oblique view from the south-south-east framing the fire, 2D = animated top-down,
 // store.flyTo and one-shot camera commands (compass reset-north, frame fire, zoom) animate smoothly. The orbit target
 // is kept on the terrain under the view centre (so the DOF focus and orbit pivot are on the ground) and the
 // projection is shifted so the target sits in the middle of the area not covered by UI panels (sceneStore.viewInsets).
+// Brief 4 (decisions f, k): the heading turns in 2D as in 3D. In 2D the controls rotate too, with the top-down polar
+// clamp kept (azimuth only: right-drag, Ctrl / Shift / Cmd + drag, a two-finger drag or twist); 2D <-> 3D keeps the
+// heading; the commands 'rotate' (deg) and 'set-heading' (deg) turn it (Q / E, the ⟲ ⟳ buttons, the compass drag);
+// the rig registers the view's RotationTarget (state/rotation.ts: Q / E / N reach it), takes Safari's trackpad twist
+// (lib/rotateGesture.ts) and a touch twist on the canvas, and applies store.flyTo.bearingDeg (the map's heading on the
+// hand-off, ui/shell/handoff.ts). Every turn goes through a camera command, so the hand-off sees the user's turn.
 import { useFrame, useThree } from '@react-three/fiber'
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { MapControls } from 'three/addons/controls/MapControls.js'
 import { raycastHeightfield } from '../../lib/geo'
+import { attachRotateGesture } from '../../lib/rotateGesture'
+import { registerRotation } from '../../state/rotation'
 import { useStore } from '../../state/store'
 import type { IncidentAssets } from '../assets'
 import { fireFrameWithForecast } from '../frame'
 import { reducedMotion } from '../motion'
-import { useSceneStore, type ViewInsets } from '../sceneStore'
+import { useSceneStore, type CameraCommand, type ViewInsets } from '../sceneStore'
 import { camState } from './cameraState'
+import { azimuthOfHeading, headingOfAzimuth, turnedAzimuth, TwistTracker } from './heading'
 
 const DEG = Math.PI / 180
 const POLAR_3D = 61 * DEG // from vertical (29 deg above the horizon)
 const AZ_SSE = 22.5 * DEG // camera south-south-east of the target, looking north-north-west
 const POLAR_2D = 0.0005
 const MAX_POLAR = 84 * DEG
+/** A ⟲ / ⟳ / Q / E turn (15°) animates this long (instant under reduced motion). */
+const TURN_S = 0.35
 
 interface Pose {
   tx: number
@@ -35,6 +46,8 @@ interface Tween {
   to: Pose
   t0: number
   dur: number
+  /** A heading turn ('rotate'): the next turn continues from this one's goal. */
+  turn?: boolean
 }
 
 const _pose: Pose = { tx: 0, ty: 0, tz: 0, dist: 1, polar: 0, azimuth: 0 }
@@ -61,6 +74,15 @@ function lerpAngle(a: number, b: number, t: number): number {
   if (d > Math.PI) d -= 2 * Math.PI
   if (d < -Math.PI) d += 2 * Math.PI
   return a + d * t
+}
+
+/** Stop the controls' leftover drag inertia (their damping keeps turning / panning for a while after a drag), so an
+ *  animation or a set heading does not drift afterwards. three.js has no public call for it: these are the fields its
+ *  own update() clears (OrbitControls r186). */
+function stopInertia(controls: MapControls, pan = true): void {
+  const c = controls as unknown as { _sphericalDelta?: THREE.Spherical; _panOffset?: THREE.Vector3 }
+  c._sphericalDelta?.set(0, 0, 0)
+  if (pan) c._panOffset?.set(0, 0, 0)
 }
 
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
@@ -106,10 +128,15 @@ export function CameraRig({ assets }: { assets: IncidentAssets | null }) {
   }, [camera])
 
   const tween = useRef<Tween | null>(null)
-  const last3d = useRef({ polar: POLAR_3D, azimuth: AZ_SSE })
+  const last3dPolar = useRef(POLAR_3D)
   const framedKey = useRef<string | null>(null)
   const exagRef = useRef(useStore.getState().exaggeration)
   const publish = useRef({ t: 0, key: '' })
+  // what the camera-command subscription needs from the latest render
+  const latest = useRef({ assets, width: size.width, height: size.height })
+  useLayoutEffect(() => {
+    latest.current = { assets, width: size.width, height: size.height }
+  }, [assets, size.width, size.height])
 
   // no keyboard panning: the timeline owns the arrow keys
   useEffect(() => {
@@ -137,9 +164,10 @@ export function CameraRig({ assets }: { assets: IncidentAssets | null }) {
     camera.updateProjectionMatrix()
   }, [camera, size.width, size.height, insets])
 
-  const startTween = (to: Pose, dur = 1.2) => {
+  const startTween = (to: Pose, dur = 1.2, turn = false) => {
+    stopInertia(controls)
     const from = poseOf(camera, controls.target)
-    tween.current = { from, to, t0: performance.now(), dur: reducedMotion() ? 0.05 : dur }
+    tween.current = { from, to, t0: performance.now(), dur: reducedMotion() ? 0.05 : dur, turn }
     camState.animating = true
     controls.enabled = false
   }
@@ -161,22 +189,24 @@ export function CameraRig({ assets }: { assets: IncidentAssets | null }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assetKey])
 
-  // 2D / 3D
+  // 2D / 3D: the heading is kept both ways (decision k); 2D clamps the polar angle to top-down, so the controls only
+  // turn the azimuth there (right-drag, modifier + drag, two fingers)
   useEffect(() => {
     if (!assets) return
-    controls.enableRotate = viewMode === '3d'
-    controls.maxPolarAngle = viewMode === '3d' ? MAX_POLAR : POLAR_2D * 2
+    controls.enableRotate = true
+    controls.minPolarAngle = viewMode === '3d' ? 0 : POLAR_2D
+    controls.maxPolarAngle = viewMode === '3d' ? MAX_POLAR : POLAR_2D
     const cur = poseOf(camera, controls.target)
     if (viewMode === '2d') {
-      if (cur.polar > POLAR_2D * 4) last3d.current = { polar: cur.polar, azimuth: cur.azimuth }
-      startTween({ ...cur, polar: POLAR_2D, azimuth: 0, dist: cur.dist * (cur.polar > 0.3 ? 1.15 : 1) }, 1.1)
+      if (cur.polar > POLAR_2D * 4) last3dPolar.current = cur.polar
+      startTween({ ...cur, polar: POLAR_2D, dist: cur.dist * (cur.polar > 0.3 ? 1.15 : 1) }, 1.1)
     } else if (cur.polar < 0.05) {
-      startTween({ ...cur, polar: last3d.current.polar, azimuth: last3d.current.azimuth, dist: cur.dist / 1.15 }, 1.1)
+      startTween({ ...cur, polar: last3dPolar.current, dist: cur.dist / 1.15 }, 1.1)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewMode])
 
-  // store.flyTo
+  // store.flyTo (with the map's heading on the hand-off from the map: flyTo.bearingDeg)
   const flyNonce = useStore((s) => s.flyTo?.nonce ?? null)
   useEffect(() => {
     const f = useStore.getState().flyTo
@@ -184,26 +214,108 @@ export function CameraRig({ assets }: { assets: IncidentAssets | null }) {
     const exag = useStore.getState().exaggeration
     const cur = poseOf(camera, controls.target)
     const dist = f.distance ?? Math.min(cur.dist, assets.extent * 0.32)
-    startTween({ tx: f.x, ty: assets.heightAt(f.x, f.z) * exag, tz: f.z, dist: Math.max(controls.minDistance, dist), polar: cur.polar, azimuth: cur.azimuth }, 1.5)
+    const azimuth = f.bearingDeg != null && Number.isFinite(f.bearingDeg) ? azimuthOfHeading(f.bearingDeg) : cur.azimuth
+    startTween({ tx: f.x, ty: assets.heightAt(f.x, f.z) * exag, tz: f.z, dist: Math.max(controls.minDistance, dist), polar: cur.polar, azimuth }, 1.5)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flyNonce])
 
-  // one-shot camera commands (compass, frame fire, zoom buttons)
-  const cmdNonce = useSceneStore((s) => s.cameraCommand?.nonce ?? null)
+  // one-shot camera commands (compass, turn buttons and keys, frame fire, zoom buttons), handled as they are issued
+  // (a store subscription: a compass drag sends one per frame without re-rendering this component)
   useEffect(() => {
-    const cmd = useSceneStore.getState().cameraCommand
-    if (!cmd || !assets) return
-    const cur = poseOf(camera, controls.target)
-    const exag = useStore.getState().exaggeration
-    if (cmd.kind === 'reset-north') startTween({ ...cur, azimuth: 0 }, 0.9)
-    else if (cmd.kind === 'zoom-in') startTween({ ...cur, dist: Math.max(controls.minDistance, cur.dist * 0.6) }, 0.5)
-    else if (cmd.kind === 'zoom-out') startTween({ ...cur, dist: Math.min(controls.maxDistance, cur.dist / 0.6) }, 0.5)
-    else if (cmd.kind === 'frame-fire') {
-      const vm = useStore.getState().viewMode
-      startTween(framingPose(assets, exag, size.width, size.height, useSceneStore.getState().viewInsets, camera.fov, vm === '2d' ? POLAR_2D : POLAR_3D, vm === '2d' ? 0 : AZ_SSE), 1.4)
+    const run = (cmd: CameraCommand) => {
+      const { assets: a, width, height } = latest.current
+      if (!a) return
+      const cur = poseOf(camera, controls.target)
+      const exag = useStore.getState().exaggeration
+      const tw = tween.current
+      if (cmd.kind === 'reset-north' || cmd.kind === 'rotate') {
+        if (cmd.kind === 'rotate' && cmd.deg == null) return
+        const goal = (from: number) => (cmd.kind === 'rotate' ? turnedAzimuth(from, cmd.deg ?? 0) : 0)
+        // during another animation (2D <-> 3D, a fly-to, framing) the turn joins it: same end, new heading
+        if (tw && !tw.turn) {
+          tw.to.azimuth = goal(tw.to.azimuth)
+          return
+        }
+        // a turn during a turn continues from that turn's goal, so repeated presses add up to whole steps
+        const base = tw?.turn ? tw.to.azimuth : cur.azimuth
+        startTween({ ...cur, azimuth: goal(base) }, cmd.kind === 'rotate' ? TURN_S : 0.9, true)
+      } else if (cmd.kind === 'set-heading') {
+        if (cmd.deg == null) return
+        const azimuth = azimuthOfHeading(cmd.deg)
+        if (tw) {
+          // an animation is running (2D <-> 3D, a fly-to): it ends at this heading
+          tw.from.azimuth = azimuth
+          tw.to.azimuth = azimuth
+          return
+        }
+        stopInertia(controls, false)
+        applyPose({ ...cur, azimuth }, camera, controls)
+        controls.update()
+      } else if (cmd.kind === 'zoom-in') startTween({ ...cur, dist: Math.max(controls.minDistance, cur.dist * 0.6) }, 0.5)
+      else if (cmd.kind === 'zoom-out') startTween({ ...cur, dist: Math.min(controls.maxDistance, cur.dist / 0.6) }, 0.5)
+      else if (cmd.kind === 'frame-fire') {
+        // fit the whole fire, keeping the heading (north up only on request)
+        const vm = useStore.getState().viewMode
+        startTween(framingPose(a, exag, width, height, useSceneStore.getState().viewInsets, camera.fov, vm === '2d' ? POLAR_2D : POLAR_3D, cur.azimuth), 1.4)
+      }
     }
+    return useSceneStore.subscribe((s, p) => {
+      if (s.cameraCommand && s.cameraCommand !== p.cameraCommand) run(s.cameraCommand)
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cmdNonce])
+  }, [camera, controls])
+
+  // the visible view's rotation for Q / E / N (state/rotation.ts) and the compass; every turn is a camera command
+  useEffect(() => {
+    const issue = useSceneStore.getState().issueCameraCommand
+    return registerRotation({
+      rotateBy: (deg) => issue('rotate', deg),
+      northUp: () => issue('reset-north'),
+      setBearing: (deg) => issue('set-heading', deg),
+      bearing: () => headingOfAzimuth(camState.azimuth),
+    })
+  }, [])
+
+  // Safari's two-finger trackpad twist and a two-finger twist on a touch screen turn the view with the fingers
+  useEffect(() => {
+    const el = gl.domElement
+    const heading = () => headingOfAzimuth(poseOf(camera, controls.target).azimuth)
+    const setHeading = (deg: number) => useSceneStore.getState().issueCameraCommand('set-heading', deg)
+    let safariStart = 0
+    const detachSafari = attachRotateGesture(el, {
+      start: () => {
+        safariStart = heading()
+      },
+      rotate: (delta) => setHeading(safariStart - delta),
+      end: () => undefined,
+    })
+    const twist = new TwistTracker()
+    let twistStart = 0
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') twist.down(e.pointerId, e.clientX, e.clientY)
+    }
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch') return
+      const step = twist.move(e.pointerId, e.clientX, e.clientY)
+      if (!step) return
+      if (step.start) twistStart = heading()
+      setHeading(twistStart - step.turned)
+    }
+    const onUp = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') twist.up(e.pointerId)
+    }
+    el.addEventListener('pointerdown', onDown)
+    el.addEventListener('pointermove', onMove)
+    el.addEventListener('pointerup', onUp)
+    el.addEventListener('pointercancel', onUp)
+    return () => {
+      detachSafari()
+      el.removeEventListener('pointerdown', onDown)
+      el.removeEventListener('pointermove', onMove)
+      el.removeEventListener('pointerup', onUp)
+      el.removeEventListener('pointercancel', onUp)
+    }
+  }, [gl, camera, controls])
 
   useFrame(() => {
     const s = useStore.getState()

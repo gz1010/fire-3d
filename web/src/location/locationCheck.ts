@@ -75,6 +75,11 @@ function locationType(p: SelectedLocation): string {
       return p.approximate ? 'Event location (estimated)' : 'Event location'
     case 'incident':
       return 'Incident reported location (where the incident was reported, not necessarily where it started)'
+    case 'device':
+      // brief 4: the browser's own location, checked because the user asked ("Check this spot", which says it sends the
+      // point to Fire-3d's server, as a map click does); never put in the link (H3+H4 review R3: "not saved" was not
+      // exact once the point is checked)
+      return p.approximate ? 'Your location from your browser, checked at your request (approximate; not added to the link)' : 'Your location from your browser, checked at your request (not added to the link)'
   }
 }
 
@@ -171,7 +176,9 @@ function observedFireCheck(input: LocationCheckInput, local: [number, number] | 
   if (gap || !local || !manifest || !rasters.observedArrival.layer) return { state: 'gap', gap: gap ?? 'nodata' }
   const s = sampleArrival(rasters.observedArrival.layer, local[0], local[1], manifest.grid.extent_m, manifest.time_origin_ms)
   if (s.kind === 'arrival' && s.ms <= timeMs + TIME_TOL_MS) return { state: 'burned', arrivalMs: s.ms }
-  if (s.kind === 'arrival' || s.kind === 'never') return { state: 'not_burned', asOfMs: timeMs }
+  // "not burned by <time>, as far as satellite observations show": never later than the latest observation (the
+  // forecast part and a live fire's NOW show that observation; review H2-B1)
+  if (s.kind === 'arrival' || s.kind === 'never') return { state: 'not_burned', asOfMs: Math.min(timeMs, manifest.time_range.now_ms) }
   return { state: 'gap', gap: s.kind === 'outside' ? 'outside_modeled_area' : 'nodata' }
 }
 
@@ -455,6 +462,17 @@ function sourcesFor(input: LocationCheckInput, r: Omit<LocationReport, 'sources'
   return out
 }
 
+/** The forecast's own caveats (said only where the model's numbers show; the Public fire view leaves them out with
+ *  the model, brief 4 decision a, review R4). */
+export const MODEL_SPOTTING_CAVEAT = 'The model does not simulate ember spotting, and firefighting is not modeled, so real spread can differ.'
+export const MODEL_EDGE_CAVEAT = 'This spot is near the edge of the modeled area, where model runs were cut off: burn chances here are underestimated.'
+export function ensembleCaveat(members: number): string {
+  return `Forecast numbers describe ${members} model runs (an ensemble with varied weather) of an experimental research model. They are not an official forecast or evacuation instruction; follow official orders.`
+}
+export function isModelCaveat(c: string): boolean {
+  return c === MODEL_SPOTTING_CAVEAT || c === MODEL_EDGE_CAVEAT || /^Forecast numbers describe \d+ model runs\b/.test(c)
+}
+
 function caveatsFor(input: LocationCheckInput, r: Omit<LocationReport, 'sources' | 'caveats'>): string[] {
   const out: string[] = []
   if (isDemoBundle(input.manifest?.id ?? input.summary?.id, input.manifest)) out.push('Demo bundle with simulated data: this is not a real fire.')
@@ -470,12 +488,9 @@ function caveatsFor(input: LocationCheckInput, r: Omit<LocationReport, 'sources'
   if (r.nearestDetection.state === 'ok') out.push('A satellite detection marks a hot pixel (hundreds of metres to kilometres wide); it is not the exact fire edge.')
   const f = r.forecast
   if (f.state === 'ok') {
-    out.push(
-      `Forecast numbers describe ${f.members} model runs (an ensemble with varied weather) of an experimental research model. They are not an official forecast or evacuation instruction; follow official orders.`,
-    )
-    if (!f.model.spotting) out.push('The model does not simulate ember spotting, and firefighting is not modeled, so real spread can differ.')
-    if (f.warnings.some((w) => /boundary|edge of the|beyond it/i.test(w)) && r.edgeDistanceM != null && r.edgeDistanceM < EDGE_NEAR_M)
-      out.push('This spot is near the edge of the modeled area, where model runs were cut off: burn chances here are underestimated.')
+    out.push(ensembleCaveat(f.members))
+    if (!f.model.spotting) out.push(MODEL_SPOTTING_CAVEAT)
+    if (f.warnings.some((w) => /boundary|edge of the|beyond it/i.test(w)) && r.edgeDistanceM != null && r.edgeDistanceM < EDGE_NEAR_M) out.push(MODEL_EDGE_CAVEAT)
   }
   if (r.modeledArea !== 'no_bundle') out.push('One point check does not establish the safety of a route or an area.')
   return out

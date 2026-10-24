@@ -4,10 +4,14 @@
 // Brief 2 (O-R12): when the USGS aerial photos fail, the map falls back to the dark street map (workspace
 // basemapFallback) and says so here, with "Try aerial again"; past the photos' last zoom level it says the photo
 // detail ends there (closer views only enlarge it).
+// Brief 4 H4 (decision a): the Public fire view draws neither the model nor the modeled area, and says itself when
+// Fire-3d has not prepared the fire's map data (under its facts): there the model notices are left out, and leaving the
+// fire's area reads "<name> is out of view" with "Back to the fire".
 import { X } from 'lucide-react'
 import { useState } from 'react'
 import { useStore } from '../state/store'
 import { useWorkspace } from '../state/workspace'
+import { mapProfileOf } from './fireProfile'
 import { useMapRuntime } from './mapStore'
 import { USGS_IMAGERY_MAXZOOM } from './providers'
 
@@ -35,6 +39,7 @@ export function MapNotices() {
   const name = useStore((s) => s.summary?.name ?? null)
   const bundle = useStore((s) => s.manifest?.status ?? s.summary?.bundle_status ?? null)
   const hasIncident = useStore((s) => s.incidentId != null)
+  const fireView = useWorkspace((s) => mapProfileOf(s.preset, hasIncident) === 'public-fire')
   const [dismissed, setDismissed] = useState<Record<string, boolean>>({})
 
   const list: Notice[] = []
@@ -59,16 +64,18 @@ export function MapNotices() {
       dismissible: true,
       text: perspective === '3d' ? '3D terrain unavailable (Mapterhorn is not responding): showing a flat map.' : 'Terrain shading unavailable (Mapterhorn is not responding).',
     })
-  if (hasIncident && bundle !== 'ready' && bundle != null)
+  if (hasIncident && !fireView && bundle !== 'ready' && bundle != null)
     list.push({
       id: 'bundle',
       tone: 'info',
       dismissible: false,
       text: bundle === 'building' ? 'Model data for this incident is being prepared; the map shows its reported location for now.' : 'No model data for this incident; the map shows its reported location only.',
     })
-  if (observed.status === 'error') list.push({ id: 'obs-error', tone: 'warn', dismissible: true, text: 'The observed fire layer could not be loaded.' })
-  if (forecast.status === 'error') list.push({ id: 'fc-error', tone: 'warn', dismissible: true, text: 'The forecast layer could not be loaded.' })
-  if (aoiInView === false)
+  if (!fireView && observed.status === 'error') list.push({ id: 'obs-error', tone: 'warn', dismissible: true, text: 'The observed fire layer could not be loaded.' })
+  if (!fireView && forecast.status === 'error') list.push({ id: 'fc-error', tone: 'warn', dismissible: true, text: 'The forecast layer could not be loaded.' })
+  if (aoiInView === false && fireView)
+    list.push({ id: 'outside', tone: 'info', dismissible: false, text: `${name ?? 'The fire'} is out of view.`, action: { label: 'Back to the fire', run: () => actions?.frameFire() } })
+  else if (aoiInView === false)
     list.push({
       id: 'outside',
       tone: 'info',

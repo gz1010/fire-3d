@@ -1,0 +1,97 @@
+/* Map atmosphere (owner: H2c; brief 4 decision g, CONTRACT §15.1). map/MapAtmosphere.tsx places .mw-atmo inside the
+   MapLibre map directly above the canvas: it dims the map picture only, while the map's own DOM overlays (selection
+   pin, markers, hover text, popups; MapLibre appends them later, so they paint above) and the provider notices
+   (z-index 2) stay readable, and the floating chrome (--m-z-chrome) is above it all. It never catches pointer events
+   and is hidden from assistive technology. Public and Command only (2D and 3D); Forensic has its own scene.
+     ::before  the globe-like vignette: a circle at --mw-vig-x / --mw-vig-y (the safe area's centre) whose dark edge
+               starts at .6 of --mw-vig-r (half the safe area's shorter side), at the strength --mw-vignette
+               (clamp((zoom − 3) / 7, .25, 1), written by MapAtmosphere when it moves by .02 or more);
+     ::after   the per-view edge gradients behind the chrome's text, chosen by data-edges, with the stops of the
+               handoff's screens (CommandView / FireView rgba(12,12,12,…), Main rgba(14,14,14,…)). */
+.mw-atmo {
+  --mw-vignette: 0.25;
+  --mw-vig-x: 50%;
+  --mw-vig-y: 50%;
+  --mw-vig-r: 360px;
+  position: absolute;
+  inset: 0;
+  /* no stacking level of its own: painted in DOM order inside the map (above the canvas, below what MapLibre
+     appends after it) */
+  pointer-events: none;
+}
+.mw-atmo::before,
+.mw-atmo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* the globe: central area clear, the surroundings dim towards a circular limb */
+.mw-atmo::before {
+  background: radial-gradient(
+    circle at var(--mw-vig-x) var(--mw-vig-y),
+    rgba(12, 12, 12, 0) calc(var(--mw-vig-r) * 0.6),
+    rgba(12, 12, 12, 0.55) calc(var(--mw-vig-r) * 0.92),
+    rgba(12, 12, 12, 0.9) calc(var(--mw-vig-r) * 1.35)
+  );
+  opacity: var(--mw-vignette);
+  transition: opacity 160ms linear;
+}
+
+/* edge gradients (static per view) */
+.mw-atmo::after {
+  transition: opacity 200ms ease;
+}
+/* Command (CommandView.dc.html): left 540, right 500, bottom 230, top 120; the side columns narrow with the readout
+   and Official now columns below 1440 px (decision h: 360 / 320 px at 1024-1279) */
+.mw-atmo[data-edges='command']::after {
+  background:
+    linear-gradient(90deg, rgba(12, 12, 12, 0.93) 0%, rgba(12, 12, 12, 0.72) 62%, rgba(12, 12, 12, 0) 100%) left top / min(540px, 38vw) 100% no-repeat,
+    linear-gradient(270deg, rgba(12, 12, 12, 0.93) 0%, rgba(12, 12, 12, 0.72) 62%, rgba(12, 12, 12, 0) 100%) right top / min(500px, 35vw) 100% no-repeat,
+    linear-gradient(0deg, rgba(12, 12, 12, 0.96) 0%, rgba(12, 12, 12, 0) 100%) left bottom / 100% 230px no-repeat,
+    linear-gradient(180deg, rgba(12, 12, 12, 0.9) 0%, rgba(12, 12, 12, 0) 100%) left top / 100% 120px no-repeat;
+}
+/* Public fire view (FireView.dc.html): the facts column on the left, 560 px */
+.mw-atmo[data-edges='fire']::after {
+  background: linear-gradient(90deg, rgba(12, 12, 12, 0.9) 0%, rgba(12, 12, 12, 0.72) 55%, rgba(12, 12, 12, 0) 100%) left top / min(560px, 42vw) 100% no-repeat;
+}
+/* Public overview (Main.dc.html): top and bottom 200 px (the radial dimming is the vignette above). Brief 4 H3: soft
+   dark plates behind the bar's logo and title (left) and its date and count (right), so basemap place names do not
+   show through them (the dark basemap's capitals at the very top of the map), whatever the zoom */
+.mw-atmo[data-edges='overview']::after {
+  background:
+    radial-gradient(ellipse 340px 70px at 170px 42px, rgba(14, 14, 14, 0.72) 0%, rgba(14, 14, 14, 0.45) 55%, rgba(14, 14, 14, 0) 100%),
+    radial-gradient(ellipse 280px 60px at calc(100% - 130px) 42px, rgba(14, 14, 14, 0.6) 0%, rgba(14, 14, 14, 0) 100%),
+    linear-gradient(180deg, rgba(14, 14, 14, 0.85) 0%, rgba(14, 14, 14, 0) 100%) left top / 100% min(200px, 24vh) no-repeat,
+    linear-gradient(0deg, rgba(14, 14, 14, 0.9) 0%, rgba(14, 14, 14, 0) 100%) left bottom / 100% min(200px, 24vh) no-repeat;
+}
+@media (max-width: 760px) {
+  .mw-atmo[data-edges='overview']::after {
+    background:
+      radial-gradient(ellipse 280px 56px at 130px 30px, rgba(14, 14, 14, 0.72) 0%, rgba(14, 14, 14, 0.45) 55%, rgba(14, 14, 14, 0) 100%),
+      linear-gradient(180deg, rgba(14, 14, 14, 0.88) 0%, rgba(14, 14, 14, 0) 100%) left top / 100% 150px no-repeat,
+      linear-gradient(0deg, rgba(14, 14, 14, 0.9) 0%, rgba(14, 14, 14, 0) 100%) left bottom / 100% 170px no-repeat;
+  }
+}
+/* phones: the columns become bottom sheets, so the side gradients would only darken the map; the top bar and the
+   bottom sheet keep a gradient behind them */
+@media (max-width: 760px) {
+  .mw-atmo[data-edges='command']::after,
+  .mw-atmo[data-edges='fire']::after {
+    background:
+      linear-gradient(180deg, rgba(12, 12, 12, 0.88) 0%, rgba(12, 12, 12, 0) 100%) left top / 100% 140px no-repeat,
+      linear-gradient(0deg, rgba(12, 12, 12, 0.9) 0%, rgba(12, 12, 12, 0) 100%) left bottom / 100% 160px no-repeat;
+  }
+}
+/* panels hidden (H): no text over the edges, so no edge gradients */
+.mw.is-collapsed .mw-atmo::after {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mw-atmo::before,
+  .mw-atmo::after {
+    transition: none;
+  }
+}

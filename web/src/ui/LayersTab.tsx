@@ -249,7 +249,9 @@ function Legend({ layer }: { layer: LayerKey }) {
           <i style={{ left: '50%' }}>50</i>
           <i style={{ left: '90%' }}>90%</i>
         </span>
-        <span className="legend-cap">P(burned by t)</span>
+        <span className="legend-cap">
+          P(burned by t) <span className="exp-tag">experimental model</span>
+        </span>
       </div>
     )
   if (layer === 'fuels')

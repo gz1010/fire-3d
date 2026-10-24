@@ -19,6 +19,8 @@ export const SRC = {
   forecastLines: 'fx-forecast-lines',
   forecastHatch: 'fx-forecast-hatch',
   perimeters: 'fx-perimeters',
+  /** Brief 4 H4: the newest perimeter as polygons, filled in the Public fire view only (empty otherwise). */
+  perimeterArea: 'fx-perimeter-area',
   detections: 'fx-detections',
   detectionPoints: 'fx-detection-points',
   aoi: 'fx-aoi',
@@ -36,6 +38,7 @@ export const LYR = {
   forecastLine50: 'fx-forecast-line-50',
   observedGlow: 'fx-observed-glow',
   observedEdge: 'fx-observed-edge',
+  perimeterArea: 'fx-perimeter-area',
   perimetersOld: 'fx-perimeters-old',
   perimetersLatest: 'fx-perimeters-latest',
   nearbyCasing: 'fx-nearby-casing',
@@ -85,7 +88,7 @@ const FONT_BOLD = ['Noto Sans Bold']
 export const LAYER_GROUPS = {
   observed: [LYR.observedRaster, LYR.observedGlow, LYR.observedEdge],
   forecast: [LYR.forecastRaster, LYR.forecastHatch, LYR.forecastLine10, LYR.forecastLine50],
-  perimeters: [LYR.perimetersCasing, LYR.perimetersOld, LYR.perimetersLatest, LYR.perimetersLabel, LYR.nearbyCasing, LYR.nearbyLine, LYR.nearbyLabel],
+  perimeters: [LYR.perimeterArea, LYR.perimetersCasing, LYR.perimetersOld, LYR.perimetersLatest, LYR.perimetersLabel, LYR.nearbyCasing, LYR.nearbyLine, LYR.nearbyLabel],
   detections: [LYR.detectionsFill, LYR.detectionsLine, LYR.detectionsGoes, LYR.detectionsDot],
   events: [LYR.eventsCircle, LYR.eventsLabel],
 } as const
@@ -194,6 +197,14 @@ export function drapedLayers(theme: MapTheme = 'dark'): LayerSpecification[] {
       paint: { 'line-color': TOKENS.fireObserved, 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1.2, 14, 2.2] },
     },
     {
+      // the Public fire view's fire area (brief 4 H4, decision a): the newest perimeter filled, as FireView.dc.html's
+      // "fire area" (map/fireProfile.ts); its source stays empty in Command and on the overview
+      id: LYR.perimeterArea,
+      type: 'fill',
+      source: SRC.perimeterArea,
+      paint: { 'fill-color': TOKENS.fireObservedFill, 'fill-opacity': aerial ? ['interpolate', ['linear'], ['zoom'], 12.5, 1, 13.5, AERIAL_CLOSE_FILL_OPACITY] : 1 },
+    },
+    {
       id: LYR.perimetersOld,
       type: 'line',
       source: SRC.perimeters,
@@ -236,8 +247,15 @@ export function drapedLayers(theme: MapTheme = 'dark'): LayerSpecification[] {
   return layers
 }
 
-/** Point markers and our labels (added after the basemap labels). */
-export function topLayers(theme: MapTheme = 'dark'): LayerSpecification[] {
+/** The reported location's label: the fire's name, then "Reported location" (Public) or the Command screen's short
+ *  "REPORTED" (handoff-4 CommandView). The hover text explains it in both. */
+export function incidentLabelField(preset: 'public' | 'command' = 'public'): unknown[] {
+  const second = preset === 'command' ? ['REPORTED', { 'font-scale': 0.74 }] : ['Reported location', { 'font-scale': 0.82 }]
+  return ['format', ['get', 'name'], { 'font-scale': 1, 'text-font': ['literal', FONT_BOLD] }, '\n', {}, ...second]
+}
+
+/** Point markers and our labels (added after the basemap labels). `preset` picks the reported location's label. */
+export function topLayers(theme: MapTheme = 'dark', preset: 'public' | 'command' = 'public'): LayerSpecification[] {
   const t = THEME[theme]
   const aerial = theme === 'aerial'
   return [
@@ -342,7 +360,7 @@ export function topLayers(theme: MapTheme = 'dark'): LayerSpecification[] {
       type: 'symbol',
       source: SRC.incident,
       layout: {
-        'text-field': ['format', ['get', 'name'], { 'font-scale': 1, 'text-font': ['literal', FONT_BOLD] }, '\n', {}, 'Reported location', { 'font-scale': 0.82 }],
+        'text-field': incidentLabelField(preset) as never,
         'text-font': FONT_REGULAR,
         'text-size': 12.5,
         'text-anchor': 'top',

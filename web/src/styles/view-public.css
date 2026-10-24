@@ -1,0 +1,1603 @@
+/* The Public map views (brief 4 H3 + H4; docs/redesign/handoff-4/screens/Main.dc.html and FireView.dc.html; PLAN-4
+   §3.3-3.4). Every rule is scoped to its chrome's root: .mw[data-view='overview'] (the national overview, both presets;
+   ui/shell/OverviewChrome.tsx) and .mw[data-view='public-fire'] (the fire view, H4). Values are the screens': top bar
+   from the tokens, the centred search pill at --m-chrome-top (560 × 52 + the 52 px locate button), the first row of
+   panels at 160 px (--ovw-row2), sides 28 px, the list panel 472 px at the right edge (12 px), the readout 360 px at
+   the bottom left, the legend 600 px at the bottom right, the disclaimer centred above the credits and the "Show
+   details" pill at the bottom right (Public). Phones (<= 760 px, decision h): a full-width search pill with a 44 px
+   locate button, the compact controls at the bottom right, the fire list as a bottom sheet. */
+
+/* ================================================================================================ overview */
+.mw[data-view='overview'] {
+  --ovw-x: var(--m-topbar-x);
+  /* the first row under the search pill (Main: 160 px = 84 + 52 + 24) */
+  --ovw-row2: calc(var(--m-chrome-top) + 76px);
+  --ovw-card-w: 360px;
+  --ovw-list-w: 472px;
+  --ovw-list-w-eff: min(var(--ovw-list-w), 36vw);
+  /* the scale bar beside the readout (its plate + the gap) */
+  --ovw-scale-w: 172px;
+  /* the disclaimer + pill row and the credits under the panels (the fire list runs down to it on shorter screens) */
+  --ovw-low: 88px;
+  --ovw-glass: rgba(14, 14, 14, 0.74);
+  --ovw-glass-blur: blur(22px) saturate(140%);
+  --ovw-hair: rgba(200, 200, 200, 0.18);
+}
+
+/* ------------------------------------------------------------------------------------------------ top bar */
+/* "OCT 24 2026 · 203 ACTIVE": mono 11 px, .14em, the count in fire orange (ui/public/OverviewStatus.tsx) */
+.ovw-status {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 400 11px / 1.3 var(--m-font-mono);
+  letter-spacing: 0.14em;
+  color: #d0d0d0;
+  cursor: default;
+}
+.ovw-status-sep {
+  white-space: pre;
+}
+.ovw-status-count.is-count {
+  color: var(--m-fire-2);
+}
+.ovw-status-count.is-quiet {
+  color: var(--m-text-3);
+}
+.ovw-status-count.is-warn {
+  color: var(--m-stale);
+}
+
+/* ------------------------------------------------------------------------------------------------ search row */
+/* the search pill and the locate-me button, centred under the bar; the results open under the pill */
+.mw[data-view='overview'] .ovw-search {
+  --chrome-side: top;
+  position: absolute;
+  top: var(--m-chrome-top);
+  left: 0;
+  right: 0;
+  z-index: calc(var(--m-z-chrome) + 2);
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: min(622px, calc(100% - 2 * var(--ovw-x)));
+  margin: 0 auto;
+}
+.mw[data-view='overview'] .ovw-search .loc-search {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------------------------------------------ "Show details" */
+.ovw-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 48px;
+  padding: 0 18px 0 16px;
+  border: 1px solid rgba(200, 200, 200, 0.3);
+  border-radius: 999px;
+  background: rgba(14, 14, 14, 0.66);
+  -webkit-backdrop-filter: var(--ovw-glass-blur);
+  backdrop-filter: var(--ovw-glass-blur);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  color: var(--m-text);
+  font: 500 14px / 1 var(--m-font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ovw-pill:hover {
+  background: rgba(30, 30, 30, 0.78);
+}
+.ovw-pill-icon {
+  flex: none;
+  color: #d0d0d0;
+}
+.ovw-pill-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 106, 42, 0.16);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--m-fire-3);
+}
+
+/* ------------------------------------------------------------------------------------------------ disclaimer */
+.mw[data-view='overview'] .ovw-note {
+  --chrome-side: bottom;
+  grid-area: note;
+  justify-self: center;
+  align-self: center;
+  max-width: min(640px, calc(100% - 2 * 210px));
+  margin: 0 !important;
+  white-space: normal;
+  text-align: center;
+  pointer-events: none;
+}
+.mw[data-view='overview'] .ovw-note > .fxc {
+  /* text on the bottom gradient (no chip, as Main.dc.html), the bar's halo for bright map areas */
+  display: block;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  overflow: visible;
+  white-space: normal;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--m-text-2b);
+  text-shadow:
+    0 0 3px rgba(12, 12, 12, 0.95),
+    0 0 8px rgba(12, 12, 12, 0.9),
+    0 1px 2px rgba(12, 12, 12, 0.9);
+  pointer-events: auto;
+}
+
+/* ------------------------------------------------------------------------------------------------ credits */
+.mw[data-view='overview'] .ovw-bottom .mw-footer {
+  grid-area: foot;
+  justify-content: center;
+}
+.mw[data-view='overview'] .mw-footer-attrib {
+  background: none;
+  text-align: center;
+  font: 400 10px / 14px var(--m-font-mono);
+  color: var(--m-text-4);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+.mw[data-view='overview'] .mw-footer .fxm-attrib {
+  justify-content: center;
+  padding: 0;
+  background: none;
+  color: inherit;
+}
+
+/* ------------------------------------------------------------------------------------------------ wide screens */
+@media (min-width: 761px) {
+  /* the top region becomes a positioning frame over the whole map; its slots are placed one by one */
+  .mw[data-view='overview'] .ovw-top {
+    inset: 0;
+    display: block;
+  }
+  /* left column: the map controls bar (details), then the fire card (Command) or the location card */
+  .mw[data-view='overview'] .ovw-left {
+    position: absolute;
+    top: var(--ovw-row2);
+    left: var(--ovw-x);
+    bottom: calc(var(--mw-bottom-stack) + var(--m-gap));
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--m-gap);
+    min-height: 0;
+    pointer-events: none;
+  }
+  .mw[data-view='overview'] .ovw-left > * {
+    pointer-events: auto;
+    flex: 0 1 auto;
+    min-height: 0;
+  }
+  .mw[data-view='overview'] .ovw-left > .mw-card,
+  .mw[data-view='overview'] .ovw-left > .mw-firecard {
+    width: min(var(--ovw-card-w), calc(100vw - 2 * var(--ovw-x)));
+    max-height: 100%;
+  }
+  .mw[data-view='overview'] .ovw-controls {
+    flex: none;
+    justify-self: auto;
+  }
+  /* minimal: the compact cluster at the right edge, above the "Show details" pill */
+  .mw[data-view='overview'] .ovw-cluster {
+    --chrome-side: right;
+    position: absolute;
+    right: var(--ovw-x);
+    bottom: calc(var(--mw-bottom-stack) + 16px);
+  }
+  /* the "Fires in the lower 48" panel: right 12, top 160, down to the legend */
+  .mw[data-view='overview'] .ovw-list {
+    position: absolute;
+    top: var(--ovw-row2);
+    right: var(--m-gap);
+    bottom: calc(var(--mw-bottom-stack) + var(--m-gap));
+    width: var(--ovw-list-w-eff);
+    max-height: none;
+  }
+  .mw[data-view='overview'].has-updates .ovw-list {
+    width: var(--ovw-list-w-eff);
+  }
+
+  /* bottom: the readout + scale (left) and the legend (right), then the disclaimer with the pill, then the credits */
+  .mw[data-view='overview'] .ovw-bottom {
+    left: var(--ovw-x);
+    right: var(--m-gap);
+    bottom: 2px;
+    grid-template-columns: minmax(0, auto) minmax(0, 1fr) minmax(0, auto);
+    grid-template-rows: auto auto auto;
+    grid-template-areas:
+      'coords . legend'
+      'note   note note'
+      'foot   foot foot';
+    row-gap: 10px;
+    align-items: end;
+  }
+  .mw[data-view='overview'] .ovw-bottom:not(.has-details) {
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      'note note note'
+      'foot foot foot';
+  }
+  .mw[data-view='overview'] .ovw-pill-slot {
+    --chrome-side: bottom;
+    grid-area: note;
+    justify-self: end;
+    margin: 0 calc(var(--ovw-x) - var(--m-gap)) 4px 0;
+  }
+  .mw[data-view='overview'] .ovw-readout {
+    grid-area: coords;
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+    min-width: 0;
+    pointer-events: none;
+  }
+  .mw[data-view='overview'] .ovw-readout > * {
+    pointer-events: auto;
+  }
+  .mw[data-view='overview'] .ovw-legend {
+    grid-area: legend;
+    justify-self: end;
+    width: min(600px, calc(100vw - 2 * var(--ovw-x) - 400px));
+    max-width: none;
+  }
+}
+
+/* ------------------------------------------------------------------------------------------------ readout */
+/* the overview readout (location/CoordinateStrip.tsx 'compact'): "UNITED STATES OVERVIEW / No fire open",
+   "SELECTED POINT / …" with mono eyebrows (Main.dc.html "Overview": 360 px glass, padding 14/16, radius 14) */
+.mw[data-view='overview'] .ovw-readout .mw-coords {
+  width: var(--ovw-card-w);
+  max-width: 100%;
+}
+.mw[data-view='overview'] .ovw-readout .loc-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-color: var(--ovw-hair);
+  border-radius: 14px;
+  background: rgba(14, 14, 14, 0.7);
+  -webkit-backdrop-filter: var(--ovw-glass-blur);
+  backdrop-filter: var(--ovw-glass-blur);
+}
+.mw[data-view='overview'] .ovw-readout .loc-coord {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.mw[data-view='overview'] .ovw-readout .loc-coord + .loc-coord {
+  padding-top: 10px;
+  border-top: 1px solid rgba(200, 200, 200, 0.12);
+}
+.mw[data-view='overview'] .ovw-readout .loc-coord-label {
+  font: 400 11px / 1.4 var(--m-font-mono);
+  letter-spacing: var(--m-label-track);
+  text-transform: uppercase;
+  color: #d0d0d0;
+}
+.mw[data-view='overview'] .ovw-readout .loc-coord.is-empty .loc-coord-value {
+  font: 400 14px / 1.4 var(--m-font-ui);
+  color: var(--m-text-2b);
+}
+.mw[data-view='overview'] .ovw-readout .loc-coord.is-empty:first-child .loc-coord-value {
+  color: var(--m-text-body);
+}
+
+/* the scale bar beside the readout (Main: 140 px, mono 11 px, a 1.5 px bracket, on a small glass plate) */
+.mw[data-view='overview'] .ovw-scale {
+  --chrome-side: bottom;
+  pointer-events: none;
+}
+.mw[data-view='overview'] .ovw-scale .fxm-scale {
+  padding: 8px 12px;
+  border: 1px solid rgba(200, 200, 200, 0.14);
+  border-radius: 8px;
+  background: rgba(14, 14, 14, 0.6);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  color: var(--m-text-2b);
+}
+.mw[data-view='overview'] .ovw-scale .fxm-scale-label {
+  font-size: 11px;
+}
+
+/* ------------------------------------------------------------------------------------------------ legend */
+/* Main.dc.html "Legend": 600 px glass (.74), padding 14/18, radius 14, entries 13 px with gaps 10 / 22 */
+.mw[data-view='overview'] .ovw-legend .fxm-legend {
+  padding: 14px 18px;
+  border: 1px solid var(--ovw-hair);
+  border-radius: 14px;
+  background: var(--ovw-glass);
+  -webkit-backdrop-filter: var(--ovw-glass-blur);
+  backdrop-filter: var(--ovw-glass-blur);
+  box-shadow: var(--m-shadow);
+  font-size: 13px;
+  color: var(--m-text-body);
+}
+.mw[data-view='overview'] .ovw-legend .fxm-legend-row {
+  gap: 10px 22px;
+}
+.mw[data-view='overview'] .ovw-legend .fxm-legend-row li {
+  gap: 8px;
+}
+.mw[data-view='overview'] .ovw-legend .fxm-legend-absence {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--m-text-2b);
+}
+
+/* ------------------------------------------------------------------------------------------------ cards */
+.mw[data-view='overview'] .ovw-left > .mw-card,
+.mw[data-view='overview'] .ovw-left > .mw-firecard {
+  --chrome-side: left;
+}
+
+/* ------------------------------------------------------------------------------------------------ medium sizes */
+/* (ui/public/overviewLayout.ts) Narrower or shorter windows: the fire list keeps its height down to the disclaimer row;
+   the legend sits left of it (from 1200 px wide; below that it is in the Layers panel), the scale bar gives way below
+   1280 px */
+@media (min-width: 761px) and (max-width: 1279px) {
+  .mw[data-view='overview'] {
+    --ovw-list-w: 400px;
+    --ovw-card-w: 320px;
+    --ovw-scale-w: 0px;
+  }
+  .mw[data-view='overview'] .ovw-scale {
+    display: none;
+  }
+}
+@media (min-width: 761px) and (max-width: 1399px) and (max-height: 1079px) {
+  .mw[data-view='overview'] {
+    --ovw-scale-w: 0px;
+  }
+  .mw[data-view='overview'] .ovw-scale {
+    display: none;
+  }
+}
+@media (min-width: 761px) and (max-width: 1279px), (min-width: 761px) and (max-height: 1079px) {
+  .mw[data-view='overview'] .ovw-list {
+    bottom: var(--ovw-low);
+  }
+  /* the official block gives the fire rows more of the height */
+  .mw[data-view='overview'] .ov-official {
+    max-height: 18vh;
+  }
+  .mw[data-view='overview'] .ovw-legend {
+    margin-right: calc(var(--ovw-list-w-eff) + var(--m-gap));
+    width: calc(100vw - var(--ovw-list-w-eff) - var(--ovw-x) - var(--ovw-card-w) - var(--ovw-scale-w) - 3 * var(--m-gap) - 24px);
+  }
+}
+
+/* ------------------------------------------------------------------------------------------------ phones */
+@media (max-width: 760px) {
+  .mw[data-view='overview'] {
+    --ovw-x: var(--m-gap);
+  }
+  .mw[data-view='overview'] .ovw-search {
+    left: var(--m-gap);
+    right: var(--m-gap);
+    width: auto;
+    gap: 8px;
+  }
+  /* the region under the search row: the controls (top right) and the bottom sheets */
+  .mw[data-view='overview'] .ovw-top {
+    top: calc(var(--m-chrome-top) + 44px + var(--m-gap));
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: '. controls';
+  }
+  .mw[data-view='overview'] .ovw-left {
+    display: contents;
+  }
+  /* Public: the compact cluster above the "Show details" pill (decision h) */
+  .mw[data-view='overview'] .ovw-cluster {
+    --chrome-side: right;
+    align-self: end;
+  }
+  .mw[data-view='overview'] .ovw-bottom {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto auto;
+    grid-template-areas:
+      'coords coords'
+      'pill   pill'
+      'note   foot';
+    row-gap: 6px;
+    align-items: end;
+  }
+  .mw[data-view='overview'] .ovw-pill-slot {
+    --chrome-side: bottom;
+    grid-area: pill;
+    justify-self: end;
+  }
+  .mw[data-view='overview'] .ovw-pill {
+    height: 44px;
+  }
+  .mw[data-view='overview'] .ovw-note {
+    justify-self: start;
+    max-width: 100%;
+    text-align: left;
+  }
+  .mw[data-view='overview'] .ovw-note > .fxc {
+    font-size: 11px;
+    line-height: 15px;
+  }
+  .mw[data-view='overview'] .ovw-bottom .mw-footer {
+    justify-content: flex-end;
+  }
+  .mw[data-view='overview'] .mw-footer-attrib {
+    text-align: left;
+  }
+  /* an open card or sheet takes the bottom of the map: the pill and the cluster give way */
+  .mw[data-view='overview']:is(.has-selection, .has-firecard, .has-sheet) :is(.ovw-cluster, .ovw-pill-slot) {
+    display: none;
+  }
+}
+
+/* ================================================================================================ fire view (H4) */
+/* The Public fire view (ui/shell/PublicFireChrome.tsx; FireView.dc.html at 1440 × 1000): the close button at 24 / 24
+   (44 px), the title centred at 22, the hazard circle at 48 / 88 (312 px), the facts under it (400 px wide, from
+   452), the key at right 24 / bottom 52 and the 30 px bottom bar. No panels behind the text: it sits on the left edge
+   gradient (map/MapAtmosphere.tsx, edges "fire") with the readout's halo (decision l). */
+.mw[data-view='public-fire'] {
+  --pfv-x: 48px;
+  --pfv-circle: 312px;
+  --pfv-col-w: 400px;
+  --pfv-circle-top: 88px;
+  --pfv-right: 24px;
+  --pfv-halo:
+    0 0 3px rgba(12, 12, 12, 0.95),
+    0 0 8px rgba(12, 12, 12, 0.9),
+    0 1px 2px rgba(12, 12, 12, 0.9);
+}
+
+/* ------------------------------------------------------------------------------------------------ bar */
+.mw[data-view='public-fire'] .pfv-bar {
+  --tb-x: 24px;
+  top: 24px;
+}
+.mw[data-view='public-fire'] .pfv-close {
+  width: 44px;
+  height: 44px;
+  background: rgba(14, 14, 14, 0.6);
+  border-color: rgba(200, 200, 200, 0.22);
+  color: var(--m-text-body);
+}
+.mw[data-view='public-fire'] .pfv-bar .tb-right {
+  gap: 8px;
+}
+
+/* the address search: the overview's centred pill, under the title (CommandSearch variant "pill") */
+.pfv-search-pop {
+  position: fixed;
+  top: 168px;
+  left: 50%;
+  z-index: calc(var(--m-z-header) + 1);
+  width: min(560px, calc(100vw - 2 * var(--m-topbar-x)));
+  transform: translateX(-50%);
+  text-shadow: none;
+  pointer-events: auto;
+}
+.pfv-search-pop .loc-search {
+  width: 100%;
+}
+
+/* ------------------------------------------------------------------------------------------------ title */
+.mw[data-view='public-fire'] .pfv-title-slot {
+  --chrome-side: top;
+  position: absolute;
+  top: 22px;
+  left: 50%;
+  z-index: var(--m-z-chrome);
+  max-width: calc(100vw - 2 * (var(--pfv-x) + var(--pfv-circle) + 24px));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.pfv-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  text-align: center;
+  text-shadow: var(--pfv-halo);
+}
+.mw .pfv-place {
+  margin: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 24px / 1.25 var(--m-font-ui);
+  letter-spacing: -0.01em;
+  color: var(--m-text);
+  text-shadow:
+    0 1px 12px rgba(0, 0, 0, 0.6),
+    var(--pfv-halo);
+}
+.pfv-date {
+  font: 400 12px / 1.3 var(--m-font-mono);
+  letter-spacing: 0.16em;
+  color: #d0d0d0;
+  white-space: nowrap;
+}
+.pfv-date-day {
+  white-space: nowrap;
+}
+
+/* the distance chip (light blue: the selected point / distance colour) */
+.pfv-dist-wrap {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: auto;
+}
+.pfv-dist {
+  display: flex;
+  align-items: center;
+  border-radius: 999px;
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  text-shadow: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pfv-dist.is-shared {
+  height: 44px;
+  gap: 10px;
+  padding: 0 16px 0 6px;
+  background: rgba(8, 22, 34, 0.6);
+  border: 1px solid rgba(143, 208, 255, 0.45);
+  box-shadow: 0 0 24px rgba(110, 190, 255, 0.18);
+  color: #bfe4ff;
+}
+.pfv-dist.is-shared:hover {
+  background: rgba(14, 34, 52, 0.72);
+}
+.pfv-dist-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: rgba(143, 208, 255, 0.16);
+  border: 1px solid rgba(143, 208, 255, 0.5);
+  color: var(--m-select);
+}
+.pfv-dist-value {
+  font: 600 20px / 1 var(--m-font-mono);
+  color: var(--m-select-strong);
+}
+.pfv-dist-unit {
+  margin-left: 3px;
+  font-size: 12px;
+  color: var(--m-select);
+}
+.pfv-dist-sep {
+  width: 1px;
+  height: 18px;
+  background: rgba(143, 208, 255, 0.3);
+}
+.pfv-dist-dir {
+  font-size: 13px;
+  color: var(--m-select);
+}
+.pfv-dist-measures {
+  font: 400 10.5px / 1.3 var(--m-font-mono);
+  letter-spacing: 0.04em;
+  color: #b8e1ff;
+  text-shadow: var(--pfv-halo);
+}
+.pfv-dist.is-prompt {
+  height: 34px;
+  gap: 8px;
+  padding: 0 14px;
+  background: rgba(14, 14, 14, 0.62);
+  border: 1px solid rgba(200, 200, 200, 0.22);
+  color: var(--m-text-2);
+  font: 400 13px / 1 var(--m-font-ui);
+}
+.pfv-dist.is-prompt:hover:not(:disabled) {
+  background: rgba(30, 30, 30, 0.78);
+  color: var(--m-text);
+}
+.pfv-dist.is-prompt svg {
+  color: #d0d0d0;
+}
+.pfv-dist:disabled {
+  cursor: progress;
+}
+.pfv-dist-spin {
+  animation: pfv-spin 1s linear infinite;
+}
+@keyframes pfv-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.pfv-dist-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 380px;
+  padding: 8px 8px 8px 12px;
+  border: 1px solid var(--m-border);
+  border-radius: 10px;
+  background: var(--m-panel-strong);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--m-text-2);
+  text-align: left;
+  text-shadow: none;
+}
+
+/* ------------------------------------------------------------------------------------------------ left column */
+/* the top region becomes a positioning frame over the whole map (its slots are placed one by one) */
+.mw[data-view='public-fire'] .pfv-top {
+  inset: 0;
+  display: block;
+}
+.mw[data-view='public-fire'] .pfv-left {
+  position: absolute;
+  top: var(--pfv-circle-top);
+  left: var(--pfv-x);
+  bottom: calc(var(--mw-bottom-stack) + 12px);
+  width: var(--pfv-col-w);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 52px;
+  pointer-events: none;
+}
+.mw[data-view='public-fire'] .pfv-circle-slot {
+  --chrome-side: left;
+  flex: none;
+  pointer-events: auto;
+}
+.mw[data-view='public-fire'] .pfv-facts-slot {
+  --chrome-side: left;
+  flex: 0 1 auto;
+  width: 100%;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  pointer-events: auto;
+}
+
+/* the hazard circle (HazardCircle.tsx): the screen's 312 px button; its texture is an SVG, its text scales with it */
+.pfv-circle {
+  --pfv-k: 1;
+  position: relative;
+  isolation: isolate;
+  /* the small text below asks how wide the circle is drawn (@container pfv-circle) */
+  container: pfv-circle / inline-size;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(6px * var(--pfv-k));
+  width: var(--pfv-circle, 312px);
+  height: var(--pfv-circle, 312px);
+  box-sizing: border-box;
+  padding: 0 calc(24px * var(--pfv-k));
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background-color: #0f0403;
+  box-shadow:
+    0 0 0 1px rgba(255, 120, 60, 0.45),
+    0 0 48px rgba(200, 40, 12, 0.4),
+    inset 0 0 40px rgba(0, 0, 0, 0.6);
+  color: #fff8ec;
+  text-align: center;
+  cursor: pointer;
+}
+.pfv-circle:focus-visible {
+  outline: 2px solid #d0d0d0;
+  outline-offset: 3px;
+  box-shadow:
+    0 0 0 1px rgba(255, 120, 60, 0.45),
+    0 0 48px rgba(200, 40, 12, 0.4),
+    inset 0 0 40px rgba(0, 0, 0, 0.6);
+}
+.pfv-circle-tex {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+/* a fire the record does not list as active glows darker: an ember, not a blaze (its words say what the record says) */
+.pfv-circle.is-quiet .pfv-circle-tex,
+.pfv-circle.is-unknown .pfv-circle-tex {
+  filter: saturate(0.55) brightness(0.62);
+}
+.pfv-circle.is-quiet {
+  box-shadow:
+    0 0 0 1px rgba(255, 150, 100, 0.3),
+    0 0 36px rgba(160, 50, 20, 0.22),
+    inset 0 0 40px rgba(0, 0, 0, 0.6);
+}
+.pfv-circle-shade {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  /* the screen's 58 % × 30 % shade behind the name, a little taller so the status and "MORE IN COMMAND" keep 4.5:1
+     over the moving glow when the name takes two lines */
+  background: radial-gradient(ellipse 60% 38% at 50% 50%, rgba(12, 3, 1, 0.64) 0%, rgba(12, 3, 1, 0.34) 62%, rgba(12, 3, 1, 0) 100%);
+  pointer-events: none;
+}
+.pfv-circle-status,
+.pfv-circle-more {
+  position: relative;
+  z-index: 1;
+  /* never under 10 px, however small the circle (HANDOFF: 10-11 px mono labels; the status is the agency record's) */
+  font: 600 max(10px, calc(12px * var(--pfv-k))) / 1.3 var(--m-font-mono);
+  letter-spacing: 0.18em;
+  color: #fff1dc;
+  /* the screen's soft glow, plus a tight dark edge: 4.5:1 or more over the brightest part of the moving texture
+     (decision l; measured on Willow and fixture-live) */
+  text-shadow:
+    0 0 3px rgba(30, 10, 0, 0.95),
+    0 1px 8px rgba(40, 15, 0, 0.8);
+  text-transform: uppercase;
+}
+.pfv-circle-more {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: max(10px, calc(11px * var(--pfv-k)));
+  letter-spacing: 0.14em;
+  text-shadow:
+    0 0 3px rgba(30, 10, 0, 0.95),
+    0 0 6px rgba(30, 10, 0, 0.8),
+    0 1px 8px rgba(40, 15, 0, 0.9);
+}
+.pfv-circle:hover .pfv-circle-more {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.pfv-circle-name {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 100%;
+  font-size: calc(var(--pfv-name-px, 72px) * var(--pfv-k));
+  line-height: 1.11;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  text-shadow: 0 2px 14px rgba(40, 15, 0, 0.75);
+}
+.pfv-circle-name > span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* a name too long even at 28 px over four lines: one block, cut at its end (fireView.ts fitName) */
+.pfv-circle-name.is-clamped > span {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+/* a circle drawn smaller than the screen's 312 px: the status on two lines ("WILDFIRE" / "DECLARED OUT"), so the
+   10 px floor still fits inside the round edge */
+@container pfv-circle (max-width: 300px) {
+  .pfv-circle-status {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1.25;
+    letter-spacing: 0.12em;
+    text-wrap: balance;
+  }
+  .pfv-circle-status .pfv-circle-dot {
+    display: none;
+  }
+  .pfv-circle-more {
+    letter-spacing: 0.1em;
+  }
+}
+
+/* the facts (FireFacts.tsx): "value — LABEL" rows between hairlines, on the left gradient */
+.pfv-facts {
+  display: flex;
+  flex-direction: column;
+  text-shadow: var(--pfv-halo);
+}
+.pfv-facts-rows {
+  padding: 10px 0;
+  border-top: 1px solid rgba(200, 200, 200, 0.35);
+  border-bottom: 1px solid rgba(200, 200, 200, 0.35);
+}
+.mw[data-view='public-fire'] .pfv-facts .ro-row {
+  padding: 11px 0;
+}
+.mw[data-view='public-fire'] .pfv-facts .ro-value {
+  color: var(--m-text);
+}
+.mw[data-view='public-fire'] .pfv-facts .ro-row.is-alert .ro-value {
+  color: var(--m-alert);
+}
+.mw[data-view='public-fire'] .pfv-facts .ro-label {
+  font-size: 11px;
+  white-space: nowrap;
+}
+.mw[data-view='public-fire'] .pfv-facts .ro-sub {
+  font-size: 11.5px;
+  color: var(--m-text-2b);
+}
+.mw[data-view='public-fire'] .pfv-facts :is(.ro-copy, .mw-link-btn, a) {
+  text-shadow: inherit;
+}
+.pfv-facts-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 12px;
+}
+/* the facts scroll on short windows: the sources and "Not an all-clear" stay in view at the bottom */
+.pfv-facts-slot .pfv-facts-foot {
+  position: sticky;
+  bottom: 0;
+  padding-top: 18px;
+  padding-bottom: 2px;
+  background: linear-gradient(to bottom, rgba(12, 12, 12, 0), rgba(12, 12, 12, 0.97) 16px);
+}
+.pfv-src {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 12px;
+  color: var(--m-text-2b);
+}
+.pfv-badge {
+  padding: 2px 8px;
+  border: 1px solid var(--m-official-ink);
+  border-radius: 999px;
+  font: 600 10px / 1.4 var(--m-font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--m-official-ink);
+  text-shadow: none;
+}
+.pfv-badge.is-demo {
+  border-color: var(--m-stale);
+  color: var(--m-stale);
+}
+.pfv-clear {
+  font-size: 12px;
+  color: var(--m-text-2b);
+}
+.pfv-facts a,
+.pfv-prep a {
+  color: var(--m-accent-text);
+  text-decoration: underline;
+}
+
+/* the map data's state under the facts: prepare, preparing, failed, no perimeter */
+.pfv-prep {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 12px 0 2px;
+  border-bottom: 1px solid rgba(200, 200, 200, 0.2);
+  padding-bottom: 12px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--m-text-body);
+  text-shadow: var(--pfv-halo);
+}
+.pfv-prep.is-note {
+  font-size: 12px;
+}
+.pfv-prep-step {
+  font-family: var(--m-font-mono);
+  font-size: 11.5px;
+  color: var(--m-text-3);
+}
+.pfv-prep .progress {
+  width: 100%;
+}
+.pfv-prep-text {
+  flex: 1 1 100%;
+}
+/* the facts do not fit the column at the full size (an extra row: a local officials' alert, a longer alert source;
+   ui/public/useFactsFit.ts, review DF-H34-4): one step at a time, "snug" (less gap and row padding), "tight" (+ a
+   smaller circle), "tighter" (smaller still), so every row and the foot stay in view; when even that does not fit,
+   the facts scroll and the foot says "More below" */
+.mw[data-view='public-fire'] .pfv-left.is-snug {
+  gap: 28px;
+}
+.mw[data-view='public-fire'] .pfv-left.is-snug .pfv-facts .ro-row {
+  padding: 7px 0;
+}
+.mw[data-view='public-fire'] .pfv-left.is-tight {
+  --pfv-circle: 248px;
+}
+.mw[data-view='public-fire'] .pfv-left.is-tight .pfv-circle {
+  --pfv-k: 0.795;
+}
+.mw[data-view='public-fire'] .pfv-left.is-tighter {
+  --pfv-circle: 200px;
+  gap: 18px;
+}
+.mw[data-view='public-fire'] .pfv-left.is-tighter .pfv-circle {
+  --pfv-k: 0.641;
+}
+.mw[data-view='public-fire'] .pfv-left.is-tighter .pfv-facts .ro-row {
+  padding: 5px 0;
+}
+/* over the foot's fade, at its top right: it takes no room of its own */
+.pfv-more {
+  position: absolute;
+  top: -6px;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid rgba(200, 200, 200, 0.28);
+  border-radius: 999px;
+  background: rgba(14, 14, 14, 0.86);
+  color: var(--m-text-2);
+  font: 500 10.5px / 1 var(--m-font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-shadow: none;
+  cursor: pointer;
+}
+.pfv-more:hover {
+  color: var(--m-text);
+  border-color: rgba(200, 200, 200, 0.45);
+}
+/* an unprepared or preparing fire: a smaller circle, so the prepare button stays in view under the facts */
+.mw[data-view='public-fire'] .pfv-left:has(.pfv-prep:not(.is-note)) {
+  --pfv-circle: 248px;
+  gap: 36px;
+}
+.mw[data-view='public-fire'] .pfv-left:has(.pfv-prep:not(.is-note)) .pfv-circle {
+  --pfv-k: 0.795;
+}
+.pfv-prep-btn {
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--m-accent);
+  color: var(--m-accent-ink);
+  font: 600 13px / 1 var(--m-font-ui);
+  text-shadow: none;
+  cursor: pointer;
+}
+.pfv-prep-btn:hover {
+  background: var(--m-accent-bg-hover);
+}
+
+/* ------------------------------------------------------------------------------------------------ right column */
+/* under the top-right cluster: the satellite image's status line, then a picked point's location card (360 px) */
+.mw[data-view='public-fire'] .pfv-right {
+  position: absolute;
+  top: calc(var(--m-chrome-top) + 2px);
+  right: var(--pfv-right);
+  bottom: calc(var(--mw-bottom-stack) + 120px);
+  width: min(360px, calc(100vw - 2 * var(--pfv-right)));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  pointer-events: none;
+}
+.mw[data-view='public-fire'] .pfv-right > * {
+  pointer-events: auto;
+}
+.mw[data-view='public-fire'] .pfv-status {
+  --chrome-side: none;
+  max-width: 100%;
+  min-width: 0;
+  text-shadow: var(--pfv-halo);
+}
+.mw[data-view='public-fire'] .pfv-card {
+  --chrome-side: right;
+  flex: 0 1 auto;
+  width: 100%;
+  max-height: 100%;
+  min-height: 0;
+}
+.mw[data-view='public-fire'] .pfv-card.is-empty {
+  display: none;
+}
+/* bottom right: the compact map controls (zoom, ⟲ compass ⟳) above the map key (right 24, bottom 52) */
+.mw[data-view='public-fire'] .pfv-right-bottom {
+  position: absolute;
+  right: var(--pfv-right);
+  bottom: calc(var(--mw-bottom-stack) + 22px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  /* the key on one line at 1440 px, the Stale tag included (review DF-H34-8) */
+  max-width: min(900px, calc(100vw - var(--pfv-x) - var(--pfv-col-w) - 2 * var(--pfv-right)));
+  pointer-events: none;
+}
+.mw[data-view='public-fire'] .pfv-right-bottom > * {
+  pointer-events: auto;
+}
+.mw[data-view='public-fire'] .pfv-cluster {
+  --chrome-side: right;
+  position: static;
+}
+/* a location card takes the right column: the controls step left of it */
+.mw[data-view='public-fire'].has-selection .pfv-cluster {
+  margin-right: calc(min(360px, 100vw - 2 * var(--pfv-right)) + 12px);
+}
+.mw[data-view='public-fire'] .pfv-key-slot {
+  --chrome-side: bottom;
+  position: relative;
+  /* its "Legend details" opens upward over the map controls (map.css .fxm-ctl is z-index 4) */
+  z-index: 5;
+  max-width: 100%;
+}
+.pfv-key {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px 18px;
+  padding: 10px 14px;
+  border: 1px solid rgba(200, 200, 200, 0.2);
+  border-radius: 12px;
+  background: rgba(14, 14, 14, 0.62);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  font-size: 13px;
+  color: var(--m-text-body);
+}
+.pfv-key-item {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.pfv-key-item .fxm-sw {
+  flex: none;
+}
+.pfv-key-text {
+  min-width: 0;
+}
+.pfv-key-time {
+  font: 400 11px / 1.3 var(--m-font-mono);
+  color: var(--m-text-3);
+  /* a date and its age never break across lines (review DF-H34-8) */
+  white-space: nowrap;
+}
+.pfv-key-off {
+  color: var(--m-text-3);
+}
+.pfv-key-stale {
+  margin-left: 6px;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+.pfv-key-sep,
+.pfv-key-scale,
+.pfv-key-legend {
+  flex: none;
+}
+.pfv-key-sep {
+  width: 1px;
+  height: 18px;
+  background: rgba(200, 200, 200, 0.2);
+}
+.pfv-key-scale .fxm-scale {
+  padding: 0;
+  background: none;
+  color: var(--m-text-2b);
+}
+.pfv-key-legend .fxm-legend {
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.pfv-key-legend .fxm-legend-pop {
+  right: 0;
+  left: auto;
+}
+
+/* ------------------------------------------------------------------------------------------------ bottom bar */
+/* 30 px: the prototype line left, the credits right (every credit text kept; it wraps when long, decision i-9) */
+.mw[data-view='public-fire'] .pfv-bottom {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+}
+.mw[data-view='public-fire'] .pfv-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 30px;
+  padding: 4px 16px;
+  box-sizing: border-box;
+  background: rgba(12, 12, 12, 0.78);
+  border-top: 1px solid rgba(200, 200, 200, 0.1);
+  pointer-events: auto;
+}
+.mw[data-view='public-fire'] .pfv-note {
+  flex: 0 0 auto;
+  max-width: min(440px, 38%);
+  margin: 0 !important;
+}
+.mw[data-view='public-fire'] .pfv-note > .fxc {
+  padding: 0;
+  background: none;
+  /* both lines whole: it wraps (two short lines) rather than cutting either */
+  overflow: visible;
+  white-space: normal;
+  font: 400 11px / 15px var(--m-font-mono);
+  color: var(--m-text-4);
+}
+.mw[data-view='public-fire'] .pfv-foot .mw-footer {
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: flex-end;
+}
+.mw[data-view='public-fire'] .pfv-foot .mw-footer-attrib {
+  background: none;
+  text-align: right;
+  font: 400 10.5px / 14px var(--m-font-mono);
+  color: var(--m-text-4);
+}
+.mw[data-view='public-fire'] .pfv-foot .fxm-attrib {
+  padding: 0;
+  background: none;
+  color: inherit;
+}
+.mw[data-view='public-fire'] .pfv-foot a {
+  color: inherit;
+}
+
+/* ------------------------------------------------------------------------------------------------ map overlay */
+/* the reported point and the circle's leader (ReportedPoint.tsx): over the map, under the chrome */
+.pfv-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: calc(var(--m-z-map) + 2);
+  overflow: visible;
+  pointer-events: none;
+}
+.pfv-leader {
+  stroke: var(--m-fire);
+  stroke-width: 1.5;
+}
+.pfv-point-halo {
+  fill: var(--m-fire);
+  fill-opacity: 0.22;
+}
+.pfv-point-dot {
+  fill: var(--m-fire);
+  stroke: #ffd79a;
+  stroke-width: 2;
+}
+.pfv-point-core {
+  fill: #fff6e4;
+}
+
+/* ------------------------------------------------------------------------------------------------ what Public hides */
+/* the fire view says itself when the map data is not prepared, and shows its preparation under the facts (decision a);
+   a model run's progress pill belongs to Command */
+.mw[data-view='public-fire'] .top-center .mw-notprepared,
+.mw[data-view='public-fire'] .top-center .fc-pill.is-forecast,
+.mw[data-view='public-fire'] .center-overlay:has(> .build-card) {
+  display: none;
+}
+
+/* the fire view has no timeline: App.tsx's "Skip to timeline" link would lead nowhere here (search and map stay) */
+.mw[data-view='public-fire'] .mw-skip a[href='#mw-timeline'] {
+  display: none;
+}
+
+/* "H": the panels go, the title, the bar and the controls stay */
+.mw[data-view='public-fire'].is-collapsed :is(.pfv-left, .pfv-card, .pfv-key-slot) {
+  display: none;
+}
+
+/* the location card's model block in the fire view (location/LocationCard.tsx ModelInCommand): a plain text link */
+.loc-model-command {
+  margin: 0;
+}
+.loc-model-command .mw-link-btn {
+  display: inline;
+  text-align: left;
+  font-size: 12.5px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.loc-model-command .mw-link-btn svg {
+  vertical-align: -2px;
+}
+/* the fire view's own text links (the note under the facts, the Layers drawer's Command link) */
+.pfv-prep .mw-link-btn,
+.mw[data-view='public-fire'] .mw-layers .mw-set-note .mw-link-btn {
+  display: inline;
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------------------------------------ medium sizes */
+/* narrower windows: a smaller circle at the edge; the title keeps its room between the circle and the cluster */
+@media (min-width: 761px) and (max-width: 1279px) {
+  .mw[data-view='public-fire'] {
+    --pfv-x: 28px;
+    --pfv-circle: 248px;
+    --pfv-col-w: 340px;
+  }
+  .pfv-circle {
+    --pfv-k: 0.795;
+  }
+  .mw[data-view='public-fire'] .pfv-left.is-tight {
+    --pfv-circle: 232px;
+  }
+  .mw[data-view='public-fire'] .pfv-left.is-tight .pfv-circle {
+    --pfv-k: 0.744;
+  }
+  .mw[data-view='public-fire'] .pfv-left.is-tighter {
+    --pfv-circle: 200px;
+  }
+  .mw[data-view='public-fire'] .pfv-left.is-tighter .pfv-circle {
+    --pfv-k: 0.641;
+  }
+}
+/* shorter windows: a smaller circle, so the facts keep their room above the bar */
+@media (min-width: 761px) and (max-height: 900px) {
+  .mw[data-view='public-fire'] {
+    --pfv-circle: 232px;
+    --pfv-circle-top: 84px;
+  }
+  .mw[data-view='public-fire'] .pfv-left {
+    gap: 28px;
+  }
+  .pfv-circle {
+    --pfv-k: 0.744;
+  }
+  .mw[data-view='public-fire'] .pfv-facts .ro-row {
+    padding: 7px 0;
+  }
+  .mw[data-view='public-fire'] .pfv-left:has(.pfv-prep:not(.is-note)) {
+    --pfv-circle: 200px;
+    gap: 24px;
+  }
+  .mw[data-view='public-fire'] .pfv-left:has(.pfv-prep:not(.is-note)) .pfv-circle {
+    --pfv-k: 0.641;
+  }
+  .mw[data-view='public-fire'] .pfv-left.is-snug {
+    gap: 20px;
+  }
+  .mw[data-view='public-fire'] .pfv-left.is-snug .pfv-facts .ro-row {
+    padding: 5px 0;
+  }
+  .mw[data-view='public-fire'] .pfv-left.is-tight {
+    --pfv-circle: 200px;
+  }
+  .mw[data-view='public-fire'] .pfv-left.is-tight .pfv-circle {
+    --pfv-k: 0.641;
+  }
+  .mw[data-view='public-fire'] .pfv-left.is-tighter {
+    --pfv-circle: 160px;
+    gap: 14px;
+  }
+  .mw[data-view='public-fire'] .pfv-left.is-tighter .pfv-circle {
+    --pfv-k: 0.513;
+  }
+  .mw[data-view='public-fire'] .pfv-left.is-tighter .pfv-facts .ro-row {
+    padding: 4px 0;
+  }
+}
+@media (min-width: 761px) and (max-height: 800px) {
+  .mw[data-view='public-fire'] {
+    --pfv-circle: 184px;
+  }
+  .pfv-circle {
+    --pfv-k: 0.59;
+  }
+  .mw[data-view='public-fire'] .pfv-facts .ro-26 .ro-value {
+    font-size: 22px;
+  }
+  .mw[data-view='public-fire'] .pfv-left:has(.pfv-prep:not(.is-note)) {
+    --pfv-circle: 160px;
+  }
+  .mw[data-view='public-fire'] .pfv-left:has(.pfv-prep:not(.is-note)) .pfv-circle {
+    --pfv-k: 0.513;
+  }
+  .mw[data-view='public-fire'] :is(.pfv-left.is-tight, .pfv-left.is-tighter) {
+    --pfv-circle: 160px;
+    gap: 14px;
+  }
+  .mw[data-view='public-fire'] :is(.pfv-left.is-tight, .pfv-left.is-tighter) .pfv-circle {
+    --pfv-k: 0.513;
+  }
+}
+
+/* ------------------------------------------------------------------------------------------------ phones */
+/* decision h: bar = X, the place and dates (small), search, menu; a strip with a 120 px circle and the distance chip;
+   the facts in a bottom sheet (peek: acres, containment, the official line), the key inside it */
+@media (max-width: 760px) {
+  .mw[data-view='public-fire'] {
+    --pfv-right: var(--m-gap);
+  }
+  .mw[data-view='public-fire'] .pfv-bar {
+    --tb-x: var(--m-gap);
+    top: var(--m-topbar-top);
+  }
+  .mw[data-view='public-fire'] .pfv-bar .tb-left {
+    gap: 10px;
+  }
+  .pfv-title.is-compact {
+    align-items: flex-start;
+    gap: 2px;
+    text-align: left;
+  }
+  .mw .pfv-title.is-compact .pfv-place {
+    font-size: 15px;
+  }
+  .pfv-title.is-compact .pfv-date {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    white-space: normal;
+  }
+  /* the place and dates take the bar's room (the right side keeps only its two buttons) */
+  .mw[data-view='public-fire'] .pfv-bar .tb-left {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .mw[data-view='public-fire'] .pfv-bar .tb-right {
+    flex: none;
+  }
+  .mw[data-view='public-fire'] .pfv-bar .tb-left > .pfv-title {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .mw[data-view='public-fire'] .pfv-strip {
+    --chrome-side: top;
+    position: absolute;
+    top: calc(var(--m-chrome-top) + 4px);
+    left: var(--m-gap);
+    right: var(--m-gap);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    pointer-events: none;
+  }
+  .mw[data-view='public-fire'] .pfv-strip > * {
+    pointer-events: auto;
+  }
+  .pfv-circle.is-compact {
+    --pfv-circle: 120px;
+    --pfv-k: 0.385;
+    flex: none;
+    padding: 0 6px;
+  }
+  .pfv-circle.is-compact .pfv-circle-status,
+  .pfv-circle.is-compact .pfv-circle-more {
+    font-size: 9px;
+    letter-spacing: 0.06em;
+  }
+  /* 9 px (review DF-H34-3) inside the 120 px circle's lower chord: the words without the chevron */
+  .pfv-circle.is-compact .pfv-circle-more {
+    letter-spacing: 0.02em;
+  }
+  .pfv-circle.is-compact .pfv-circle-more svg {
+    display: none;
+  }
+  /* the status on two lines in the small circle ("WILDFIRE" / "DECLARED OUT") */
+  .pfv-circle.is-compact .pfv-circle-status {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1.25;
+  }
+  .pfv-circle.is-compact .pfv-circle-dot {
+    display: none;
+  }
+  .pfv-dist-wrap.is-compact {
+    margin: 0;
+    align-items: flex-start;
+    min-width: 0;
+  }
+  .pfv-dist-wrap.is-compact .pfv-dist.is-prompt {
+    height: 44px;
+    white-space: normal;
+    text-align: left;
+    line-height: 1.25;
+  }
+  .pfv-dist-wrap.is-compact .pfv-dist-measures {
+    text-align: left;
+  }
+  .pfv-search-pop {
+    top: calc(var(--m-chrome-top) + 4px);
+    width: calc(100vw - 2 * var(--m-gap));
+  }
+  /* the location card is a bottom sheet above the facts' peek (map-layout.css phones) */
+  .mw[data-view='public-fire'] .pfv-card {
+    --chrome-side: bottom;
+    top: auto;
+    left: var(--m-gap);
+    right: var(--m-gap);
+    bottom: calc(var(--mw-bottom-stack) + var(--m-gap));
+    width: auto;
+    max-height: calc(100% - var(--m-chrome-top) - 140px - var(--mw-bottom-stack));
+    z-index: 6;
+  }
+  .mw[data-view='public-fire'] .pfv-cluster {
+    bottom: calc(var(--mw-bottom-stack) + var(--m-gap));
+  }
+  .mw[data-view='public-fire']:is(.has-selection, .has-sheet) .pfv-cluster,
+  .mw[data-view='public-fire']:has(.pfv-sheet.is-open) .pfv-cluster {
+    display: none;
+  }
+  .mw[data-view='public-fire'] .pfv-bottom {
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+  .pfv-sheet {
+    --chrome-side: bottom;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    max-height: min(70vh, calc(100vh - var(--m-chrome-top) - 150px));
+    margin: 0 var(--m-gap) 6px;
+    border: 1px solid var(--m-border);
+    border-radius: 14px;
+    background: var(--m-panel-strong);
+    -webkit-backdrop-filter: var(--m-panel-blur);
+    backdrop-filter: var(--m-panel-blur);
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.55);
+    pointer-events: auto;
+  }
+  .pfv-sheet-toggle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    display: flex;
+    justify-content: flex-end;
+    height: 44px;
+    padding: 6px 10px 0;
+    border: 0;
+    background: none;
+    color: var(--m-text-2);
+    cursor: pointer;
+  }
+  .pfv-sheet-toggle .mw-sheet-handle {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    margin: 6px 0 0 -18px;
+  }
+  .pfv-sheet-body {
+    min-height: 0;
+    overflow: auto;
+    padding: 26px 16px 12px;
+  }
+  .pfv-sheet .pfv-facts {
+    text-shadow: none;
+  }
+  .pfv-sheet .pfv-facts-rows {
+    padding: 4px 0;
+  }
+  .mw[data-view='public-fire'] .pfv-sheet .pfv-facts .ro-row {
+    padding: 6px 0;
+  }
+  .pfv-sheet .pfv-facts.is-peek .pfv-facts-rows {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 18px;
+    padding-top: 0;
+    border-top: 0;
+  }
+  .mw[data-view='public-fire'] .pfv-sheet .pfv-facts.is-peek .ro-26 .ro-value {
+    font-size: 20px;
+  }
+  .mw[data-view='public-fire'] .pfv-sheet .pfv-facts.is-peek .ro-label {
+    letter-spacing: 0.08em;
+  }
+  .pfv-sheet .pfv-prep {
+    text-shadow: none;
+  }
+  .pfv-sheet .pfv-key {
+    flex-wrap: wrap;
+    margin-top: 12px;
+    border-color: var(--m-border);
+    background: rgba(255, 255, 255, 0.03);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .pfv-sheet .pfv-key-item {
+    flex: 1 1 100%;
+  }
+  .pfv-sheet .pfv-key-sep {
+    display: none;
+  }
+  .mw[data-view='public-fire'].has-sheet .pfv-sheet,
+  .mw[data-view='public-fire'].has-selection .pfv-sheet {
+    display: none;
+  }
+  .mw[data-view='public-fire'] .pfv-foot {
+    min-height: 0;
+    padding: 4px var(--m-gap) calc(4px + env(safe-area-inset-bottom, 0px));
+    background: rgba(12, 12, 12, 0.85);
+  }
+  .mw[data-view='public-fire'] .pfv-note {
+    flex: 1 1 auto;
+    max-width: none;
+  }
+  .mw[data-view='public-fire'] .pfv-note > .fxc {
+    font-size: 10px;
+    white-space: normal;
+  }
+}
+
+/* ------------------------------------------------------------------------------------------------ phone touch targets */
+/* decision h: 44 px on phones (review DF-H34-7). The bar's round buttons grow; the pill's Search button and the
+   "© Credits" toggle keep their look and get a transparent hit area of 44 px */
+@media (max-width: 760px) {
+  .mw:is([data-view='overview'], [data-view='public-fire']) .mw-header .tb-icon {
+    width: 44px;
+    height: 44px;
+  }
+  .mw:is([data-view='overview'], [data-view='public-fire']) .loc-search.is-pill .loc-search-go,
+  .mw:is([data-view='overview'], [data-view='public-fire']) .mw-credits-toggle {
+    position: relative;
+  }
+  .mw:is([data-view='overview'], [data-view='public-fire']) .loc-search.is-pill .loc-search-go::before {
+    content: '';
+    position: absolute;
+    inset: -4px -2px;
+  }
+  .mw:is([data-view='overview'], [data-view='public-fire']) .mw-credits-toggle::before {
+    content: '';
+    position: absolute;
+    inset: -13px -6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pfv-dist-spin {
+    animation: none;
+  }
+}

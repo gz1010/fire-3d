@@ -21,30 +21,20 @@ import { useWorkspace, useWorkspaceUrlSync, type PanelKey } from './state/worksp
 import { Spinner } from './ui/controls'
 import { ErrorBanner, ForecastPill, StatusOverlay, Toasts } from './ui/Overlays'
 import { TooltipLayer } from './ui/Tooltip'
-// Public/Command slots (owners in CONTRACT §1)
+// Public/Command: the map, its atmosphere and the chromes (brief 4, CONTRACT §15.2)
 import { ExtrasSync } from './extras/ExtrasSync'
-import { ImageryChip } from './extras/ImageryChip'
-import { useExtrasFeedItems } from './extras/runtime'
-import { CoordinateStrip } from './location/CoordinateStrip'
-import { LocationCard } from './location/LocationCard'
-import { SearchBox } from './location/SearchBox'
-import { MapAttribution, ScaleBar } from './map/MapAttribution'
-import { MapControls } from './map/MapControls'
-import { MapLegend } from './map/MapLegend'
-import { UpdatesFeed } from './ui/feed/UpdatesFeed'
-import { AnalysisDrawer } from './ui/shell/AnalysisDrawer'
-import { CoordsSlot } from './ui/shell/CoordsSlot'
-import { FireCard } from './ui/shell/FireCard'
+import { MapAttribution } from './map/MapAttribution'
+import { MapAtmosphere } from './map/MapAtmosphere'
+import { CommandFireChrome } from './ui/shell/CommandFireChrome'
 import { buildFailed, needsBuild, openFire } from './ui/shell/fireActions'
-import { NARROW_QUERY, useMediaQuery, WIDE_QUERY } from './ui/shell/hooks'
-import { LayersPanel } from './ui/shell/LayersPanel'
+import { CREDITS_FOLD_QUERY, NARROW_QUERY, useMediaQuery } from './ui/shell/hooks'
 import { MapBoundary } from './ui/shell/MapBoundary'
-import { MapHeader } from './ui/shell/MapHeader'
-import { MissingFireNotice, OverviewPanel } from './ui/shell/OverviewPanel'
-import { UpdatesPanel } from './ui/shell/UpdatesPanel'
+import { OverviewChrome } from './ui/shell/OverviewChrome'
+import { MissingFireNotice } from './ui/shell/OverviewPanel'
+import { PublicFireChrome } from './ui/shell/PublicFireChrome'
 import { useMapSafeArea } from './ui/shell/useMapSafeArea'
 import { usePinAboveSheet } from './ui/shell/usePinAboveSheet'
-import { CompactTimeline } from './ui/timeline/CompactTimeline'
+import { atmosphereEdgesOf, mapChromeOf } from './ui/shell/views'
 import './styles/map-tokens.css'
 import './styles/map-fallbacks.css'
 import './styles/map-layout.css'
@@ -232,13 +222,15 @@ function SkipLinks({ overview }: { overview: boolean }) {
 }
 
 /** The map credits. Phones (brief 2 C-R2): folded with the research note into one line, behind a labelled "© Credits"
- *  toggle that opens the full credits above the bottom row (like MapLibre's compact attribution on narrow maps). */
-function CreditsFooter({ narrow }: { narrow: boolean }) {
+ *  toggle that opens the full credits above the bottom row (like MapLibre's compact attribution on narrow maps).
+ *  `fold` (brief 4 review DF-11, decision i-9): the same fold on wider screens, Command in a fire below 1280 px, where
+ *  the credits would wrap to five lines and push the readout's rows off screen. Every credit text is kept. */
+function CreditsFooter({ narrow, fold = narrow }: { narrow: boolean; fold?: boolean }) {
   const [open, setOpen] = useState(false)
-  const folded = narrow && !open
+  const folded = fold && !open
   return (
-    <footer className={`mw-footer${narrow ? ' is-narrow' : ''}${open ? ' is-open' : ''}`}>
-      {narrow && (
+    <footer className={`mw-footer${narrow ? ' is-narrow' : ''}${fold ? ' is-fold' : ''}${open ? ' is-open' : ''}`}>
+      {fold && (
         <button type="button" className="mw-credits-toggle" aria-expanded={open} aria-controls="mw-credits" data-chrome="credits-toggle" onClick={() => setOpen((o) => !o)}>
           © Credits
         </button>
@@ -286,9 +278,16 @@ function NotPreparedNotice({ name, failed }: { name: string; failed: boolean }) 
   )
 }
 
-/** Public/Command: the map-first layout (styles/map-layout.css documents the regions). No incident = the national
- *  overview: the fire list takes the right column, the timeline is hidden and the header reads "United States · all
- *  fires". */
+/** The 2 px loading line along the top edge while an incident or the fire lists load. */
+function LoadingLine() {
+  const loading = useStore((s) => s.incidentLoading || s.catalog.loading)
+  return <span className={`mw-hdr-loading ${loading ? 'is-on' : ''}`} aria-hidden="true" />
+}
+
+/** Public/Command: the map-first layout (styles/map-layout.css documents the regions). One map mount, its atmosphere,
+ *  the credits, status overlays, banners, toasts and tooltips stay here; exactly one chrome floats over the map
+ *  (brief 4, CONTRACT §15.2): OverviewChrome (no fire, both presets), PublicFireChrome or CommandFireChrome. Switching
+ *  preset or opening a fire swaps the chrome and never remounts the map. The root's data-view names the chrome. */
 function MapWorkspace() {
   const root = useRef<HTMLDivElement | null>(null)
   const panels = useWorkspace((s) => s.panels)
@@ -298,14 +297,14 @@ function MapWorkspace() {
   const overview = useStore((s) => s.incidentId == null)
   const collapsed = useStore((s) => s.panelsCollapsed)
   const narrow = useMediaQuery(NARROW_QUERY)
-  const wide = useMediaQuery(WIDE_QUERY)
-  const extraItems = useExtrasFeedItems()
+  const midWidth = useMediaQuery(CREDITS_FOLD_QUERY)
   const notPrepared = useNotPrepared()
+  const chrome = mapChromeOf(!overview, preset)
   useNarrowSheets(narrow)
   useEscapeClosesDrawers(narrow)
   useEscapeClosesFireCard()
   usePinAboveSheet(narrow)
-  useMapSafeArea(root, [panels.updates, panels.analysis, panels.layers, preset, hasSelection, hasFireCard, overview, collapsed, narrow])
+  useMapSafeArea(root, [panels.updates, panels.analysis, panels.layers, preset, hasSelection, hasFireCard, overview, collapsed, narrow, chrome])
   const sheetOpen = narrow && SHEETS.some((k) => panels[k])
   const cls = [
     'mw',
@@ -318,68 +317,18 @@ function MapWorkspace() {
     hasFireCard && 'has-firecard',
     sheetOpen && 'has-sheet',
   ]
+  const credits = <CreditsFooter narrow={narrow} fold={narrow || (chrome === 'command-fire' && midWidth)} />
   return (
-    <div className={cls.filter(Boolean).join(' ')} ref={root}>
+    <div className={cls.filter(Boolean).join(' ')} ref={root} data-view={chrome}>
       <SkipLinks overview={overview} />
       <ExtrasSync />
-      <header className="mw-header" data-chrome="header">
-        <MapHeader />
-      </header>
-      <div className="mw-layers-slot" data-chrome="layers">
-        <LayersPanel />
-      </div>
-      {!overview && (
-        <div className="mw-drawer-slot" data-chrome="analysis">
-          <AnalysisDrawer />
-        </div>
+      {chrome === 'overview' ? (
+        <OverviewChrome credits={credits} />
+      ) : chrome === 'command-fire' ? (
+        <CommandFireChrome credits={credits} />
+      ) : (
+        <PublicFireChrome credits={credits} />
       )}
-      <div className="mw-top">
-        <div className="mw-search" id="mw-search" data-chrome="search">
-          <SearchBox />
-        </div>
-        <div className="mw-firecard" data-chrome="firecard">
-          <FireCard />
-        </div>
-        <div className="mw-card" data-chrome="card">
-          <LocationCard />
-        </div>
-        {/* the satellite chip: in the header bar on wide screens (MapHeader), else here next to the map controls */}
-        <div className="mw-imagery" data-chrome="imagery">
-          {!wide && <ImageryChip />}
-        </div>
-        <div className="mw-controls" data-chrome="controls">
-          <MapControls />
-        </div>
-        <aside className="mw-updates" id="mw-updates" data-chrome="updates" aria-label={overview ? 'Fires in the lower 48' : 'Incident updates'}>
-          {overview ? (
-            <OverviewPanel />
-          ) : (
-            <UpdatesPanel>
-              <UpdatesFeed extraItems={extraItems} />
-            </UpdatesPanel>
-          )}
-        </aside>
-      </div>
-      <div className="mw-scale-slot" data-chrome="scale">
-        <ScaleBar />
-      </div>
-      <div className="mw-bottom">
-        <CoordsSlot>
-          <CoordinateStrip />
-        </CoordsSlot>
-        {!overview && (
-          <div className="mw-timeline" id="mw-timeline" data-chrome="timeline">
-            <CompactTimeline />
-          </div>
-        )}
-        <div className="mw-legend-slot" data-chrome="legend">
-          <MapLegend />
-        </div>
-        <p className="mw-note" data-chrome="note">
-          Research prototype — not for operational use
-        </p>
-        <CreditsFooter narrow={narrow} />
-      </div>
       {/* the map is drawn underneath (z-index) but comes after the chrome in the tab order */}
       <main className="mw-map" id="mw-map" aria-label="Wildfire map">
         <MapBoundary>
@@ -394,6 +343,9 @@ function MapWorkspace() {
           </Suspense>
         </MapBoundary>
       </main>
+      {/* between the map and the chrome: vignette and per-view edge gradients (H2c) */}
+      <MapAtmosphere edges={atmosphereEdgesOf(chrome)} />
+      <LoadingLine />
       {/* the overview panel shows the lists' loading / error / empty states; an unprepared fire gets a short notice */}
       {!overview && !notPrepared && <StatusOverlay />}
       <div className="top-center">

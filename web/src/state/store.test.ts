@@ -253,3 +253,16 @@ describe('latest observation and Play after a zoom focus', () => {
     expect(playStartsOver(172 * H, w, null)).toBe(true)
   })
 })
+
+describe('camera hand-off heading (brief 4, CONTRACT §15.3)', () => {
+  it('flyToLocal carries a compass heading only when one is given', () => {
+    useStore.setState({ flyTo: null })
+    useStore.getState().flyToLocal(10, 20, 500)
+    expect(useStore.getState().flyTo).toEqual({ x: 10, z: 20, distance: 500, nonce: 1 })
+    expect('bearingDeg' in (useStore.getState().flyTo ?? {})).toBe(false)
+    useStore.getState().flyToLocal(10, 20, 500, 35)
+    expect(useStore.getState().flyTo).toEqual({ x: 10, z: 20, distance: 500, bearingDeg: 35, nonce: 2 })
+    useStore.getState().flyToLocal(1, 2, undefined, Number.NaN)
+    expect(useStore.getState().flyTo?.bearingDeg).toBeUndefined()
+  })
+})

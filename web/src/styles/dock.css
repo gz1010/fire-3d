@@ -1,9 +1,16 @@
-/* Bottom dock (SPEC 9.4): timeline, charts row, key events. */
+/* Bottom dock (SPEC 9.4): timeline, charts row, key events. Brief 4 (H5, ForensicView.dc.html): grey glass, radius
+   16; the timeline row is the screen's (title, step ‹ ›, the 36 px accent play, speed, time + zone + T+, the range tabs
+   in accent, the window); the track keeps the activity strip, event marks and the NOW mark, the past orange-hatched,
+   the forecast amber-hatched, the handle a light knob with an accent ring. The charts also show in the map's Analysis
+   drawer, where the map's tokens apply. */
 
 .dock {
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--keyevents-w);
   overflow: hidden;
+}
+.dock.glass {
+  border-radius: 16px;
 }
 .dock-main {
   display: flex;
@@ -13,7 +20,7 @@
   container: dockmain / inline-size;
 }
 .dock-title {
-  font-size: var(--fs-md);
+  font-size: 14px;
   font-weight: 600;
   color: var(--text);
   white-space: nowrap;
@@ -22,7 +29,7 @@
 /* ------------------------------------------------------------------ timeline */
 .tl {
   flex: none;
-  padding: 9px 14px 2px;
+  padding: 10px 18px 2px;
   border-bottom: 1px solid var(--hairline-soft);
 }
 .tl.is-disabled .tl-top > :not(.dock-title) {
@@ -31,9 +38,12 @@
 .tl-top {
   display: flex;
   align-items: center;
-  gap: 12px;
-  height: 30px;
+  gap: 10px;
+  height: 36px;
   min-width: 0;
+}
+.tl-top .dock-title {
+  margin-right: 6px;
 }
 .tl-ctrl {
   display: flex;
@@ -41,21 +51,25 @@
   gap: 2px;
   flex: none;
 }
+.tl-ctrl > .icon-btn {
+  color: var(--text-2);
+}
 .tl-play {
   display: inline-grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   margin: 0 2px;
   border-radius: 50%;
-  color: #17130a;
-  background: radial-gradient(circle at 35% 30%, #f6dc9c, #d9b263 70%);
-  box-shadow: 0 0 0 1px rgba(255, 233, 180, 0.25), 0 0 14px rgba(226, 190, 114, 0.35);
-  transition: transform 0.12s var(--ease), box-shadow 0.15s var(--ease);
+  color: var(--accent-ink);
+  background: var(--gold);
+  box-shadow: 0 0 14px rgba(255, 122, 61, 0.45);
+  transition: transform 0.12s var(--ease), box-shadow 0.15s var(--ease), background 0.15s var(--ease);
 }
 .tl-play:hover:not(:disabled) {
   transform: scale(1.05);
-  box-shadow: 0 0 0 1px rgba(255, 233, 180, 0.4), 0 0 20px rgba(226, 190, 114, 0.5);
+  background: var(--accent-hover);
+  box-shadow: 0 0 18px rgba(255, 122, 61, 0.55);
 }
 .tl-play:disabled {
   opacity: 0.4;
@@ -69,27 +83,51 @@
 }
 .tl-speed {
   margin-left: 6px;
-  height: 24px;
-  font-size: var(--fs-xs);
+  height: 28px;
+  border-radius: 8px;
+  border-color: rgba(200, 200, 200, 0.18);
+  background: transparent;
+  font-size: 11.5px;
+  color: var(--text-2);
 }
 .tl-now {
   display: inline-flex;
   align-items: baseline;
-  gap: 9px;
+  gap: 8px;
   min-width: 0;
+  margin-left: 6px;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 15px;
 }
 .tl-now .gold-strong {
-  font-weight: 500;
-  letter-spacing: -0.01em;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--text);
 }
 .tl-tz {
-  font-size: 10.5px;
-  color: var(--text-2);
+  font-size: 11px;
+  color: var(--text-3);
 }
 .tl-now .muted {
   font-size: 11px;
+  color: var(--text-4);
+}
+/* range tabs All / 7 d / 72 h: mono, the selected one accent (controls.css .seg-btn) */
+.tl-top .seg {
+  padding: 2px;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.25);
+  border-color: rgba(200, 200, 200, 0.12);
+}
+.tl-top .seg-btn {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 7px;
+  font: 600 11.5px / 1 var(--font-mono);
+  color: var(--text-2);
+}
+.tl-top .seg-btn[aria-checked='true'] {
+  color: var(--accent-ink);
 }
 .tl-fc-chip {
   align-self: center;
@@ -100,7 +138,7 @@
 }
 .tl-range {
   font-size: 11px;
-  color: var(--text-2);
+  color: var(--text-3);
   white-space: nowrap;
 }
 .tl-empty {
@@ -113,7 +151,7 @@
 .tl-track {
   position: relative;
   height: 62px;
-  margin-top: 4px;
+  margin-top: 2px;
   cursor: pointer;
   touch-action: none;
   user-select: none;
@@ -129,14 +167,14 @@
   overflow: visible;
 }
 .tl-bar {
-  fill: rgba(255, 255, 255, 0.07);
+  fill: rgba(200, 200, 200, 0.22);
 }
 .tl-tick line {
-  stroke: rgba(236, 230, 214, 0.2);
+  stroke: rgba(230, 230, 230, 0.2);
   stroke-width: 1;
 }
 .tl-tick.is-day line {
-  stroke: rgba(236, 230, 214, 0.42);
+  stroke: rgba(230, 230, 230, 0.4);
 }
 .tl-day,
 .tl-hour {
@@ -148,23 +186,23 @@
 .tl-day {
   font-family: var(--font-ui);
   font-size: 10.5px;
-  font-weight: 600;
-  fill: var(--text-2);
+  font-weight: 500;
+  fill: var(--text-3);
 }
 .tl-fc-label {
   font: 600 8.5px var(--font-mono);
   letter-spacing: 0.14em;
-  fill: rgba(255, 150, 96, 0.85);
+  fill: rgba(245, 192, 96, 0.9);
 }
+/* NOW (live) / T₀ (past fire): the screen's orange mono mark */
 .tl-nowm line {
-  stroke: var(--fire-hot);
+  stroke: var(--fire-3);
   stroke-width: 1.5;
-  filter: drop-shadow(0 0 3px rgba(255, 179, 71, 0.9));
 }
 .tl-nowm text {
-  font: 700 8.5px var(--font-mono);
-  letter-spacing: 0.12em;
-  fill: var(--fire-hot);
+  font: 500 9px var(--font-mono);
+  letter-spacing: 0.1em;
+  fill: var(--fire-3);
 }
 
 .tl-markers {
@@ -196,13 +234,13 @@
   filter: drop-shadow(0 0 5px currentColor);
 }
 
+/* the part of the window before the handle: the screen's orange hatch */
 .tl-played {
   position: absolute;
   top: 24px;
   height: 6px;
   border-radius: 3px;
-  background: linear-gradient(90deg, rgba(226, 190, 114, 0.08), rgba(226, 190, 114, 0.45));
-  box-shadow: inset 0 -1px 0 rgba(243, 215, 146, 0.65);
+  background: repeating-linear-gradient(90deg, rgba(255, 106, 42, 0.6) 0 2px, rgba(255, 106, 42, 0.16) 2px 4px);
   pointer-events: none;
 }
 .tl-handle {
@@ -219,30 +257,30 @@
   top: 0;
   bottom: 0;
   width: 1px;
-  background: var(--gold-bright);
-  box-shadow: 0 0 6px rgba(243, 215, 146, 0.8);
+  background: rgba(240, 240, 240, 0.85);
 }
+/* the handle: a light knob with the accent ring (the screen) */
 .tl-knob {
   position: absolute;
-  left: -6.5px;
-  top: 6.5px;
-  width: 13px;
-  height: 13px;
+  left: -8px;
+  top: 5.5px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  background: #12160f;
-  border: 2px solid var(--gold-bright);
-  box-shadow: 0 0 0 3px rgba(226, 190, 114, 0.16), 0 0 10px rgba(243, 215, 146, 0.65);
+  background: #f0f0f0;
+  border: 0;
+  box-shadow: 0 0 0 3px rgba(255, 122, 61, 0.8);
 }
 .tl-bubble {
   position: absolute;
-  bottom: calc(100% + 3px);
+  bottom: calc(100% + 5px);
   left: 0;
   transform: translateX(-50%);
   padding: 2px 7px;
-  border-radius: 5px;
-  background: rgba(16, 22, 17, 0.94);
-  border: 1px solid rgba(226, 190, 114, 0.5);
-  color: var(--gold-bright);
+  border-radius: 6px;
+  background: rgba(20, 20, 20, 0.94);
+  border: 1px solid var(--hairline-strong);
+  color: var(--text);
   font-size: 10.5px;
   white-space: nowrap;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
@@ -255,7 +293,7 @@
   top: 14px;
   height: 27px;
   width: 1px;
-  background: rgba(236, 230, 214, 0.35);
+  background: rgba(230, 230, 230, 0.35);
   pointer-events: none;
 }
 .tl-ghost span {
@@ -265,7 +303,7 @@
   transform: translateX(-50%);
   padding: 1px 6px;
   border-radius: 4px;
-  background: rgba(10, 14, 11, 0.95);
+  background: rgba(18, 18, 18, 0.95);
   border: 1px solid var(--hairline);
   color: var(--text);
   font-size: 10px;
@@ -351,10 +389,9 @@
   margin-top: -2.5px;
   border-radius: 50%;
   background: var(--gold);
-  box-shadow: 0 0 6px rgba(226, 190, 114, 0.8);
 }
 .ke-row.is-selected {
-  background: rgba(226, 190, 114, 0.09);
+  background: rgba(255, 122, 61, 0.09);
   box-shadow: inset 2px 0 0 var(--gold);
 }
 .ke-del {
@@ -363,7 +400,7 @@
   width: 22px;
   height: 22px;
   opacity: 0;
-  background: rgba(12, 17, 13, 0.92);
+  background: rgba(18, 18, 18, 0.92);
 }
 .ke-row:hover .ke-del {
   opacity: 1;
@@ -534,7 +571,7 @@
 }
 .chart-tool.is-active {
   color: var(--gold);
-  border-color: rgba(226, 190, 114, 0.55);
+  border-color: rgba(255, 122, 61, 0.55);
   background: var(--gold-ghost);
 }
 .chart-body {
@@ -574,11 +611,11 @@
   shape-rendering: crispEdges;
 }
 .ax .base {
-  stroke: rgba(236, 230, 214, 0.16);
+  stroke: rgba(230, 230, 230, 0.16);
   shape-rendering: crispEdges;
 }
 .ax .tick {
-  stroke: rgba(236, 230, 214, 0.22);
+  stroke: rgba(230, 230, 230, 0.22);
 }
 .ax .unit {
   font-size: 9px;
@@ -591,7 +628,7 @@
   stroke-width: 1.8;
   stroke-linejoin: round;
   stroke-linecap: round;
-  filter: drop-shadow(0 0 3px rgba(226, 190, 114, 0.35));
+  filter: drop-shadow(0 0 3px rgba(255, 138, 60, 0.3));
 }
 .s-obs-wash {
   fill: var(--chart-observed);
@@ -641,7 +678,7 @@
 }
 .front-mark circle {
   fill: var(--fire);
-  stroke: #0c110d;
+  stroke: #0c0c0c;
   stroke-width: 2;
   filter: drop-shadow(0 0 5px rgba(255, 106, 43, 0.9));
 }
@@ -658,7 +695,7 @@
   fill: rgba(255, 243, 196, 0.7);
 }
 
-/* gold timeline cursor */
+/* timeline cursor (light grey) */
 .cursor line {
   stroke: var(--chart-cursor);
   stroke-width: 1;
@@ -666,9 +703,9 @@
 }
 .cursor circle {
   fill: var(--chart-cursor);
-  stroke: #0c110d;
+  stroke: #0c0c0c;
   stroke-width: 2;
-  filter: drop-shadow(0 0 4px rgba(226, 190, 114, 0.8));
+  filter: drop-shadow(0 0 3px rgba(230, 230, 230, 0.5));
 }
 .cursor-val {
   font-family: var(--font-mono);
@@ -676,7 +713,7 @@
   font-weight: 500;
   fill: var(--text);
   paint-order: stroke;
-  stroke: rgba(8, 12, 9, 0.85);
+  stroke: rgba(10, 10, 10, 0.85);
   stroke-width: 3px;
 }
 
@@ -691,7 +728,7 @@
   top: 0;
   bottom: 0;
   width: 1px;
-  background: rgba(236, 230, 214, 0.32);
+  background: rgba(230, 230, 230, 0.32);
   pointer-events: none;
 }
 .xdot {
@@ -701,7 +738,7 @@
   margin: -4px 0 0 -4px;
   border-radius: 50%;
   background: #a8b393;
-  box-shadow: 0 0 0 2px #0c110d;
+  box-shadow: 0 0 0 2px #0c0c0c;
   pointer-events: none;
 }
 .readout {
@@ -711,7 +748,7 @@
   min-width: 128px;
   padding: 6px 8px;
   border-radius: 6px;
-  background: rgba(14, 20, 16, 0.95);
+  background: rgba(20, 20, 20, 0.95);
   border: 1px solid var(--hairline-strong);
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.55);
   pointer-events: none;
@@ -721,13 +758,14 @@
 .readout.is-left {
   transform: translateX(calc(-100% - 10px));
 }
-.ro-time {
+/* the charts' cross-hair readout (xr-*; the ro-* names belong to the shared "value — LABEL" rows, ui/shell/Readout.tsx) */
+.xr-time {
   font-size: 10px;
   color: var(--text-2);
   margin-bottom: 3px;
   white-space: nowrap;
 }
-.ro-row {
+.xr-row {
   display: grid;
   grid-template-columns: 12px auto 1fr;
   align-items: center;
@@ -735,14 +773,14 @@
   line-height: 1.6;
   white-space: nowrap;
 }
-.ro-val {
+.xr-val {
   color: var(--text);
   font-weight: 600;
 }
-.ro-label {
+.xr-label {
   color: var(--text-2);
 }
-.ro-hint {
+.xr-hint {
   margin-top: 3px;
   font-size: 9.5px;
 }
@@ -786,6 +824,19 @@
   }
   .dock-title {
     display: none;
+  }
+}
+/* a narrow dock (tablets, small phones): the range tabs wrap to a line of their own (right) instead of running over
+   the time (they did at 768-900 px) */
+@container dockmain (max-width: 560px) {
+  .tl-top {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 36px;
+    row-gap: 4px;
+  }
+  .tl-top .seg {
+    margin-left: auto;
   }
 }
 .s-burn-old {

@@ -333,3 +333,57 @@ describe('MapInput: a move that started as the user’s', () => {
     expect(outside).toEqual([])
   })
 })
+
+// Brief 4 (H2c, decisions f and k): the map turns in 2D as in 3D. The ⟲ ⟳ buttons, Q / E / N and the compass drag are
+// our own camera commands (like the zoom buttons); Safari's two-finger twist is the user's own move, as a drag on the
+// map: it records an input and passes its GestureEvent to MapLibre as the move's originalEvent.
+describe('rotation (brief 4)', () => {
+  it('a twist inside our own command still counts as the user’s move (a gesture), from movestart to moveend', () => {
+    const c = clock()
+    const input = new MapInput(c.now)
+    const hold = new FocusHold()
+    hold.flight('fire-card')
+    // turnTo(deg, gestureEvent): input(), then jumpTo inside ours with { originalEvent } (movestart / moveend in it)
+    input.input()
+    const user = input.ours(() => {
+      input.moveStart(true)
+      return input.moveEnd(true)
+    })
+    expect(user).toBe(true)
+    if (user) hold.release()
+    expect(hold.active).toBe(false)
+  })
+
+  it('a compass drag or a rotate button is ours: a fire card’s focus hold stays', () => {
+    const c = clock()
+    const input = new MapInput(c.now)
+    const hold = new FocusHold()
+    hold.flight('fire-card')
+    c.advance(5000)
+    const user = input.ours(() => {
+      input.moveStart(false)
+      return input.moveEnd(false)
+    })
+    expect(user).toBe(false)
+    expect(hold.active).toBe(true)
+  })
+
+  it('the controller wires it: setBearing / the twist / ⟲ ⟳ / north up run in ours, the twist as a gesture, and 2D keeps the heading', () => {
+    const src = mapControllerSource.replace(/\s+/g, ' ')
+    // one place sets the heading at once; a gesture records an input and becomes MapLibre's originalEvent
+    expect(src).toMatch(/private turnTo\(deg: number, gesture\?: Event\): void \{[^}]*if \(gesture\) this\.input\.input\(\) this\.input\.ours\(\(\) => this\.map\.jumpTo\(\{ bearing: deg \}, gesture \? \{ originalEvent: gesture \} : undefined\)\)/)
+    expect(src).toMatch(/setBearing: \(deg\) => this\.turnTo\(deg\)/)
+    // Safari's twist: heading = heading at start − rotation, passed with its event
+    expect(src).toMatch(/attachRotateGesture\(container, \{/)
+    expect(src).toMatch(/rotate: \(delta, e\) => this\.turnTo\(stepDeg\(start, -delta\), e\)/)
+    // ⟲ ⟳ and north up ease inside ours (the shared ease helper)
+    expect(src).toMatch(/const ease = \(o: \{ bearing\?: number; pitch\?: number \}, ms: number\) => this\.input\.ours\(\(\) => this\.map\.easeTo\(\{ \.\.\.o, duration: motionMs\(ms\) \}\)\)/)
+    expect(src).toMatch(/ease\(\{ bearing: to \}, ROTATE_MS\)/)
+    expect(src).toMatch(/ease\(\{ bearing: 0 \}, NORTH_MS\)/)
+    // the visible view's rotation for Q / E / N
+    expect(src).toMatch(/registerRotation\(\{ rotateBy: \(deg\) => actions\.rotateBy\(deg\), northUp: \(\) => actions\.northUp\(\), setBearing: \(deg\) => actions\.setBearing\(deg\), bearing: \(\) => this\.map\.getBearing\(\), \}\)/)
+    // 2D looks straight down and keeps the heading (decision k): no bearing in the 2D ease
+    expect(src).toMatch(/this\.input\.ours\(\(\) => map\.easeTo\(\{ pitch: 0, duration \}\)\)/)
+    expect(src).not.toMatch(/easeTo\(\{ pitch: 0, bearing: 0/)
+  })
+})

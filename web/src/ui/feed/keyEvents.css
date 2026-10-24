@@ -1,6 +1,7 @@
 /* Forensic Key Events: the kind glyph of each row, with a corner dot for automated items (owner: official-web; brief 2
    U-R11). The row layout itself is in styles/dock.css; these sit in its last grid column, before the time. Kinds differ
-   by glyph, never by colour alone. */
+   by glyph, never by colour alone. Brief 4 (H5): the map feed's kind colours (handoff palette: official green, model
+   amber, estimate and observation fire oranges, notes grey; light blue is kept for the selected point). */
 .ke-end {
   display: inline-flex;
   align-items: center;
@@ -17,19 +18,19 @@
   box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 40%, transparent);
 }
 .ke-kind.is-official {
-  color: #8ee0a8;
+  color: #8fd3a8;
 }
 .ke-kind.is-model {
-  color: #f5b45a;
+  color: #f5c060;
 }
 .ke-kind.is-estimate {
-  color: #f2c97d;
+  color: #ffb27a;
 }
 .ke-kind.is-observation {
-  color: #8ec5ff;
+  color: #ff9a5a;
 }
 .ke-kind.is-annotation {
-  color: #cbb9ef;
+  color: #cfcfcf;
 }
 /* automated (Fire-3d detected it, not a person or agency): a dot on the glyph's corner, spelled out in its label */
 .ke-kind.is-auto {
@@ -48,5 +49,5 @@
   height: 5px;
   border-radius: 50%;
   background: currentColor;
-  box-shadow: 0 0 0 1.5px var(--bg-1, #0d120e);
+  box-shadow: 0 0 0 1.5px var(--bg-1, #141414);
 }

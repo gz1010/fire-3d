@@ -3153,3 +3153,804 @@ The clean re-check after 14.16 found nine minor problems (R1-R9, report `docs/re
   the lower 48 (2026: 356 of 1,178 fires of 300 acres or more without a NIFC perimeter); the hourly re-check of a
   daily weather block; the 12 test fires' real build times (30-539 s, 18 and 22 min while a weather host did not
   answer); about 32,400 towns and places besides the 3,222 counties.
+
+---
+
+## 15. Brief 4 (handoff restyle) interfaces
+
+Added for brief 4 (`docs/redesign/BRIEF-4.md`, `PLAN-4.md`, design spec `handoff-4/HANDOFF.md`). Restyle and layout
+only: no HTTP or data contract changes (`SPEC.md`, `contracts.py`, `api/types.ts` unchanged). Steps: **H2** foundation +
+Command (alone, first), then **H3+H4** (Public overview, Public fire view, Command overview) and **H5** (Forensic) in
+parallel. Each step fills its own "As built" sub-heading at the end of this section and edits nothing else here.
+Everything marked *frozen* is owned by H2 and changes after H2 only through the orchestrator.
+
+### 15.1 Tokens and CSS variables
+
+- `styles/map-tokens.css` (H2, frozen): new values for the existing `--m-*` tokens (PLAN-4 §1 table: greys, glass
+  `rgba(14,14,14,.62-.86)` + `blur(22px) saturate(140%)`, hairlines `rgba(200,200,200,…)`, accent `#ff7a3d`, selection
+  `#9fd6ff`, fire `#ff6a2a`/`#ff8a3c`, modeled `#f5c060`, stale `#e8b04a`, official `#8fd3a8`) and new tokens:
+  `--m-accent-ink #1a0a03`, `--m-accent-soft`, `--m-text-body #e6e6e6`, `--m-text-2b #bdbdbd`, `--m-text-4 #8a8a8a`,
+  `--m-fire`, `--m-fire-2`, `--m-fire-3`, `--m-fire-4`, `--m-alert #ee7aa0`, `--m-label-track .14em`, `--m-readout-fs 22px`,
+  `--m-readout-lg 26px`, `--m-coord-xl 30px`, `--m-topbar-top 20px`, `--m-topbar-x 28px`, `--m-topbar-h 44px`,
+  `--m-chrome-top` (first row under the floating bar). The `html[data-workspace='map']` re-pointing block keeps working
+  (its `--gold-*` alphas become orange).
+- TypeScript mirrors (MapLibre paint cannot read CSS vars), kept equal to the tokens: `map/overlayModel.ts TOKENS`,
+  `OBSERVED_RGBA`, `FORECAST_RGBA`, `map/basemapStyle.ts DARK` (H2), `extras/style.ts EXTRAS_COLORS` (H2),
+  `official/style.ts OFFICIAL_COLORS.redFlag → #ee7aa0` (H2), `map/overviewLayers.ts PALETTE` (H3+H4).
+- `styles/theme.css` (H5): Forensic UI tokens greyed (`--glass`, `--hairline*`, `--text*`, `--bg-*`), `--gold*` = the UI
+  accent `#ff7a3d` family, new `--accent-ink #1a0a03`; scene colours (`--lattice-*`, `--fire*`, `--ev-*`, `--ac-*`) kept;
+  `--chart-observed #ff8a3c`, `--chart-forecast #f5c060`, `--chart-cursor #e6e6e6`.
+- Runtime CSS variables on `.mw-atmo` (H2, `map/MapAtmosphere.tsx`): `--mw-vignette` (0-1, from the map zoom:
+  `clamp((zoom − 3) / 7, .25, 1)`), `--mw-vig-x`, `--mw-vig-y`, `--mw-vig-r` (centre and half the shorter side of the
+  safe area, px). Attribute `data-edges="overview" | "fire" | "command"` selects the static edge gradients.
+- `web/index.html` (H2, frozen): Inter weights 400-800, `theme-color #0c0c0c`.
+
+### 15.2 Shared components (H2, frozen)
+
+```ts
+// ui/shell/TopBar.tsx (+ styles/topbar.css): the floating bar used by every view (map chromes and Forensic Header)
+export function TopBar(p: { left: ReactNode; centre?: ReactNode; right?: ReactNode; className?: string; inset?: 'map' | 'forensic' }): JSX.Element
+export function ViewPill(p: { size?: 'sm' | 'md' }): JSX.Element            // Public · Command · Forensic (views.ts applyView)
+export function BackButton(p: { onClick: () => void; label?: string }): JSX.Element   // 36 px round, default "Back to all fires"
+export function LiveDot(p: { live: boolean; year?: number | null }): JSX.Element      // "● LIVE" mono, else the year chip
+export function IconPill(p: { icon: ReactNode; label: string; tip?: string; pressed?: boolean; expanded?: boolean; onClick: () => void; badge?: ReactNode }): JSX.Element
+export function TopBarStatus(p: { parts: string[]; staleFrom?: number; tip?: string; onClick?: () => void }): JSX.Element
+// ui/Logo.tsx (re-exported by ui/Header.tsx)
+export function Logo(p: { size?: number }): JSX.Element
+// ui/shell/fixedCopy.ts + FixedCopy.tsx
+export const PROTOTYPE_LINE = 'Research prototype — not for operational use'
+export const NOT_ALL_CLEAR = 'Not an all-clear. Follow local officials.'
+export function FixedCopy(p: { variant: 'line' | 'corner' | 'bar' | 'pill'; extra?: string }): JSX.Element
+// ui/shell/Readout.tsx: "value unit — LABEL" rows (Command readout, Public fire facts)
+export function ReadoutRow(p: { value: ReactNode; unit?: string; label: string; size?: 22 | 26 | 17; tone?: 'stale' | 'official' | 'alert'; sub?: ReactNode; copy?: string }): JSX.Element
+// map/MapAtmosphere.tsx: vignette + edge gradients, mounted once in MapWorkspace between the map and the chrome
+export function MapAtmosphere(p: { edges: 'overview' | 'fire' | 'command' }): JSX.Element
+```
+
+- `App.tsx` `MapWorkspace` (frozen): one map mount, `MapAtmosphere`, credits, status overlays, banners, toasts and
+  tooltips, plus exactly one chrome: `OverviewChrome` (no fire, both presets; H3+H4), `PublicFireChrome` (H3+H4),
+  `CommandFireChrome` (H2). Switching preset or opening a fire never remounts the map. Every floating element keeps
+  `[data-chrome]` and `--chrome-side` (CONTRACT §3.1).
+- `map/MapControls.tsx` gains `variant: 'bar' | 'compact'` (H2): `bar` = 2D/3D, basemap, ⟲, compass, ⟳, −, +, framing,
+  optional Layers icon (Main details, Command); `compact` = vertical zoom ±, ⟲, compass, ⟳ (Public minimal and fire view).
+- `extras/ImageryChip.tsx` gains `variant: 'chip' | 'status'` (H2): `status` = the bar's mono "VIIRS NOAA · 375 M · 6.2 H
+  AGO" with the same actions.
+- `ui/feed/OfficialNow.tsx` `Row` (H2): collapsible one-line rows (`collapsed` meta = issuer · own time · checked);
+  rows with an evacuation order or warning, a local officials' alert or an NWS alert in effect start open.
+- `location/CommandReadout.tsx` (H2, frozen): the Command left readout (PLAN-4 §3.2).
+
+### 15.3 Shared state
+
+```ts
+// state/workspace.ts (H2 adds; behaviour by H3+H4)
+export type SelectionSource = 'click' | 'coords' | 'address' | 'event' | 'incident' | 'device'
+export interface DeviceLocation { lat: number; lon: number; accuracyM: number | null; tMs: number }
+interface WorkspaceState {
+  overviewDetails: boolean            // Public overview "Show details" (default false; Command overview shows details always)
+  setOverviewDetails(open: boolean): void
+  device: DeviceLocation | null       // browser geolocation after an explicit click; never in the URL, never persisted
+  setDevice(d: DeviceLocation | null): void
+}
+// state/store.ts (H2 adds, frozen): the heading travels with the workspace hand-off
+flyTo: { x: number; z: number; distance?: number; bearingDeg?: number; nonce: number } | null
+// state/rotation.ts (H2, frozen): one rotation target at a time (the mounted map or the Forensic camera)
+export interface RotationTarget { rotateBy(deg: number): void; northUp(): void; setBearing(deg: number): void; bearing(): number }
+export function registerRotation(t: RotationTarget): () => void
+export function rotateView(deg: number): void        // Q = −15, E = +15 (state/runtime.ts useHotkeys, outside text fields)
+export function viewNorthUp(): void                  // N
+// lib/compass.ts (H2, pure, tested): pointerBearing(cx, cy, x, y), normalizeDeg(d), stepDeg(d, step)
+// ui/useCompassDrag.ts (H2): pointer drag around a compass element → setBearing; a click without drag → northUp
+// lib/rotateGesture.ts (H2): attachRotateGesture(el, { start, rotate(deltaDeg), end }) for Safari's gesturestart/change/end
+```
+
+- `map/mapStore.ts MapActions` (H2): adds `setBearing(deg)` and `setTint(level: 'overview' | 'fire' | 'none')`; the map
+  keeps its heading on 2D↔3D; every camera call stays inside `this.input.ours(…)` (map/userInput.test.ts).
+- `scene/sceneStore.ts` (H5): `CameraCommandKind` adds `'rotate'` (with `deg`) and `'set-heading'` (with `deg`);
+  `CameraRig` registers a `RotationTarget`, rotates in 2D and 3D and keeps the heading on 2D↔3D.
+- Public fire view (H3+H4): `fireActions.openFireView(id)` = `setFireCard(null)` + `selectIncident(id, { source: 'card' })`
+  (one history push, no build); zoom focus is off while the Public preset is shown (PLAN-4 decision b); the Public fire
+  map profile shows the newest perimeter only (PLAN-4 decision a). Names may change when built; record them below.
+
+### 15.4 Fixed wording added in brief 4
+
+- `PROTOTYPE_LINE` and `NOT_ALL_CLEAR` on every view (Public overview line: "RESEARCH PROTOTYPE · Not for operational
+  use. " + §14.14 `LIST_ABSENCE`).
+- Fire view facts on a past fire (orchestrator follow-up, Oct 24): an alert in effect at the time shown reads "Was in
+  effect" (or "Was about to start") with "as of <date>" first in its sub-line, never a bare "In effect"
+  (`fireView.ts` `FactsInput.pastMs`, set by `FireFacts` when the panel time is an hour or more before now).
+- Fire view key: "Latest perimeter · <source> · <its own time> (<age>)" (+ Stale), "No mapped perimeter yet · reported
+  location (<issuer>)", "No perimeter published yet". Facts: evacuation "Not available in this state" (§14.14 short
+  form; never "N/A"), fire weather "None in effect". Distance chip: "<n> mi · <direction> of you", with what it measures
+  ("to the mapped edge" / "to the reported location, not its edge").
+
+### 15.5 As built
+
+#### H2 (foundation + Command) — as built
+
+Built 2026-10-24 in three parts that share this tree: **H2a** foundation, then **H2b** Command in a fire and **H2c**
+rotation, dimming and tint in parallel, then an integration pass. Reports: `reports/brief4-h2a.json`, `-h2b.json`,
+`-h2c.json`, `-h2.json`; screenshots `docs/screenshots/brief4-h2*-*.png`. Where this differs from §15.1-15.4, this
+sub-section is what the code does.
+
+**Tokens, fonts, colour mirrors.** `styles/map-tokens.css` carries the PLAN-4 §1 values and the new tokens
+`--m-accent-ink`, `--m-accent-soft`, `--m-text-body`, `--m-text-2b`, `--m-text-4`, `--m-fire` … `--m-fire-4`, `--m-alert`,
+`--m-label-track`, `--m-readout-fs`, `--m-readout-lg`, `--m-coord-xl`, `--m-topbar-top` 20 / `-x` 28 / `-h` 44 (phones
+8 / 8 / 44) and `--m-chrome-top` = top + h + 20 (phones + 8); `--m-header-h` is kept (= chrome-top − gap). The
+`html[data-workspace='map']` re-pointing block makes `--gold-*` orange alphas and adds `--accent-ink`. Links in the map
+workspace are `--m-accent-text` and underlined (a `:where()` rule in `map-bridge.css`). TypeScript mirrors:
+`overlayModel.ts TOKENS` / `OBSERVED_RGBA` / `FORECAST_RGBA`, `basemapStyle.ts DARK` (neutral greys) +
+`BUILDING_COLORS.dark #555555`, `extras/style.ts EXTRAS_COLORS` (+ `selectSoft`), `official/style.ts redFlag #ee7aa0`.
+`index.html`: Inter 400-800, `theme-color #0c0c0c`.
+
+**Shared components** (exact signatures; frozen):
+- `ui/shell/TopBar.tsx` (styles `styles/topbar.css`): `TopBar({ left, centre?, right?, className?, inset? = 'map' } &
+  HTMLAttributes)` renders `<header class="tb tb-inset-…">` (extra props such as `data-chrome` go to the root);
+  `TopBarBrand({ size? })`; `ViewPill({ size?, className? })` (radiogroup, `.tb-view-btn[aria-checked]`, focus stays on
+  the new pill after a switch); `BackButton({ onClick, label? = 'Back to all fires', tip? })`; `LiveDot({ live, year? })`;
+  `IconPill({ icon, label, tip?, pressed?, expanded?, onClick, badge?, className?, ref? } & button attributes)` (label =
+  visually hidden text, so a badge's hidden text joins the name; `.has-label` shows it; `.is-on` = accent);
+  `TopBarStatus({ parts, staleFrom?, tip?, onClick? })`; `TopBarPlace({ place, date?, tip? })`. Pure helpers
+  `ui/shell/topBarText.ts` (`placeLine(summary)`, `statusSegments(parts, staleFrom)`).
+- `ui/Logo.tsx Logo({ size? = 24 })` (width; 26:22), re-exported by `ui/Header.tsx`.
+- `ui/shell/fixedCopy.ts`: `PROTOTYPE_LINE`, `NOT_ALL_CLEAR`, `PROTOTYPE_LEAD`, `PROTOTYPE_TAIL`, `defaultExtra(variant)`
+  (line → `LIST_ABSENCE`, corner / pill → `NOT_ALL_CLEAR`, bar → none), `fixedCopyText(variant, extra?)`;
+  `FixedCopy({ variant, extra?, className? })` (`extra` undefined = the default, null = none; `.fxc-*`).
+- `ui/shell/Readout.tsx ReadoutRow({ value, unit?, label, size? = 22, tone?, sub?, copy? })` (`.ro-row .ro-<size>
+  .is-<tone>`, label rendered "— Label", upper-cased by CSS). The `.ro-*` names belong to this row only: the Forensic
+  charts' cross-hair readout, which used `.ro-row` / `.ro-label` too, is now `.xr-*` (`ui/Charts.tsx`, `styles/dock.css`).
+- Top-bar items, shared by every map chrome (no step owns them): `ui/shell/topBarItems.tsx` (`PanelPill`,
+  `AnalysisPill`, `LayersPill`, `AllFiresBack`, `DemoBadge`, `IncidentIdChip`, `HeaderMenu`, `CompactMenu`,
+  `UpdatesToggle`, `ShowPanelsPill`, `LOWER48_TIP`) and `ui/shell/fireBarInfo.ts useFireBarInfo()`. The former
+  `MapHeader.tsx` is gone. `IncidentPicker({ variant? = 'pill' | 'title' })`: `title` = the bar's 18 px name.
+
+**Map workspace.** `App.tsx MapWorkspace` keeps the map mount, `MapAtmosphere`, `CreditsFooter` (passed to the chrome as
+its `credits` prop and placed in its bottom row), `LoadingLine` (2 px at the top edge), `StatusOverlay`, the top-centre
+banners, toasts and tooltips, and mounts exactly one chrome, `({ credits }: { credits: ReactNode })`: `OverviewChrome`
+(no fire, both presets), `PublicFireChrome` (both today's layouts moved verbatim under the floating bar; H3+H4 rebuilds
+them) or `CommandFireChrome`. `views.ts mapChromeOf(hasFire, preset): 'overview' | 'public-fire' | 'command-fire'` picks
+it; the root carries `data-view`; `atmosphereEdgesOf(chrome)` gives the atmosphere's edges (overview / fire / command).
+Every chrome's bar is `TopBar className="mw-header" data-chrome="header"`. The map canvas is the same element across
+preset switches, Back and reopening a fire.
+
+**State.** `SelectionSource` adds `'device'` (`locationCheck.ts` line "Your location from your browser …"),
+`DeviceLocation`, `overviewDetails` / `setOverviewDetails`, `device` / `setDevice` (validated, memory only, never in the
+URL), `FlyTo.bearingDeg?` and `flyToLocal(x, z, distance?, bearingDeg?)` (stored only when finite).
+
+**Rotation** (decisions f, k). `lib/compass.ts` (pure): `normalizeDeg(d)` → [0, 360), `signedDeg(d)` → (−180, 180],
+`angleDelta(a, b)`, `stepDeg(d, step)`, `pointerBearing(cx, cy, x, y, deadPx? = 0)` (null within `deadPx`),
+`dragHeading(start, turned)` (= start − turned), `headingLabel(d)` ("045°"), `isRotated(d)` (> 0.5°).
+`state/rotation.ts`: `RotationTarget`, `registerRotation(t)` (the last registered is the visible view),
+`rotationTarget()`, `rotateView(deg)` / `viewNorthUp()` (return whether a view took it), `ROTATE_STEP_DEG = 15`,
+`rotationKey(e)` (q / e / n without Ctrl / Meta / Alt), `runRotationKey(key)`, `popoverOpen(doc, target?)` with
+`POPOVER_SELECTOR = '.popover, [data-popover], .loc-results, .fxm-legend-pop'` (mark any new popover `data-popover`; a key
+from inside a dialog, menu or list box also counts). `state/runtime.ts useHotkeys`: Q −15°, E +15°, N north up, outside
+text fields and never while a popover is open. `ui/useCompassDrag({ bearing, setBearing, northUp, rotateBy?, disabled? })
+→ { props, dragging }` (spread `props` on the compass button: pointer capture; a press moving < 4 px is a click =
+`northUp`; `setBearing` at most once per frame; ← / → turn 15°; Escape during a drag restores the heading).
+`lib/rotateGesture.ts attachRotateGesture(el, { start, rotate(deltaDeg, event), end }, { thresholdDeg? = 4 }) → detach`
+(Safari `gesturestart/change/end`, `preventDefault` on each; the view sets heading = start − delta). Map:
+`MapActions.setBearing(deg)` (instant `jumpTo` inside `this.input.ours`); `rotateBy` continues from the running turn's
+goal (a user gesture clears it); `applyPerspective` eases only the pitch, so 2D ↔ 3D keeps the heading; the controller
+registers its `RotationTarget` and attaches the Safari twist to the map container (`turnTo(deg, gestureEvent)`:
+`input.input()` + `jumpTo(…, { originalEvent })`, the user's own move). Hand-off (`ui/shell/handoff.ts`): map → Forensic
+`flyToLocal(x, z, distance, bearingDeg = the live map bearing)`; Forensic → map `view.bearing = cam.bearingDeg` in 2D
+and 3D. `MapControls({ variant?: 'bar' | 'compact', anchor?: 'top' | 'bottom' = 'top', layers?: boolean, className? })`:
+no variant = the previous row (its compass drags; ⟲ ⟳ stay in the 3D orbit row); `bar` = 2D/3D, basemap, ⟲ compass ⟳
+(`.fxm-turn`), −, +, framing, optional Layers icon (`data-panel-toggle="layers"`), glass .7, radius 12, 36 px buttons,
+the 3D orbit row (tilt ±, Top-down, North up) on the side away from `anchor`; `compact` = vertical +, −, ⟲, compass, ⟳
+(44 px on phones). Compass of `bar` / `compact`: the screens' 14×18 needle, north `--m-fire`. One-time hint
+`ROTATE_HINT` (key `fire3d.rotateHintSeen`, 12 s; in `bar` also in 2D). Development builds take `?ctl=bar|compact`.
+
+**Globe-like dimming and tint** (decisions g, j). `map/atmosphere.ts` (pure): `vignetteStrength(zoom)` = clamp((zoom −
+3) / 7, .25, 1), `vignetteChanged(prev, next)` (≥ .02 or reaching .25 / 1), `vignetteGeometry(w, h, insets)` (safe-area
+centre, radius half its shorter side, insets scaled like the map padding, radius ≥ a fifth of the map's shorter side),
+`defaultTint(edges)`. **Placement differs from §15.2:** `MapAtmosphere({ edges })` keeps its `App.tsx` mount but renders
+nothing there; it creates `div.mw-atmo[aria-hidden][data-edges]` and inserts it in MapLibre's canvas container right
+after the canvas, without a z-index, so the map's own DOM overlays (selection pin, markers, hover popups, provider
+notices) paint above the dimming and the chrome above all (`.mw > .mw-atmo` does not match it). `--mw-vignette`,
+`--mw-vig-x` / `-y` / `-r` are written from `useMapRuntime` / `useWorkspace` subscriptions and a ResizeObserver (no React
+render per frame). `styles/atmosphere.css`: `::before` the vignette, `::after` the screens' edge stops (Command left
+`min(540px, 38vw)`, right `min(500px, 35vw)`, bottom 230, top 120; fire left `min(560px, 42vw)`; overview top / bottom
+`min(200px, 24vh)`; ≤ 760 px Command and fire use a top 140 + bottom 160 instead of the sides; no edges while panels are
+hidden, `.mw.is-collapsed`); no transitions under reduced motion. Tint: `basemapStyle.ts` `TintLevel`, `AERIAL_TINT`
+(overview −0.85 / brightness-max .64, fire −0.6 / .68, none 0 / 1), `aerialTintPaint(level)`, `deriveAerial(base,
+tint?)`, `deriveBasemap(…, tint?)`, `fallbackStyle(basemap, tint?)`, `loadBasemap(basemap, url?, tint?)`;
+`MapActions.setTint(level)` paints only `fx-usgs-imagery` (transition `motionMs(400)`) and keeps the tint across basemap
+switches; `useMapRuntime.tint` (in effect) and `tintRequest`. `MapAtmosphere` applies `tintRequest ?? defaultTint(edges)`
+(overview → 'overview', fire and Command → 'fire'), so no chrome needs a call; one that wants another uses
+`map/useMapTint.ts useMapTint(level | null)` while mounted.
+
+**Command in a fire** (`ui/shell/CommandFireChrome.tsx`, layout `styles/view-command.css`, every rule scoped to
+`.mw[data-view='command-fire']`; `--cmd-x` 40 / `--cmd-top` chrome-top + 16 / `--cmd-left-w` 420 / `--cmd-right-w` 380;
+1024-1279 px 28 / 360 / 320; ≤ 1023 px 20 / 320 / 290):
+- Bar. Left: `AllFiresBack`, `IncidentPicker variant="title"`, `LiveDot`, `TopBarPlace`, `DemoBadge`; centre `ViewPill`;
+  right: `ImageryChip({ variant: 'status' })` (wide screens, panels shown: a `TopBarStatus`-style mono line, age amber
+  when stale; click = show / hide the image, chevron = "More images", same caption), `ShowPanelsPill`, `UpdatesToggle`,
+  `AnalysisPill`, `location/CommandSearch.tsx CommandSearch()`, `LayersPill`, `CompactMenu`. `CommandSearch` = the
+  "Check an address" `IconPill` and the unchanged `SearchBox` in a 400 px right-aligned `role="dialog"` popover
+  `#cmd-search-pop[data-popover]` under the bar (`searchUi.ts searchOpen` / `setSearchOpen`; "/" and
+  `fireActions.focusSearch()` open it first and focus the box; Escape with no result list open and an outside press
+  close it, focus back on the button). The incident ID left the bar for the readout.
+- Left: `location/CommandReadout.tsx CommandReadout()` (no panel; scrolls with a bottom fade when taller than its room):
+  header (`readoutText.ts selectedLabel(sel)`: "Selected point", "Entered point", "Selected address · approximate", …;
+  copy, centre, clear), the point in mono `--m-coord-xl` on two lines, `coordinateLine(lat, lon, utmZone)` ("DMS · UTM
+  10N … E … N · WGS84"), `nearSentence(n)` with outlined tags (Mapped / Estimate + basis, Stale + age; `describe.ts
+  NearHere` gains `edge`, `basis`, `staleFor`), the MODEL line (dashed tag, the model's dated sentence, the accuracy line
+  with "Outside the modeled area is unknown, not low."), the official block at the point (`OfficialSection compact`,
+  wording unchanged), `RecordRows()` (`ReadoutRow`s from the list summary only: Burned, Contained, Record updated ·
+  issuer, Reported location · issuer with copy and centre, Incident ID with copy and the agency id line, demo note) and
+  "More about this spot" (`<details>`, open state per preset in `cardPrefs.detailsOpen`: the run figure, run and
+  quantiles, `ReasonsBlock`, `ReliabilityBlock`, `DetailsBody`). Empty state "Click the map or search to select a
+  point" + the rows. The check is `location/useLocationCheck.ts useLocationCheck(sel, official) → LocationCheckView`,
+  shared with the Public `LocationCard` (output unchanged). Another fire's card floats in the readout's place.
+- Right: on wider screens `UpdatesPanel` renders the column (`.mw-updates-panel.is-column`, no panel) with
+  `OfficialNow({ variant: 'command' })`: header "Official now" (+ "at the replay time") and "Times in PDT" (`PST/PDT`
+  when the replay and today differ; tooltip = `zoneLine`); one-line `CommandRow`s (a button with `aria-expanded` /
+  `aria-controls`: tone dot, **title** — verdict, mono meta = issuer · the item's own time · checked; open = the previous
+  body unchanged with Show / Source / More); rows with an evacuation order or warning, an NWS alert in effect or a local
+  officials' alert in effect start open (and open once when they become one); foot `COMMAND_OFFICIAL_FOOT` ("Fire-3d's
+  modeled spread is experimental and is not an evacuation order. Not an all-clear. Follow local officials."); the rows
+  scroll between head and foot with a fade while more is below; "View all updates" opens the glass panel
+  (`.is-command-panel`: the same rows, `DataStatus`, `UpdatesFeed`; "Show fewer" returns; focus moves to the panel
+  heading and back); "Hide" collapses it as before. Phones keep the Updates sheet with these rows.
+- Bottom (`.mw-bottom.cmd-bottom`): row 1 `MapControls variant="bar" anchor="bottom"` (left) and `MapLegend({ variant:
+  'chips' })` (right: plain chips, the scale bar at the end, "Legend details" opening the same details upward); row 2
+  `CompactTimeline({ variant: 'slim' })` (full width, no card; same parts and keys: play, the mono issue / now or replay
+  line, forecast details, parts key, handle label saying what the time is, past solid / forecast dashed / unavailable
+  dotted, key-event markers, stop labels with their disabled reasons, stale ring); row 3 `FixedCopy variant="corner"`
+  (`PROTOTYPE_LINE` + `NOT_ALL_CLEAR`) and the credits (mono 10 px, every text kept, wraps).
+- Map labels: `location/CommandAreaLabels.tsx` (DOM, `aria-hidden`, z-index map + 2, hidden while the map moves) with
+  pure `location/areaLabels.ts` (`rankAnchors`, `placeAlong`, `placeLeader`, `pickAnchor`, `labelWidth`, `overlaps`):
+  "Observed fire" + its time and "Modeled spread" + "By <time> · experimental", anchored on the drawn outline
+  (`queryRenderedFeatures` on `fx-observed-edge` / `fx-forecast-line-10`), leaders up-right / down-right, then flipped,
+  then mirrored, inside the safe area and off the selection label. The reported location reads "<name> / REPORTED" in
+  Command and "<name> / Reported location" in Public (`map/layers.ts incidentLabelField(preset)`, `topLayers(theme,
+  preset?)`; the controller switches it with the preset). Text on the map carries a soft dark halo (decision l).
+- Phones (≤ 760 px): bar = back, name, Updates, search, menu; LIVE / demo badge and the default map-controls row under
+  it; the readout is a card above the timeline with a one-line peek (selected point, else the reported location; 44 px
+  copy / expand), opening on a new pick; the fixed copy wraps (both lines whole) beside "© Credits"; the legend is in
+  the Layers sheet.
+
+**Selected point marker** (every map view; orchestrator commit 9c743d1 + integration). `map/markers.ts SelectionPin`:
+the handoff's light-blue dot, halo, hairline leader and plain mono label ("<label or coordinates>" / "SELECTED · …").
+`map/pinLabel.ts` (pure, tested): `PinSide` ('up-right' | 'up-left' | 'down-right' | 'down-left', in that preference),
+`pinLabelBox(x, y, w, h, side)`, `overflowPx(box, free)`, `pinLabelSide(dot, size, free, current, covers?)` = the
+cheapest corner by `OVERFLOW_COST_PER_PX` (3) × pixels outside the free map area + `covers(box, side)`
+(`COVERS_TEXT_COST` 40 for the fire's label or an event label, `COVERS_POINT_COST` 15 for the fire's point or an event
+dot, from `queryRenderedFeatures`); ties keep the current corner. `SelectionPin.place(map, free, covers?)` sets
+`.fxm-pin.is-left` / `.is-down` (leader mirrored in `map/map.css`); the controller calls it on moveend, idle, a
+safe-area change and every pin update. The free area is the safe area (`useWorkspace.safeInsets`).
+
+**Tools, CSS moves.** `.fx-ws*`, `.fx-demo-badge`, `.fx-empty*` live in `styles/forensic-entry.css` (H5's).
+`scripts/shot.mjs --shot-timeout <ms> --quality low` (Forensic `fixture-live` ≈ 46 s under SwiftShader with
+`--wait 25000 --shot-timeout 240000`).
+
+**Measured.** `__mapChrome().unobstructed` at 1440×1000 (integration): Public overview 0.724, Public fire (Lower
+Sugarloaf) 0.763, Command `fixture-live` 0.515, Command Lower Sugarloaf 0.514, Command overview 0.713; Command 1024×768
+0.387, 390×844 0.754 (H2b). Composited contrast of every Command chrome text run (text made transparent,
+90th-percentile background): ≥ 5.47:1 on Lower Sugarloaf aerial at the opening view, ≥ 4.77:1 on Eaton aerial at z8
+(4.05 before the halo); no gradient or panel alpha changed. Browser checks (scratch Playwright, not in the repo):
+rotation 38/38 in Public, Command and the overview (Q / E / N, buttons, compass drag and click, popover and text-field
+guards including Command's search popover, 2D ↔ 3D, a synthetic Safari twist, vignette strength, edges and tint per
+chrome), Command keys 27/27, hand-off and tint 5/5; reduced motion turns at once with no transitions.
+
+**Review fixes** (step h2-fix, 2026-10-24; two reviews of H2, design and behaviour; per finding in
+`reports/brief4-h2-fix.json`). Where this differs from the text above, this paragraph is what the code does.
+- *Command readout record rows* (H2-B3): the issuer tag ("Record updated · CAL FIRE", "Reported location · <issuer>")
+  and the agency ID sub-line appear only when the bundle was built from that agency's incident record
+  (`manifest.data_sources` lists CAL FIRE or the NIFC WFIGS incident record) and it is not demo data:
+  `location/readoutText.ts recordIssuer(issuer, sources, demo)`. Otherwise "Record updated" and "Reported location
+  (incident data)".
+- *"Observed fire" map label* (H2-B1, DF-16): `location/areaLabels.ts observedLabelMeta(timeMs, latestMs, acres, units,
+  fmt)` = "≈6,875 ac · Oct 22, 13:30 PDT" (the reconstructed area from the hourly series, `seriesAcresAt`, the
+  Analysis "Fire Area" line; hectares in metric); past the latest observation (`time_range.now_ms`; the forecast part,
+  a live fire's NOW) it reads "Latest · <that observation's time>", never a forecast or future time. A line too wide
+  for the free map falls back to the line without the area. The location check's "Not burned by …" is clamped the same
+  way (`locationCheck.ts`, `asOfMs = min(timeMs, now_ms)`).
+- *Hand-off heading* (H2-B2, decision k): `ui/shell/handoff.ts returnBearing(forensicBearing, turnedInForensic,
+  mapBearing)`. Map → Forensic remembers the map's heading; Forensic → map carries the Forensic heading only when the
+  user turned the Forensic camera there (a drag that changed the heading, or any camera command other than
+  frame-fire / zoom, such as north up or H5's turns), else restores the map's own heading (or the stored view's, or
+  north up when Forensic was opened directly). A north-up 2D map stays north up after Forensic and back (browser check
+  3/3).
+- *Map controls* (H2-m1): the default row (Public, overview and Command on phones until H3+H4 switch them) shows ⟲ ⟳ on
+  a short row of their own under it in 2D (`.fxm-turn-row`, 44 px on phones); in 3D the orbit row holds them as
+  before. `bar` with `anchor="bottom"` opens the basemap menu upward (DF-1); in the map workspace a menu item's hint
+  sits on its own line under the label (`map-bridge.css .select-pop`).
+- *Search across chrome swaps* (H2-m2): when a fire opens or closes or the preset changes, a search box with a message
+  or a result list open hands its text and popover to the next chrome's box (`location/searchUi.ts carry`, `SearchCarry`,
+  `CARRY_MS` 1500, `freshCarry(c, nowMs)`; saved from zustand subscriptions before React renders the next chrome, read
+  by the new box's first render).
+- *Selected-point label* (DF-2, DF-17): `map/pinLabel.ts pinLabelLayout(dot, { wide, stacked? }, free, current,
+  covers?, view?) → { side, stacked }` adds the stacked label (latitude, longitude, "SELECTED" on three lines; only for
+  a coordinates label) at `STACKED_COST` 8 and `OFFSCREEN_COST_PER_PX` 10 for pixels cut off by the screen;
+  `pinLabelSide` is the one-line wrapper. `SelectionPin` measures both forms, sets `.fxm-pin.is-stacked`; the label
+  reads "39.23708° N · 106.43677° W" (`fmtLatLon(lat, lon, digits, sep)`).
+- *Map labels* (DF-3, DF-14, DF-12): Command's area labels also stay off the map's own labels and points as MapLibre
+  drew them (`areaLabels.ts` `Blocked` predicate on `placeLeader` / `placeAlong`: `queryRenderedFeatures` on the
+  incident and event label / circle layers) and are dropped when no slot is free; they and the selected-point label
+  carry a four-layer dark halo, and the coloured meta line sits on a soft dark plate (`rgba(12,12,12,.6)`, feathered):
+  composited contrast on Eaton aerial at z9 went from 2.57:1 to ≥ 5.6:1 (pin label 4.25 → 4.88). "Outside modeled area" labels: `map/aoiLabels.ts aoiLabelBox(side, x, y, size)` / `aoiSidesInside(anchors,
+  free, size)`; the controller filters `fx-aoi-label` to the sides whose label box stays inside the safe area
+  (`placeAoiLabels`, with the pin label on moveend, idle and safe-area changes).
+- *Slim timeline* (DF-4, DF-5): the forecast lane is full-strength dashed `#f5c060` wherever the handle is (only the
+  past after the handle is dimmed); a stale active stop keeps its amber (the underline marks it).
+- *Colours and links* (DF-6, DF-7, DF-8): `--m-info` is a neutral grey `#cfcfcf` (light blue means the selected point
+  only; the wall-clock mark and its tooltip say "grey dotted mark"); `.on-link`, `.on-link-btn`, `.uf-link`, `.os-link`
+  and `.xs-caption-more` are `--m-accent-text`, underlined; feed kind tags use tokens (observation `--m-fire-3`,
+  estimate `--m-fire-4` dashed, model `--m-forecast` dotted, official `--m-official-ink`, annotation `--m-text-2`; NWS
+  alert icon `--m-alert`).
+- *Smaller layout fixes*: the feed's sticky filter bar is `--m-panel-raised` (DF-9); Command's search box fills its
+  400 px popover (DF-10); the top-bar status keeps the age whole (platform and pixel size shrink first;
+  `.xs-status-head` / `.xs-status-tail`) and the Public satellite chip ellipsises (DF-13); the demo badge reads "Demo"
+  in Command's bar (full wording in its accessible text, tooltip and the readout's note; DF-15); the floating bar's text
+  has the readout's halo and the logo a drop-shadow (DF-18, partly: the Command overview's top band is H3+H4's);
+  "More about this spot" section titles are mono with tracking (DF-19).
+- *Readout room* (DF-11, partly): below 1280 px Command folds the credits behind "© Credits"
+  (`App.tsx CreditsFooter({ narrow, fold })`, `ui/shell/hooks.ts CREDITS_FOLD_QUERY`; every text kept, opened above the
+  bottom row). The official block at the point stays under MODEL (PLAN-4 §3.2); the rows below it scroll into view
+  with the fade where the window is short.
+
+#### H3+H4 (Public overview, Public fire view, Command overview) — as built
+
+**H3 (Public overview, Command overview, click to fire view, markers, locate-me, leader labels)**, built 2026-10-24
+(report `reports/brief4-h3.json`, screenshots `docs/screenshots/brief4-h3-*.png`, notes `progress/brief4-h3.md`).
+Where this differs from §15.1-15.4, this paragraph is what the code does.
+- *Overview chrome* (`ui/shell/OverviewChrome.tsx`; layout `styles/view-public.css`, every rule under
+  `.mw[data-view='overview']`): one chrome for both presets. Bar: `TopBarBrand`, "United States · all fires", `ViewPill`;
+  right `ui/public/OverviewStatus.tsx` ("OCT 24 2026 · 203 ACTIVE": the viewer's local date `barDate`, then
+  `activeCountPart`, never "0" when the lists could not be read: "LOADING FIRES", "FIRE LIST UNAVAILABLE", "FIRE LISTS
+  UNAVAILABLE"; tooltip `ACTIVE_COUNT_TIP`, which ends with §14.14 `LIST_ABSENCE`), `ShowPanelsPill`, `CompactMenu`.
+  Search row `.ovw-search#mw-search`, centred at `--m-chrome-top`: `SearchBox({ variant: 'pill' })` (52 px pill; the
+  label "Check an address: street, town, ZIP code or coordinates" for screen readers only; `PILL_PLACEHOLDER` "Check an
+  address, town, ZIP or coordinates", phones `PILL_PLACEHOLDER_SHORT` "Address, town or ZIP"; hints, messages and
+  results under the pill, as wide as it) and `location/LocateButton.tsx`.
+- *Public minimal* (`overviewDetails` false, the default): + `MapControls variant="compact"` (right edge, above the
+  pill), `FixedCopy variant="line"` centred above the credits (phones: `LIST_ABSENCE_SHORT` + "Follow local
+  officials."), the credits centred in mono 10 px, `ui/public/ShowDetailsPill.tsx` (bottom right; count
+  `ui/public/useOverviewCount.ts` = `overviewFires(catalog, filter).length`, a spinner while the lists load; name "Show
+  details: list of N fires"; showing the details also opens `panels.updates`). A selected point's location card (and
+  Command's fire card) is the left column at left 28, top `--ovw-row2` (chrome-top + 76 = 160), under the controls bar
+  when the details show.
+- *Details* (Public after the pill; Command always, without the pill, decision c): `MapControls variant="bar" layers`
+  top left; "Fires in the lower 48" (`OverviewPanel({ closeHidesDetails?, sheetPeek? })`, right 12, top 160, 472 px;
+  in Public its close button is "Hide details"; restyled in `styles/overview.css` under the overview root: mono OFFICIAL
+  NOW, the NWS block in a pink frame, accent tabs, the outlined OFFICIAL source pill, 16 / 13 / mono 15 px rows); the
+  overview readout (`CoordinateStrip` compact, mono .14em eyebrows) with the scale bar beside it; the legend (600 px).
+  Shorter or narrower windows (`ui/public/overviewLayout.ts`): below 1080 px high or 1280 px wide the list runs down to
+  the disclaimer row (`--ovw-low` 88 px) and the legend sits left of it; the scale bar gives way below 1280 px (below
+  1400 px on short windows); below 1200 px the legend is in the Layers panel (`OVERVIEW_LEGEND_IN_PANEL_QUERY`,
+  `LayersPanel`), as on phones. The menu's "Fires (lower 48)" (< 1024 px) also shows the details in Public.
+- *The overview map stays put* when its panels come and go (`mapController.applySafeInsets`: with no fire open and no
+  framing settling, the point at the middle of the new free area keeps its pixel; the new padding applies to the next
+  framing, e.g. "All states" or a search). No more shifted, cut-off lower 48 after "Show details".
+- *Phones* (decision h): bar (logo, title, menu), full-width search pill + 44 px locate, the compact cluster bottom
+  right, the pill opens the fire list sheet (`panels.updates`), the disclaimer and "© Credits" at the bottom; pill and
+  cluster give way to an open card or sheet. Command keeps the default controls row, the peek bar and the coordinate
+  line. The skip link "Skip to the fire list" lands on the pill while no list is shown (`#mw-updates`).
+- *Locate-me* (`location/locate.ts`, pure, tested; `LocateButton.tsx`): only a click asks the browser
+  (`getCurrentPosition({ enableHighAccuracy: false, timeout: 15 s, maximumAge: 60 s })`, no outside location service) →
+  `setDevice(deviceFromPosition(pos))` + `selectLocation(deviceSelection(d), { fly: true, zoom: deviceZoom(accuracy) })`
+  (`source 'device'`, label "Your location", approximate when coarser than 100 m or unknown). Denied / unavailable /
+  timeout / unsupported / insecure: `LOCATE_MESSAGES` under the button (dismissable; never a default place). Memory only:
+  not in the URL, not in browser storage. The point is checked like a map click (Fire-3d's own `/api/geo/lookup`,
+  `/api/extras/evacuations`, `/api/official/local-alerts`), so the card's line is now "Your location from your browser
+  (not saved or added to the link)" (`location/locationCheck.ts`; H2's "it stays in your browser" was not exact).
+- *Click → fire view* (decision b): `state/fireCard.ts openFireView(id)` = `setFireCard(null)` + `selectIncident(id,
+  { source: 'card' })` (the fire already open is only framed again), `opensFireView()` (map workspace and Public),
+  `pickFire(id, row?)` = the fire view in Public, `showFireCard` in Command and Forensic; `fireActions.ts` re-exports
+  them. Callers: the list row, the marker and its label (`mapController.openFireFromOverview`), the leader labels, the
+  search box's fire result (`pickFireCard`), the location card's nearest-fire rows (`OverviewCard.openOrShow`; prepared
+  fires still open through `openFromSearch`). On the map, a chip or another fire's outline opens that fire's view in
+  Public (`openFireView`) and its card in Command; the open fire's own marker opens its card in Command only. Zoom focus
+  and the "Spread not prepared yet" chips are off in Public (`evaluateFocus`: no chips, `keepShownFocus()`; a preset
+  switch re-evaluates); the overview view kept for Back may be any zoom in Public. History rules are unchanged: one push
+  from the overview (`fromOverview`), Back / X = `goToOverview()` (history.back). Browser checks 9/9 (list row, marker,
+  leader label → fire view; Back and browser Back; zooming out keeps the fire view; details kept; Command → fire card).
+- *Markers* (`map/overviewLayers.ts`, decision e): `markerKind(s)` small / active / large / other and `markerRadius(s)`
+  (`MARKER_PX` 7 / 11 / 15 / 4.5; `DOT_PX` 1.4 / 2.2 / 2.8 / 0); `PALETTE` (exported; dark and aerial: fill
+  rgba(255,138,60,.10), ring rgba(255,192,138,.8), dot #fff3dc, other rings rgba(240,217,176,.8), groups of other fires
+  .5; light: darker equivalents) with a faint dark casing; groups `groupRadius(n)` = min(36, 10 + 4.2·√n)
+  (`CLUSTER_RADIUS_EXPR` by `point_count`), a centre dot each, "28 FIRES" (`groupLabelText`, Noto Sans Bold 13 with the
+  unit at .62, `GROUP_TICK_IMAGE` tick, data-driven `GROUP_TICK_OFFSET` / `GROUP_TEXT_OFFSET` on the upper-right edge),
+  the count layers placed above the names (names keep clear of them); full size at a desktop's national zoom, 1.2x by
+  z10, 0.65x at a phone's national view (z2, full at z3.5). New layers `OVR.activeDot`, `pinnedDot`, `activeClusterDot`,
+  `otherClusterDot`; `labelFilters(leaderIds)`. Names keep clear of their marker: feature property `lr` (the radius a
+  label keeps away from: `r`, plus `CARD_RING_PX` 8 for the fire whose card is open, so its name clears the selection
+  ring), `labelRadialOffset()` growing with the markers from z7 to z10. The legend (`MapLegend`) follows: new swatches (`.fxm-sw-fire-active /
+  -large / -past / -group-* / -small-active / -nws`), "Fire weather alert (NWS)" while alerts are in effect on the
+  overview, details copy for sizes by type and the preset's click.
+- *Leader-line labels* (decision e; `map/leaderLayout.ts`, pure, tested: `layoutLeaders(items, { free, obstacles,
+  circles, max })`, `leaderCandidates`, `gutterEdge`, `labelBox`, `segmentHitsRect`, `circleHitsRect`, `rectsOverlap`,
+  `leaderAcres`, `LEADER_MAX` 12; `map/LeaderLabels.tsx`, mounted by the overview chrome): at most 12 (5 on maps under
+  500 px) of the large active fires and fires of 20,000 ac or more that MapLibre draws as single markers, largest first,
+  below z5; a gutter column at the free map's left edge for the westernmost, else diagonals; off the chrome, the markers,
+  group centres and counts and the basemap's place names; recomputed on moveend, resize, chrome or unit change and once
+  the map is idle after new marker data (never on every idle: that fed back); during pans and turns they follow their
+  markers per frame, hidden while zooming; a click = `pickFire`. **Differs from decision e's fallback:** below z5
+  `useMapRuntime.leaderIds` hides the MapLibre labels of every candidate, named or not (past the 12th, or with no free
+  spot): MapLibre cannot keep its labels clear of this DOM overlay, and those labels ran across the leaders and names;
+  from z5 the map's own labels show as before and the fire list names every fire.
+  For H4: `map/useMapAnchor.ts useMapAnchor([lon, lat]) → { x, y, inView } | null` (follows the map per frame) and the
+  geometry helpers above draw the fire view's circle-to-point leader.
+- *Rotate hint* (H2 known issue): `RotateHint` floats in the page (portal, `position: fixed`, `.fxm-orbit-hint
+  .is-floating`) at `map/hintPlacement.ts placeHint(ctl, size, view, obstacles, prefer)` (tested): beside the controls
+  (above / below sliding sideways, or to a side), inside the window, over no `[data-chrome]` region or banner; seen
+  after 2.5 s on screen, so a chrome that swaps at load (a linked fire opening over the overview) no longer uses it up.
+- *Atmosphere and tint*: soft plates behind the bar's logo and title and behind its status (`atmosphere.css`, overview,
+  phones too); edges "overview" and tint "overview" as H2 set them.
+- *Public fire view*: only `MapControls variant="compact"` here (H4 places it and builds the view).
+- *Measured* (decision l): every overview text run, text made transparent with halos kept, 90th-percentile background
+  per line box: min 4.94:1 (Public minimal and details at the national zoom over aerial with the overview tint, the
+  Bonneville salt flats at z10 and White Sands at z11, the Command overview on the dark basemap); no panel alpha or
+  gradient had to change. `__mapChrome().unobstructed` at 1440×1000 (decision m: recorded, no target): Public minimal
+  0.90, Public details 0.55, Command overview 0.56. Locate-me checks 7/7.
+
+**H4 (Public fire view)**, built 2026-10-24 (report `reports/brief4-h4.json`, screenshots
+`docs/screenshots/brief4-h4-*.png`, notes `progress/brief4-h4.md`). FireView.dc.html / renders/FireView.jpg on the real
+map, PLAN-4 §3.4 with decision a (option A), b, h and i. No H2 frozen file, no backend file and no HTTP contract changed.
+Where this differs from §15.1-15.4, this paragraph is what the code does.
+- *Chrome* (`ui/shell/PublicFireChrome.tsx`; layout `styles/view-public.css` under `.mw[data-view='public-fire']`):
+  the floating bar (`TopBar className="mw-header pfv-bar"`) holds the 44 px close button (X, `goToOverview()`, history
+  back when opened from the overview) left and the top-right cluster `ShowPanelsPill` · `ViewPill size="sm"` ·
+  `location/CommandSearch.tsx CommandSearch({ variant: 'pill' })` (new prop: the overview's centred `SearchBox variant="pill"`
+  opens under the title, `#pfv-search-pop[data-popover]`, same keys: "/", Escape twice, outside press) · `LayersPill` ·
+  `ui/public/FireMenu.tsx` (below 1024 px: the view switch and Layers; the shared `HeaderMenu` lists panels the fire view
+  lacks). Slots: `title` (top centre), `circle` and `facts` (left column at 48 / 88, 400 px), `imagery` (the satellite
+  status line, `ImageryChip variant="status"`, from 1280 px, under the cluster), `card` (a picked point's location
+  card, right 24, 360 px), `controls` (`MapControls variant="compact"`) above `key` (right 24, bottom 52), and the bottom
+  bar (`FixedCopy variant="bar"` + every credit, wrapping). Not mounted in Public: timeline, updates feed and toggle,
+  Analysis drawer and pill, incident picker, coordinate strip (the facts carry the reported coordinates with a copy
+  button; the card carries the picked point). `MapAtmosphere` edges "fire" and tint "fire" by default (no call). "H"
+  hides the circle, facts, card and key. CSS hides App.tsx's top `NotPreparedNotice`, the centre build card and a
+  forecast job pill in this view, and the "Skip to timeline" link (there is none; App.tsx is frozen).
+- *Pure parts* (`ui/public/fireView.ts`, tested): `fireEnd(summary, record)` (the record endpoint's latest stage, declared
+  out > controlled > contained, else the row's dated `containedLabel`), `recordActive`, `upperDay`, `fireDateLine`
+  ("JUN 28 2026 — PRESENT", "SEP 1 2025 — DECLARED OUT DEC 15 2025", or the start alone), `hazardStatus(summary, end,
+  demo, issuer, tz)` (`WILDFIRE · ACTIVE` only while the record lists it; `CONTAINED` (+ "Contained is not out") /
+  `CONTROLLED` / `DECLARED OUT` with the record's own time in the description; else `NOT LISTED AS ACTIVE`; demo
+  `SIMULATED FIRE · DEMO`), `fitName(name, measure, 256, 72, 40)`, `distanceToFire(me, { perimeter, grid, reported })`
+  (nearest edge planar in the fire's UTM grid, then geodesic; inside = 0), `distanceChipText(d, units, perimeterDay)`,
+  `perimeterKey(p, nowMs, live, tf)`, `recordFigures`, `fireFacts(input) → FactRow[]`, `factsSource(input)`; fixed words
+  `MODEL_IN_COMMAND`, `LAYERS_IN_COMMAND`, `NOT_PREPARED`, `PREPARE_LABEL`, `PREPARE_FAILED`, `PREPARE_AGAIN_LABEL`,
+  `PREPARING`, `NO_PERIMETER`, `ESTIMATE_IN_COMMAND`, `SHARE_PROMPT`.
+- *Title* (`ui/public/FireTitle.tsx`): `placeLine(summary)` 24/600 (the fire's name first for screen readers), the date
+  line mono 12 .16em, then the distance chip. Phones: place and dates small in the bar, no chip there.
+- *Hazard circle* (`ui/public/HazardCircle.tsx`, `CIRCLE_PX` 312): the screen's SVG (glow gradient, `feTurbulence` cloud
+  with drifting `baseFrequency` / `dy`, twinkling specks, grain; ids from `useId`), status words from `hazardStatus`,
+  the name fitted with canvas-measured Inter 800 (the full name is the button's name; the record's meaning its
+  description), "MORE IN COMMAND ›" → `applyView('command')`. Not active: a darker ember (CSS filter). Reduced motion:
+  no `<animate>` rendered and `pauseAnimations()`; a hidden tab pauses them (`visibilitychange`). The screen's centre
+  shade is a little taller (60 % × 38 %) and the small text has a tight dark edge, for 4.5:1 over the moving glow.
+  Sizes: 312 px; 248 px below 1280 px wide or when the prepare block shows; 232 / 200 px below 900 px high; 184 /
+  160 px below 800 px high; 120 px on phones (status on two lines).
+- *Reported point and leader* (`ui/public/ReportedPoint.tsx`): an SVG overlay (`.pfv-overlay`, z-index map + 2,
+  `aria-hidden`, no pointer events) draws the point as the screen (r 22 halo, r 12 `#ff6a2a` with a `#ffd79a` ring, r 3
+  centre) at the record's coordinates via `useMapAnchor`, and the 1.5 px leader from the circle's edge; the line is left
+  out when the point is off the map, under or within 24 px of the circle, under a panel, or when it would cross any
+  `[data-chrome]` region, the bar's items, a banner, the search pill and its list or the legend details
+  (`segmentHitsRect`); it is recomputed on map moves, chrome and safe-area changes, the search and a picked point. No
+  leader on phones (the point stays). The map's own reported ring and label are off in this view.
+- *Facts* (`ui/public/FireFacts.tsx`, `ReadoutRow`s; the reported row is the same shape with its own "Copy the reported
+  coordinates" button): Burned (ac), Contained (%), Started, Reported (3 decimals), "None in effect" / "In effect" /
+  "Starting soon" — the alert's own event name + "(NWS)" (default "Red Flag Warning (NWS)"; sub: its own end time,
+  sending office, archived copy, "a weather warning, not an evacuation order", NWS link), Evacuation zones (<state>)
+  ("Not available in this state", "None listed", the issuer's verbatim status with zone count, issuer, own time and
+  source link, "Not available for past dates", …), Local officials' alert (only while `localAlertsLine` has one: its
+  verbatim quote, sent time, channel and link), Last official update (date + clock + zone). Figures come from the
+  record endpoint (`useOfficialNow().calfire`) when it has them, else the list row; quiet states end with "not an
+  all-clear"; never "N/A". Foot (sticky when the facts scroll): OFFICIAL badge (DEMO for synthetic data) + "<record
+  issuer> · NWS · <evacuation source> · checked <age>", `NOT_ALL_CLEAR` + the record's link ("NIFC WFIGS" / "CAL
+  FIRE"). Between rows and foot, `MapDataState`: unprepared "Fire-3d has not prepared this fire's map data yet." +
+  "Prepare map data (1-3 min)" (`openFire(id, 'prepare')`), failed "… last preparation … failed." + "Prepare again",
+  building "Preparing this fire's map data (1-3 min) · <step>" with a progress bar, prepared without a perimeter
+  "Estimated burned area from satellite detections: in Command ›".
+- *Distance chip* (`ui/public/DistanceChip.tsx`): with `workspace.device` "↗ 9.2 mi | north of you" (arrow turned to the
+  bearing) and under it what it measures ("to the mapped edge, Oct 5, 2025 perimeter" / "to the reported location, not
+  its edge"; inside: "Inside | the mapped fire area"); a click `setDevice(null)`. Without it "Share your location to see
+  how far you are": only a click asks `navigator.geolocation` (`location/locate.ts` options and `LOCATE_MESSAGES`), and
+  sets `device` only (no selection, no flight). Memory only.
+- *Key* (`ui/public/FireKey.tsx`): fire-area swatch + "Latest perimeter · <source> · <its time>" (+ "(<age>)" for a live
+  fire, Stale tag after `PERIMETER_STALE_MS` 24 h), "No perimeter published yet", or "No mapped perimeter yet ·
+  reported location (<issuer>)"; the scale bar; `MapLegend({ variant: 'key' })` (the "Legend details" button and the
+  details only).
+- *Map profile* (`map/fireProfile.ts`, tested): `mapProfileOf(preset, hasFire)` 'public-fire' | 'full',
+  `PUBLIC_FIRE_HIDDEN` (observed, forecast, detections, events), `profileLayers`, `newestPerimeter`, `perimeterStale`,
+  `ringPolygons` (unlabelled rings → polygons with holes, even-odd). `mapController`: `effectiveLayers()` drive
+  visibility, rasters and vectors (the user's choices are kept for Command); in the profile the perimeter source holds
+  the newest perimeter whatever the timeline time, and the new `SRC/LYR.perimeterArea` (`fx-perimeter-area`, fill
+  `TOKENS.fireObservedFill` rgba(160,50,20,.6), in `LAYER_GROUPS.perimeters`, empty in 'full') fills it
+  (`overlayModel.perimeterArea`); `fx-aoi-*`, `fx-incident-circle` and `fx-incident-label` are hidden (`fx-incident-hit`
+  keeps the hover text). Official layers, nearby perimeters and the dimmed markers stay. `MapNotices`: no model / bundle
+  notices in the profile; leaving the area reads "<name> is out of view" with "Back to the fire". `MapLegend` follows the
+  profile (fire-area and reported swatches, `.fxm-sw-fire-area`, `.fxm-sw-reported`).
+- *Time* (`ui/public/usePublicFireTime.ts`, `publicFireTime` tested): while mounted, the time is
+  `latestObservationMs(manifest)` (live: now; past: end of record), playback stops; an asked-for time (a `?t=` link, or
+  Command's own time when the user switched) is held and given back on switching to Command in the same fire; the
+  store's opening default is not held.
+- *Card and Layers*: `LocationCard` in a fire in Public drops the model sentence, the run, the model reliability line,
+  the details' model section and model sources, and shows `ModelInCommand` ("The experimental spread model for this
+  spot is in Command ›"); `LayersPanel` hides the observed, detections, forecast and event toggles and "Forecast shown",
+  with `LAYERS_IN_COMMAND` + "Open Command ›".
+- *Phones* (decision h): bar = X, place and dates (wrapping), search, menu; a strip with the 120 px circle and the chip;
+  the facts as a bottom sheet (`.pfv-sheet`, keyed by fire) whose peek shows Burned, Contained, the official foot and
+  the map-data state; open: every row and the key; a picked point's card replaces it; the cluster gives way to the
+  card, an open sheet or drawer.
+- *Measured* (1440×1000, SwiftShader): `__mapChrome().unobstructed` Lower Sugarloaf 0.672, fixture-live 0.682, Willow
+  0.676, with a card 0.503, 1024×768 0.580, phone 0.580; composited contrast of every text run (text transparent, halos
+  kept, 90th-percentile background) ≥ 5.51:1 on Lower Sugarloaf, Eaton, Greer, Willow and fixture-live aerial. Browser
+  checks 39/39 (profile layers, newest perimeter only and filled, time, leader, search, card, Command round trips and
+  time hand-back, `?t=`, chip, hidden-tab pause, reduced motion, X back).
+
+**Review fixes** (step H3+H4 fix, 2026-10-24; two reviews of H3+H4, design fidelity and behaviour / features /
+safety; per finding in `reports/brief4-h3h4-fix.json`, screenshots `docs/screenshots/brief4-h3h4-fix-*.png`). Where this
+differs from the H3 and H4 paragraphs above, this paragraph is what the code does. No H2 frozen file, backend file or HTTP
+contract changed.
+- *Fixed copy in the fire view* (R1, blocker): the bottom bar is `FixedCopy variant="bar" extra={NOT_ALL_CLEAR}`
+  (`PROTOTYPE_LINE` · `NOT_ALL_CLEAR`, wrapping onto two short lines), so both lines stay with "H", the phones' Layers
+  drawer and search; the facts' foot keeps its own line.
+- *List notices* (R2): `ui/shell/useOverviewData.ts` (moved out of `OverviewPanel.tsx`: `LIST_OF`, `useOverviewData`,
+  new `useListNotices() → { lines, retry }`) and `ui/public/ListNoticeBanner.tsx`: while the list is not open (Public
+  minimal, phones with the sheet closed) the panel's own list-down / list-failure lines show as a banner in App.tsx's
+  top-centre slot (a portal, App.tsx unchanged), with Retry for a failed list, dismissable, back when the words change.
+- *Locate-me* (R3; decision i-7 kept): a fix only sets `workspace.device` and flies the map there
+  (`requestMapFlyTo`); `map/DeviceMarker.tsx` marks it (light-blue dot, white ring, halo, dashed ring when coarser than
+  100 m, mono "YOU"; SVG over the map, `aria-hidden`); nothing is sent. The prompt under the button (`LOCATE_FOUND`,
+  `LOCATE_CHECK_NOTE`) says it stays in this browser and what a check sends; "Check this spot" makes it the selected
+  point (`deviceSelection`, the only `selectLocation` in `LocateButton.tsx`), which the card checks like a map click;
+  "Stop showing my location" clears `device`. Card line: "Your location from your browser, checked at your request (not
+  added to the link)". `LOCATE_TIP` no longer says the point is not saved after a check.
+- *No model output in the Public card* (R4): `location/publicCard.ts withoutModel(card)` also drops the reasons and
+  details lines tagged Model (weather-model wind and dryness), the forecast's own caveats (`locationCheck.ts
+  isModelCaveat`, `ensembleCaveat`, `MODEL_SPOTTING_CAVEAT`, `MODEL_EDGE_CAVEAT`) and every model source;
+  `MODEL_IN_COMMAND` = "Model weather (wind, dryness) and the experimental spread model for this spot are in Command".
+- *Wording* (R5, R8 / DF-H34-10, R9, DF-H34-9): in Public a fire search result reads "· opens the fire view" (tooltip "Open
+  the fire view of …") and a nearest-fire row's tooltip says the same; `fireView.ts evacReasonRest(reason, value)` drops a
+  reason that only repeats "Not available in this state (<State>)"; `fireLabel(name)` ("Willow fire", "Eaton Fire") in
+  the title's hidden prefix and the circle's name; `updateYear(start, updated, now, tz)` shows the update row's year
+  whenever the start shows one or the years differ ("May 7, 2026").
+- *Group click* (R6): `clusterClickZoom` zooms at least one level in (still capped at 8, never out).
+- *Held time* (R7): `usePublicFireTime.ts leaveHold(held, { incidentId, preset })`: the hold is given back on a switch to
+  Command in the same fire and dropped when the fire closes (X, Back, another fire); kept only while the same fire stays
+  open in Public.
+- *Group counts* (DF-H34-1): the count layers collide (`text-allow-overlap` / `icon-allow-overlap` false, `icon-optional`,
+  `text-padding` 2, `symbol-sort-key` −point_count): the larger group keeps its "N FIRES", a count with no room is left
+  out (the circle's size and the hover still give it). The leader layout's count obstacles are the placed counts only.
+- *Leader lines* (DF-H34-2): `leaderLayout.ts` adds `segmentsCross`, `segmentHitsCircle`, `LINE_CLEAR_PX` (4),
+  `LEADER_MAX_LEN` 140 / `LEADER_MAX_LEN_NARROW` 90, options `lineObstacles` and `maxLen`: a candidate is skipped when its
+  leader is longer than the cap, crosses a placed leader, passes within 4 px of another marker's or group's centre
+  (circles under the item's own marker are ignored) or crosses chrome or a placed count. Measured at 1440 × 1144: 8
+  labels, 0 crossings (5 before), leaders 54-149 px from the marker centre (at most 140 beyond its ring; 268 px before);
+  Command overview 4 labels; a phone's national view now has none (no spot
+  passes; the fire list names every fire).
+- *Place names* (DF-H34-5): `leaderLayout.ts placeLabelLayers(style layers)` = every symbol layer of the "place" and
+  "water_name" source layers, so the dark style's `place_*` names are obstacles too.
+- *Hazard circle* (DF-H34-3, DF-H34-6): status and "MORE IN COMMAND" never under 10 px (`max(10px, …)`; 9 px in the
+  phones' 120 px circle, where the chevron is left out); a circle under 300 px puts the status on two lines (`@container
+  pfv-circle`). `fitName(…, floorPx = 28)`: a long name goes below 40 px over up to three lines (four at 28-30 px), its
+  words in order; one too long even then is one block clamped to four lines (`FittedName.clamp`, `.is-clamped`); the
+  circle's tooltip then gives the whole name.
+- *Facts room* (DF-H34-4): `ui/public/useFactsFit.ts useFactsFit(slot, enabled) → { level, tight, more, scrollMore }`
+  (`fitKey`, `hiddenBelow`): while the facts overflow the column, one step at a time `.pfv-left.is-snug` (gap 28, row
+  padding 7), `.is-tight` (+ circle 248), `.is-tighter` (circle 200, gap 18, padding 5), decided before paint and kept
+  for the same window size and facts words (no flip-flop); still overflowing, the foot shows "More below" (`.pfv-more`,
+  scrolls the facts). Lower Sugarloaf at 1440 × 1000 is snug with the 312 px circle; Eaton with its local alert is
+  tighter with every row and the foot in view.
+- *Key* (DF-H34-8): `perimeterKey` gives `text` "Latest perimeter · <publisher>" (`shortPerimeterSource`) and `source`
+  (the whole string, the tooltip); the time and the Stale tag never break; the key is up to 900 px, one line at 1440.
+- *Phones* (DF-H34-7): the overview's and fire view's bar buttons are 44 px; the pill's Search button and "© Credits" get
+  a transparent 44 px hit area.
+- *Not changed* (DF-H34-11, nit): the overview's bottom-row offsets and the scale bar's form (labels above a 140 px
+  bracket) stay as H3 built them (see the report).
+
+#### H5 (Forensic) — as built
+
+Built 2026-10-24 by H5 (one builder; report `reports/brief4-h5.json`, screenshots `docs/screenshots/brief4-h5-*.png`,
+progress `progress/brief4-h5.md`). Forensic matches `screens/ForensicView.dc.html` / `renders/ForensicView.jpg` in
+layout and colour; every datum, layer, control and behaviour of the Forensic workspace is kept. Where this differs from
+§15.1-15.4, this sub-section is what the code does.
+
+**Tokens** (`styles/theme.css`, Forensic values; the map workspace still re-points the shared names to its `--m-*`
+tokens). Greys: `--bg-0 #0c0c0c`, `--bg-1 #141414`, `--glass rgba(14,14,14,.62)`, `--glass-strong .8`, `--glass-soft .5`,
+`--glass-raised rgba(26,26,26,.94)`, `--glass-blur blur(22px) saturate(140%)`, `--hairline rgba(200,200,200,.16)` (soft
+.08, strong .28), `--text #f0f0f0`, new `--text-body #e6e6e6`, `--text-2 #bdbdbd`, `--text-3 #9a9a9a`, `--text-4 #7a7a7a`,
+new `--link #e0e0e0`, `--shadow 0 12px 32px rgba(0,0,0,.4)`, `--focus-ring 0 0 0 2px #d0d0d0`. UI accent: `--gold #ff7a3d`
+(the names keep "gold" so components follow by value), `--gold-bright #f0f0f0` (the light highlight text, as the map's
+`--m-accent-text`), `--gold-dim/-soft/-faint/-ghost` = the accent at .55 / .28 / .14 / .07, new `--accent-ink #1a0a03`,
+`--accent-hover #ff8d57`. Status: `--ok #8fd3a8`, `--warn #e8b04a`, `--danger #f87171`, new `--fire-3 #ff9a5a`. Charts:
+`--chart-observed #ff8a3c`, `--chart-forecast #f5c060`, `--chart-band rgba(245,192,96,.2)`, `--chart-cursor #e6e6e6`,
+greyed axis and grid. Kept: `--lattice-*`, `--fire`, `--fire-*`, `--ember`, `--ev-*`, `--ac-*`, `--chart-frp`,
+`--chart-terrain` and every three.js colour (green terrain, gold scene graphics). Layout: new `--bar-top 20px`, `--edge
+16px`; `--header-h 40px`, `--panel-w 336px` (316 px ≤ 1280 px); `--safe-*` follow the new frame. Links are light grey and
+underlined (`a`, global; the map keeps its own rule in `map-bridge.css`). Range sliders: `--range-fill` / `--range-ring`
+(set only under `html[data-workspace='forensic']`: grey `#cfcfcf` fill, plain light thumb; the map keeps the accent).
+
+**Global CSS** (`theme.css`, `controls.css`, `header.css`, `overlays.css`, `layout.css`): every hard-coded gold became the
+accent or a grey: `.seg-btn[aria-checked]` and `.btn-solid` accent + `--accent-ink`, `.switch` / `.check` / `.spinner` /
+`.progress-fill` / `.fc-pill` accent, `.tab` underline without glow, chips' frames, `.popover` `rgba(18,18,18,.92)`,
+`.tooltip` `rgba(20,20,20,.96)`, `.ov-card` `rgba(14,14,14,.82)`, `.card-link` grey underlined, empty notes, inputs,
+corner marks. Forensic-only (scoped `:root[data-workspace='forensic']`): menu icons grey. The map workspace's look is
+unchanged (its tokens and `map-bridge.css` resolve to the same values); Public and Command checked against the H2
+screenshots (`brief4-h5-mapcheck-*.png`).
+
+**Top bar** (`ui/Header.tsx`, `styles/header.css`): H2's `TopBar inset="forensic" className="fx-bar"` inside
+`.app-header` (top 20, sides 20, height 40; the bar fills it). Left: `BackButton` "Back to all fires" (switches to the map,
+then `goToOverview()`: history-aware, the map's overview framing), `TopBarBrand size 22`, a hairline, the
+`IncidentPicker` (pill variant, restyled in CSS only: 36 px glass pill, "● LIVE" mono `#ff9a5a` without the chip frame, or
+the year as the bar's grey chip; name 16/600; caret; the map's `is-title` trigger is untouched), then the place in
+`TopBarPlace`'s classes (`.tb-place.fx-place`: "<County> County", else `placeLine(summary)`, and the mono dates "Jun 28,
+2026 – present" / "Sep 1 – Nov 14, 2025"; one line with " · " above 1600 px, place over dates below, hidden ≤ 1280 px;
+the full location and the coordinates in the tooltip). Centre: `ViewPill className="fx-bar-view"`. Right: the Incident | Aircraft (n) tabs as a glass pill group
+(active = light wash), then `nav.hdr-actions`: `ViewMenu` ("View options", eye), `AnalysisMenu`, `ShareButton`,
+`SettingsMenu` and "Hide panels (H)" as 34 px `IconPill`s (`.fx-tool`; a menu's pill is accent while open; Share is
+`aria-disabled` without a fire). Settings' keyboard list adds Q / E (turn 15°) and N (north up). The tagline is dropped;
+≤ 1180 px the brand name hides. A 2 px busy line runs along the window's top edge. Collapsed
+("H"): `MiniBar` is a glass pill (logo, name, ● LIVE / year, time, accent play, a small `ViewPill`, "Panels H") — the view
+switch stays reachable now that the floating one is gone.
+
+**Workspace** (`ui/shell/ForensicWorkspace.tsx`, `styles/forensic-entry.css`, `layout.css`): the floating `.fx-ws-switch`
+is removed. `.fx-ws` (left `safe-left + 8`, top `safe-top + 100`) holds "Frame fire" / "Charts & key events" (the
+screen's glass box, 36 px rows; phones "Layers & analysis") and the demo badge (amber mono pill). `.fx-topfade`: the
+screen's 120 px top gradient inside `.app-canvas` (above the terrain, under the scene controls). `.fx-note`: `FixedCopy
+variant="pill"` (`PROTOTYPE_LINE` · `NOT_ALL_CLEAR`) left 16, 4 px above the dock (it follows the dock's height); 761-1279
+px one row higher (the view controls need the row); the right column's old footer line is gone. Right column
+(`.rcol`): top 76, right 16, bottom 16, 336 px; `.rp` radius 16, cards 14. Dock: left 16, right 368, bottom 16; with the
+timeline only it is 110 px tall (the screen's 112); "Charts & key events" opens the unchanged charts row.
+
+**No fire** (`OpenFireFirst`): the floating `TopBar` (back = "Back to the map", logo, "Forensic · 3D analysis", the view
+pill) over the ground; "Zoom in on a fire or pick one" as a grey glass panel (radius 16, title 18/600) with the same text,
+"Back to the map", the fire list and the fire card.
+
+**Right panel** (`styles/panel.css`, `ui/RightPanel.tsx`, `ui/LayersTab.tsx` unchanged markup): tabs 14 px with the 2 px
+accent underline, count chip grey, the Evidence warnings dot accent; group heads mono 10.5 .16em with count and the eye
+toggle grey; rows 18 px accent check boxes with dark ticks, 26×18 swatches (data colours kept; their dark bases neutral),
+13 px names, grey sliders, mono 10.5 %; Incident Overview starts collapsed (`defaultOpen={false}`, the choice remembered
+under `fire3d:card:overview`) with the agency link; Weather & Fire Behavior (`ui/WeatherCard.tsx`): the screen's grid
+(icon + label on one line, mono 18 px value, mono sub line), header wraps, "at fire front", ANL grey / FCST amber stamp;
+flame length `#ff9a5a` (red from 8 ft), other warn tones `#e8b04a`; icons kept.
+
+**Timeline and charts** (`styles/dock.css`, `ui/Timeline.tsx`, `ui/Charts.tsx`): title 14/600, step buttons grey, play
+36 px accent with dark ink and a soft glow, speed "1 h/s ▾" outlined, time mono 15 px white + zone + T+ grey, range tabs
+All / 7 d / 72 h mono accent, window text grey; track grey, past part orange-hatched, forecast window hatched in the
+modeled amber (pattern and label), NOW / T₀ mark `#ff9a5a`, handle a 16 px light knob with the accent ring and a grey
+bubble. Key Events: accent current / selected marks, kind glyphs in the map feed's colours (`ui/feed/keyEvents.css`).
+Charts: the profile's modeled part amber-hatched, cursor light grey, readouts grey glass.
+
+**Scene overlays** (`scene/overlays/SceneOverlays.tsx`, `overlays.css`): grey glass (`rgba(14,14,14,.6)` + blur 18,
+hairline .16, radius 12). Compass: a 60 px dial (48 on phones) at `safe-top + 8` / `safe-left + 8` with the screen's
+needle (north `#ff7a3d`, south `#9a9a9a`; no CSS transition, so crossing north never spins it the long way), "338° · 29°"
+(heading · tilt) under it, ⟲ ⟳ (`.sc-turn`, 15°) beside it.
+View dock (right `safe-right + 4`, bottom `safe-bottom`): scale (light grey bar), 2D / 3D accent with dark ink, the
+exaggeration and quality `<select>`s drawn as "1.5× ▾" / "High ▾", depth of field (on = light wash), frame fire, full
+screen; on phones the two selects hide (both are in View options). Probe readout and quality toast grey. The 3D
+selection pin is light blue (`#9fd6ff` / `#cfeaff`, `scene/overlays/SelectionPin.tsx`).
+
+**Rotation** (decisions f, k). `scene/sceneStore.ts`: `CameraCommandKind` adds `'rotate'` and `'set-heading'`;
+`CameraCommand.deg?`; `issueCameraCommand(kind, deg?)`. `scene/camera/heading.ts` (pure, tested): `headingOfAzimuth(az)`
+(= −azimuth, [0, 360)), `azimuthOfHeading(deg)`, `turnedAzimuth(az, deg)`, `TWIST_THRESHOLD_DEG` (4), `TwistTracker`
+(two touch points → `{ start, turned }` once past the threshold; a pinch never turns). `scene/camera/CameraRig.tsx`:
+controls rotate in 2D too, with the polar angle clamped to top-down (`minPolarAngle = maxPolarAngle = POLAR_2D`), so a
+right-drag, Ctrl / Shift / Cmd + drag or a two-finger drag turn the azimuth only; 2D ↔ 3D keeps the heading (3D gets back
+its last tilt); commands run from a store subscription (one per frame while the compass is dragged, no re-render):
+`rotate` tweens 0.35 s and continues from a running turn's goal (repeated Q / E add up), `set-heading` is instant (it
+joins a running animation's goal), `reset-north` tweens to 0, and during another animation (2D ↔ 3D, a fly-to) a turn
+changes that animation's goal heading instead of cutting it short; a command also stops the controls' leftover drag
+inertia (`stopInertia`: three.js damping would otherwise keep turning after a right-drag); `frame-fire` keeps the heading (north up only on
+request; a new fire is still framed from the SSE by default); `store.flyTo.bearingDeg` sets the heading of the fly-to
+(the map's heading on the hand-off). The rig registers a `RotationTarget` (`state/rotation.ts`: Q / E / N reach it;
+`bearing()` reads the live camera), attaches Safari's twist (`lib/rotateGesture.ts`) and a touch twist to the canvas;
+every turn is a camera command, so `ui/shell/handoff.ts` sees the user's turn and the map gets the Forensic heading
+back. The compass uses `ui/useCompassDrag.ts` (drag around the dial = `set-heading`; click = north up; ← → on it = 15°).
+
+**Medium screens and phones.** ≤ 1180 px the Incident | Aircraft tabs show their icons (and the aircraft count) with
+the words as accessible names and tooltips; 761-1279 px the disclaimer pill sits one row above the view dock. Phones
+(`styles/forensic-narrow.css`): the bar keeps back, the picker (the LIVE dot, the name) and the five tool pills; the
+view pill drops to a row under the bar's right end; the dial is 48 px; entry controls in a row under it; the pill
+above the view dock; the right column stays the bottom sheet and the dock the timeline only (play 32 px, time 13 px).
+
+**Checked** (scratch Playwright, Chrome + SwiftShader at 1440×1000, not in the repo). Rotation 23/23
+(`h5-rotate-check.mjs`): Forensic opens at 337.5°; N → 0°; E → 15°; Q Q pressed together → 345° (whole steps); ⟳ / ⟲;
+a quarter-turn compass drag → −90°; compass click → north; → on the focused compass → +15°; 2D keeps 60° top-down; Q in
+2D; right-drag and Ctrl + drag turn the 2D view with the polar angle still 0.03°; a right-drag's inertia does not drift
+after N ⟲ ⟲ (330°); back to 3D keeps 330° at 61° tilt; a synthetic Safari twist of 30° → −26°; a CDP two-finger touch
+twist of 40° → −36°; Forensic → map carries the user's Forensic turn (30° → map 30°); map −50° → `flyTo.bearingDeg −50`
+→ Forensic 310°; reduced motion: no transitions on the play button, compass, view pill or busy line, and E still turns.
+Layout (`h5-measure.mjs`, fixture-live): bar 20 / 20 / 40 px, view pill centred (589 px each side), compass 20 / 80 / 60
+px, entry box top 172, right column top 76 / right 16 / bottom 16 / 336 px, dock left 16 / right 368 / bottom 16 / 112
+px, view dock right 368 / bottom 140, disclaimer pill left 16 / bottom 136 — the screen's numbers. Public and Command
+(`brief4-h5-mapcheck-*.png`) are unchanged against `brief4-h2-*.png` apart from H3+H4's own work in progress.
+
+**Review fixes** (step h5-fix, 2026-10-24; two reviews of H5, design and behaviour; per finding in
+`reports/brief4-h5-fix.json`, screenshots `docs/screenshots/brief4-h5-fix-*.png`). Where this differs from the text
+above, this paragraph is what the code does. No H2 frozen file was edited; the map workspace is untouched (every new
+rule is scoped to `.app`, `.fx-bar`, `.minibar`, `.fx-empty*` or a Forensic-only component).
+- *Top bar below 1024 px* (H5-DF-1, H5-m2, PLAN-4 decision h): the view pill drops to a row of its own under the bar's
+  left end (`.fx-bar .tb-centre` absolute, `top: 100% + 8`); `.app-header` grows by `--fx-view-row` (48 px; phones 46)
+  so the measured `--safe-top` starts below that row and the compass, ⟲ ⟳ and the entry controls sit under the pill;
+  the bar keeps its 40 px row and the right column keeps top 76 (from `--header-h`). No control overlaps another from
+  761 to 1023 px (checked at 761, 768, 800, 820, 834, 900, 960, 1000 px; before: up to 90 px of overlap). Found while
+  re-measuring and fixed with it: at 761-900 px the view dock hides its two selects (they are in View options, as on
+  phones; the scale ran off the left edge at 768-820 px), and in a dock narrower than 560 px the timeline's range tabs
+  wrap to a line of their own, right-aligned (`@container dockmain`; they ran over the time at 768-900 px).
+- *Phones* (H5-DF-4, H5-m3, H5-B1): the bar holds back, the picker and four tool pills (View options, Analysis, Share,
+  Settings, 10 px apart); a second row holds the view pill (left) and "Hide panels" (`.fx-hide`, right); the compass row
+  starts below it at every width (320-430 px: no overlap; before, the pill covered ⟳ at 360-375 px). Touch targets are
+  44 px: transparent `::before` hit areas on the back button, the picker (44 px tall), the tool pills, the view pill's
+  buttons, the entry buttons and ⟲ ⟳ (now 40 px, 4 px apart), never into a neighbour's (sampled with
+  `elementFromPoint` at 360, 390 and 430 px; the 48 px compass is round). The MiniBar ("H" or "Hide panels"): the view
+  pill hides on phones (`.minibar .tb-view.minibar-view` outweighs `topbar.css .tb-view`, which used to win), the
+  fire's name is the only item that shrinks, the bar is at most the screen's width less its margins below 1024 px, and
+  "Panels H" (44 px target on phones) is always inside it; tapping it restores the panels (checked at 320-1440 px).
+- *Fixed copy with no fire* (H5-M1, H5-DF-2): `OpenFireFirst` ends with `footer.fx-empty-foot` holding
+  `FixedCopy variant="pill"` (`PROTOTYPE_LINE` · `NOT_ALL_CLEAR`), a row of its own under the list (never over it), on
+  desktop and phones; test `ui/shell/ForensicWorkspace.test.ts`. The no-fire bar hides "Forensic · 3D analysis" below
+  1024 px and the logo on phones (they ran under the centred pill).
+- *Disclaimer pill and the view dock* (H5-DF-3, H5-m1): the pill sits one row higher from 761 to 1399 px (was 1279);
+  from 1400 px its `max-width` is `100% − --safe-right − 560px`, so it wraps rather than meets the view dock.
+- *Place and dates* (H5-DF-6): `.fx-place` is a wrapping flex row: one line ("Monterey County · Oct 19, 2026 – present")
+  while it fits, else the dates on a line of their own under the place; the " · " sits in the 18 px before the dates and
+  is clipped (`clip-path`) when they wrap; each line ellipsises only when it alone is too long (the dates' inner span
+  carries the ellipsis). The "Fire-3d" word hides at ≤ 1400 px (the logo stays), so at 1281-1400 px the dates show whole
+  (1366 px: was cut to "Oct 19, 2026 – pr…"); the place line still hides at ≤ 1280 px.
+- *Timeline NOW / T₀* (H5-DF-5): the word starts 14 px right of its mark (`Timeline.tsx NOW_LABEL_DX`), clear of the
+  16 px knob and its 3 px ring at the default time; the time bubble keeps the space above the handle. The
+  FORECAST / HINDCAST word shows when its window is wider than 100 px (was 90), so the two never meet.
+- *Weather card* (H5-DF-7): the sub line may use its cell's right padding (`.wx-sub { margin-right: -10px }`), so "of
+  100 (Fosberg)" shows whole in the 336 px column; in the 316 px column (`@container wx (max-width: 300px)`) it is 9 px
+  with −0.02em tracking. The foot reads "gusts 19 mph · ROS potential 76 ch/h"; the Open-Meteo credit is unchanged.
+- *Model output labelled experimental* (H5-m4; the rule, not a regression): the Forecast probability legend reads
+  "P(burned by t)" with an "experimental model" tag, and the Analysis tab's "Runs" and "Selected run" headings carry
+  "experimental model" / "experimental" tags (`.exp-tag`: the modeled amber `#f5c060`, dashed, as the map's MODEL tag).
+
+#### Final check — as built
+
+Step H6 (`final-verification-4`), 2026-10-24: report `reports/final-verification-4.json`, screenshots
+`docs/screenshots/brief4-final-*.png`, notes `progress/brief4-final-verification-4.md`. No interface of §15.1-15.4
+changed; no backend source, HTTP contract or H2 frozen file changed.
+- *Start*: nothing of the build was left uncommitted (working tree clean at `bf3e79c`).
+- *Gates*: typecheck ok; lint 55 warnings, all in `src/scene` (none added); web tests 101 files, 1383 passed, 2 skipped;
+  build ok; backend `uv run pytest -q` 1009 passed.
+- *Backend test isolation* (H2's known failure): `tests/test_endpoint_contracts.py`'s module fixture `client` read the
+  developer's own `data/cache`, so `test_health_lists_status_and_errors` depended on its age. With a live list fresh in
+  that cache (CAL FIRE 10 min TTL; any running dev server refreshes it) and the cached WFIGS `IrwinID LIKE '{000000%'`
+  answer past its 24 h TTL, the unknown id `2099-nope-fire-000000` reached the blocked transport, `resolve_listed`
+  counted a failed lookup and raised `ListsUnavailable`, and the API answered 503 instead of 404. Reproduced (503) right
+  after this step's API fetched the live list. Fix (test setup only): the fixture points `config.CACHE_DIR` at an empty
+  temp folder and calls `catalog.clear_cache()` before and after. The suite then passes in that same cache state. With
+  an empty cache the 404 comes from conftest's refusal raising `RuntimeError`, which `_catalog_summary` treats as "not
+  listed"; a real outage (`HttpError`) still answers 503 by design (§14.2).
+- *Small fixes*: (1) the fire view's date line on phones broke inside a date ("DECLARED OUT DEC" / "15 2025"):
+  `ui/public/FireTitle.tsx keepDatesWhole(line)` wraps each "MON D YYYY" in `.pfv-date-day` (nowrap, `view-public.css`),
+  so the line breaks only between them; (2) the map compass needle lost its 80 ms CSS transition (`map/map.css`), which
+  spun it the long way round when the heading crossed ±180° (H5's known issue); it follows the heading every frame.
+- *Screenshots* (Chrome + SwiftShader; viewed): 1440×1000 unless noted: `public-overview-minimal` and
+  `public-overview-details` (1440×1144, Main), `command-overview`, `public-fire-lower-sugarloaf`,
+  `public-fire-fixture-live`, `public-fire-unprepared-willow` (listed, no bundle), `command-fire-fixture-live`
+  (`&sel=36.215,-121.43`), `forensic-fixture-live`, `rotated-public` (35°), `rotated-command` (−40°), `rotated-forensic`
+  (35°), and phones 390×844 @2x `phone-public-overview`, `phone-public-fire`, `phone-command`. No console error on any.
+- *Smoke run* (scratch Playwright, not in the repo; Chrome + SwiftShader, 1440×1000): rotation 56/56 (55 in one run; the Forensic 2D → 3D check passed on a re-run once the script waited for the tilt
+  rather than a fixed pause under SwiftShader) (Q, E, Q Q
+  pressed together, N, the ⟲ ⟳ buttons, a quarter-turn compass drag, compass click in the Public overview, Public fire
+  view, Command in a fire, Command overview and Forensic; 2D ↔ 3D keeps the heading in Command and Forensic, E turns
+  Forensic's 2D view; map 30° → Forensic 30°, turned there to 330° → Command 330°); reduced motion 27/27 (no running CSS
+  or Web Animation and no playing SVG animation on nine views; a turn lands at once; control: the hazard circle
+  animates without reduced motion); fixed copy, safety words and console errors 56/56 on 14 views (incl. Forensic with
+  no fire and four phone views): "Research prototype — not for operational use" (the overview's §14.14 form "RESEARCH
+  PROTOTYPE · Not for operational use. " + `LIST_ABSENCE`, decision i-5) and "…not an all-clear. Follow local
+  officials." visible, no "safe" / "low risk" / "FireTrace" on screen, no console error (Forensic logs one three.js
+  warning, "THREE.Clock … deprecated").
+- *Scans* (count only; the key is never printed): `FIRMS_MAP_KEY` value 0 times in 1372 tracked files, 0 in the
+  `f318347..HEAD` diffs and 0 in their commit messages; "FireTrace" 0 in code and UI (docs name it only in the rule);
+  "safe" / "low risk" 0 in brief-4 UI strings (only in tests that assert their absence; the older caveat "does not
+  establish the safety of a route or an area" is unchanged).
+- *README*: the screenshots are the brief-4 set, a new "The three views at a glance" section (each view, turning the
+  map, the dimming, the fixed copy), and the lines that described the old look (click → fire card and zoom focus in
+  Public, rotation only in 3D, the header's satellite chip, the coordinate strip, the cyan Forensic pin) now say
+  what the app does; every data-source credit is unchanged.
+- *Left for later* (details in the report's `known_issues`): Safari trackpad and touch twists are checked only with
+  synthetic events (a person should try them on a Mac and a phone); every measurement used SwiftShader (no GPU; the
+  hazard circle's CPU cost on a laptop is not measured); a checked device point reaches Fire-3d's server like a map
+  click (keeping it out of server logs needs a backend change); Command's readout scrolls on real fires at 1440×1000;
+  phones keep Command's default controls row and some 26-32 px Forensic dock buttons; the fire view has no skip link of
+  its own (`App.tsx` is frozen); and BRIEF-4's later list (search suggestions, Forensic search, the globe intro,
+  Wildfire-FM).

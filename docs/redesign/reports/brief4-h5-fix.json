@@ -1,0 +1,122 @@
+{
+  "step": "brief4-h5-fix",
+  "summary": "H5 review fixes (Forensic). All 13 findings of the two H5 reviews (design and behaviour) were reproduced and fixed. Below 1024 px the view pill drops to a row of its own under the bar's left end and the header's box takes that row in, so the compass, its turn buttons and the entry controls start below it: no Forensic control overlaps another from 320 to 1920 px (an elementFromPoint/bounding-box scan at 25 sizes; before: the view pill over the picker and the Incident tab over 'Forensic' at 761-960 px, the pill over the turn buttons at 360-375 px, the disclaimer pill over the scale at 1280-1340 px). On phones the bar holds back, the picker and four tool pills, a second row holds the view pill and 'Hide panels', and every new control has a 44 px touch target (transparent ::before hit areas, ⟲ ⟳ 40 px). The collapsed MiniBar no longer shows the view pill on phones (a specificity bug let topbar.css win), its fire name is the only item that shrinks, and 'Panels H' is always inside the bar and restores the panels (320-1440 px). The no-fire state ('Zoom in on a fire or pick one') now shows 'Research prototype — not for operational use · Not an all-clear. Follow local officials.' in a footer row (unit test added). The disclaimer pill sits one row higher up to 1399 px; the place and dates stay on one line while they fit and wrap otherwise (the 'Fire-3d' word hides at ≤ 1400 px so the dates show whole on laptops); the NOW / T₀ word sits right of the timeline knob; the weather card shows 'of 100 (Fosberg)' whole and 'gusts … · ROS potential …'; model output in Forensic carries 'experimental' tags (forecast legend, Runs, Selected run). Found while re-measuring tablets and fixed with DF-1: the view dock's scale ran off the left edge at 768-820 px (its two selects now wait in View options at 761-900 px, as on phones) and the timeline's range tabs ran over the time at 768-900 px (they wrap in a dock narrower than 560 px).",
+  "findings": [
+    {
+      "id": "H5-B1",
+      "outcome": "fixed",
+      "how": "header.css: `.minibar .tb-view.minibar-view { display: none }` on phones (outweighs topbar.css `.tb-view`, which loads later and won); `.minibar > * { flex: none }` with only `.minibar-name` shrinking (min-width 0, ellipsis); max-width = screen less margins below 1024 px; 'Panels' and play get 44 px ::before targets on phones. Checked at 320, 360, 375, 390, 430, 761, 820, 1024 and 1440 px: every MiniBar item inside the bar, 'Panels H' hit at its centre, a tap restores the panels (scratch minibar.mjs). The view pill stays in the MiniBar at ≥ 761 px, where it fits."
+    },
+    {
+      "id": "H5-M1",
+      "outcome": "fixed",
+      "how": "ForensicWorkspace.tsx OpenFireFirst ends with `<footer class=\"fx-empty-foot\"><FixedCopy variant=\"pill\" /></footer>`: PROTOTYPE_LINE · NOT_ALL_CLEAR in a row of its own under the list on desktop and phones (forensic-entry.css; the list's max-height leaves room). New test ui/shell/ForensicWorkspace.test.ts. Screenshots brief4-h5-fix-forensic-empty.png, -empty-phone.png."
+    },
+    {
+      "id": "H5-DF-2",
+      "outcome": "fixed",
+      "how": "Same change as H5-M1 (the same finding from the design review)."
+    },
+    {
+      "id": "H5-DF-1",
+      "outcome": "fixed",
+      "how": "header.css ≤ 1023 px: `.fx-bar .tb-centre` absolute under the bar's left end (top 100% + 8), `.app:not(.is-collapsed) .app-header` height = --header-h + --fx-view-row (48 px) so useSafeArea's --safe-top starts below the pill row (compass and entry controls move under it), the bar keeps 40 px, the right column keeps top 76. Bar scan (scratch widths.mjs) at 761, 768, 800, 820, 834, 900, 960, 1000, 1023 px: centre row below, no overlap (before: 13-90 px). Also fixed (found while re-measuring): overlays.css hides the view dock's two selects at 761-900 px (scale was off-screen at 768-820 px; both selects are in View options), dock.css `@container dockmain (max-width: 560px)` wraps the range tabs to their own line (they covered the time at 768-900 px). Screenshots brief4-h5-fix-forensic-tablet-820.png, -tablet-900.png."
+    },
+    {
+      "id": "H5-m2",
+      "outcome": "fixed",
+      "how": "Same change as H5-DF-1 (elementFromPoint at the 'Forensic' pill's centre now returns the pill at 768, 820 and 834 px). The no-fire bar also hides 'Forensic · 3D analysis' below 1024 px (it ran under the centred pill at 768-820 px) and the logo on phones."
+    },
+    {
+      "id": "H5-DF-3",
+      "outcome": "fixed",
+      "how": "forensic-entry.css: the pill's one-row lift now covers 761-1399 px (was 761-1279); from 1400 px `.fx-note` max-width = 100% − --safe-right − 560px so it wraps rather than meets the view dock. Overlap scan clean at 1280x720, 1280x800, 1300x800, 1340x800, 1366x768, 1400x900 (before: overlap at 1280-1340). Screenshots brief4-h5-fix-forensic-1280.png, -1366.png."
+    },
+    {
+      "id": "H5-m1",
+      "outcome": "fixed",
+      "how": "Same change as H5-DF-3."
+    },
+    {
+      "id": "H5-DF-4",
+      "outcome": "fixed",
+      "how": "forensic-narrow.css: on phones the view pill sits in a second row under the bar's left end (with 'Hide panels' at its right end, `.fx-hide`), counted in the header's box (--fx-view-row 46 px), so the compass and ⟲ ⟳ start below it at every width. Scan at 320, 360, 375, 390, 393, 412, 430 px: no overlap (before: pill over ⟳ at 360-375 px, both buttons hidden at 320 px). Screenshots brief4-h5-fix-forensic-phone-390.png, -phone-360.png."
+    },
+    {
+      "id": "H5-m3",
+      "outcome": "fixed",
+      "how": "Phones: transparent ::before hit areas make 44 x 44 px targets on the back button, the four tool pills (34 px, now 10 px apart; 'Hide panels' moved to the second row to keep the picker's room), 'Hide panels', the picker (44 px tall), the view pill's buttons (44 px tall), the entry buttons (44 px tall) and ⟲ ⟳ (40 px buttons, 4 px apart); none reaches into a neighbour's. Sampled with elementFromPoint over a 44 px square around each control at 360, 390 and 430 px (scratch targets.mjs): all hit; a tap 1 px outside the drawn ⟳ still turns the view (337.5° → 352.5°). The 48 px compass is round (its box is 48 px). Not changed: the view dock and timeline step buttons (26-32 px), which were under the target before H5 (the reviewer's note)."
+    },
+    {
+      "id": "H5-DF-5",
+      "outcome": "fixed",
+      "how": "Timeline.tsx: the NOW / T₀ word starts NOW_LABEL_DX = 14 px right of its mark, clear of the 16 px knob and its 3 px ring at the default time (the time bubble keeps the space above the handle, where the screen has the word but the app has the bubble); the FORECAST / HINDCAST word needs a window wider than 100 px (was 90) so the two never meet. Seen in brief4-h5-fix-forensic-1440.png and the phone shots."
+    },
+    {
+      "id": "H5-DF-6",
+      "outcome": "fixed",
+      "how": "header.css: `.fx-place` is a wrapping flex row (one line while it fits, else the dates under the place); the ' · ' is a ::before in the 18 px before the dates, clipped by a clip-path when they wrap; each line ellipsises only when it alone is too long (Header.tsx wraps the dates in an inner span for the ellipsis). The 'Fire-3d' word hides at ≤ 1400 px (logo kept) so the dates fit whole on laptops; the place line still hides at ≤ 1280 px. Scan: no clipped place or date at 1281, 1300, 1366, 1440, 1600 px for 'Cedar Canyon Fire' (before: cut at 1281-1366); one line at ≥ 1700 px (the line needs 279 px beside this name)."
+    },
+    {
+      "id": "H5-DF-7",
+      "outcome": "fixed",
+      "how": "panel.css: `.wx-sub { margin-right: -10px }` lets the sub line use the cell's right padding as the screen does (cut only past the cell's edge); in the 316 px column (`@container wx (max-width: 300px)`) 9 px with −0.02em tracking. 'of 100 (Fosberg)' whole at 1280, 1366, 1440 and 820 px. WeatherCard.tsx: a ' · ' between gusts and ROS potential (aria-hidden; foot column gap 6 px). The Open-Meteo credit is unchanged."
+    },
+    {
+      "id": "H5-m4",
+      "outcome": "fixed",
+      "how": "Cheap wording addition under the standing rule (model output is experimental): LayersTab's Forecast probability legend shows 'P(burned by t)' with an 'experimental model' tag; AnalysisTab's 'Runs' heading an 'experimental model' tag and 'Selected run · <id>' an 'experimental' tag (panel.css `.exp-tag`: #f5c060, dashed, mono caps, as the map's MODEL tag). Forensic-only components. Screenshot brief4-h5-fix-forensic-analysis.png."
+    }
+  ],
+  "files_changed": [
+    "web/src/styles/header.css",
+    "web/src/styles/forensic-narrow.css",
+    "web/src/styles/forensic-entry.css",
+    "web/src/styles/panel.css",
+    "web/src/styles/dock.css",
+    "web/src/scene/overlays/overlays.css",
+    "web/src/ui/Header.tsx",
+    "web/src/ui/Timeline.tsx",
+    "web/src/ui/WeatherCard.tsx",
+    "web/src/ui/LayersTab.tsx",
+    "web/src/ui/AnalysisTab.tsx",
+    "web/src/ui/shell/ForensicWorkspace.tsx",
+    "web/src/ui/shell/ForensicWorkspace.test.ts (new)",
+    "docs/redesign/CONTRACT.md (15.5 H5 as built: 'Review fixes')",
+    "docs/redesign/progress/brief4-h5-fix.md",
+    "docs/redesign/reports/brief4-h5-fix.json",
+    "docs/screenshots/brief4-h5-fix-*.png"
+  ],
+  "screenshots": [
+    "docs/screenshots/brief4-h5-fix-forensic-1440.png",
+    "docs/screenshots/brief4-h5-fix-forensic-1366.png",
+    "docs/screenshots/brief4-h5-fix-forensic-1280.png",
+    "docs/screenshots/brief4-h5-fix-forensic-tablet-900.png",
+    "docs/screenshots/brief4-h5-fix-forensic-tablet-820.png",
+    "docs/screenshots/brief4-h5-fix-forensic-phone-390.png",
+    "docs/screenshots/brief4-h5-fix-forensic-phone-360.png",
+    "docs/screenshots/brief4-h5-fix-forensic-phone-minibar.png",
+    "docs/screenshots/brief4-h5-fix-forensic-analysis.png",
+    "docs/screenshots/brief4-h5-fix-forensic-empty.png",
+    "docs/screenshots/brief4-h5-fix-forensic-empty-phone.png"
+  ],
+  "measured": {
+    "overlap_scan": "fixture-live, every visible Forensic control (bar buttons and tabs, compass, ⟲ ⟳, entry buttons, view dock, disclaimer pill, play, MiniBar): no overlap and nothing off screen at 1920x1000, 1440x1000, 1400x900, 1366x768, 1340x800, 1300x800, 1280x800, 1280x720, 1180x800, 1024x768, 1000x800, 960x800, 900x800, 834x1112, 820x1180, 800x900, 768x1024, 761x900, 412x915, 393x852, 390x844, 375x812 (fresh loads at 360x780, 430x932 also clean; a resize sweep leaves the view dock briefly off screen while the safe area catches up)",
+    "touch_targets_phones": "back, picker, 4 tool pills, Hide panels, view pill buttons, ⟲ ⟳, entry buttons: 44 x 44 px hit squares at 360, 390, 430 px",
+    "minibar": "Panels H inside the bar and restoring the panels at 320, 360, 375, 390, 430, 761, 820, 1024, 1440 px",
+    "no_fire_state": "prototype line and 'Not an all-clear' present and nothing overlapping at 1440, 1024, 820, 768, 430, 390, 360 px"
+  },
+  "gates": "typecheck ok / lint 55 warnings, all in src/scene (none added) / tests 101 files: 1383 passed, 2 skipped, 0 failed / build ok",
+  "known_issues": [
+    "Below 1024 px the view pill's row costs about 46-48 px of the scene's height at the top-left (the compass column starts lower); on phones the timeline's range tabs take a second line below about 400 px wide, so the dock is about 36 px taller there.",
+    "Phone touch targets: the view dock buttons (2D / 3D, depth of field, frame, full screen) and the timeline's step and range buttons stay at 26-32 px, as before H5.",
+    "The place / dates line can still ellipsise at 1281-1330 px beside a very long fire name (picker at its 300 px maximum); the full text is in the tooltip.",
+    "The 'Fire-3d' word in the Forensic bar now shows only above 1400 px (the logo mark stays at every width)."
+  ],
+  "notes_for_others": "No H2 frozen file was edited, and nothing in the map workspace changed: every new rule is scoped to .app, .fx-bar, .minibar, .fx-empty* or Forensic-only components (WeatherCard, LayersTab, AnalysisTab are only in the Forensic right panel). Final check: Forensic below 1024 px now has the view pill on a second row (decision h); the scratch checks are in the session scratchpad h5fix/ (widths.mjs, layout.mjs, minibar.mjs, targets.mjs, empty.mjs), not in the repo.",
+  "commits": [
+    "2bf1a83 / b8b91db brief 4 H3+H4/H5 fixes: work-in-progress snapshots (orchestrator; hold most of these CSS and component edits)",
+    "0796b20 brief 4 H5 fix: Forensic review fixes finished (no-fire test, screenshots, CONTRACT 15.5, report)",
+    "(this commit) brief 4 H5 fix: report commit list"
+  ]
+}

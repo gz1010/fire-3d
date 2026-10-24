@@ -1,6 +1,7 @@
 // Timeline (SPEC 9.4): play / pause / step 1 h, speed 0.5–24 h/s, scrubber with a time bubble, Pacific-time day and
 // 6-hour ticks, event markers, an hourly fire-activity strip, the "Now" marker with a hatched forecast region after
-// it, and window presets All / 7 d / 72 h (+ forecast). Playback itself runs in state/runtime.ts (rAF).
+// it, and window presets All / 7 d / 72 h (+ forecast). Playback itself runs in state/runtime.ts (rAF). Brief 4 (H5):
+// the handoff's colours (the forecast window hatched in the modeled amber #f5c060; styles/dock.css for the rest).
 import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type RefObject } from 'react'
 import { useShallow } from 'zustand/react/shallow'
@@ -15,6 +16,8 @@ import { useElementSize } from './hooks'
 import { goToItem, mergeEvents, useTimelineWindow, type TimelineItem } from './timelineModel'
 
 const PAD = 12
+/** The NOW / T₀ word starts this far right of its mark: the handle's knob (r 8) and accent ring (3 px) end at 11. */
+const NOW_LABEL_DX = 14
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
 export function Timeline() {
@@ -273,8 +276,8 @@ const TrackSvg = memo(function TrackSvg({
     <svg className="tl-svg" width={w} height="100%" aria-hidden>
       <defs>
         <pattern id="tl-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-          <rect width="6" height="6" fill="rgba(255,106,43,0.07)" />
-          <line x1="0" y1="0" x2="0" y2="6" stroke="rgba(255,138,76,0.55)" strokeWidth="1.6" />
+          <rect width="6" height="6" fill="rgba(245,192,96,0.07)" />
+          <line x1="0" y1="0" x2="0" y2="6" stroke="rgba(245,192,96,0.55)" strokeWidth="1.6" />
         </pattern>
       </defs>
       <rect className="tl-bar" x={x0} y={BAR_Y} width={Math.max(0, x1 - x0)} height={BAR_H} rx={BAR_H / 2} />
@@ -282,8 +285,8 @@ const TrackSvg = memo(function TrackSvg({
       {fx0 != null && fx1 != null && fx1 > fx0 && (
         <g className="tl-fc">
           <rect x={fx0} y={BAR_Y - 9} width={fx1 - fx0} height={BAR_H + 18} fill="url(#tl-hatch)" rx="2" />
-          <line x1={fx0} x2={fx1} y1={BAR_Y - 9} y2={BAR_Y - 9} stroke="rgba(255,106,43,0.45)" />
-          {fx1 - fx0 > 90 && (
+          <line x1={fx0} x2={fx1} y1={BAR_Y - 9} y2={BAR_Y - 9} stroke="rgba(245,192,96,0.45)" />
+          {fx1 - fx0 > 100 && (
             <text x={fx1 - 5} y={BAR_Y - 2} textAnchor="end" className="tl-fc-label">
               {live ? 'FORECAST' : 'HINDCAST'}
             </text>
@@ -314,7 +317,9 @@ const TrackSvg = memo(function TrackSvg({
       {nx != null && (
         <g className="tl-nowm">
           <line x1={nx} x2={nx} y1={BAR_Y - 12} y2={BAR_Y + BAR_H + 9} />
-          <text x={nx + 4} y={BAR_Y - 4}>
+          {/* beside the line, clear of the 16 px knob and its 3 px ring when the handle sits at the mark (the default
+              time; review H5-DF-5): the time bubble is above the handle, where the screen puts this word */}
+          <text x={nx + NOW_LABEL_DX} y={BAR_Y - 4}>
             {live ? 'NOW' : 'T₀'}
           </text>
         </g>

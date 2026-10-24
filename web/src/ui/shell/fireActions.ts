@@ -4,6 +4,7 @@
 import { isHistoryEntry } from '../../state/history'
 import { getTimeBounds, useStore, type AppState } from '../../state/store'
 import { useWorkspace } from '../../state/workspace'
+import { useSearchUi } from '../../location/searchUi'
 import { switchWorkspace } from './handoff'
 
 /** What a fire card button asks for. */
@@ -23,9 +24,15 @@ export function buildFailed(s: Pick<AppState, 'manifest' | 'summary' | 'job'>): 
   return !jobRunning(s) && (s.manifest?.status === 'error' || s.summary?.bundle_status === 'error' || (s.job?.kind === 'build' && s.job.status === 'error'))
 }
 
-/** Focus the address search box ("Check a location"). */
+/** Focus the address search box ("Check a location"). Command keeps the box behind the top bar's "Check an address"
+ *  button (brief 4, location/CommandSearch.tsx): it is opened first, and focuses its box once shown. */
 export function focusSearch(): void {
-  document.querySelector<HTMLInputElement>('#mw-search input')?.focus()
+  const input = document.querySelector<HTMLInputElement>('#mw-search input')
+  if (input) {
+    input.focus()
+    return
+  }
+  if (document.getElementById('mw-search')) useSearchUi.getState().setSearchOpen(true)
 }
 
 /** Open fire `id` (or act on it when it is already open). 'play' starts the replay from the beginning, 'check' focuses
@@ -78,5 +85,6 @@ export function goToOverview(): void {
 
 /** A fire picked from a list (the overview list row, the header picker): open its card and fly the map to it. The
  *  same function serves the map marker, the search box's fire result and the location card's nearest fires
- *  (state/fireCard.ts). */
-export { showFireCard } from '../../state/fireCard'
+ *  (state/fireCard.ts). Brief 4 (decision b): in Public those paths open the fire view directly instead
+ *  (`openFireView`: no card, one history entry, no build); `pickFire` picks the right one for the shown preset. */
+export { openFireView, pickFire, showFireCard } from '../../state/fireCard'

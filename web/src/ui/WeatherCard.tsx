@@ -1,6 +1,7 @@
 // Weather & Fire Behavior card (SPEC 9.4) at the current timeline time: wind mph + cardinal (degrees), temperature,
 // RH, 1-h dead fuel moisture, FFWI and flame length, from weather.json `at_fire` (hourly). Re-renders only when the
-// timeline crosses an hour. Thresholds tint values; tooltips explain them. FFWI has no official or peer-reviewed
+// timeline crosses an hour. Thresholds tint values; tooltips explain them. Brief 4 (H5): the readings keep their icons;
+// flame length is orange (#ff9a5a) as the handoff, red from 8 ft. FFWI has no official or peer-reviewed
 // category scale, so it is shown as a value with an explanation and no low / high labels or tint (lib/plainLanguage).
 import { CloudSun, Droplet, Flame, Gauge, Leaf, Navigation2, Thermometer, Wind } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -17,9 +18,9 @@ import { OpenMeteoCredit } from './DataCredits'
 
 type Tone = '' | 'warn' | 'danger'
 
-function Cell({ icon, label, value, unit, sub, tone = '', tip }: { icon: ReactNode; label: string; value: string; unit?: string; sub?: ReactNode; tone?: Tone; tip?: string }) {
+function Cell({ icon, label, value, unit, sub, tone = '', tip, className }: { icon: ReactNode; label: string; value: string; unit?: string; sub?: ReactNode; tone?: Tone; tip?: string; className?: string }) {
   return (
-    <div className={`wx-cell ${tone ? `wx-${tone}` : ''}`} data-tip={tip}>
+    <div className={`wx-cell ${tone ? `wx-${tone}` : ''}${className ? ` ${className}` : ''}`} data-tip={tip}>
       <span className="wx-icon">{icon}</span>
       <span className="wx-label">{label}</span>
       <span className="wx-value mono">
@@ -51,7 +52,7 @@ export function WeatherCard() {
   const hasManifest = useStore((s) => s.manifest?.status === 'ready')
   if (!hasManifest) return null
   return (
-    <Card className="wx" title="Weather & Fire Behavior" sub="(at fire front)" collapsible storageKey="weather" aside={weather && idx != null ? <WxStamp w={weather} i={idx} /> : undefined}>
+    <Card className="wx" title="Weather & Fire Behavior" sub="at fire front" collapsible storageKey="weather" aside={weather && idx != null ? <WxStamp w={weather} i={idx} /> : undefined}>
       {!weather ? (
         <EmptyNote icon={<CloudSun size={15} />} title="No weather in this bundle" />
       ) : idx == null ? (
@@ -142,6 +143,7 @@ function WxBody({ now }: { now: WeatherNow }) {
         <Cell
           icon={<Flame size={15} />}
           label="Flame length"
+          className="wx-flame"
           value={now.flameFt != null ? fmtNumber(now.flameFt, now.flameFt < 10 ? 1 : 0) : '—'}
           unit=" ft"
           sub="head fire"
@@ -151,6 +153,11 @@ function WxBody({ now }: { now: WeatherNow }) {
       </div>
       <div className="wx-foot mono">
         {gustMph != null && <span>gusts {fmtNumber(gustMph)} mph</span>}
+        {gustMph != null && now.rosPotential != null && (
+          <span className="wx-foot-sep" aria-hidden="true">
+            ·
+          </span>
+        )}
         {now.rosPotential != null && <span data-tip="Potential head-fire rate of spread from weather + local fuels">ROS potential {fmtNumber(now.rosPotential, now.rosPotential < 10 ? 1 : 0)} ch/h</span>}
         {critical && (
           <span className="chip chip-danger wx-crit" data-tip="RH ≤ 15% with sustained wind ≥ 25 mph or gusts ≥ 35 mph">

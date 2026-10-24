@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { coordsVariant } from './coordsVariant'
 import { buildFailed, needsBuild } from './fireActions'
-import { VIEWS, viewOf, viewTarget } from './views'
+import { atmosphereEdgesOf, mapChromeOf, VIEWS, viewOf, viewTarget } from './views'
 
 describe('Public · Command · Forensic switch', () => {
   it('keeps the three names in order', () => {
@@ -14,6 +14,21 @@ describe('Public · Command · Forensic switch', () => {
     expect(viewOf('forensic', 'command')).toBe('forensic')
     expect(viewTarget('command', 'public')).toEqual({ workspace: 'map', preset: 'command' })
     expect(viewTarget('forensic', 'command')).toEqual({ workspace: 'forensic', preset: 'command' })
+  })
+})
+
+describe('map chrome (brief 4: exactly one chrome over one map)', () => {
+  it('overview without a fire in both presets; Public or Command chrome inside a fire', () => {
+    expect(mapChromeOf(false, 'public')).toBe('overview')
+    expect(mapChromeOf(false, 'command')).toBe('overview')
+    expect(mapChromeOf(true, 'public')).toBe('public-fire')
+    expect(mapChromeOf(true, 'command')).toBe('command-fire')
+  })
+
+  it('picks the atmosphere edges of the chrome', () => {
+    expect(atmosphereEdgesOf('overview')).toBe('overview')
+    expect(atmosphereEdgesOf('public-fire')).toBe('fire')
+    expect(atmosphereEdgesOf('command-fire')).toBe('command')
   })
 })
 

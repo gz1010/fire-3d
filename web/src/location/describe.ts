@@ -54,6 +54,12 @@ export interface NearHere {
   burned: string | null
   /** Live data older than the timeline's stale threshold. */
   stale: boolean
+  /** Brief 4 (Command readout): the parts of `sub`, so a layout can place them apart. `edge`: "0.2 mi from the edge"
+   *  (inside only); `basis`: "mapped Oct 22, 07:59 PDT (2 d ago)" or "from satellite detections up to …"; `staleFor`:
+   *  how old the latest observation is when `stale` ("32 h"), else null. `sub` stays the joined sentence. */
+  edge: string | null
+  basis: string | null
+  staleFor: string | null
 }
 
 /** Block 3: one main reason, tagged. */
@@ -464,18 +470,23 @@ function conditionsSection(r: LocationReport, o: DescribeOptions): CardSection {
 // ------------------------------------------------------------------------------------------------- summary
 /** One short line under the headline: distance to the edge when inside, and the basis time with its age (its source,
  *  area and latest detection are in the details). */
-function perimeterSub(r: LocationReport, o: DescribeOptions): string | null {
+/** The near line's edge distance (inside only) and its basis with the basis time and age. */
+function perimeterParts(r: LocationReport, o: DescribeOptions): { edge: string | null; basis: string } | null {
   const p = r.perimeter
   if (p.state !== 'ok') return null
   const when = (ms: number) => {
     const a = age(ms, r, o)
     return a === 'at the selected time' ? at(ms) : `${at(ms)} (${a})`
   }
-  const edge = p.inside ? `${distance(p.edgeDistanceM, o.units).text} from ${p.basis === 'mapped' ? 'the' : 'its'} edge · ` : ''
-  const sub =
-    p.basis === 'reconstructed'
-      ? `${edge}from satellite detections${p.latestDetectionMs != null ? ` up to ${when(p.latestDetectionMs)}` : ''}`
-      : `${edge}mapped ${when(p.perimeterTimeMs)}`
+  const edge = p.inside ? `${distance(p.edgeDistanceM, o.units).text} from ${p.basis === 'mapped' ? 'the' : 'its'} edge` : null
+  const basis = p.basis === 'reconstructed' ? `from satellite detections${p.latestDetectionMs != null ? ` up to ${when(p.latestDetectionMs)}` : ''}` : `mapped ${when(p.perimeterTimeMs)}`
+  return { edge, basis }
+}
+
+function perimeterSub(r: LocationReport, o: DescribeOptions): string | null {
+  const parts = perimeterParts(r, o)
+  if (!parts) return null
+  const sub = parts.edge ? `${parts.edge} · ${parts.basis}` : parts.basis
   return sub.charAt(0).toUpperCase() + sub.slice(1)
 }
 
@@ -486,7 +497,19 @@ export function isStale(r: Pick<LocationReport, 'latestObservationMs'>, o: Pick<
 
 function nearHere(r: LocationReport, o: DescribeOptions, h: LocationCardModel['headline']): NearHere {
   const f = r.observedFire
-  return { text: h.text, sub: perimeterSub(r, o), kind: h.kind, tone: h.tone, burned: f.state === 'burned' ? `Burned around ${at(f.arrivalMs)} (estimate)` : null, stale: isStale(r, o) }
+  const parts = perimeterParts(r, o)
+  const stale = isStale(r, o)
+  return {
+    text: h.text,
+    sub: perimeterSub(r, o),
+    kind: h.kind,
+    tone: h.tone,
+    burned: f.state === 'burned' ? `Burned around ${at(f.arrivalMs)} (estimate)` : null,
+    stale,
+    edge: parts?.edge ?? null,
+    basis: parts?.basis ?? null,
+    staleFor: stale && r.latestObservationMs != null ? span(o.nowMs - r.latestObservationMs) : null,
+  }
 }
 
 /** Wind relative to the point: the direction the wind blows TO against the bearing from the nearest fire edge to the

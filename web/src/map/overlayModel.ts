@@ -11,26 +11,29 @@ import type { Detection, ForecastManifest, IncidentManifest, Perimeter } from '.
 import { HOUR_MS, NEVER_MIN } from '../data/rasters'
 import { localToLonLat, type LonLat, type UtmGrid } from '../lib/reproject'
 import { fmtAt, type TimeFmt } from '../lib/time'
+import { ringPolygons } from './fireProfile'
 
 /** --m-* tokens used by map paint (keep equal to styles/map-tokens.css). */
 export const TOKENS = {
-  select: '#22d3ee',
-  selectStrong: '#67e8f9',
-  fireObserved: '#ff5a1f',
-  fireObservedGlow: 'rgba(255,106,43,0.55)',
-  fireFront: '#ffb066',
-  perimeter: '#ff7849',
-  perimeterOld: 'rgba(255,120,73,0.45)',
-  forecast: '#f5a524',
-  forecastHatch: 'rgba(245,165,36,0.6)',
+  select: '#9fd6ff',
+  selectStrong: '#cfeaff',
+  fireObserved: '#ff6a2a',
+  fireObservedGlow: 'rgba(255,106,42,0.55)',
+  /** --m-fire-observed-fill: the Public fire view's "fire area" (the newest perimeter, filled). */
+  fireObservedFill: 'rgba(160,50,20,0.6)',
+  fireFront: '#ffb27a',
+  perimeter: '#ff8a3c',
+  perimeterOld: 'rgba(255,138,60,0.45)',
+  forecast: '#f5c060',
+  forecastHatch: 'rgba(245,192,96,0.6)',
   detection: '#ffd84a',
   detectionStroke: '#6b1f00',
   detectionOld: '#c27a3a',
-  aoi: 'rgba(232,237,243,0.55)',
+  aoi: 'rgba(230,230,230,0.5)',
   event: '#f0f4f8',
-  text: '#e8edf3',
-  textInverse: '#0b1119',
-  bg: '#0b1119',
+  text: '#f0f0f0',
+  textInverse: '#0c0c0c',
+  bg: '#0c0c0c',
 } as const
 
 /** Hours before the timeline time that count as "recently burned" (brighter fill). */
@@ -53,12 +56,12 @@ export function rgba(r: number, g: number, b: number, a: number): number {
 }
 
 export const OBSERVED_RGBA = {
-  burned: rgba(150, 36, 16, 0.45), // --m-fire-observed-fill
-  recent: rgba(255, 90, 31, 0.62),
+  burned: rgba(160, 50, 20, 0.6), // --m-fire-observed-fill
+  recent: rgba(255, 106, 42, 0.62), // --m-fire at .62
 } as const
 
 /** Forecast class tints: index 1 = 10-50 %, 2 = 50-90 %, 3 = >= 90 % of model runs. */
-export const FORECAST_RGBA = [0, rgba(245, 165, 36, 0.14), rgba(245, 165, 36, 0.26), rgba(240, 130, 30, 0.4)] as const
+export const FORECAST_RGBA = [0, rgba(245, 192, 96, 0.14), rgba(245, 192, 96, 0.26), rgba(240, 168, 64, 0.4)] as const
 
 const isNodata = (v: number, nodata: number | null | undefined) => Number.isNaN(v) || (nodata !== undefined && nodata !== null && v === nodata)
 
@@ -266,6 +269,14 @@ export function perimeterFeatures(perimeters: readonly Perimeter[], grid: UtmGri
     },
   }))
   return { fc: { type: 'FeatureCollection', features }, latest }
+}
+
+/** The Public fire view's fire area (brief 4 H4): one perimeter's rings grouped into polygons with their holes
+ *  (fireProfile.ringPolygons; the backend writes exteriors and holes unlabelled), for a fill. */
+export function perimeterArea(p: Perimeter, grid: UtmGrid): FeatureCollection {
+  const rings = perimeterRings(p, grid)
+  const polys = ringPolygons(rings).map((idx) => idx.map((i) => rings[i]))
+  return polygons(polys, { t: p.t_ms })
 }
 
 const footprintCache = new WeakMap<Detection, LonLat[]>()

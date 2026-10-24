@@ -1,0 +1,61 @@
+{
+  "summary": "Brief 4 H2c: map rotation in Public and Command (2D and 3D), the globe-like dimming and the basemap tint. Rotation: lib/compass.ts (pure angle maths), state/rotation.ts (one rotation target at a time, the visible view; Q / E / N routed through it from state/runtime.ts useHotkeys, never while typing or while a popover is open), ui/useCompassDrag.ts (drag the compass around its centre with pointer capture; a click without a drag is still north up; arrow keys on the compass turn 15 degrees), lib/rotateGesture.ts (Safari two-finger trackpad twist via gesturestart/change/end, preventDefault, heading = start - rotation). MapActions gains setBearing(deg) (instant, inside this.input.ours) and setTint(level). The heading is kept across 2D <-> 3D (applyPerspective eases only the pitch) and across the map <-> Forensic hand-off (handoff.ts passes flyTo.bearingDeg on the way out and keeps view.bearing in 2D on the way back). MapControls gains variant 'bar' (Main details look: 2D/3D, basemap, rotate left, compass, rotate right, zoom -, +, framing, optional Layers icon; 3D orbit row on the side away from `anchor`) and 'compact' (vertical zoom in/out, rotate left, compass, rotate right); the default rendering is unchanged apart from the draggable compass. New one-time hint text. Dimming: map/atmosphere.ts (vignette strength, write threshold, geometry, default tint), MapAtmosphere.tsx (the layer is inserted inside the MapLibre map right above the canvas so the pin, popups and notices stay readable; CSS variables written from store subscriptions, no React render per frame), styles/atmosphere.css (circular vignette + per-view edge gradients with the screens' stops; reduced motion: no transitions). Tint: basemapStyle.ts AERIAL_TINT / aerialTintPaint / tint-aware deriveAerial, fallbackStyle and loadBasemap; the controller paints only the aerial photo layer and keeps the tint across basemap switches; the view's default comes from MapAtmosphere, and chromes can override with map/useMapTint.ts.",
+  "files": [
+    "web/src/lib/compass.ts",
+    "web/src/lib/compass.test.ts",
+    "web/src/lib/rotateGesture.ts",
+    "web/src/lib/rotateGesture.test.ts",
+    "web/src/state/rotation.ts",
+    "web/src/state/rotation.test.ts",
+    "web/src/state/runtime.ts",
+    "web/src/ui/useCompassDrag.ts",
+    "web/src/ui/shell/handoff.ts",
+    "web/src/map/MapAtmosphere.tsx",
+    "web/src/map/atmosphere.ts",
+    "web/src/map/atmosphere.test.ts",
+    "web/src/map/useMapTint.ts",
+    "web/src/map/MapControls.tsx",
+    "web/src/map/map.css",
+    "web/src/map/mapController.ts",
+    "web/src/map/mapStore.ts",
+    "web/src/map/basemapStyle.ts",
+    "web/src/map/basemapStyle.test.ts",
+    "web/src/map/userInput.test.ts",
+    "web/src/styles/atmosphere.css",
+    "docs/redesign/CONTRACT.md (section 15.5, H2c paragraph)",
+    "docs/redesign/progress/brief4-h2c.md",
+    "docs/redesign/reports/brief4-h2c.json"
+  ],
+  "verification": {
+    "gates": "typecheck clean; lint 55 warnings, all in src/scene (none added); tests 85 files, 1262 passed, 2 skipped (pre-existing), 0 failed; build ok",
+    "browser_checks": "Scratch Playwright scripts (Chrome + SwiftShader, not in the repo), reading window.__mapRuntime: in Public and in Command, E +15, Q twice -30 (the second press continues from the first turn's goal), N north up, the rotate-right / rotate-left buttons, a quarter-turn compass drag (heading start - 90), the release after a drag is not a north-up click, a compass click = north up, ArrowRight on the compass +15, E ignored while the basemap menu is open, q/e/n typed in the search box ignored, 2D -> 3D and 3D -> 2D keep a 40 degree heading, a synthetic Safari twist (gesturestart, gesturechange 2/34/64) is preventDefault-ed and gives heading -60, the vignette strength reads 0.286 at z5 and ~0.96 near z10.5, and the atmosphere layer sits right after the map canvas with pointer-events none: 33/34 passed (the one miss is the Command search box check: H2b moved search into a popover). Hand-off and tint: fire view tint 'fire' (saturation -0.6, brightness-max .68), overview tint 'overview' (-0.85, .64), map -> Forensic store.flyTo.bearingDeg = -50 from a map turned to -50, Forensic (2D camera at 30) -> map opens at bearing 30: 5/5 passed.",
+    "untestable_here": "Safari's two-finger trackpad rotation cannot be produced in the cloud (Chrome only; Chrome on a Mac has no rotate gesture at all). The wiring was checked with synthetic gesture events; the user should try a twist on the map in Safari on a Mac."
+  },
+  "screenshots": [
+    "docs/screenshots/brief4-h2c-public-rotated.png",
+    "docs/screenshots/brief4-h2c-command-rotated.png",
+    "docs/screenshots/brief4-h2c-vignette-national.png",
+    "docs/screenshots/brief4-h2c-vignette-z10.png",
+    "docs/screenshots/brief4-h2c-controls-bar.png",
+    "docs/screenshots/brief4-h2c-controls-compact.png",
+    "docs/screenshots/brief4-h2c-command-3d-bar.png",
+    "docs/screenshots/brief4-h2c-phone-command.png"
+  ],
+  "contract_deviations": [
+    "MapAtmosphere keeps its App.tsx mount but its div.mw-atmo is inserted inside the MapLibre canvas container right after the canvas (no z-index), not as a sibling of .mw-map: otherwise the selection pin, hover popups, markers and the provider notices (all inside .mw-map's stacking context) would sit under the dimming and lose contrast. Descendant selectors such as .mw[data-view] .mw-atmo still work; .mw > .mw-atmo would not.",
+    "The compact cluster puts zoom in (+) above zoom out (-), the usual map order; the task listed 'zoom -, +'.",
+    "Edge gradient widths shrink below 1440 px (min(540px, 38vw), min(500px, 35vw), min(560px, 42vw), min(200px, 24vh)) and phones (<= 760 px) replace Command's and the fire view's side gradients with top 140 / bottom 160 px, so narrow screens are not blacked out. At 1440 px the screens' exact widths apply.",
+    "useMapTint is an override: each view already gets its tint from MapAtmosphere (overview -> 'overview', fire and Command -> 'fire'), so the chromes do not need to call it.",
+    "Development builds accept ?ctl=bar|compact to show a controls variant in the default slot (used for the screenshots); compiled out of production like ?mapfail=."
+  ],
+  "known_issues": [
+    "Safari two-finger trackpad rotation is untested on real hardware (see verification.untestable_here). If Safari also turns the pinch into page zoom despite preventDefault, or if a pinch now zooms less smoothly, the fix is in lib/rotateGesture.ts.",
+    "Chrome on a Mac has no trackpad rotate gesture: Mac Chrome users turn the map with Ctrl + drag, right-drag, the compass drag, the rotate buttons or Q / E (the one-time hint says so).",
+    "The default MapControls rendering (still used by OverviewChrome and PublicFireChrome until H3+H4 switches them) has no rotate buttons in 2D; 2D rotation there is by compass drag, Q / E, and MapLibre's own gestures. H3+H4 should use variant 'bar' (details) and 'compact' (minimal, fire view).",
+    "The vignette dims MapLibre-drawn labels and markers near the edges as well (it is part of the map picture, as the design intends); DOM overlays stay above it.",
+    "The overview tint (saturation -0.85, brightness-max .64) and the vignette strength curve have not had a contrast measurement over bright aerial areas (decision l); H3+H4 should check the overview's map labels.",
+    "While a compass drag runs during the opening flight, each heading change interrupts the flight and the framing re-issues it with the new heading; it converges once the drag ends.",
+    "Under SwiftShader a 300 ms rotate ease takes much longer to draw; checks must wait for the camera to stop rather than a fixed time."
+  ],
+  "notes_for_integrator": "H2b: Command already passes <MapControls variant=\"bar\" anchor=\"bottom\" />; add layers to put a Layers icon at the end of the bar if the top-bar Layers pill goes. The tint and the dimming need no call from a chrome. H3+H4: use <MapControls variant=\"bar\" layers /> for Main details (top-left) and <MapControls variant=\"compact\" /> for the minimal overview and the fire view; useMapTint(level) only to differ from the view default; mark any new popover with data-popover so Q / E / N leave its letters alone. H5: register the Forensic camera with registerRotation({ rotateBy, northUp, setBearing, bearing }) while mounted, use useCompassDrag for the Forensic compass, attachRotateGesture on the canvas element, and read useStore.flyTo.bearingDeg on arrival; Forensic -> map already carries cam.bearingDeg in 2D and 3D."
+}

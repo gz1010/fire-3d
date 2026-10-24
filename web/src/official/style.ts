@@ -1,18 +1,19 @@
 // Colours and line styles of the official map layers (owner: official-web), shared by the map layer and the legend.
 // MapLibre paint cannot read CSS variables, so they are literals here.
 
-/** NWS-style colours (Red Flag Warning deep pink, Fire Weather Watch navajo white), lightened for dark basemaps and
- *  drawn as outlines only, so they never read as an evacuation zone (cross-hatched fill) or as fire. */
+/** NWS-style colours (Red Flag Warning pink: the handoff's alert colour #ee7aa0 = --m-alert, brief 4; Fire Weather
+ *  Watch navajo white), lightened for dark basemaps and drawn as outlines only, so they never read as an evacuation
+ *  zone (cross-hatched fill) or as fire. */
 export const OFFICIAL_COLORS = {
-  redFlag: '#ff5fae',
+  redFlag: '#ee7aa0', // --m-alert
   fireWeatherWatch: '#ffdcae',
-  casing: 'rgba(8,12,18,0.85)',
+  casing: 'rgba(10,10,10,0.85)',
   /** The light casing under the unselected NWS outlines: just enough to keep a thin line legible on aerial photos. */
-  fwCasing: 'rgba(8,12,18,0.5)',
+  fwCasing: 'rgba(10,10,10,0.5)',
   highlight: '#ffffff',
   highlightFill: 'rgba(255,255,255,0.10)',
   /** A selected NWS alert's zones: its own colour, faintly filled (never a heavy white outline over a large zone). */
-  fwHighlightFill: 'rgba(255,95,174,0.07)',
+  fwHighlightFill: 'rgba(238,122,160,0.07)',
   fwWatchHighlightFill: 'rgba(255,220,174,0.07)',
 } as const
 

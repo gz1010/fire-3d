@@ -7,34 +7,25 @@
 // overview (no fire open) the card shows the official line and the nearest fires (OverviewCard).
 // Brief 3 (§14.9): every time is in the fire's own zone with the preset's clock, and the reliability block names the
 // zone ("Times: Mountain Time (MDT), the fire's local time").
-import { ChevronDown } from 'lucide-react'
-import { useDeferredValue, useMemo, useState } from 'react'
-import { useShallow } from 'zustand/react/shallow'
-import { useRasterSet, type RasterSlot } from '../data/rasters'
+// Brief 4 H4 (decision a): in the Public fire view the card shows no model output (location/publicCard.ts withoutModel:
+// the spread model's sentence, run and section, the weather-model wind and dryness readings, the forecast caveats and
+// the model sources); "Model weather and the experimental spread model for this spot are in Command ›" opens Command.
+import { ChevronDown, ChevronRight } from 'lucide-react'
+import { useState } from 'react'
 import { useOfficialAtPoint, type OfficialInfo } from '../official/hooks'
-import { zoneLine } from '../lib/time'
 import { useStore } from '../state/store'
-import { useTimeFormat, useZoneSource } from '../state/timeZone'
 import { useWorkspace, type SelectedLocation } from '../state/workspace'
-import { useNow } from '../ui/hooks'
-import { detailsFor, useAddressDetails } from './addressStore'
 import { useCardPrefs } from './cardPrefs'
-import { describeLocation, type CardLine, type LocationCardModel } from './describe'
+import type { CardLine, LocationCardModel } from './describe'
 import { CardFrame, CoverageNotice, KindTag, OfficialSection, StaleChip } from './CardParts'
-import { coverageText, useGeoLookup } from './geoLookup'
 import { useOpenFireAccuracy } from '../state/accuracy'
-import { checkLocation } from './locationCheck'
-import { officialBlock, officialFireWeatherNote } from './official'
 import { OverviewCard } from './OverviewCard'
-import type { LocationRasters } from './types'
+import { useLocationCheck } from './useLocationCheck'
 import { useNarrow } from './useNarrow'
+import { withoutModel } from './publicCard'
+import { MODEL_IN_COMMAND } from '../ui/public/fireView'
+import { applyView } from '../ui/shell/views'
 import './location.css'
-
-const REQ = {
-  incident: ['observed_arrival', 'elevation', 'fuel'],
-  forecast: ['burn_probability', 'arrival_p10', 'arrival_p50', 'arrival_p90'],
-} as const
-const MISSING: RasterSlot = { status: 'missing', layer: null, error: null }
 
 export function LocationCard() {
   const sel = useWorkspace((s) => s.selection)
@@ -65,63 +56,11 @@ function Line({ l, technical }: { l: CardLine; technical: boolean }) {
 }
 
 function LocationCardBody({ sel, official }: { sel: SelectedLocation; official: OfficialInfo }) {
-  const units = useWorkspace((s) => s.units)
-  const preset = useWorkspace((s) => s.preset)
-  const st = useStore(
-    useShallow((s) => ({
-      timeMs: s.timeMs,
-      mode: s.manifest?.mode ?? s.mode,
-      summary: s.summary,
-      manifest: s.manifest?.status === 'ready' ? s.manifest : null,
-      forecast: s.forecast,
-      perimeters: s.perimeters,
-      detections: s.detections,
-      weather: s.weather,
-    })),
-  )
-  // a fire just opened or focused by zooming (brief 2 decision 10): its files are on the way
-  const loadingFire = useStore((s) => s.incidentLoading && !(s.manifest?.status === 'ready' && s.manifest.id === s.incidentId))
-  const lastAddress = useAddressDetails((s) => s.details)
-  const address = detailsFor(sel, lastAddress)
-  const set = useRasterSet(REQ)
-  const nowMs = useNow(60_000)
-  const timeMs = useDeferredValue(st.timeMs) // playback moves the time every frame; the card may lag a frame
-  const report = useMemo(() => {
-    const rasters: LocationRasters = {
-      observedArrival: set.incident.observed_arrival ?? MISSING,
-      elevation: set.incident.elevation ?? MISSING,
-      fuel: set.incident.fuel ?? MISSING,
-      burnProbability: set.forecastLayers.burn_probability ?? MISSING,
-      arrivalP10: set.forecastLayers.arrival_p10 ?? MISSING,
-      arrivalP50: set.forecastLayers.arrival_p50 ?? MISSING,
-      arrivalP90: set.forecastLayers.arrival_p90 ?? MISSING,
-    }
-    return checkLocation({
-      point: sel,
-      timeMs,
-      nowMs,
-      summary: st.summary,
-      manifest: st.manifest,
-      perimeters: st.perimeters?.perimeters ?? [],
-      detections: st.detections?.detections ?? [],
-      weather: st.weather,
-      forecast: st.forecast,
-      rasters,
-      address,
-    })
-  }, [sel, timeMs, nowMs, st.summary, st.manifest, st.perimeters, st.detections, st.weather, st.forecast, set, address])
-  const tf = useTimeFormat()
-  const fireWeatherNote = officialFireWeatherNote(official.fireWeather, tf)
-  const zoneSource = useZoneSource()
-  // coverage at the point comes from the server's lookup only (a point searched far from the open fire)
-  const lookup = useGeoLookup(sel.lon, sel.lat)
-  const coverage = coverageText(lookup.status === 'ok' ? lookup.data : null)
-  const card = useMemo(() => describeLocation(report, { units, preset, mode: st.mode, nowMs, fireWeatherNote, tf }), [report, units, preset, st.mode, nowMs, fireWeatherNote, tf])
-  const fireName = st.summary ? (/\bfire$/i.test(st.summary.name) ? `the ${st.summary.name}` : st.summary.name) : null
-  // official answers are for the replay time at a past time (a local message sent after it says so)
-  const refMs = st.mode === 'live' ? nowMs : Math.floor(timeMs / 60_000) * 60_000
-  const block = useMemo(() => officialBlock(official, { nowMs, units, fireName, incidentUrl: st.summary?.url ?? null, tf, refMs }), [official, nowMs, units, fireName, st.summary?.url, tf, refMs])
+  const { card, block, coverage, loadingFire, fireName, zone, preset } = useLocationCheck(sel, official)
   const command = preset === 'command'
+  // the Public fire view: no model output here (decision a); the card points to Command for it
+  const fireView = !command
+  const shownCard = fireView ? withoutModel(card) : card
   const detailsOpen = useCardPrefs((s) => s.detailsOpen[preset])
   const narrow = useNarrow()
   // phones: a short bottom sheet until the user asks for more; every new point starts short again
@@ -141,23 +80,35 @@ function LocationCardBody({ sel, official }: { sel: SelectedLocation; official: 
         <NearBlock card={card} />
       )}
       <OfficialSection block={block} compact={compact} />
-      {!loadingFire && <ReasonsBlock card={card} compact={compact} command={command} />}
+      {!loadingFire && <ReasonsBlock card={shownCard} compact={compact} command={command} withModel={!fireView} />}
+      {!loadingFire && fireView && <ModelInCommand />}
       {loadingFire ? null : compact ? (
         <button type="button" className="mw-btn is-sm loc-expand" aria-expanded="false" onClick={() => setExpandedFor(selKey)}>
           <ChevronDown size={13} aria-hidden="true" /> More about this location
         </button>
       ) : (
         <>
-          <ReliabilityBlock card={card} zone={zoneLine(tf, timeMs, zoneSource)} />
-          <Details card={card} command={command} open={detailsOpen} onToggle={(open) => useCardPrefs.getState().setDetailsOpen(preset, open)} />
+          <ReliabilityBlock card={shownCard} zone={zone} />
+          <Details card={shownCard} command={command} open={detailsOpen} onToggle={(open) => useCardPrefs.getState().setDetailsOpen(preset, open)} />
         </>
       )}
     </CardFrame>
   )
 }
 
+/** The Public fire view's stand-in for the model block: the model is in Command. */
+export function ModelInCommand() {
+  return (
+    <p className="loc-model-command">
+      <button type="button" className="mw-link-btn" onClick={() => applyView('command')}>
+        {MODEL_IN_COMMAND} <ChevronRight size={12} aria-hidden="true" />
+      </button>
+    </p>
+  )
+}
+
 /** Block 1: near here (the kind tag leads its sub-line: Mapped / Estimate / Unknown). */
-function NearBlock({ card }: { card: LocationCardModel }) {
+export function NearBlock({ card }: { card: LocationCardModel }) {
   const n = card.summary.near
   return (
     <>
@@ -175,8 +126,10 @@ function NearBlock({ card }: { card: LocationCardModel }) {
 }
 
 /** Block 3: up to three main reasons, each tagged, and the model (a dated sentence; Command adds the figure). */
-function ReasonsBlock({ card, compact, command }: { card: LocationCardModel; compact: boolean; command: boolean }) {
-  const { reasons, model, run } = card.summary
+export function ReasonsBlock({ card, compact, command, withModel = true }: { card: LocationCardModel; compact: boolean; command: boolean; withModel?: boolean }) {
+  const { reasons, run } = card.summary
+  // Command's readout says the model on its own line (brief 4): the block then lists the main factors only
+  const model = withModel ? card.summary.model : null
   const accuracy = useOpenFireAccuracy().label
   if (!reasons.length && !model) return null
   return (
@@ -230,7 +183,7 @@ function ReasonsBlock({ card, compact, command }: { card: LocationCardModel; com
 }
 
 /** Block 4: updated and reliability. */
-function ReliabilityBlock({ card, zone }: { card: LocationCardModel; zone: string }) {
+export function ReliabilityBlock({ card, zone }: { card: LocationCardModel; zone: string }) {
   return (
     <section className="loc-block loc-reliability" aria-label="Updated and reliability">
       <h3 className="loc-block-title">Updated and reliability</h3>
@@ -254,14 +207,24 @@ function ReliabilityBlock({ card, zone }: { card: LocationCardModel; zone: strin
 }
 
 function Details({ card, command, open, onToggle }: { card: LocationCardModel; command: boolean; open: boolean; onToggle: (open: boolean) => void }) {
-  // Command only: run ids and raw values stay out of Public (brief 2 C-R8)
-  const technical = command ? card.sections.flatMap((s) => s.lines).filter((l) => l.technical) : []
   return (
     <details className="loc-more" open={open} onToggle={(e) => onToggle(e.currentTarget.open)}>
       <summary>
         <ChevronDown size={13} aria-hidden="true" className="loc-more-chev" />
         Details, sources and uncertainty
       </summary>
+      <DetailsBody card={card} command={command} />
+    </details>
+  )
+}
+
+/** The details disclosure's content: every remaining line, the uncertainty, the sources and (Command) the scientific
+ *  values. Command's readout shows it inside "More about this spot" (brief 4). */
+export function DetailsBody({ card, command }: { card: LocationCardModel; command: boolean }) {
+  // Command only: run ids and raw values stay out of Public (brief 2 C-R8)
+  const technical = command ? card.sections.flatMap((s) => s.lines).filter((l) => l.technical) : []
+  return (
+    <>
       {card.details.map((s) => (
         <section key={s.key} className={`loc-section is-${s.key}`} aria-label={s.title}>
           <h3 className="mw-eyebrow">{s.title}</h3>
@@ -304,6 +267,6 @@ function Details({ card, command, open, onToggle }: { card: LocationCardModel; c
           </ul>
         </section>
       )}
-    </details>
+    </>
   )
 }

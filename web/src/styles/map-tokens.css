@@ -1,81 +1,101 @@
-/* Public/Command design tokens (owner: shell; agreed in docs/redesign/CONTRACT.md §9). Dark navy chrome after the
-   redesign references: subdued geographic context, orange/red wildfire information, cyan selection, blue UI accents,
-   legibility first. All names start with --m-; Forensic keeps theme.css. While the map workspace is shown
-   (<html data-workspace="map">) the generic theme.css tokens are re-pointed so reused Forensic controls (segmented
-   controls, incident picker, popovers, tooltips, charts in the Analysis drawer) match the navy look.
-   MapLibre paint colours cannot read CSS variables: map-core mirrors the wildfire colours in TypeScript.
-   Brief 2 (C-R9): Public opens on aerial photos, so panels are more opaque and --m-text-3 reaches 4.5:1 over every
-   basemap (measured with the panels composited over real basemap pixels; numbers in the shell report). */
+/* Public/Command design tokens (owner: shell; CONTRACT §9, brief 4 §15.1). Brief 4 (handoff restyle,
+   docs/redesign/handoff-4/HANDOFF.md): greys plus hazard colour. Ground #0c0c0c, glass panels rgba(14,14,14,.62-.86)
+   with blur(22px) saturate(140%), grey hairlines, the UI accent orange #ff7a3d (ink #1a0a03 on it), selection light
+   blue #9fd6ff, fire #ff6a2a / #ff8a3c, modeled spread #f5c060, stale #e8b04a, official #8fd3a8, NWS alerts #ee7aa0.
+   All names start with --m-; Forensic keeps theme.css. While the map workspace is shown (<html data-workspace="map">)
+   the generic theme.css tokens are re-pointed so reused Forensic controls (segmented controls, incident picker,
+   popovers, tooltips, charts in the Analysis drawer) match the map's look.
+   MapLibre paint colours cannot read CSS variables: the wildfire colours are mirrored in TypeScript
+   (map/overlayModel.ts TOKENS, map/basemapStyle.ts DARK, extras/style.ts, official/style.ts): keep them equal.
+   Brief 2 (C-R9): --m-text-3 must reach 4.5:1 over every basemap; brief 4 decision l keeps the handoff's lighter
+   glass and darkens a panel only where measured text fails. */
 
 :root {
   /* surfaces */
-  --m-bg: #0b1119;
-  --m-bg-2: #111a25;
-  --m-panel: rgba(14, 21, 30, 0.94);
-  --m-panel-strong: rgba(14, 21, 30, 0.97);
-  --m-panel-soft: rgba(14, 21, 30, 0.86);
+  --m-bg: #0c0c0c;
+  --m-bg-2: #141414;
+  --m-panel: rgba(14, 14, 14, 0.74);
+  --m-panel-strong: rgba(14, 14, 14, 0.86);
+  --m-panel-soft: rgba(14, 14, 14, 0.62);
   /* chips that must read on any basemap (research note, credits) */
-  --m-chip-opaque: #0e151e;
-  --m-panel-raised: rgba(24, 34, 47, 0.97);
-  --m-panel-blur: blur(12px) saturate(140%);
-  --m-border: rgba(148, 178, 210, 0.16);
-  --m-border-strong: rgba(148, 178, 210, 0.3);
-  --m-hover: rgba(148, 178, 210, 0.09);
-  --m-active: rgba(148, 178, 210, 0.14);
-  --m-radius: 10px;
-  --m-radius-sm: 6px;
+  --m-chip-opaque: #0e0e0e;
+  --m-panel-raised: rgba(26, 26, 26, 0.96);
+  --m-panel-blur: blur(22px) saturate(140%);
+  --m-border: rgba(200, 200, 200, 0.16);
+  --m-border-strong: rgba(200, 200, 200, 0.28);
+  --m-hover: rgba(200, 200, 200, 0.08);
+  --m-active: rgba(200, 200, 200, 0.14);
+  --m-radius: 14px;
+  --m-radius-sm: 8px;
   --m-radius-pill: 999px;
-  --m-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+  --m-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
 
   /* text */
-  --m-text: #e8edf3;
-  --m-text-2: #b3bfcc;
-  --m-text-3: #98a4b2;
-  --m-text-inverse: #0b1119;
+  --m-text: #f0f0f0;
+  /* body copy (sentences in readouts and panels) */
+  --m-text-body: #e6e6e6;
+  --m-text-2: #cfcfcf;
+  /* units, secondary values */
+  --m-text-2b: #bdbdbd;
+  --m-text-3: #9a9a9a;
+  /* place names, quiet meta */
+  --m-text-4: #8a8a8a;
+  --m-text-inverse: #0c0c0c;
 
-  /* UI accent: active segments, links, focus */
-  --m-accent: #5b9dff;
-  --m-accent-text: #8fbcff;
-  --m-accent-bg: #27476b;
-  --m-accent-bg-hover: #30577f;
-  --m-focus-ring: 0 0 0 2px rgba(91, 157, 255, 0.75);
+  /* UI accent (selected state): active view tab, 2D/3D, range tabs, checked layers, play. Text on it: --m-accent-ink.
+     Links are light grey and underlined (the screens), never the accent. */
+  --m-accent: #ff7a3d;
+  --m-accent-ink: #1a0a03;
+  --m-accent-soft: rgba(255, 122, 61, 0.16);
+  --m-accent-text: #e0e0e0;
+  --m-accent-bg: #ff7a3d;
+  --m-accent-bg-hover: #ff8d57;
+  --m-focus-ring: 0 0 0 2px #d0d0d0;
 
-  /* selection (cyan): selected point, selected site, selected feed item */
-  --m-select: #22d3ee;
-  --m-select-strong: #67e8f9;
-  --m-select-soft: rgba(34, 211, 238, 0.18);
+  /* selection (light blue): selected point, selected site, selected feed item, distance from you */
+  --m-select: #9fd6ff;
+  --m-select-strong: #cfeaff;
+  --m-select-soft: rgba(143, 208, 255, 0.16);
 
   /* wildfire layers: distinguishable by colour AND line style / fill pattern (BRIEF §5, §9) */
-  --m-fire-observed: #ff5a1f; /* observed burned area outline: solid */
-  --m-fire-observed-fill: rgba(150, 36, 16, 0.45);
-  --m-fire-observed-glow: rgba(255, 106, 43, 0.55);
-  --m-fire-front: #ffb066; /* active front at the timeline time */
-  --m-perimeter: #ff7849; /* agency perimeter: solid thin */
-  --m-perimeter-old: rgba(255, 120, 73, 0.45);
-  --m-forecast: #f5a524; /* modeled spread: dashed outline + diagonal hatch */
-  --m-forecast-fill: rgba(245, 165, 36, 0.24);
-  --m-forecast-hatch: rgba(245, 165, 36, 0.6);
+  /* hazard colours (HANDOFF: fire #ff6a2a, #ff8a3c, #ff9a5a, #ffb27a): markers, perimeters, leaders, tags */
+  --m-fire: #ff6a2a;
+  --m-fire-2: #ff8a3c;
+  --m-fire-3: #ff9a5a;
+  --m-fire-4: #ffb27a;
+  --m-fire-observed: #ff6a2a; /* observed burned area outline: solid */
+  --m-fire-observed-fill: rgba(160, 50, 20, 0.6);
+  --m-fire-observed-glow: rgba(255, 106, 42, 0.55);
+  --m-fire-front: #ffb27a; /* active front at the timeline time */
+  --m-perimeter: #ff8a3c; /* agency perimeter: solid thin */
+  --m-perimeter-old: rgba(255, 138, 60, 0.45);
+  --m-forecast: #f5c060; /* modeled spread: dashed outline + diagonal hatch */
+  --m-forecast-fill: rgba(245, 192, 96, 0.22);
+  --m-forecast-hatch: rgba(245, 192, 96, 0.6);
   --m-detection: #ffd84a; /* satellite detection: point / footprint square with dark stroke */
   --m-detection-stroke: #6b1f00;
   --m-detection-old: #c27a3a;
   --m-evac-order: #e0459b; /* official evacuation: magenta / violet, cross-hatch, official wording */
   --m-evac-warning: #a78bfa;
   --m-evac-other: #7aa2f7;
-  /* "Official" tags (CAL FIRE, Cal OES, NWS): the official-zone family, never the fire colours */
-  --m-official-ink: #f0a6cf;
-  --m-official-line: rgba(224, 69, 155, 0.55);
-  --m-aoi: rgba(232, 237, 243, 0.55); /* modeled-area boundary: dashed */
+  /* "Official" tags and "Official now" (CAL FIRE, Cal OES, NWS, NIFC): the handoff's official green, never the fire
+     colours */
+  --m-official-ink: #8fd3a8;
+  --m-official-line: rgba(143, 211, 168, 0.6);
+  /* NWS Red Flag / fire weather polygons and alerts (official/style.ts OFFICIAL_COLORS.redFlag) */
+  --m-alert: #ee7aa0;
+  --m-aoi: rgba(230, 230, 230, 0.5); /* modeled-area boundary: dashed */
   --m-event: #f0f4f8;
 
   /* status */
-  --m-ok: #4ade80;
-  --m-warn: #fbbf24;
+  --m-ok: #8fd3a8;
+  --m-warn: #e8b04a;
   --m-danger: #f87171;
-  --m-info: #60a5fa;
-  --m-stale: #fbbf24;
-  --m-demo: #f5b83d;
-  --m-demo-bg: rgba(245, 184, 61, 0.14);
-  --m-demo-border: rgba(245, 184, 61, 0.45);
+  --m-info: #cfcfcf; /* neutral grey (review DF-6): light blue means the selected point only */
+  --m-stale: #e8b04a;
+  --m-demo: #e8b04a;
+  --m-demo-bg: rgba(232, 176, 74, 0.14);
+  --m-demo-border: rgba(232, 176, 74, 0.45);
 
   /* type */
   --m-font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -90,10 +110,21 @@
      body 13 px, meta 12 px, tags and headings 11 px) */
   --m-coord-fs: 13px;
   --m-meta-fs: 12px;
+  /* brief 4 readouts: small uppercase labels, "value — LABEL" rows, the Command point in mono */
+  --m-label-track: 0.14em;
+  --m-readout-fs: 22px;
+  --m-readout-lg: 26px;
+  --m-coord-xl: 30px;
 
-  /* layout */
+  /* layout. The top bar floats (no full-width bar): its items sit --m-topbar-top from the top and --m-topbar-x from
+     the sides, --m-topbar-h high; the first row of chrome under it starts at --m-chrome-top. --m-header-h is kept for
+     older rules: header-h + gap = chrome-top. */
   --m-gap: 12px;
-  --m-header-h: 40px;
+  --m-topbar-top: 20px;
+  --m-topbar-x: 28px;
+  --m-topbar-h: 44px;
+  --m-chrome-top: calc(var(--m-topbar-top) + var(--m-topbar-h) + 20px);
+  --m-header-h: calc(var(--m-chrome-top) - var(--m-gap));
   --m-search-w: 360px;
   --m-updates-w: 304px;
   /* the location and fire cards match the search column above them */
@@ -120,8 +151,8 @@
 /* Command: denser and more operational, never the Forensic effects. Slightly more opaque panels for legibility over
    aerial imagery; larger coordinates, identifiers and timestamps. */
 :root[data-preset='command'] {
-  --m-panel: rgba(11, 17, 25, 0.95);
-  --m-panel-soft: rgba(11, 17, 25, 0.88);
+  --m-panel: rgba(14, 14, 14, 0.8);
+  --m-panel-soft: rgba(14, 14, 14, 0.68);
   --m-coord-fs: 15px;
   --m-meta-fs: 12px;
   --m-updates-w: 324px;
@@ -143,7 +174,10 @@
 @media (max-width: 760px) {
   :root {
     --m-gap: 8px;
-    --m-header-h: 48px;
+    --m-topbar-top: 8px;
+    --m-topbar-x: 8px;
+    --m-topbar-h: 44px;
+    --m-chrome-top: calc(var(--m-topbar-top) + var(--m-topbar-h) + 8px);
     --m-search-w: 100%;
   }
 }
@@ -153,7 +187,7 @@
   --text: var(--m-text);
   --text-2: var(--m-text-2);
   --text-3: var(--m-text-3);
-  --text-4: #7d8997;
+  --text-4: var(--m-text-4);
   --glass: var(--m-panel);
   --glass-strong: var(--m-panel-strong);
   --glass-soft: var(--m-panel-soft);
@@ -168,20 +202,21 @@
   --bg-gradient: var(--m-bg);
   --font-ui: var(--m-font-ui);
   --font-mono: var(--m-font-mono);
-  /* the Forensic gold accent becomes the map's blue UI accent */
+  /* the Forensic gold accent becomes the map's orange UI accent */
   --gold: var(--m-accent);
   --gold-bright: var(--m-accent-text);
-  --gold-dim: rgba(91, 157, 255, 0.55);
-  --gold-soft: rgba(91, 157, 255, 0.28);
-  --gold-faint: rgba(91, 157, 255, 0.14);
-  --gold-ghost: rgba(91, 157, 255, 0.07);
+  --gold-dim: rgba(255, 122, 61, 0.55);
+  --gold-soft: rgba(255, 122, 61, 0.28);
+  --gold-faint: rgba(255, 122, 61, 0.14);
+  --gold-ghost: rgba(255, 122, 61, 0.07);
+  --accent-ink: var(--m-accent-ink);
   /* Analysis drawer charts use the map's wildfire colours: observed orange-red, modeled amber */
   --chart-observed: var(--m-fire-observed);
   --chart-forecast: var(--m-forecast);
-  --chart-band: rgba(245, 165, 36, 0.2);
-  --chart-cursor: var(--m-accent-text);
-  --chart-axis: rgba(232, 237, 243, 0.5);
-  --chart-grid: rgba(148, 178, 210, 0.1);
+  --chart-band: rgba(245, 192, 96, 0.2);
+  --chart-cursor: #e6e6e6;
+  --chart-axis: rgba(230, 230, 230, 0.5);
+  --chart-grid: rgba(200, 200, 200, 0.1);
   --ok: var(--m-ok);
   --warn: var(--m-warn);
   --danger: var(--m-danger);

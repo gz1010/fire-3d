@@ -4,7 +4,8 @@
        spread and profile charts and the Key Events list;
      - phones: the panel sheet (Layers / Analysis / Evidence / Notes) opens collapsed (.fx-sheet-closed) and the
        timeline drops to the bottom edge; "Layers & analysis" opens the sheet;
-     - a labelled "Frame fire" sits with the view switch (the scene's own icon button stays too). */
+     - a labelled "Frame fire" sits under the compass (the scene's own icon button stays too).
+   Brief 4 (H5, ForensicView.dc.html): grey glass, the screen's positions (below). */
 
 @media (min-width: 761px) {
   .app.fx-dock-min .dock {
@@ -15,9 +16,10 @@
   .app.fx-dock-min .dock .ke {
     display: none;
   }
+  /* the screen's 112 px timeline dock */
   .app.fx-dock-min .dock .tl {
     border-bottom: 0;
-    padding-bottom: 6px;
+    padding-bottom: 0;
   }
 }
 
@@ -30,38 +32,258 @@
   }
 }
 
+/* "Frame fire" and "Charts & key events": the screen's glass box under the compass (36 px rows, 15 px icons) */
 .fx-entry {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 2px;
+  gap: 0;
   padding: 4px;
+  border-radius: 14px;
+  background: rgba(14, 14, 14, 0.6);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(200, 200, 200, 0.16);
+  box-shadow: none;
 }
 .fx-entry-btn {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  height: 30px;
-  padding: 0 10px;
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  font-size: var(--fs-sm, 12px);
-  font-weight: 500;
+  gap: 10px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  color: var(--text-body);
+  font-size: 13px;
+  font-weight: 400;
   white-space: nowrap;
   text-align: left;
 }
 .fx-entry-btn:hover {
-  background: var(--hairline-soft);
+  background: var(--surface-2);
+  color: var(--text);
 }
 .fx-entry-btn[aria-expanded='true'] {
-  color: var(--gold-bright);
+  color: var(--text);
+  background: rgba(240, 240, 240, 0.12);
 }
 @media (max-width: 760px) {
   .fx-entry {
     flex-direction: row;
   }
   .fx-entry-btn {
-    height: 28px;
-    padding: 0 8px;
+    position: relative;
+    height: 40px;
+    padding: 0 10px;
+  }
+  /* 44 px touch targets (PLAN-4 decision h): 2 px more above and below, inside the box's padding */
+  .fx-entry-btn::before {
+    content: '';
+    position: absolute;
+    inset: -2px 0;
+  }
+}
+
+/* Brief 4 (H2a): moved here unchanged from map-layout.css and overview.css, so all Forensic CSS lives in Forensic's
+   files (owner H5). */
+
+/* ------------------------------------------------------------------------------------------------ Forensic */
+/* Brief 4 (H5): the floating "View" switch is gone (the view pill is in the top bar's centre). This column sits under
+   the scene's compass (scene/overlays: top = safe-top + 8, 60 px dial, the heading line under it): the entry controls,
+   then the demo badge. */
+.fx-ws {
+  position: absolute;
+  top: calc(var(--safe-top) + 100px);
+  left: calc(var(--safe-left) + 8px);
+  z-index: var(--z-scene-ui);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  pointer-events: none;
+}
+.fx-ws > * {
+  pointer-events: auto;
+}
+.fx-demo-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(232, 176, 74, 0.5);
+  background: rgba(14, 14, 14, 0.7);
+  color: #e8b04a;
+  font: 500 10.5px / 1 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* the 120 px top gradient behind the floating bar (the screen); inside .app-canvas, above the terrain and under the
+   scene's own controls (.sc-ui) */
+.fx-topfade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 120px;
+  z-index: 1;
+  background: linear-gradient(180deg, rgba(12, 12, 12, 0.85) 0%, rgba(12, 12, 12, 0) 100%);
+  pointer-events: none;
+}
+
+/* the disclaimer pill, bottom-left just above the timeline dock (left 16; it follows the dock's height) */
+.fx-note {
+  position: absolute;
+  left: var(--edge);
+  bottom: calc(var(--safe-bottom) - 4px);
+  z-index: var(--z-scene-ui);
+  max-width: calc(100% - var(--safe-right) - 32px);
+  pointer-events: none;
+}
+.fx-note > .fxc-pill {
+  pointer-events: auto;
+}
+/* medium screens and smaller laptops: the view controls at the dock's right (scale, 2D / 3D, the selects, the
+   tools: 470-530 px wide) need the row, so the pill sits one row higher. Up to 1279 px as before, and up to 1399 px
+   since the right column stays 316-336 px wide there and the view dock reached the pill's row until about 1380 px
+   (review H5-DF-3 / H5-m1). Wider screens keep the screen's place; the cap lets the pill wrap rather than reach the
+   view dock should both ever meet there. */
+@media (min-width: 761px) and (max-width: 1399px) {
+  .fx-note {
+    bottom: calc(var(--safe-bottom) + 46px);
+  }
+}
+@media (min-width: 1400px) {
+  .fx-note {
+    max-width: calc(100% - var(--safe-right) - 560px);
+  }
+}
+
+/* ------------------------------------------------------------------------------------------------ Forensic: no fire */
+/* "Zoom in on a fire or pick one": the floating top bar (back to the map, logo, "Forensic · 3D analysis", the view
+   pill) over the ground, the list as a grey glass panel under it */
+.fx-empty {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-0) var(--bg-gradient);
+}
+.fx-empty-head.tb {
+  --tb-x: 20px;
+}
+.fx-empty-where {
+  min-width: 0;
+  color: var(--text-3);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fx-empty-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 84px 16px 12px;
+  overflow: auto;
+}
+/* the fixed copy's row under the list (PROTOTYPE_LINE + NOT_ALL_CLEAR) */
+.fx-empty-foot {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  padding: 0 16px 14px;
+}
+.fx-empty-list {
+  display: flex;
+  flex-direction: column;
+  width: min(460px, 100%);
+  max-height: calc(100vh - 140px);
+  min-height: 0;
+  border-radius: 16px;
+  background: rgba(14, 14, 14, 0.62);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  backdrop-filter: blur(22px) saturate(140%);
+  border: 1px solid rgba(200, 200, 200, 0.16);
+}
+.fx-empty-list .mw-panel-head {
+  padding: 14px 18px 12px;
+  border-bottom-color: rgba(200, 200, 200, 0.12);
+}
+.fx-empty-list .mw-panel-head h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--m-text);
+}
+.fx-empty-text {
+  margin: 0;
+  padding: 12px 18px 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--m-text-2);
+}
+.fx-empty-actions {
+  padding: 8px 18px 6px;
+}
+.fx-empty-actions .mw-btn {
+  border-radius: 999px;
+}
+.fx-empty-card {
+  width: min(340px, 100%);
+  flex: none;
+}
+/* the no-fire bar on tablets: the back button, the logo and the centred view pill (the "Forensic · 3D analysis" words
+   ran under the pill below 1024 px) */
+@media (max-width: 1023px) {
+  .fx-empty-where,
+  .fx-empty-head .tb-sep {
+    display: none;
+  }
+}
+@media (max-width: 760px) {
+  /* phones: back and the view pill (the logo ran under the pill); 44 px touch targets (PLAN-4 decision h) */
+  .fx-empty-head.tb {
+    --tb-x: 8px;
+  }
+  .fx-empty-head .tb-brand {
+    display: none;
+  }
+  .fx-empty-head .tb-back::before {
+    content: '';
+    position: absolute;
+    inset: -5px;
+  }
+  .fx-empty-head .tb-view-btn {
+    position: relative;
+    padding: 0 12px;
+  }
+  .fx-empty-head .tb-view-btn::before {
+    content: '';
+    position: absolute;
+    inset: -6px 0;
+  }
+  .fx-empty-main {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 64px 8px 8px;
+  }
+  .fx-empty-foot {
+    padding: 0 8px 8px;
+  }
+  .fx-empty-foot > .fxc-pill {
+    border-radius: 12px;
+    font-size: 10.5px;
+  }
+  .fx-empty-main.has-card .fx-empty-list {
+    display: none;
+  }
+  .fx-empty-list,
+  .fx-empty-card {
+    width: auto;
+    max-height: none;
   }
 }
