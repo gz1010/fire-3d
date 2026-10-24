@@ -53,3 +53,7 @@ The handoff is saved in `docs/redesign/handoff-4/`:
 - **Forensic:** search for a fire, or pick a state.
 - **Globe intro page** (`Intro.dc.html`, a separate zip): a dotted globe with orbits, and zooming in hands over to the US map. Satellites use option 1: decorative orbits, with no live positions and no next-pass countdowns presented as real.
 - **Wildfire-FM** (RAI-Lab, MIT, California 5 km weights) as an alternative experimental model. Option A or B, PyTorch and two new data sources are not decided yet.
+
+## Later requests during the build
+
+- **Oct 24: a simpler selected-point marker.** "Change this pinpoint to something more simplistic" (about the teardrop pin with its boxed coordinate chip). It is now the handoff's marker: a light-blue dot with a soft halo, a hairline leader and a plain mono label (commit 9c743d1). Keep it in every view.
