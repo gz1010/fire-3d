@@ -3583,7 +3583,101 @@ Where this differs from §15.1-15.4, this paragraph is what the code does.
   gradient had to change. `__mapChrome().unobstructed` at 1440×1000 (decision m: recorded, no target): Public minimal
   0.90, Public details 0.55, Command overview 0.56. Locate-me checks 7/7.
 
-_H4: to be filled._
+**H4 (Public fire view)**, built 2026-10-24 (report `reports/brief4-h4.json`, screenshots
+`docs/screenshots/brief4-h4-*.png`, notes `progress/brief4-h4.md`). FireView.dc.html / renders/FireView.jpg on the real
+map, PLAN-4 §3.4 with decision a (option A), b, h and i. No H2 frozen file, no backend file and no HTTP contract changed.
+Where this differs from §15.1-15.4, this paragraph is what the code does.
+- *Chrome* (`ui/shell/PublicFireChrome.tsx`; layout `styles/view-public.css` under `.mw[data-view='public-fire']`):
+  the floating bar (`TopBar className="mw-header pfv-bar"`) holds the 44 px close button (X, `goToOverview()`, history
+  back when opened from the overview) left and the top-right cluster `ShowPanelsPill` · `ViewPill size="sm"` ·
+  `location/CommandSearch.tsx CommandSearch({ variant: 'pill' })` (new prop: the overview's centred `SearchBox variant="pill"`
+  opens under the title, `#pfv-search-pop[data-popover]`, same keys: "/", Escape twice, outside press) · `LayersPill` ·
+  `ui/public/FireMenu.tsx` (below 1024 px: the view switch and Layers; the shared `HeaderMenu` lists panels the fire view
+  lacks). Slots: `title` (top centre), `circle` and `facts` (left column at 48 / 88, 400 px), `imagery` (the satellite
+  status line, `ImageryChip variant="status"`, from 1280 px, under the cluster), `card` (a picked point's location
+  card, right 24, 360 px), `controls` (`MapControls variant="compact"`) above `key` (right 24, bottom 52), and the bottom
+  bar (`FixedCopy variant="bar"` + every credit, wrapping). Not mounted in Public: timeline, updates feed and toggle,
+  Analysis drawer and pill, incident picker, coordinate strip (the facts carry the reported coordinates with a copy
+  button; the card carries the picked point). `MapAtmosphere` edges "fire" and tint "fire" by default (no call). "H"
+  hides the circle, facts, card and key. CSS hides App.tsx's top `NotPreparedNotice`, the centre build card and a
+  forecast job pill in this view, and the "Skip to timeline" link (there is none; App.tsx is frozen).
+- *Pure parts* (`ui/public/fireView.ts`, tested): `fireEnd(summary, record)` (the record endpoint's latest stage, declared
+  out > controlled > contained, else the row's dated `containedLabel`), `recordActive`, `upperDay`, `fireDateLine`
+  ("JUN 28 2026 — PRESENT", "SEP 1 2025 — DECLARED OUT DEC 15 2025", or the start alone), `hazardStatus(summary, end,
+  demo, issuer, tz)` (`WILDFIRE · ACTIVE` only while the record lists it; `CONTAINED` (+ "Contained is not out") /
+  `CONTROLLED` / `DECLARED OUT` with the record's own time in the description; else `NOT LISTED AS ACTIVE`; demo
+  `SIMULATED FIRE · DEMO`), `fitName(name, measure, 256, 72, 40)`, `distanceToFire(me, { perimeter, grid, reported })`
+  (nearest edge planar in the fire's UTM grid, then geodesic; inside = 0), `distanceChipText(d, units, perimeterDay)`,
+  `perimeterKey(p, nowMs, live, tf)`, `recordFigures`, `fireFacts(input) → FactRow[]`, `factsSource(input)`; fixed words
+  `MODEL_IN_COMMAND`, `LAYERS_IN_COMMAND`, `NOT_PREPARED`, `PREPARE_LABEL`, `PREPARE_FAILED`, `PREPARE_AGAIN_LABEL`,
+  `PREPARING`, `NO_PERIMETER`, `ESTIMATE_IN_COMMAND`, `SHARE_PROMPT`.
+- *Title* (`ui/public/FireTitle.tsx`): `placeLine(summary)` 24/600 (the fire's name first for screen readers), the date
+  line mono 12 .16em, then the distance chip. Phones: place and dates small in the bar, no chip there.
+- *Hazard circle* (`ui/public/HazardCircle.tsx`, `CIRCLE_PX` 312): the screen's SVG (glow gradient, `feTurbulence` cloud
+  with drifting `baseFrequency` / `dy`, twinkling specks, grain; ids from `useId`), status words from `hazardStatus`,
+  the name fitted with canvas-measured Inter 800 (the full name is the button's name; the record's meaning its
+  description), "MORE IN COMMAND ›" → `applyView('command')`. Not active: a darker ember (CSS filter). Reduced motion:
+  no `<animate>` rendered and `pauseAnimations()`; a hidden tab pauses them (`visibilitychange`). The screen's centre
+  shade is a little taller (60 % × 38 %) and the small text has a tight dark edge, for 4.5:1 over the moving glow.
+  Sizes: 312 px; 248 px below 1280 px wide or when the prepare block shows; 232 / 200 px below 900 px high; 184 /
+  160 px below 800 px high; 120 px on phones (status on two lines).
+- *Reported point and leader* (`ui/public/ReportedPoint.tsx`): an SVG overlay (`.pfv-overlay`, z-index map + 2,
+  `aria-hidden`, no pointer events) draws the point as the screen (r 22 halo, r 12 `#ff6a2a` with a `#ffd79a` ring, r 3
+  centre) at the record's coordinates via `useMapAnchor`, and the 1.5 px leader from the circle's edge; the line is left
+  out when the point is off the map, under or within 24 px of the circle, under a panel, or when it would cross any
+  `[data-chrome]` region, the bar's items, a banner, the search pill and its list or the legend details
+  (`segmentHitsRect`); it is recomputed on map moves, chrome and safe-area changes, the search and a picked point. No
+  leader on phones (the point stays). The map's own reported ring and label are off in this view.
+- *Facts* (`ui/public/FireFacts.tsx`, `ReadoutRow`s; the reported row is the same shape with its own "Copy the reported
+  coordinates" button): Burned (ac), Contained (%), Started, Reported (3 decimals), "None in effect" / "In effect" /
+  "Starting soon" — the alert's own event name + "(NWS)" (default "Red Flag Warning (NWS)"; sub: its own end time,
+  sending office, archived copy, "a weather warning, not an evacuation order", NWS link), Evacuation zones (<state>)
+  ("Not available in this state", "None listed", the issuer's verbatim status with zone count, issuer, own time and
+  source link, "Not available for past dates", …), Local officials' alert (only while `localAlertsLine` has one: its
+  verbatim quote, sent time, channel and link), Last official update (date + clock + zone). Figures come from the
+  record endpoint (`useOfficialNow().calfire`) when it has them, else the list row; quiet states end with "not an
+  all-clear"; never "N/A". Foot (sticky when the facts scroll): OFFICIAL badge (DEMO for synthetic data) + "<record
+  issuer> · NWS · <evacuation source> · checked <age>", `NOT_ALL_CLEAR` + the record's link ("NIFC WFIGS" / "CAL
+  FIRE"). Between rows and foot, `MapDataState`: unprepared "Fire-3d has not prepared this fire's map data yet." +
+  "Prepare map data (1-3 min)" (`openFire(id, 'prepare')`), failed "… last preparation … failed." + "Prepare again",
+  building "Preparing this fire's map data (1-3 min) · <step>" with a progress bar, prepared without a perimeter
+  "Estimated burned area from satellite detections: in Command ›".
+- *Distance chip* (`ui/public/DistanceChip.tsx`): with `workspace.device` "↗ 9.2 mi | north of you" (arrow turned to the
+  bearing) and under it what it measures ("to the mapped edge, Oct 5, 2025 perimeter" / "to the reported location, not
+  its edge"; inside: "Inside | the mapped fire area"); a click `setDevice(null)`. Without it "Share your location to see
+  how far you are": only a click asks `navigator.geolocation` (`location/locate.ts` options and `LOCATE_MESSAGES`), and
+  sets `device` only (no selection, no flight). Memory only.
+- *Key* (`ui/public/FireKey.tsx`): fire-area swatch + "Latest perimeter · <source> · <its time>" (+ "(<age>)" for a live
+  fire, Stale tag after `PERIMETER_STALE_MS` 24 h), "No perimeter published yet", or "No mapped perimeter yet ·
+  reported location (<issuer>)"; the scale bar; `MapLegend({ variant: 'key' })` (the "Legend details" button and the
+  details only).
+- *Map profile* (`map/fireProfile.ts`, tested): `mapProfileOf(preset, hasFire)` 'public-fire' | 'full',
+  `PUBLIC_FIRE_HIDDEN` (observed, forecast, detections, events), `profileLayers`, `newestPerimeter`, `perimeterStale`,
+  `ringPolygons` (unlabelled rings → polygons with holes, even-odd). `mapController`: `effectiveLayers()` drive
+  visibility, rasters and vectors (the user's choices are kept for Command); in the profile the perimeter source holds
+  the newest perimeter whatever the timeline time, and the new `SRC/LYR.perimeterArea` (`fx-perimeter-area`, fill
+  `TOKENS.fireObservedFill` rgba(160,50,20,.6), in `LAYER_GROUPS.perimeters`, empty in 'full') fills it
+  (`overlayModel.perimeterArea`); `fx-aoi-*`, `fx-incident-circle` and `fx-incident-label` are hidden (`fx-incident-hit`
+  keeps the hover text). Official layers, nearby perimeters and the dimmed markers stay. `MapNotices`: no model / bundle
+  notices in the profile; leaving the area reads "<name> is out of view" with "Back to the fire". `MapLegend` follows the
+  profile (fire-area and reported swatches, `.fxm-sw-fire-area`, `.fxm-sw-reported`).
+- *Time* (`ui/public/usePublicFireTime.ts`, `publicFireTime` tested): while mounted, the time is
+  `latestObservationMs(manifest)` (live: now; past: end of record), playback stops; an asked-for time (a `?t=` link, or
+  Command's own time when the user switched) is held and given back on switching to Command in the same fire; the
+  store's opening default is not held.
+- *Card and Layers*: `LocationCard` in a fire in Public drops the model sentence, the run, the model reliability line,
+  the details' model section and model sources, and shows `ModelInCommand` ("The experimental spread model for this
+  spot is in Command ›"); `LayersPanel` hides the observed, detections, forecast and event toggles and "Forecast shown",
+  with `LAYERS_IN_COMMAND` + "Open Command ›".
+- *Phones* (decision h): bar = X, place and dates (wrapping), search, menu; a strip with the 120 px circle and the chip;
+  the facts as a bottom sheet (`.pfv-sheet`, keyed by fire) whose peek shows Burned, Contained, the official foot and
+  the map-data state; open: every row and the key; a picked point's card replaces it; the cluster gives way to the
+  card, an open sheet or drawer.
+- *Measured* (1440×1000, SwiftShader): `__mapChrome().unobstructed` Lower Sugarloaf 0.672, fixture-live 0.682, Willow
+  0.676, with a card 0.503, 1024×768 0.580, phone 0.580; composited contrast of every text run (text transparent, halos
+  kept, 90th-percentile background) ≥ 5.51:1 on Lower Sugarloaf, Eaton, Greer, Willow and fixture-live aerial. Browser
+  checks 39/39 (profile layers, newest perimeter only and filled, time, leader, search, card, Command round trips and
+  time hand-back, `?t=`, chip, hidden-tab pause, reduced motion, X back).
 
 #### H5 (Forensic) — as built
 

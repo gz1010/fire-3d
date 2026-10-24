@@ -1,0 +1,79 @@
+{
+  "step": "brief4-h4",
+  "summary": "H4 is finished: the Public fire view is rebuilt to FireView.dc.html on the real map (PLAN-4 §3.4, decisions a option A, b, h, i). Close X, centred title with the record's dates, the distance chip, the 312 px hazard circle (feTurbulence glow, drift, specks, grain; status words from the agency record only; fitted name; MORE IN COMMAND), a leader to the restyled reported point, official facts as value — LABEL rows with their own sources and times (never N/A, quiet states never an all-clear), OFFICIAL badge, NOT_ALL_CLEAR, the key ('Latest perimeter · source · its time (age)' + Stale), the 30 px bottom bar. Map profile in Public inside a fire: newest perimeter only, filled, whatever the timeline time; reported point drawn by the view; official layers, nearby perimeters and dimmed markers kept; modeled spread, observed raster, detections, AOI, events, timeline, Analysis, updates feed and picker are Command's. Time = latest observation on entry; a ?t= link or Command's own time is held and given back in Command. Search behind an icon (the overview's centred pill), the location card on the right with its model block replaced by the Command link, the Layers drawer without model toggles. Unprepared (Prepare map data), failed, building and no-perimeter states under the facts. Phones per decision h. No H2 frozen file, backend file or HTTP contract changed.",
+  "files_changed": [
+    "web/src/ui/shell/PublicFireChrome.tsx (rebuilt)",
+    "web/src/ui/public/fireView.ts (new, pure)",
+    "web/src/ui/public/fireView.test.ts (new)",
+    "web/src/ui/public/FireTitle.tsx (new)",
+    "web/src/ui/public/DistanceChip.tsx (new)",
+    "web/src/ui/public/HazardCircle.tsx (new)",
+    "web/src/ui/public/ReportedPoint.tsx (new)",
+    "web/src/ui/public/FireFacts.tsx (new)",
+    "web/src/ui/public/FireKey.tsx (new)",
+    "web/src/ui/public/FireMenu.tsx (new)",
+    "web/src/ui/public/usePublicFireTime.ts (new)",
+    "web/src/ui/public/usePublicFireTime.test.ts (new)",
+    "web/src/map/fireProfile.ts (new, pure)",
+    "web/src/map/fireProfile.test.ts (new)",
+    "web/src/map/mapController.ts (Public-fire profile: effective layers, newest perimeter + fill, AOI / reported ring hidden)",
+    "web/src/map/layers.ts (SRC/LYR perimeterArea fill layer, in LAYER_GROUPS.perimeters)",
+    "web/src/map/overlayModel.ts (TOKENS.fireObservedFill, perimeterArea)",
+    "web/src/map/MapLegend.tsx (profile-aware, variant 'key')",
+    "web/src/map/MapNotices.tsx (no model / bundle notices in the fire view; 'out of view' + Back to the fire)",
+    "web/src/map/map.css (.fxm-sw-fire-area, .fxm-sw-reported)",
+    "web/src/location/CommandSearch.tsx (variant 'pill'; Command unchanged)",
+    "web/src/location/LocationCard.tsx (Public fire: model block -> ModelInCommand)",
+    "web/src/ui/shell/LayersPanel.tsx (fire view: no model toggles, note + Open Command)",
+    "web/src/styles/view-public.css (fire view section)",
+    "docs/redesign/CONTRACT.md (15.5 H4 paragraph)",
+    "docs/redesign/progress/brief4-h4.md",
+    "docs/redesign/reports/brief4-h4.json",
+    "docs/screenshots/brief4-h4-*.png"
+  ],
+  "screenshots": [
+    "docs/screenshots/brief4-h4-public-fire-lower-sugarloaf.png",
+    "docs/screenshots/brief4-h4-fire-vs-render.png",
+    "docs/screenshots/brief4-h4-public-fire-fixture-live.png",
+    "docs/screenshots/brief4-h4-public-fire-unprepared-willow.png",
+    "docs/screenshots/brief4-h4-distance-chip.png",
+    "docs/screenshots/brief4-h4-reduced-motion.png",
+    "docs/screenshots/brief4-h4-location-card.png",
+    "docs/screenshots/brief4-h4-search.png",
+    "docs/screenshots/brief4-h4-legend-details.png",
+    "docs/screenshots/brief4-h4-public-fire-1024.png",
+    "docs/screenshots/brief4-h4-phone-fire.png",
+    "docs/screenshots/brief4-h4-phone-facts-open.png",
+    "docs/screenshots/brief4-h4-phone-unprepared-willow.png",
+    "docs/screenshots/brief4-h4-back-to-overview.png"
+  ],
+  "comparison": {
+    "fire_view_vs_render": "brief4-h4-fire-vs-render.png: same layout as renders/FireView.jpg (X top-left, place + mono dates + chip centred, 312 px circle with status / name / MORE IN COMMAND, leader to the reported point, seven value — LABEL rows between hairlines, OFFICIAL badge + sources + 'Not an all-clear. Follow local officials.' + record link, key bottom-right, 30 px bottom bar). Differences on purpose: the real map and fire (Lower Sugarloaf, a past fire: 'DECLARED OUT', darker ember), the top-right cluster (view pill, search, layers) and the satellite status line, the compact map controls, 'None in effect' / 'Not available in this state' (decision i), the key says 'Latest perimeter · source · own time' (decision i-3), the credits wrap to two lines (every text kept).",
+    "command_unchanged": "Command in a fire (fixture-live, sel) re-shot and compared with brief4-h2-command-fixture-live.png: identical apart from clock-dependent ages."
+  },
+  "measured": {
+    "unobstructed_1440x1000": {
+      "lower_sugarloaf": 0.672,
+      "fixture_live": 0.682,
+      "willow_unprepared": 0.676,
+      "with_location_card": 0.503,
+      "1024x768": 0.58,
+      "phone_390x844": 0.58
+    },
+    "contrast_min": "5.51:1 over every text run (Lower Sugarloaf with and without the chip, Eaton, Greer, Willow, fixture-live; aerial, fire tint, vignette, left gradient). 'MORE IN COMMAND' was 3.95-4.18 before the circle's taller shade and tight text edge.",
+    "browser_checks": "39/39 (scratch Playwright): hidden layers in Public and back in Command, newest perimeter only and filled, time = latest observation, leader + point, no timeline / updates / picker / drawer, facts wording, search pill centred and focused, leader steps aside for it, Escape, location card with the Command link and no model block, Command round trip with its time held and given back, ?t= applied in Command, distance chip text and toggle, location not in the URL, hidden-tab pause, reduced motion, X back to the overview."
+  },
+  "gates": "typecheck ok / lint 55 warnings, all in src/scene (none added) / tests 99 files: 1365 passed, 2 skipped, 0 failed / build ok",
+  "commits": [],
+  "known_issues": [
+    "Credits wrap in the 30 px bar (two lines at 1440 px, four at 1024 px): App.tsx (frozen) folds them behind '© Credits' only on phones and in Command below 1280 px. On 1024 x 768 the facts scroll under their sticky foot (sources and 'Not an all-clear' stay in view).",
+    "App.tsx's 'Skip to timeline' skip link has no target in the fire view; it is hidden there by CSS (App.tsx is frozen). The orchestrator may want a fire-view skip link (e.g. 'Skip to the official facts').",
+    "When a picked point's card opens, the map re-frames the fire into the smaller free area (existing safe-area padding behaviour), so the fire moves left.",
+    "The leader line is DOM over WebGL: it follows map moves per frame (useMapAnchor) but is recomputed against panels only on map moves, chrome / safe-area changes, the search and a selection; an expanded legend popover or a tooltip that appears without those can briefly overlap it.",
+    "The location card's 'What could bring fire here' still lists the wind and dryness reasons tagged MODEL (weather model data, not the spread model); only the spread model's sentence, run and model sections are replaced by the Command link.",
+    "Perimeter Stale threshold is 24 h for live fires (agency perimeters are about daily); the rest of the app's freshness rule is 6 h on the latest observation. A past fire's key shows the perimeter date without an age.",
+    "The hazard circle's feTurbulence animation repaints its filters every frame while visible (paused when the tab is hidden and under reduced motion); laptop CPU use not measured (SwiftShader only).",
+    "Contrast, unobstructed shares and screenshots were measured with SwiftShader (software rendering)."
+  ],
+  "notes_for_others": "Final check / reviewers: the fire view lives in ui/shell/PublicFireChrome.tsx + ui/public/*.tsx (pure text in ui/public/fireView.ts), styles under .mw[data-view='public-fire'] in styles/view-public.css. The map profile is map/fireProfile.ts (mapProfileOf / profileLayers / PUBLIC_FIRE_HIDDEN); mapController applies it via effectiveLayers() and keeps the user's mapLayers untouched for Command. location/CommandSearch.tsx gained an optional variant='pill' (Command passes nothing: unchanged). No H2 frozen file was changed; App.tsx's top NotPreparedNotice, the centre build card, a forecast job pill and the 'Skip to timeline' link are hidden in the fire view by CSS only. Scratch scripts (session scratchpad, not in the repo): h4-checks.mjs (39 checks), h4-contrast.mjs, h4-final-shots.mjs."
+}

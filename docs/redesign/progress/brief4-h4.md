@@ -24,3 +24,11 @@ Ports: API 8733, Vite 5193. Builder started 2026-10-24.
   LocationCard drops the model block in Public (ModelInCommand); LayersPanel hides model toggles in the fire view.
 - Screens checked (scratch): Lower Sugarloaf 1440x1000, fixture-live, Willow (unprepared, prepare button in view),
   phone 390x844.
+- Review pass on my own screens: imagery status moved under the cluster (it ran into the title), cluster + key grouped
+  bottom right (key above the controls for its legend details), prepare block kept in view (smaller circle while it
+  shows), sticky facts foot on short windows, phone bar title room, two-line status in the 120 px circle, phone sheet
+  key wraps and the cluster gives way to an open sheet, leader recomputed for the search pill, card and chrome.
+- Contrast (decision l): "MORE IN COMMAND" was 3.95-4.18:1 over the active glow; taller centre shade + tight text edge:
+  min 5.51:1 over every fire-view text run (Lower Sugarloaf +/- chip, Eaton, Greer, Willow, fixture-live).
+- Browser checks 39/39 (scratch h4-checks.mjs). Command in a fire re-shot: unchanged vs brief4-h2.
+- Final: screenshots docs/screenshots/brief4-h4-*.png (viewed), CONTRACT 15.5 "H4" paragraph, reports/brief4-h4.json.
