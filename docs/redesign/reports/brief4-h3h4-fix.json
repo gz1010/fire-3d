@@ -185,7 +185,13 @@
   "command_in_a_fire": "brief4-h3h4-fix-command-fire-unchanged.png matches brief4-h2 Command (fixture-live, sel) apart from clock-dependent ages; no Command file changed"
  },
  "gates": "typecheck ok / lint 55 warnings, all in src/scene (none added) / tests 101 files: 1383 passed, 2 skipped, 0 failed / build ok",
- "commits": [],
+ "commits": [
+  "2bf1a83 brief 4 H3+H4/H5 fixes: work-in-progress snapshot (orchestrator; most of this step's code)",
+  "b8b91db brief 4 H3+H4/H5 fixes: work-in-progress snapshot (orchestrator)",
+  "8a5755b brief 4 H3+H4/H5 fixes: work-in-progress snapshot (orchestrator; it caught a temporary debug line in LeaderLabels.tsx, removed in 695072d)",
+  "695072d brief 4 H3+H4 fix: review fixes for the Public overview and fire view (R1-R9, DF-H34-1..10)",
+  "(this commit) brief 4 H3+H4 fix: report commit list"
+ ],
  "known_issues": [
   "A phone's national overview now names no fire with a leader (no spot passes the no-crossing / short-leader rules in the few hundred pixels the lower 48 take there); the map's own labels of the candidates stay hidden below z5 as before, so the names come from the fire list (Show details).",
   "With counts colliding, some groups at the national zoom show no 'N FIRES' (the circle's size and the hover still give the count).",
