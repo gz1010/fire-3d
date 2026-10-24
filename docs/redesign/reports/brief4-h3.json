@@ -83,7 +83,8 @@
   "commits": [
     "bfd3739 brief 4 H3: work-in-progress snapshot (overview chrome, locate-me, markers, click to fire view)",
     "e6abf32 brief 4 H3: work-in-progress snapshot (leader labels, rotate hint placement, medium screens)",
-    "brief 4 H3: finished (leader labels settle, label clearance, screenshots, CONTRACT 15.5, report) (final commit)"
+    "7af3b08 brief 4 H3: finished (leader labels settle, label clearance, screenshots, CONTRACT 15.5, report)",
+    "brief 4 H3: report commit list (this commit)"
   ],
   "known_issues": [
     "Leader labels (deviation from decision e's fallback): below z5 the MapLibre labels of every leader candidate are hidden, named or not, because MapLibre cannot keep its labels clear of the DOM overlay. A large fire past the 12th or with no free spot has no name on the map until z5 (the list names every fire).",
