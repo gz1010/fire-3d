@@ -28,5 +28,16 @@ Ports: API 8732, Vite 5192.
   h2b-keys.mjs 27/27, h2-handoff-check.mjs 5/5 (the H2c script's Forensic -> map step raced the live camera;
   fixed in the script by switching in the same tick).
 
-## Next
-- Full gates, screenshots, FIRMS scan, CONTRACT merge, report, commit, push.
+- Committed 1a1239b (pushed).
+- Label corners weighted by what they hide (pinLabel.ts OVERFLOW_COST_PER_PX 3, COVERS_TEXT_COST 40,
+  COVERS_POINT_COST 15): the boolean version put the label 17 px under Command's right column at 1440 px.
+- Chart readout fix seen in the Analysis drawer: .xr-* rows are a grid, no padding, labels not upper-cased.
+- Screenshots docs/screenshots/brief4-h2-*.png (9, all viewed; Command compared with renders/CommandView.jpg, the rest
+  with before/*.jpg). __mapChrome().unobstructed recorded. FIRMS count-only scan: 0.
+- Gates green: typecheck, lint 55 (all src/scene), 1281 passed / 2 skipped, build. Backend pytest 1008 passed,
+  1 failed (test_health_lists_status_and_errors: 503 vs 404 for an unknown id, network blocked in tests; no backend
+  change in brief 4).
+- CONTRACT 15.5: one merged "H2 as built" sub-section; reports/brief4-h2.json.
+
+## Status
+H2 integration finished (final commit + push next; servers 8732 / 5192 stopped at the end).

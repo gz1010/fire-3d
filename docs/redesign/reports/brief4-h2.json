@@ -1,0 +1,70 @@
+{
+  "step": "brief4-h2",
+  "summary": "H2 integration: H2a (foundation), H2b (Command in a fire) and H2c (rotation, globe-like dimming, basemap tint) are one coherent, green whole. Nothing was left uncommitted by the three parts. The seams were already wired and were checked in the browser: Command passes MapControls variant='bar' anchor='bottom'; MapAtmosphere gets its edges per chrome from views.ts (overview / fire / command) and sets the view's tint itself (overview 'overview', fire and Command 'fire'), so no chrome calls useMapTint. Acted on the parts' notes: (1) the selected point's label now takes the corner (up-right first, then up-left, down-right, down-left) that stays inside the free map area and hides the least (the fire's label or an event label, the fire's point or an event dot), in new pure map/pinLabel.ts with tests; this fixes the label running under Command's 'Official now' column at 1440 and 1024 px and over the fire's own label; (2) Command labels the reported location '<name> / REPORTED' as the screen, Public keeps 'Reported location' (layers.ts incidentLabelField); (3) the Forensic charts' cross-hair readout and the shared ReadoutRow both used .ro-row / .ro-label and leaked into each other (no-wrap rows in Command, uppercase letter-spaced labels and extra padding in the charts readout, Forensic and the Analysis drawer); the charts' readout is now .xr-*. Browser checks (scratch Playwright): rotation 38/38 in Public, Command and the overview (incl. the text-field guard inside Command's search popover that H2c could not reach, and edges + tint per chrome), Command keys 27/27, hand-off and tint 5/5 (H2c's Forensic-to-map step raced the live Forensic camera in the script, not in the app). CONTRACT 15.5 now has one 'H2 as built' sub-section (merged and reorganised by topic, plus the integration). Gates green; FIRMS key count-only scan 0.",
+  "files_changed": [
+    "web/src/map/pinLabel.ts (new)",
+    "web/src/map/pinLabel.test.ts (new)",
+    "web/src/map/markers.ts",
+    "web/src/map/map.css",
+    "web/src/map/mapController.ts",
+    "web/src/map/layers.ts",
+    "web/src/map/layers.test.ts",
+    "web/src/ui/Charts.tsx",
+    "web/src/styles/dock.css",
+    "web/src/styles/view-command.css",
+    "docs/redesign/CONTRACT.md",
+    "docs/redesign/progress/brief4-h2.md",
+    "docs/redesign/reports/brief4-h2.json",
+    "docs/screenshots/brief4-h2-*.png"
+  ],
+  "screenshots": [
+    "docs/screenshots/brief4-h2-command-fixture-live.png",
+    "docs/screenshots/brief4-h2-command-lower-sugarloaf-aerial.png",
+    "docs/screenshots/brief4-h2-public-overview.png",
+    "docs/screenshots/brief4-h2-public-fire.png",
+    "docs/screenshots/brief4-h2-command-overview.png",
+    "docs/screenshots/brief4-h2-forensic.png",
+    "docs/screenshots/brief4-h2-rotated-2d.png",
+    "docs/screenshots/brief4-h2-phone-command.png",
+    "docs/screenshots/brief4-h2-phone-public.png"
+  ],
+  "comparison": {
+    "command_vs_render": "Command fixture-live at 1440x1000 matches renders/CommandView.jpg in layout: floating bar (back, name, LIVE, place, demo badge; view pill; status line and round icons), left readout (30 px point, DMS/UTM line, near sentence with Mapped/Stale tags, MODEL line, rows), right 'Official now' one-line rows with the foot and 'View all updates', legend chips + scale above the slim full-width timeline, fixed copy left and credits right at the bottom. Extra versus the mockup, kept on purpose: the official block at the point and the 'Record updated' row in the readout, the map controls bar bottom-left, the 'Outside modeled area' boundary.",
+    "others_vs_before": "Public overview, Public fire, Command overview and the phones keep every element of before/*.jpg; changes are the floating top bar (first row at 84 px), greys and orange, the vignette and edge gradients, and the greyer overview tint. Forensic is unchanged except the new logo."
+  },
+  "measured": {
+    "unobstructed_1440x1000": {
+      "public_overview": 0.724,
+      "public_fire_lower_sugarloaf": 0.763,
+      "command_fixture_live": 0.515,
+      "command_lower_sugarloaf": 0.514,
+      "command_overview": 0.713
+    },
+    "browser_checks": {
+      "rotation": "38/38",
+      "command_keys": "27/27",
+      "handoff_and_tint": "5/5"
+    },
+    "firms_key_scan": "0 occurrences in 1244 tracked files and 0 in the brief-4 commit diffs (count only)"
+  },
+  "gates": "typecheck ok / lint 55 warnings, all in src/scene (0 elsewhere, none added) / tests 88 files: 1281 passed, 2 skipped, 0 failed / build ok. Backend pytest: 1008 passed, 1 failed (test_health_lists_status_and_errors: an unknown fire id falls through to a WFIGS lookup that tests block and returns 503, not 404; no backend file changed in brief 4, so this depends on the local HTTP cache, not on H2)",
+  "known_issues": [
+    "Selected point label: when every corner hides something it takes the cheapest; at 1440 px on fixture-live it sits down-left over two key-event dots, at 1024 px up-left touching the readout's tag line. The fire's MapLibre label is not moved for it.",
+    "The one-time rotation hint (12 s, dismissible) opens above Command's controls bar and covers the bottom of the readout (at 1024 px the official block) until it closes. Screenshots dismiss it.",
+    "Command readout at 1440x1000 is taller than its room (official block at the point and the 'Record updated' row are not in the mockup): it scrolls with a bottom fade, so the Incident ID row (and 'More about this spot') starts below the fold on real fires.",
+    "Swapping chromes remounts the panels inside them (search text, open menus, open official rows, 'View all updates', the phone strip toggle reset when the preset changes or a fire opens or closes). The map never remounts.",
+    "OverviewChrome and PublicFireChrome still use the previous layouts and the default MapControls row (no rotate buttons in 2D; compass drag, Q / E and MapLibre gestures work). H3+H4 switches them to 'bar' / 'compact'.",
+    "Top-bar text sits on the map with a text shadow only over the overview's top gradient; dark-basemap place labels can show behind the logo and title (H3+H4).",
+    "MapLibre's 'Outside modeled area' labels can show faintly behind Command's column text where the edge gradients thin out; the area labels are not in the selection label's cost.",
+    "Safari two-finger trackpad rotation is checked only with synthetic events; Chrome on a Mac has no rotate gesture (Ctrl/right-drag, compass drag, buttons, Q / E instead).",
+    "Contrast under the overview tint and vignette over bright aerial has not been measured yet (decision l; H3+H4).",
+    "The vignette also dims MapLibre-drawn labels and markers near the edges (part of the map picture); DOM overlays stay above it.",
+    "Backend test test_health_lists_status_and_errors fails in this container (503 instead of 404 for an unknown id, network blocked in tests); unrelated to brief 4."
+  ],
+  "notes_for_others": "H3+H4: import ReadoutRow freely - .ro-* is now only the shared row (Forensic's chart readout is .xr-*), so the Command-only overrides in view-command.css are no longer a workaround. The selection label avoids the safe area automatically (map/pinLabel.ts), so every [data-chrome] region you add with a --chrome-side keeps it clear. map/layers.ts topLayers(theme, preset?) takes the preset for the incident label; if the fire view restyles the reported point, change incidentLabelField('public'). Use MapControls variant='bar' layers (Main details) and 'compact' (minimal overview, fire view); mark new popovers data-popover. H5: Charts.tsx / dock.css readout classes are .xr-time / .xr-row / .xr-val / .xr-label / .xr-hint (renamed here, no visual change intended in Forensic beyond removing the leak). Rotation registry, compass drag and Safari gesture APIs are in CONTRACT 15.5 'H2 as built'. Scratch checks (session scratchpad, not in the repo): h2-rotate-check.mjs, h2b-keys.mjs, h2-handoff-check.mjs, h2-unobstructed.mjs, h2-pin-debug.mjs, contrast.mjs/.py.",
+  "commits": [
+    "1a1239b brief 4 H2 integration: selected-point label corners, REPORTED label in Command, readout class clash",
+    "3cd423f brief 4 H2 integration: work-in-progress snapshot (orchestrator saved the weighted label corners and the screenshots)",
+    "(this commit) brief 4 H2 integration finished: CONTRACT 15.5 'H2 as built', report, progress notes"
+  ]
+}
