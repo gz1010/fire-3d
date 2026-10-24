@@ -17,7 +17,7 @@ import { Logo } from './Logo'
 import { AnalysisMenu, SettingsMenu, ShareButton, ViewMenu } from './Menus'
 import { goToOverview } from './shell/fireActions'
 import { switchWorkspace } from './shell/handoff'
-import { BackButton, IconPill, TopBar, TopBarBrand, TopBarPlace, ViewPill } from './shell/TopBar'
+import { BackButton, IconPill, TopBar, TopBarBrand, ViewPill } from './shell/TopBar'
 import { placeLine } from './shell/topBarText'
 
 export { Logo } from './Logo'
@@ -42,7 +42,14 @@ function IncidentMeta() {
   const end = summary.mode === 'live' ? null : (summary.contained_ms ?? tr?.end_ms ?? null)
   const dates = `${fmtDayDate(start, tf.tz, { year: 'always' })} – ${end ? fmtDayDate(end, tf.tz, { year: 'always' }) : 'present'}`
   const where = [summary.location, summary.county ? `${summary.county} County` : null, summary.state ?? null].filter(Boolean).join(', ')
-  return <TopBarPlace place={place} date={dates} tip={`${where || place || summary.name} · ${fmtLatLon(summary.lat, summary.lon, 3)}`} />
+  // TopBarPlace's look (.tb-place, .tb-date), on one line on wide screens and as two lines (place over dates) where
+  // the bar is tight, so the dates stay readable beside a long name (styles/header.css)
+  return (
+    <span className="tb-place fx-place" data-tip={`${where || place || summary.name} · ${fmtLatLon(summary.lat, summary.lon, 3)}`}>
+      {place && <span className="fx-place-name">{place}</span>}
+      <span className={`tb-date${place ? ' fx-place-date' : ''}`}>{dates}</span>
+    </span>
+  )
 }
 
 function HeaderTabs() {
