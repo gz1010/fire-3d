@@ -6,8 +6,12 @@
 // the freshness line and "Official details and all updates", which expands the panel to the full block and the feed.
 // Command and the expanded panel show the full block. Phones: a bottom sheet opened from the header's labelled
 // "Updates" button, always the full block.
+// Brief 4, Command on wider screens (CommandView.dc.html; PLAN-4 §3.2): no panel, the right column floats on the map's
+// right edge gradient: "Official now" as one-line rows that expand (OfficialNow variant "command"), its foot, and "View
+// all updates", which opens the column into a glass panel with the same rows, the data status (every source's time)
+// and the updates feed, scrollable. Phones keep the Updates sheet (with Command's rows).
 import { ChevronDown, ChevronRight, ChevronUp, Clock, Flag, ListChecks, Megaphone, ShieldAlert, TriangleAlert, X } from 'lucide-react'
-import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useOfficialNow } from '../../official/hooks'
 import { useStore } from '../../state/store'
@@ -185,6 +189,74 @@ function OfficialSummary() {
   )
 }
 
+/** Command, wider screens: the right column (no panel) or, after "View all updates", the glass panel with the data
+ *  status and the feed. Focus follows the switch: into the panel's heading, back to "View all updates". */
+function CommandUpdates({ children, heading }: { children: ReactNode; heading: RefObject<HTMLHeadingElement | null> }) {
+  const setPanel = useWorkspace((s) => s.setPanel)
+  const [expanded, setExpanded] = useState(false)
+  const viewAll = useRef<HTMLButtonElement | null>(null)
+  const focusNext = useRef<'heading' | 'view-all' | null>(null)
+  useEffect(() => {
+    const t = focusNext.current
+    focusNext.current = null
+    if (t === 'heading') heading.current?.focus({ preventScroll: true })
+    else if (t === 'view-all') viewAll.current?.focus({ preventScroll: true })
+  }, [expanded, heading])
+  const toggle = (open: boolean) => {
+    const a = document.activeElement
+    if (a instanceof HTMLElement && a.closest('.mw-updates-panel')) focusNext.current = open ? 'heading' : 'view-all'
+    setExpanded(open)
+  }
+  const collapse = (
+    <button type="button" className="mw-link-btn cmd-hide" aria-label="Collapse updates panel" data-tip="Hide this column (the Updates button brings it back)" aria-expanded={true} onClick={() => setPanel('updates', false)}>
+      Hide
+    </button>
+  )
+  if (!expanded)
+    return (
+      <section className="mw-updates-panel is-column" aria-labelledby="mw-updates-title" data-drawer="updates">
+        <h2 id="mw-updates-title" className="mw-sr-only" ref={heading} tabIndex={-1}>
+          Incident updates
+        </h2>
+        <OfficialNow variant="command" />
+        <div className="cmd-col-foot">
+          <button ref={viewAll} type="button" className="mw-link-btn cmd-view-all" aria-expanded={false} onClick={() => toggle(true)}>
+            View all updates
+            <ChevronRight size={12} aria-hidden="true" />
+          </button>
+          {collapse}
+        </div>
+      </section>
+    )
+  return (
+    <section className="mw-updates-panel is-expanded is-command-panel" aria-labelledby="mw-updates-title" data-drawer="updates">
+      <header className="mw-panel-head">
+        <h2 id="mw-updates-title" ref={heading} tabIndex={-1}>
+          Incident updates
+        </h2>
+        <button type="button" className="mw-link-btn mw-panel-more" aria-expanded={true} onClick={() => toggle(false)}>
+          Show fewer
+          <ChevronUp size={13} />
+        </button>
+        {collapse}
+      </header>
+      <div className="mw-updates-scroll">
+        <div className="mw-official-slot">
+          <OfficialNow variant="command" />
+        </div>
+        <DataStatus />
+        <div className="mw-updates-body">{children}</div>
+      </div>
+      <footer className="mw-panel-foot">
+        <button type="button" className="mw-link-btn" aria-expanded={true} onClick={() => toggle(false)}>
+          Show fewer updates
+          <ChevronUp size={13} />
+        </button>
+      </footer>
+    </section>
+  )
+}
+
 export function UpdatesPanel({ children }: { children: ReactNode }) {
   const open = useWorkspace((s) => s.panels.updates)
   const setPanel = useWorkspace((s) => s.setPanel)
@@ -203,6 +275,7 @@ export function UpdatesPanel({ children }: { children: ReactNode }) {
       </button>
     )
   }
+  if (command && !narrow) return <CommandUpdates heading={heading}>{children}</CommandUpdates>
   return (
     <section className={`mw-updates-panel${expanded ? ' is-expanded' : ''}${compact ? ' is-compact' : ''}`} aria-labelledby="mw-updates-title" data-drawer="updates">
       <span className="mw-sheet-handle" aria-hidden="true" />
@@ -240,20 +313,12 @@ export function UpdatesPanel({ children }: { children: ReactNode }) {
           <OfficialSummary />
         ) : (
           <div className="mw-official-slot">
-            <OfficialNow />
+            <OfficialNow variant={command ? 'command' : 'panel'} />
           </div>
         )}
         {command ? <DataStatus /> : !compact && <Freshness defaultOpen={!narrow} />}
         {!compact && <div className="mw-updates-body">{children}</div>}
       </div>
-      {!narrow && command && (
-        <footer className="mw-panel-foot">
-          <button type="button" className="mw-link-btn" aria-expanded={expanded} onClick={() => setExpanded((e) => !e)}>
-            {expanded ? 'Show fewer updates' : 'View all updates'}
-            {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-          </button>
-        </footer>
-      )}
     </section>
   )
 }

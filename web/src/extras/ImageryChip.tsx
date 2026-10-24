@@ -3,8 +3,11 @@
 // NOAA-21 · Oct 17, 14:30 PDT (18 h ago) · 375 m"); one click shows it on the map, and while an image is shown a
 // caption gives its platform, time, age, pixel size, cloud cover and "not live". "More images" opens the image list.
 // Recent satellite images are archived snapshots, never live imagery.
+// Brief 4: `variant="status"` is the same chip as the top bar's mono status line ("VIIRS NOAA-21 · 375 M · 6.2 H AGO",
+// the age amber when a live image is older than the timeline's stale threshold), with the same actions: the line shows
+// or hides the image, the small chevron opens "More images", the caption is the same.
 import { ChevronDown, Satellite, X } from 'lucide-react'
-import { useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react'
+import { Fragment, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../state/store'
@@ -16,6 +19,8 @@ import { ImageryPanel } from './ImageryPanel'
 import { forIncident } from '../official/guard'
 import { chooseCaptionPlacement } from './placement'
 import { useExtrasRuntime } from './runtime'
+import { statusSegments } from '../ui/shell/topBarText'
+import { STALE_AFTER_MS } from '../ui/timeline/model'
 
 /** Fixed position of the caption next to the chip, re-measured when the chrome changes (safe insets, panels) or the
  *  window resizes; hidden until measured. */
@@ -50,7 +55,9 @@ function useCaptionStyle(open: boolean, chip: RefObject<HTMLElement | null>, cap
   return pos ? { left: pos.left, top: pos.top } : { left: -9999, top: 0, visibility: 'hidden' }
 }
 
-export function ImageryChip() {
+export type ImageryChipVariant = 'chip' | 'status'
+
+export function ImageryChip({ variant = 'chip' }: { variant?: ImageryChipVariant } = {}) {
   const now = useNow(60_000)
   const st = useStore(
     useShallow((s) => ({
@@ -65,7 +72,7 @@ export function ImageryChip() {
   const [open, setOpen] = useState(false)
   const [details, setDetails] = useState(false)
   const more = useRef<HTMLButtonElement | null>(null)
-  const chipRef = useRef<HTMLDivElement | null>(null)
+  const chipRef = useRef<HTMLElement | null>(null)
   const captionRef = useRef<HTMLDivElement | null>(null)
   const captionOpen = !!st.incidentId && on && !!rt.product && forIncident(rt.imgs.data, st.incidentId) != null
   const captionStyle = useCaptionStyle(captionOpen, chipRef, captionRef)
@@ -98,37 +105,56 @@ export function ImageryChip() {
   const caption = shown ? imageryCaption(shown, refMs, st.live) : null
   const timing = shown ? imageryTiming(shown, refMs, st.startedMs, st.live) : null
 
+  const label = `${text}. ${shown ? 'Hide the satellite image' : newest ? 'Show it on the map' : 'See the satellite images listed'}`
+  const tip = shown ? 'Hide the satellite image' : newest ? `${text}. Show it on the map (an archived snapshot, not live)` : 'See the satellite images listed for this area'
+  // the bar's status line: platform · pixel size · age (amber when a live image is older than the stale threshold)
+  const statusParts = parts ? [parts.platform, parts.pixel, parts.age] : [text]
+  const staleFrom = parts && newest && st.live && refMs - newest.acquired_ms > STALE_AFTER_MS ? 2 : undefined
+  const segs = statusSegments(statusParts, staleFrom)
+
   return (
-    <div className="xs-chipbox">
-      <div ref={chipRef} className={`xs-chip ${shown ? 'is-on' : ''}`}>
-        <button
-          type="button"
-          className="xs-chip-main"
-          aria-pressed={!!shown}
-          onClick={show}
-          aria-label={`${text}. ${shown ? 'Hide the satellite image' : newest ? 'Show it on the map' : 'See the satellite images listed'}`}
-          data-tip={shown ? 'Hide the satellite image' : newest ? `${text}. Show it on the map (an archived snapshot, not live)` : 'See the satellite images listed for this area'}
-        >
-          <Satellite size={14} aria-hidden="true" />
-          <span className="xs-chip-label">Satellite</span>
-          {parts ? (
-            <span className="xs-chip-text" aria-hidden="true">
-              <span className="xs-chip-keep">
-                newest {parts.age} · {parts.pixel}
+    <div className={variant === 'status' ? 'xs-statusbox' : 'xs-chipbox'}>
+      {variant === 'status' ? (
+        <span ref={chipRef} className={`xs-status${shown ? ' is-on' : ''}`}>
+          <button type="button" className="tb-status is-button xs-status-main" aria-pressed={!!shown} onClick={show} aria-label={label} data-tip={tip}>
+            <Satellite size={12} aria-hidden="true" className="xs-status-icon" />
+            <span aria-hidden="true">
+              {segs.map((seg, i) => (
+                <Fragment key={i}>
+                  {i > 0 && <span className="tb-status-sep"> · </span>}
+                  <span className={seg.stale ? 'is-stale' : undefined}>{seg.text}</span>
+                </Fragment>
+              ))}
+            </span>
+          </button>
+          <button ref={more} type="button" className="xs-status-more" aria-expanded={open} aria-haspopup="dialog" aria-label="More satellite images" data-tip="More images" onClick={() => setOpen((o) => !o)}>
+            <ChevronDown size={13} aria-hidden="true" />
+          </button>
+        </span>
+      ) : (
+        <div ref={chipRef as RefObject<HTMLDivElement | null>} className={`xs-chip ${shown ? 'is-on' : ''}`}>
+          <button type="button" className="xs-chip-main" aria-pressed={!!shown} onClick={show} aria-label={label} data-tip={tip}>
+            <Satellite size={14} aria-hidden="true" />
+            <span className="xs-chip-label">Satellite</span>
+            {parts ? (
+              <span className="xs-chip-text" aria-hidden="true">
+                <span className="xs-chip-keep">
+                  newest {parts.age} · {parts.pixel}
+                </span>
+                <span className="xs-chip-plat">&nbsp;· {parts.platform}</span>
+                <span className="xs-chip-time">&nbsp;· {parts.time}</span>
               </span>
-              <span className="xs-chip-plat">&nbsp;· {parts.platform}</span>
-              <span className="xs-chip-time">&nbsp;· {parts.time}</span>
-            </span>
-          ) : (
-            <span className="xs-chip-text" aria-hidden="true">
-              {text}
-            </span>
-          )}
-        </button>
-        <button ref={more} type="button" className="xs-chip-more" aria-expanded={open} aria-haspopup="dialog" aria-label="More satellite images" data-tip="More images" onClick={() => setOpen((o) => !o)}>
-          <ChevronDown size={14} aria-hidden="true" />
-        </button>
-      </div>
+            ) : (
+              <span className="xs-chip-text" aria-hidden="true">
+                {text}
+              </span>
+            )}
+          </button>
+          <button ref={more} type="button" className="xs-chip-more" aria-expanded={open} aria-haspopup="dialog" aria-label="More satellite images" data-tip="More images" onClick={() => setOpen((o) => !o)}>
+            <ChevronDown size={14} aria-hidden="true" />
+          </button>
+        </div>
+      )}
       {caption &&
         shown &&
         createPortal(

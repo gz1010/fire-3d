@@ -1112,14 +1112,9 @@
 }
 
 /* ------------------------------------------------------------------------------------------------ compact header */
-/* the place only where it gets a readable width (Command's bar also holds the identifier from 1280 px) */
+/* the place only where it gets a readable width */
 @media (max-width: 1179px) {
   .mw-header .tb-place {
-    display: none;
-  }
-}
-@media (max-width: 1439px) {
-  .mw[data-view='command-fire'] .mw-header .tb-place {
     display: none;
   }
 }

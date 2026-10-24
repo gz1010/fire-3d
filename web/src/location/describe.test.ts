@@ -112,6 +112,9 @@ describe('card summary: four short blocks', () => {
     const ins = card({ forecast: f, perimeters: [p], rasters: makeRasters({ ...obs, ...fc(1, 24, 24, 24) }), timeMs: ORIGIN + 30 * HOUR })
     expect(ins.summary.near).toMatchObject({ text: 'Inside the mapped fire area', kind: 'Mapped', burned: `Burned around ${at(ORIGIN + 12 * HOUR)} (estimate)` })
     expect(ins.summary.near.sub).toBe(`${distance(1000, 'us').text} from the edge · mapped ${at(p.t_ms)} (10 h before the selected time)`)
+    // brief 4 (Command readout): the same parts, apart; `sub` stays their joined sentence
+    expect(c.summary.near).toMatchObject({ edge: null, basis: `mapped ${at(p.t_ms)} (10 h before the selected time)`, staleFor: null })
+    expect(ins.summary.near).toMatchObject({ edge: `${distance(1000, 'us').text} from the edge`, basis: `mapped ${at(p.t_ms)} (10 h before the selected time)` })
   })
   it('block 3, the model as a dated sentence in Public, the figure in Command', () => {
     const zero = card({ forecast: f, rasters: makeRasters(fc(0, NEVER, NEVER, NEVER)) })
@@ -219,6 +222,9 @@ describe('updated and reliability (block 4)', () => {
     const old = describeLocation(checkLocation(input(live, pt, { nowMs: ORIGIN + 57 * HOUR })), { ...US, mode: 'live', nowMs: ORIGIN + 57 * HOUR })
     expect(old.summary.reliability[0]).toMatchObject({ stale: true, text: `Latest fire observation ${at(ORIGIN + 40 * HOUR)} (17 h ago)` })
     expect(old.summary.near.stale).toBe(true)
+    // the readout's Stale tag says how old the latest observation is
+    expect(old.summary.near.staleFor).toBe('17 h')
+    expect(fresh.summary.near.staleFor).toBeNull()
   })
   it('replay: the fire as of the selected time, the re-run date with its year', () => {
     const c = card({ forecast: f, rasters: makeRasters(fc(0.5, 30, 40, 50)) })

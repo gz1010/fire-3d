@@ -12,9 +12,15 @@ export interface PopoverBox {
 interface SearchUi {
   popover: PopoverBox | null
   setPopover: (box: PopoverBox | null) => void
+  /** Brief 4, Command: the search sits behind the top bar's "Check an address" button (location/CommandSearch.tsx);
+   *  true while its popover is open. Other layouts show the box all the time and ignore it. */
+  searchOpen: boolean
+  setSearchOpen: (open: boolean) => void
 }
 
 export const useSearchUi = create<SearchUi>()((set) => ({
+  searchOpen: false,
+  setSearchOpen: (open) => set((s) => (s.searchOpen === open ? s : { searchOpen: open })),
   popover: null,
   setPopover: (box) =>
     set((s) => {

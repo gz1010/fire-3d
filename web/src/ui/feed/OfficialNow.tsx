@@ -6,8 +6,13 @@
 // Extras (agencies, county maps, recording notes, ended alerts) sit behind each row's "More". Shown whatever the map
 // layers show; "Show" fits and highlights the official area. Official wording is verbatim, and the block never mixes
 // in observations, estimates or model output.
-import { ChevronDown, ExternalLink, Flag, Landmark, MapPinned, Megaphone, ShieldAlert, TriangleAlert } from 'lucide-react'
-import { useMemo, useState, type ReactNode } from 'react'
+// Brief 4 (Command, CommandView.dc.html; decision i-6): `variant="command"` shows each row as one line that expands: a
+// status dot, "Label — verdict" and a mono meta line with the issuer, the item's own time and when it was checked; open,
+// the row shows today's body unchanged (verbatim wording, links, "Show", "More"). Rows with an evacuation order or
+// warning, a local officials' alert or an NWS alert in effect start open. The header says which zone the times are in;
+// the foot adds "Not an all-clear. Follow local officials.".
+import { ChevronDown, ChevronRight, ExternalLink, Flag, Landmark, MapPinned, Megaphone, ShieldAlert, TriangleAlert } from 'lucide-react'
+import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { DEFAULT_MARGIN_KM } from '../../extras/client'
 import { agoText, fmtWhen } from '../../extras/format'
@@ -35,10 +40,11 @@ import { alertTimeFmt } from '../../official/fireWeather'
 import { useOfficialRuntime } from '../../official/runtime'
 import { showOfficialArea } from '../../official/select'
 import { useStore } from '../../state/store'
-import { fmtAt, localYear, recordYearMode, zoneLine } from '../../lib/time'
+import { fmtAt, localYear, recordYearMode, zoneAbbr, zoneLine } from '../../lib/time'
 import { useTimeFormat, useZoneSource } from '../../state/timeZone'
 import { useWorkspace } from '../../state/workspace'
 import { useNow } from '../hooks'
+import { NOT_ALL_CLEAR } from '../shell/fixedCopy'
 import { NOT_AN_ORDER } from './feedMeta'
 
 function SourceLink({ href, children }: { href: string | null | undefined; children: ReactNode }) {
@@ -53,7 +59,34 @@ function SourceLink({ href, children }: { href: string | null | undefined; child
 
 type Tone = 'alert' | 'quiet' | 'muted' | 'info'
 
-function Row({ icon, label, source, tone, aside, more, children }: { icon: ReactNode; label: string; source: string | null; tone: Tone; aside?: ReactNode; more?: ReactNode; children: ReactNode }) {
+/** How the rows are drawn: the panel's blocks (default), or Command's one-line rows that expand (brief 4). */
+export type OfficialNowVariant = 'panel' | 'command'
+const RowsVariant = createContext<OfficialNowVariant>('panel')
+
+interface RowProps {
+  icon: ReactNode
+  label: string
+  source: string | null
+  tone: Tone
+  aside?: ReactNode
+  more?: ReactNode
+  children: ReactNode
+  /** Command: the collapsed line's title when it differs from `label` ("CAL FIRE incident record"). */
+  title?: string
+  /** Command: the collapsed line's verdict after the title ("none listed within 15 km of this fire"). */
+  verdict?: string
+  /** Command: the collapsed line's meta: issuer · the item's own time · checked. */
+  meta?: string
+  /** Command: the row starts open (an order or warning, a local alert or an NWS alert in effect; decision i-6). */
+  startOpen?: boolean
+}
+
+function Row(p: RowProps) {
+  const variant = useContext(RowsVariant)
+  return variant === 'command' ? <CommandRow {...p} /> : <PanelRow {...p} />
+}
+
+function PanelRow({ icon, label, source, tone, aside, more, children }: RowProps) {
   const [open, setOpen] = useState(false)
   return (
     <li className={`on-row is-${tone}`}>
@@ -79,10 +112,56 @@ function Row({ icon, label, source, tone, aside, more, children }: { icon: React
   )
 }
 
+/** Command: "● Label — verdict" + meta on one button; open, today's body (wording, links, Show, More). A row that turns
+ *  into an alert while shown opens by itself once; the user's own close is kept until then. */
+function CommandRow({ label, source, tone, aside, more, children, title, verdict, meta, startOpen = false }: RowProps) {
+  const [open, setOpen] = useState(startOpen)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const wasAlert = useRef(startOpen)
+  useEffect(() => {
+    if (startOpen && !wasAlert.current) setOpen(true)
+    wasAlert.current = startOpen
+  }, [startOpen])
+  const id = useId()
+  return (
+    <li className={`on-row is-${tone} is-line${open ? ' is-open' : ''}`}>
+      <button type="button" className="on-row-toggle" aria-expanded={open} aria-controls={id} onClick={() => setOpen((o) => !o)}>
+        <span className="on-dot" aria-hidden="true" />
+        <span className="on-row-sum">
+          <span className="on-row-title">
+            <strong>{title ?? label}</strong>
+            {verdict ? ` — ${verdict}` : null}
+          </span>
+          {(meta ?? source) && <span className="on-row-meta">{meta ?? source}</span>}
+        </span>
+        <ChevronRight size={12} aria-hidden="true" className="on-row-chev" />
+      </button>
+      {open && (
+        <div className="on-row-body" id={id}>
+          {children}
+          {(aside || more) && (
+            <div className="on-row-actions">
+              {aside}
+              {more && (
+                <button type="button" className="on-more" aria-expanded={moreOpen} onClick={() => setMoreOpen((o) => !o)}>
+                  {moreOpen ? 'Less' : 'More'}
+                  <ChevronDown size={11} aria-hidden="true" className={moreOpen ? 'is-open' : undefined} />
+                </button>
+              )}
+            </div>
+          )}
+          {more && moreOpen && <div className="on-extra">{more}</div>}
+        </div>
+      )}
+    </li>
+  )
+}
+
 const checked = (ms: number | null | undefined, wallMs: number): string | null => (ms != null ? `checked ${agoText(ms, wallMs)}` : null)
 const join = (parts: (string | null | undefined | false)[]) => parts.filter(Boolean).join(' · ')
 
 const capital = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s)
+const lowerFirst = (s: string) => (s ? s[0].toLowerCase() + s.slice(1) : s)
 
 /** A reason as one sentence before "Follow local officials." (never said twice, always with its full stop). */
 function reasonSentence(reason: string | null | undefined): string {
@@ -131,13 +210,13 @@ function EvacuationRow({ e, nowMs, wallMs, metric }: { e: EvacuationOfficial; no
   ) : null
   if (e.state === 'loading')
     return (
-      <Row icon={icon} label={label} source={source} tone="muted">
+      <Row icon={icon} label={label} source={source} tone="muted" verdict="checking…">
         <p className="on-line">Checking official evacuation zones…</p>
       </Row>
     )
   if (e.state === 'past-date')
     return (
-      <Row icon={icon} label={label} source={source} tone="muted">
+      <Row icon={icon} label={label} source={source} tone="muted" verdict="not available for past dates" meta={`${who} · current status only · follow local officials`}>
         <p className="on-line">
           <strong>Not available for past dates.</strong> {who} {who.includes(' and ') ? 'publish' : 'publishes'} current status only. Follow local officials.
         </p>
@@ -145,7 +224,14 @@ function EvacuationRow({ e, nowMs, wallMs, metric }: { e: EvacuationOfficial; no
     )
   if (e.state === 'not-available')
     return (
-      <Row icon={icon} label={label} source={null} tone="muted">
+      <Row
+        icon={icon}
+        label={label}
+        source={null}
+        tone="muted"
+        verdict={e.notAvailableIn && e.notAvailableIn.length ? `zones not available in ${e.notAvailableIn.length === 1 ? e.notAvailableIn[0] : e.notAvailableIn.join(', ')}` : 'zones not available here'}
+        meta="Follow local officials"
+      >
         <p className="on-line">
           {e.notAvailableIn && e.notAvailableIn.length ? (
             // CONTRACT §14.14 (full form)
@@ -159,7 +245,15 @@ function EvacuationRow({ e, nowMs, wallMs, metric }: { e: EvacuationOfficial; no
     )
   if (e.state === 'unavailable' || e.state === 'not-checked')
     return (
-      <Row icon={icon} label={label} source={e.state === 'unavailable' ? source : null} tone="muted" more={counties ?? undefined}>
+      <Row
+        icon={icon}
+        label={label}
+        source={e.state === 'unavailable' ? source : null}
+        tone="muted"
+        more={counties ?? undefined}
+        verdict={e.state === 'unavailable' ? 'unavailable right now' : 'not checked'}
+        meta={join([e.state === 'unavailable' ? who : null, 'follow local officials'])}
+      >
         <p className="on-line">
           <strong>{e.state === 'unavailable' ? 'Unavailable right now.' : 'Not checked.'}</strong> {reasonSentence(e.reason)}Follow local officials.
         </p>
@@ -172,6 +266,8 @@ function EvacuationRow({ e, nowMs, wallMs, metric }: { e: EvacuationOfficial; no
         label={label}
         source={source}
         tone="quiet"
+        verdict={`none listed within ${DEFAULT_MARGIN_KM.evacuations} km of this fire`}
+        meta={join([updates.some(Boolean) ? null : who, ...updates, checked(e.checkedMs, wallMs)])}
         aside={<SourceLink href={e.sourceUrl}>Source</SourceLink>}
         more={
           counties || layerOff ? (
@@ -191,6 +287,18 @@ function EvacuationRow({ e, nowMs, wallMs, metric }: { e: EvacuationOfficial; no
   const shown = groups.slice(0, 2)
   const more = groups.length - shown.length
   const active = highlightId === id
+  // Command's collapsed line: the most urgent status verbatim, its zones and issuer, the issuer's own time
+  const top = groups[0]
+  const zoneCount = e.zones.length
+  const verdict = top ? `${top.status}${groups.length > 1 ? ` and ${groups.length - 1} more status${groups.length > 2 ? 'es' : ''}` : ''} · ${zoneCount} zone${zoneCount === 1 ? '' : 's'}` : 'zones listed'
+  const meta = top
+    ? join([
+        top.issuer,
+        top.updatedMs != null ? `updated ${fmtWhen(top.updatedMs, nowMs, tf)}` : top.listedMs != null ? `${top.listedPhrase} ${fmtWhen(top.listedMs, nowMs, tf)}` : 'no issuer time',
+        checked(e.checkedMs, wallMs),
+      ])
+    : undefined
+  const urgent = groups.some((g) => g.group === 'order' || g.group === 'warning')
   const show = e.bounds ? (
     <button type="button" className="on-btn" aria-pressed={active} onClick={() => showOfficialArea({ kind: 'evacuation', id, zoneIds: e.zones.map((z) => z.id) }, e.bounds, { toggle: true })}>
       <MapPinned size={12} aria-hidden="true" /> {active ? 'Shown' : 'Show'}
@@ -202,6 +310,9 @@ function EvacuationRow({ e, nowMs, wallMs, metric }: { e: EvacuationOfficial; no
       label={label}
       source={source}
       tone="alert"
+      verdict={verdict}
+      meta={meta}
+      startOpen={urgent}
       aside={show}
       more={
         <>
@@ -260,15 +371,24 @@ function RecordRow({ c, nowMs, wallMs, live }: { c: CalFireOfficial; nowMs: numb
     const ch = d?.current ? d.changes : null
     return ch?.length ? ch.reduce((a, b) => ((b.updated_ms ?? b.seen_ms) > (a.updated_ms ?? a.seen_ms) ? b : a)) : null
   })
+  const title = issuer === 'Agency record' ? 'Fire record' : `${label} ${source}`
   if (c.state === 'loading')
     return (
-      <Row icon={icon} label={issuer === 'Agency record' ? 'Fire record' : label} source={source} tone="muted">
+      <Row icon={icon} label={issuer === 'Agency record' ? 'Fire record' : label} source={source} tone="muted" title={title} verdict="checking…">
         <p className="on-line">Checking the agency record…</p>
       </Row>
     )
   if (c.state === 'unavailable')
     return (
-      <Row icon={icon} label={issuer === 'Agency record' ? 'Fire record' : label} source={source} tone="muted">
+      <Row
+        icon={icon}
+        label={issuer === 'Agency record' ? 'Fire record' : label}
+        source={source}
+        tone="muted"
+        title={title}
+        verdict={c.synthetic ? 'not available: synthetic or local data' : c.notChecked ? 'agency record not checked' : 'no record shown'}
+        meta={c.synthetic ? 'Demo data' : source}
+      >
         <p className="on-line">
           {c.synthetic ? (
             <strong>Not available: synthetic or local data.</strong>
@@ -300,16 +420,25 @@ function RecordRow({ c, nowMs, wallMs, live }: { c: CalFireOfficial; nowMs: numb
         {note && <p className="on-meta">{note}</p>}
       </>
     ) : undefined
+  const facts = join([
+    c.acres != null ? `${Math.round(c.acres).toLocaleString('en-US')} acres` : 'area not stated',
+    c.percentContained != null ? `${Math.round(c.percentContained)} % contained` : 'containment not stated',
+    status,
+  ])
   return (
-    <Row icon={icon} label={label} source={source} tone="info" aside={<SourceLink href={c.url}>{cf ? 'Incident page' : 'Record'}</SourceLink>} more={extra}>
+    <Row
+      icon={icon}
+      label={label}
+      source={source}
+      tone="info"
+      title={title}
+      verdict={facts}
+      meta={join([issuer, c.updatedMs != null ? fmtAt(c.updatedMs, tf, { zone: true, year: yearMode }) : 'no update time', checked(c.checkedMs, wallMs)])}
+      aside={<SourceLink href={c.url}>{cf ? 'Incident page' : 'Record'}</SourceLink>}
+      more={extra}
+    >
       <p className="on-line">
-        <strong className="on-official">
-          {join([
-            c.acres != null ? `${Math.round(c.acres).toLocaleString('en-US')} acres` : 'area not stated',
-            c.percentContained != null ? `${Math.round(c.percentContained)} % contained` : 'containment not stated',
-            status,
-          ])}
-        </strong>
+        <strong className="on-official">{facts}</strong>
       </p>
       {c.complexName && <p className="on-meta">{partOfComplex(c.complexName)}</p>}
       {c.members && c.members.length > 0 && (
@@ -357,13 +486,20 @@ function FireWeatherRow({ f, nowMs, wallMs, metric, statewide = false }: { f: Fi
   const icon = <Flag size={13} />
   if (f.state === 'loading')
     return (
-      <Row icon={icon} label={label} source={source} tone="muted">
+      <Row icon={icon} label={label} source={source} tone="muted" verdict="checking NWS alerts…">
         <p className="on-line">Checking NWS alerts…</p>
       </Row>
     )
   if (f.state === 'past-date' || f.state === 'unavailable')
     return (
-      <Row icon={icon} label={label} source={source} tone="muted">
+      <Row
+        icon={icon}
+        label={label}
+        source={source}
+        tone="muted"
+        verdict={f.state === 'past-date' ? 'not available for this time' : f.reasonCode === 'demo' || f.reasonCode === 'not_checked' ? 'not checked' : 'unavailable right now'}
+        meta={join([source, 'not an all-clear'])}
+      >
         <p className="on-line">
           <strong>{f.state === 'past-date' ? 'Not available for this time.' : f.reasonCode === 'demo' || f.reasonCode === 'not_checked' ? 'Not checked.' : 'Unavailable right now.'}</strong> {reasonSentence(f.reason)}That does not mean there were no alerts.
         </p>
@@ -382,7 +518,16 @@ function FireWeatherRow({ f, nowMs, wallMs, metric, statewide = false }: { f: Fi
   ) : undefined
   if (inEffect.length === 0)
     return (
-      <Row icon={icon} label={label} source={source} tone="quiet" aside={<SourceLink href={f.sourceUrl}>Source</SourceLink>} more={endedLines}>
+      <Row
+        icon={icon}
+        label={label}
+        source={source}
+        tone="quiet"
+        verdict={`no Red Flag Warning or Fire Weather Watch ${statewide ? `in ${scope}` : f.archived ? 'at this time' : 'in effect'}`}
+        meta={join([source, checked(f.checkedMs, wallMs), ended.length ? `${ended.length} ended in the last 48 h` : null])}
+        aside={<SourceLink href={f.sourceUrl}>Source</SourceLink>}
+        more={endedLines}
+      >
         <p className="on-line">
           <strong>
             No Red Flag Warning or Fire Weather Watch {f.archived ? 'in effect at this time' : 'in effect'} {statewide ? `in ${scope}` : 'near this fire'}.
@@ -392,12 +537,22 @@ function FireWeatherRow({ f, nowMs, wallMs, metric, statewide = false }: { f: Fi
         <p className="on-meta">{join([checked(f.checkedMs, wallMs), ended.length ? `${ended.length} ended in the last 48 h` : null])}</p>
       </Row>
     )
+  const events = [...new Set(inEffect.map((a) => (a.phase === 'upcoming' ? `${a.event} (not yet in effect)` : a.event)))]
+  const first = inEffect[0]
   return (
     <Row
       icon={icon}
       label={label}
       source={source}
       tone="alert"
+      verdict={events.join(', ')}
+      meta={join([
+        first?.senderName,
+        first?.sentMs != null ? `issued ${fmtWhen(first.sentMs, nowMs, alertTimeFmt({ time_zone: first.timeZone ?? null }, tf))}` : null,
+        first?.timeText,
+        checked(f.checkedMs, wallMs),
+      ])}
+      startOpen
       more={
         <>
           {inEffect.map((a) =>
@@ -488,13 +643,13 @@ export function LocalAlertsRow({ l: answer, wallMs, refMs }: { l: LocalAlertsOff
   )
   if (l.state === 'loading')
     return (
-      <Row icon={icon} label={label} source={source} tone="muted">
+      <Row icon={icon} label={label} source={source} tone="muted" verdict="checking…">
         <p className="on-line">Checking local officials&apos; alerts…</p>
       </Row>
     )
   if (l.state === 'not-checked' || l.state === 'unavailable')
     return (
-      <Row icon={icon} label={label} source={null} tone="muted" more={standing}>
+      <Row icon={icon} label={label} source={null} tone="muted" more={standing} verdict={l.state === 'unavailable' ? 'unavailable right now' : 'not checked'} meta="Follow local officials">
         <p className="on-line">
           <strong>{l.state === 'unavailable' ? 'Unavailable right now.' : 'Not checked.'}</strong> {reasonSentence(l.reason)}
           {l.state === 'unavailable' ? 'That does not mean there were none. ' : ''}Follow local officials.
@@ -504,7 +659,15 @@ export function LocalAlertsRow({ l: answer, wallMs, refMs }: { l: LocalAlertsOff
     )
   if (l.state === 'none')
     return (
-      <Row icon={icon} label={label} source={source} tone="quiet" more={standing}>
+      <Row
+        icon={icon}
+        label={label}
+        source={source}
+        tone="quiet"
+        more={standing}
+        verdict={lowerFirst(NONE_HERE[answeredChannelsText(l)].replace(/\.$/, ''))}
+        meta={join([source, checked(l.checkedMs, wallMs), 'not an all-clear'])}
+      >
         <p className="on-line">
           <strong>{NONE_HERE[answeredChannelsText(l)]}</strong> Not an all-clear: most local alerts are not relayed.
         </p>
@@ -513,8 +676,19 @@ export function LocalAlertsRow({ l: answer, wallMs, refMs }: { l: LocalAlertsOff
       </Row>
     )
   const shown = l.alerts.slice(0, 3)
+  const inEffectCount = l.alerts.filter((a) => a.phase === 'active').length
+  const lead = l.alerts[0]
   return (
-    <Row icon={icon} label={label} source={source} tone="alert" more={standing}>
+    <Row
+      icon={icon}
+      label={label}
+      source={source}
+      tone="alert"
+      more={standing}
+      verdict={`${l.alerts.length} message${l.alerts.length === 1 ? '' : 's'}${inEffectCount ? ` · ${inEffectCount} in effect` : ''}`}
+      meta={join([lead ? sentText(lead, tf) : null, source, checked(l.checkedMs, wallMs)])}
+      startOpen={inEffectCount > 0}
+    >
       {l.alerts.length > shown.length && (
         <p className="on-meta">{`${l.alerts.length} messages for this fire's area; in effect first, then the nearest to its reported location:`}</p>
       )}
@@ -538,9 +712,20 @@ export function LocalAlertsRow({ l: answer, wallMs, refMs }: { l: LocalAlertsOff
   )
 }
 
+/** Command's foot (decision i-8): the model is not an order, and not an all-clear: "Fire-3d's modeled spread is
+ *  experimental and is not an evacuation order. Not an all-clear. Follow local officials." */
+export const COMMAND_OFFICIAL_FOOT = `${NOT_AN_ORDER.replace(/\s*Follow local officials\.\s*$/, '')} ${NOT_ALL_CLEAR}`
+
+/** "TIMES IN MDT": which zone the times are in (the tooltip says it in full). */
+function timesIn(abbr: string, whose: 'fire' | 'place' | 'viewer'): string {
+  if (whose === 'viewer') return `Your device's time (${abbr})`
+  return whose === 'place' ? `Times in ${abbr} (local)` : `Times in ${abbr}`
+}
+
 /** The block: the open fire's official status, or on the overview the current NWS fire weather alerts of every state
- *  the answer covers (`states_checked`) with a pointer to zoom in on a fire (CONTRACT §13, §14.6). */
-export function OfficialNow() {
+ *  the answer covers (`states_checked`) with a pointer to zoom in on a fire (CONTRACT §13, §14.6). `variant="command"`:
+ *  Command's one-line rows (brief 4). */
+export function OfficialNow({ variant = 'panel' }: { variant?: OfficialNowVariant } = {}) {
   const { evacuation, fireWeather, calfire, local } = useOfficialNow()
   // "Official now · lower 48 states" only when the answer covers all 49 codes; today's California-only backend:
   // "California" (the header follows states_checked, never a hard-coded scope)
@@ -575,6 +760,33 @@ export function OfficialNow() {
         <p className="on-foot">{NOT_AN_ORDER}</p>
       </section>
     )
+  const rows = (
+    <ul className="on-rows">
+      <EvacuationRow e={evacuation} nowMs={nowMs} wallMs={wallMs} metric={metric} />
+      <RecordRow c={calfire} nowMs={nowMs} wallMs={wallMs} live={live} />
+      <FireWeatherRow f={fireWeather} nowMs={nowMs} wallMs={wallMs} metric={metric} />
+      {local && <LocalAlertsRow l={local} wallMs={wallMs} refMs={nowMs} />}
+    </ul>
+  )
+  // the replay time's abbreviation first, today's too when it differs (integration review UX-m4)
+  const zone = zoneLine(tf, nowMs, whose, wallMs)
+  if (variant === 'command') {
+    const a = zoneAbbr(nowMs, tf.tz)
+    const b = zoneAbbr(wallMs, tf.tz)
+    return (
+      <section className="on is-command" aria-labelledby="on-title">
+        <header className="on-head" data-tip="Agencies' own updates, with their wording, issuer, times and a link to the source">
+          <h3 id="on-title">Official now</h3>
+          {!live && <span className="on-head-sub">at the replay time</span>}
+          <span className="on-head-zone" data-tip={zone}>
+            {timesIn(a && b && a !== b ? `${a}/${b}` : a, whose)}
+          </span>
+        </header>
+        <RowsVariant.Provider value="command">{rows}</RowsVariant.Provider>
+        <p className="on-foot">{COMMAND_OFFICIAL_FOOT}</p>
+      </section>
+    )
+  }
   return (
     <section className="on" aria-labelledby="on-title">
       <header className="on-head" data-tip="Agencies' own updates, with their wording, issuer, times and a link to the source">
@@ -582,14 +794,8 @@ export function OfficialNow() {
         <h3 id="on-title">Official now</h3>
         {!live && <span className="on-head-sub">at the replay time</span>}
       </header>
-      <ul className="on-rows">
-        <EvacuationRow e={evacuation} nowMs={nowMs} wallMs={wallMs} metric={metric} />
-        <RecordRow c={calfire} nowMs={nowMs} wallMs={wallMs} live={live} />
-        <FireWeatherRow f={fireWeather} nowMs={nowMs} wallMs={wallMs} metric={metric} />
-        {local && <LocalAlertsRow l={local} wallMs={wallMs} refMs={nowMs} />}
-      </ul>
-      {/* the replay time's abbreviation first, today's too when it differs (integration review UX-m4) */}
-      <p className="on-meta">{zoneLine(tf, nowMs, whose, wallMs)}</p>
+      {rows}
+      <p className="on-meta">{zone}</p>
       <p className="on-foot">{NOT_AN_ORDER}</p>
     </section>
   )

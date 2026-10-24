@@ -5,6 +5,13 @@
 // Keyboard: the track is a slider (←/→ 1 h, Shift 6 h, PgUp/PgDn 24 h, Home/End, Space play/pause); stops and the
 // forecast details are buttons. Playback runs in state/runtime.ts (usePlayback); the time lives in the main store.
 // Public uses plain words ("model re-run on past weather", no run id); Command keeps "hindcast" and the run id.
+// Brief 4 (Command, CommandView.dc.html; PLAN-4 §3.2): `variant="slim"` is the same timeline without a card, full
+// width: a 40 px play button; above the track one mono line with the forecast issue time (the forecast details
+// button) and the current time, or the replay's dates, and on the right what each part of the track is; the time shown
+// in mono above the handle with what it is (observed, latest observation, forecast +24 h); the track (past solid
+// orange, forecast dashed amber, unavailable hours dotted, key-event markers, day ticks, the current-time mark), the
+// handle orange with an amber ring when the data at that time is stale; under it the stops as mono labels (the record's
+// first day, LATEST <time> · <age> (+ STALE), +24H, +48H, +72H), disabled with their reasons. Same keys and parts.
 import { Info, Pause, Play, TriangleAlert } from 'lucide-react'
 import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent as RKeyboardEvent, type PointerEvent as RPointerEvent, type RefObject } from 'react'
 import { useShallow } from 'zustand/react/shallow'
@@ -41,7 +48,9 @@ const PAD = 10
 const LANE_Y = 15
 const TRACK_H = 26
 
-export function CompactTimeline() {
+export type TimelineVariant = 'card' | 'slim'
+
+export function CompactTimeline({ variant = 'card' }: { variant?: TimelineVariant } = {}) {
   const st = useStore(
     useShallow((s) => ({
       manifest: s.manifest?.status === 'ready' ? s.manifest : null,
@@ -63,14 +72,15 @@ export function CompactTimeline() {
   )
   const markers = useMemo(() => (st.manifest ? buildFeedItems({ manifest: st.manifest, events: st.events?.events ?? [], annotations: notes, tf }) : []), [st.manifest, st.events, notes, tf])
 
+  const slim = variant === 'slim'
   if (!model)
     return (
-      <section className="ctl is-empty" aria-label="Timeline">
+      <section className={`ctl is-empty${slim ? ' is-slim' : ''}`} aria-label="Timeline">
         <span className="ctl-empty">{st.loading ? 'Loading the timeline…' : 'The timeline appears once the incident data is ready.'}</span>
       </section>
     )
   return (
-    <section className={`ctl mode-${model.mode} ${command ? 'is-command' : ''}`} aria-label="Timeline">
+    <section className={`ctl mode-${model.mode} ${command ? 'is-command' : ''}${slim ? ' is-slim' : ''}`} aria-label="Timeline">
       <button
         type="button"
         className={`ctl-play ${st.playing ? 'is-playing' : ''}`}
@@ -80,7 +90,7 @@ export function CompactTimeline() {
       >
         {st.playing ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
       </button>
-      <TimelineBody model={model} markers={markers} command={command} forecast={st.forecast} />
+      {slim ? <SlimBody model={model} markers={markers} command={command} forecast={st.forecast} /> : <TimelineBody model={model} markers={markers} command={command} forecast={st.forecast} />}
     </section>
   )
 }
@@ -307,7 +317,9 @@ function Thumb({ model, scale, w }: { model: CompactTimelineModel; scale: TrackS
   const t = useStore((s) => s.timeMs)
   const kind = describeTime(model, t).currentKind
   const inside = t >= model.startMs && t <= model.trackEndMs
-  return <span className={`ctl-thumb is-${kind} ${inside ? '' : 'is-out'}`} style={{ left: xAt(scale, w, t), top: LANE_Y }} aria-hidden="true" />
+  // the data shown at this time is stale (live, the latest observation older than the threshold): amber ring (slim)
+  const stale = kind === 'observation' && model.stale.isStale
+  return <span className={`ctl-thumb is-${kind} ${inside ? '' : 'is-out'}${stale ? ' is-stale' : ''}`} style={{ left: xAt(scale, w, t), top: LANE_Y }} aria-hidden="true" />
 }
 
 /** Greedy de-overlap of marker x positions (min spacing), re-centred per cluster. */
@@ -589,5 +601,197 @@ function Freshness({ model }: { model: CompactTimelineModel }) {
         Current time <time dateTime={new Date(wall).toISOString()}>{fmt(wall)}</time>
       </span>
     </span>
+  )
+}
+
+// ------------------------------------------------------------------------------------------------- slim (Command)
+function SlimBody({ model, markers, command, forecast }: { model: CompactTimelineModel; markers: FeedItem[]; command: boolean; forecast: ForecastManifest | null }) {
+  const [ref, size] = useElementSize<HTMLDivElement>()
+  const scale = useMemo(() => trackScale(model), [model])
+  const w = size.width
+  return (
+    <div className="ctl-body" ref={ref}>
+      <span id="ctl-track-help" className="ctl-sr">
+        Arrow keys move one hour (Shift: six hours), Page Up and Page Down move a day, Home and End jump to the ends, Space plays or pauses.
+      </span>
+      <SlimTop model={model} forecast={forecast} command={command} />
+      {w > 60 && (
+        <>
+          <HandleLabel model={model} scale={scale} w={w} command={command} />
+          <Track model={model} scale={scale} w={w} markers={markers} command={command} />
+          <SlimStops model={model} scale={scale} w={w} />
+        </>
+      )}
+    </div>
+  )
+}
+
+/** The line above the track: forecast issue time (the details button) · current time, or the replay's dates; what
+ *  each part of the track is on the right. */
+function SlimTop({ model, forecast, command }: { model: CompactTimelineModel; forecast: ForecastManifest | null; command: boolean }) {
+  const minute = useStore((s) => Math.floor(s.timeMs / 60_000))
+  const tf = useTimeFormat()
+  const live = model.mode === 'live'
+  const fc = model.forecast
+  const wall = model.wallClockMs
+  return (
+    <div className="ctl-top">
+      <span className="ctl-top-left">
+        {fc && forecast ? (
+          <ForecastInfo model={model} forecast={forecast} t={minute * 60_000} command={command} />
+        ) : (
+          <span className="ctl-fcinfo is-missing">{model.forecastStatus === 'none' && !live ? (command ? 'No hindcast run for this fire' : 'No model re-run for this fire') : (FORECAST_STATE[model.forecastStatus] ?? '')}</span>
+        )}
+        {live ? (
+          <span className="ctl-clock" data-tip="The actual current time; the blue dotted mark on the track shows where it falls">
+            <svg className="ctl-clock-glyph" width="6" height="12" aria-hidden="true" focusable="false">
+              <line x1="3" x2="3" y1="0" y2="9" />
+              <circle cx="3" cy="10" r="2" />
+            </svg>
+            Now <time dateTime={new Date(wall).toISOString()}>{fmtClock(wall, tf, { zone: true })}</time>
+          </span>
+        ) : (
+          <span className="ctl-replay">
+            Historical replay · {fmtDayDate(model.startMs, tf.tz, { year: 'always' })} – {fmtDayDate(model.latestObservationMs, tf.tz, { year: 'always' })}
+          </span>
+        )}
+      </span>
+      <SlimZones model={model} command={command} />
+    </div>
+  )
+}
+
+/** What each part of the track is (the zone labels): observations solid, the forecast / hindcast dashed, hours the
+ *  forecast does not cover dotted. */
+function SlimZones({ model, command }: { model: CompactTimelineModel; command: boolean }) {
+  const live = model.mode === 'live'
+  const fc = model.forecast
+  return (
+    <span className="ctl-zones-key" aria-label="Timeline parts">
+      <span className="ctl-zone is-obs">
+        <KindGlyph kind="observation" />
+        Observations
+      </span>
+      {fc && (
+        <span className="ctl-zone is-fc">
+          <KindGlyph kind="forecast" />
+          {live ? 'Forecast' : command ? 'Hindcast' : 'Model re-run'} · {fc.horizonH} h
+        </span>
+      )}
+      {model.unavailable && (
+        <span className="ctl-zone is-off" data-tip={model.unavailable.reason}>
+          <KindGlyph kind="beyond" />
+          {fc ? 'Not covered' : 'No forecast'}
+        </span>
+      )}
+    </span>
+  )
+}
+
+/** The time shown, in mono above the handle, with what it is (kept inside the track's width). */
+function HandleLabel({ model, scale, w, command }: { model: CompactTimelineModel; scale: TrackScale; w: number; command: boolean }) {
+  const minute = useStore((s) => Math.floor(s.timeMs / 60_000))
+  const tf = useTimeFormat()
+  const t = minute * 60_000
+  const d = describeTime(model, t)
+  const live = model.mode === 'live'
+  const word = forecastWord(model.mode, command)
+  const lead = d.leadH != null ? `+${Math.round(d.leadH)} h` : ''
+  const atLatest = live && Math.abs(t - model.latestObservationMs) < 60_000
+  let kind: string
+  let cls: string
+  if (d.currentKind === 'forecast') {
+    kind = `${word} ${lead}${live ? '' : ' (after the record)'}`
+    cls = 'is-forecast'
+  } else if (d.currentKind === 'observation') {
+    kind = atLatest ? 'Latest observation' : d.inForecastPeriod && !live ? `Observed · ${word} ${lead}` : 'Observed'
+    cls = model.stale.isStale ? 'is-stale' : 'is-observation'
+  } else {
+    kind = 'No data for this time'
+    cls = 'is-beyond'
+  }
+  const x = xAt(scale, w, t)
+  const align = x < 150 ? 'is-start' : x > w - 150 ? 'is-end' : ''
+  const fc = model.forecast
+  const zoneSource = useZoneSource()
+  return (
+    <div className="ctl-handle-row">
+      <span
+        className={`ctl-handle-label ${align}`}
+        style={{ left: align === 'is-start' ? 0 : align === 'is-end' ? undefined : x, right: align === 'is-end' ? 0 : undefined }}
+        data-tip={`Time shown on the map${fc && d.inForecastPeriod ? ' (the forecast valid time)' : ''}. ${zoneLine(tf, t, zoneSource)}${command ? ` · ${new Date(t).toISOString().slice(0, 16).replace('T', ' ')} UTC` : ''}`}
+      >
+        <time className="ctl-time" dateTime={new Date(t).toISOString()}>
+          {fmtAt(t, tf, { zone: true })}
+        </time>
+        <span className={`ctl-kind ${cls}`}> · {kind}</span>
+      </span>
+    </div>
+  )
+}
+
+/** The stops as mono labels under the track (buttons; disabled with their reason). */
+function SlimStops({ model, scale, w }: { model: CompactTimelineModel; scale: TrackScale; w: number }) {
+  const activeId = useStore((s) => activeStop(model, s.timeMs)?.id ?? null)
+  const tf = useTimeFormat()
+  const live = model.mode === 'live'
+  const latest = model.latestObservationMs
+  const stale = model.stale.isStale
+  const freshTip = `Latest observation = the newest satellite detection, mapped perimeter or confirmed satellite pass over the fire that saw no new fire. Fire-3d flags live data as stale when that is more than ${STALE_AFTER_MS / HOUR_MS} h older than the current time. Satellites pass over only a few times a day, so gaps can be normal; it means "check the time", not "the fire is out". Data last refreshed ${fmtRelative(model.checkedMs, model.wallClockMs)}.`
+  const text = (s: TimelineStop, short: boolean): string => {
+    if (s.id === 'past') return fmtDayDate(model.startMs, tf.tz)
+    if (s.id === 'now') {
+      if (!live) return short ? 'Start' : 'Hindcast start'
+      const tail = stale ? ' · Stale' : ''
+      return short ? `Latest${tail}` : `Latest ${fmtClock(latest, tf)} · ${fmtRelative(latest, model.wallClockMs)}${tail}`
+    }
+    return s.label.toUpperCase()
+  }
+  const layout = useMemo(() => {
+    const placed = model.stops.filter((s) => s.posMs != null)
+    const grouped = model.stops.filter((s) => s.posMs == null)
+    const points = placed.map((s) => xAt(scale, w, s.posMs as number))
+    const width = (t: string) => t.length * 7.1 + 10
+    const attempt = (short: boolean) => {
+      const widths = placed.map((s) => width(text(s, short)))
+      const groupW = grouped.reduce((a, s) => a + width(text(s, short)) + 2, 0)
+      const centers = spreadLabels(points, widths, 0, w - (grouped.length ? groupW + 8 : 0), 6)
+      return { short, centers, fits: labelsCoverPoints(points, centers, widths) }
+    }
+    const full = attempt(false)
+    return { placed, grouped, ...(full.fits ? full : attempt(true)) }
+    // text() reads the model, the zone and the clock, which the deps cover
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model, scale, w, tf])
+  const jump = (s: TimelineStop) => {
+    if (!s.available || s.tMs == null) return
+    const st = useStore.getState()
+    st.setPlaying(false)
+    st.setTimeMs(clampToData(model, s.tMs))
+  }
+  const button = (s: TimelineStop, style?: { left: number }) => (
+    <button
+      key={s.id}
+      type="button"
+      className={`ctl-stop is-${s.kind} ${s.available ? '' : 'is-off'} ${activeId === s.id ? 'is-active' : ''}${s.id === 'now' && live && stale ? ' is-stale' : ''}`}
+      style={style}
+      aria-disabled={!s.available}
+      aria-current={activeId === s.id ? 'time' : undefined}
+      aria-label={s.available && s.tMs != null ? `${s.label}: ${s.description}, ${fmtAt(s.tMs, tf, { zone: true })}${s.id === 'now' && live ? ` (${fmtRelative(latest, model.wallClockMs)}${stale ? ', stale' : ''})` : ''}` : `${s.label}: not available, ${s.reason ?? ''}`}
+      data-tip={s.id === 'now' && live ? `${stopTip(s, tf)}. ${freshTip}` : stopTip(s, tf)}
+      onClick={() => jump(s)}
+    >
+      {text(s, layout.short)}
+    </button>
+  )
+  return (
+    <div className="ctl-stops">
+      {layout.placed.map((s, i) => button(s, { left: layout.centers[i] }))}
+      {layout.grouped.length > 0 && (
+        <span className="ctl-stop-group" title={layout.grouped[layout.grouped.length - 1].reason ?? undefined}>
+          {layout.grouped.map((s) => button(s))}
+        </span>
+      )}
+    </div>
   )
 }

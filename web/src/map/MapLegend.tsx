@@ -9,6 +9,8 @@
 // OpenStreetMap; buildings destroyed by this fire may be missing; not a damage assessment").
 // Brief 3 (§14.11): the national overview's groups and small dots, the record sources (CAL FIRE in California, NIFC
 // WFIGS elsewhere) and the list-absence line of §14.14; times in the open fire's zone and the preset's clock.
+// Brief 4 (Command, CommandView.dc.html): `variant="chips"` is the same compact row as plain chips on the map with the
+// scale bar at its end and a "Legend details" button that opens the same details upward.
 import { ChevronDown, Info } from 'lucide-react'
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { ExtrasLegend, ExtrasNotice, LegendSwatch } from '../extras/ExtrasCommon'
@@ -21,6 +23,7 @@ import { useWorkspace } from '../state/workspace'
 import { Segmented } from '../ui/controls'
 import { useDismiss, useNow } from '../ui/hooks'
 import { BUILDINGS_MINZOOM, buildingsCaveat } from './basemapStyle'
+import { ScaleBar } from './MapAttribution'
 import { useMapRuntime } from './mapStore'
 import { DETECTION_RECENT_H, DETECTION_WINDOW_H, GOES_WINDOW_H, RECENT_H, type ForecastView } from './overlayModel'
 import { LABEL_ACTIVE_Z5_ACRES, LABEL_MIN_ACRES, PINNED_MIN_ACRES } from './overviewLayers'
@@ -49,7 +52,9 @@ function Row({ sw, children, title }: { sw: string; children: ReactNode; title?:
   )
 }
 
-export function MapLegend({ inline }: { inline?: boolean } = {}) {
+export type MapLegendVariant = 'row' | 'chips'
+
+export function MapLegend({ inline, variant = 'row' }: { inline?: boolean; variant?: MapLegendVariant } = {}) {
   const layers = useWorkspace((s) => s.mapLayers)
   const hasSelection = useWorkspace((s) => s.selection != null)
   const basemap = useWorkspace((s) => s.basemap)
@@ -326,13 +331,15 @@ export function MapLegend({ inline }: { inline?: boolean } = {}) {
         {details}
       </section>
     )
+  const chips = variant === 'chips'
   return (
-    <section ref={root} className="mw-legend fxm-legend" aria-label="Map legend">
+    <section ref={root} className={`mw-legend fxm-legend${chips ? ' is-chips' : ''}`} aria-label="Map legend">
       <div className="fxm-legend-anchor">
         {compact}
+        {chips && <ScaleBar />}
         <button type="button" className="fxm-legend-toggle" aria-expanded={open} aria-controls="fxm-legend-details" onClick={() => setOpen((o) => !o)} data-tip="What the map layers mean">
           <Info size={13} aria-hidden="true" />
-          <span>Details</span>
+          <span>{chips ? 'Legend details' : 'Details'}</span>
           <ChevronDown size={12} aria-hidden="true" className={open ? 'is-open' : ''} />
         </button>
         {open && <div className="fxm-legend-pop">{details}</div>}

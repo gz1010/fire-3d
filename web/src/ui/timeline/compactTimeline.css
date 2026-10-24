@@ -535,3 +535,217 @@
     column-gap: 8px;
   }
 }
+
+/* ------------------------------------------------------------------------------------------------ slim (Command) */
+/* Brief 4, CommandView.dc.html: no card, full width, 40 px play; one mono line above the track (issue time, current
+   time or the replay's dates; what each part of the track is), the time shown above the handle, the track (past
+   solid #ff6a2a, forecast dashed #f5c060), the handle orange with an amber ring when the data shown is stale, the stops
+   as mono labels under the track. Text sits on the map's bottom gradient: a soft shadow keeps it readable. */
+.ctl.is-slim {
+  gap: 24px;
+  padding: 0;
+  background: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+.ctl.is-slim.is-empty {
+  justify-content: flex-start;
+  min-height: 40px;
+}
+.ctl.is-slim .ctl-play {
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(200, 200, 200, 0.2);
+  background: rgba(14, 14, 14, 0.6);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  color: var(--m-text);
+}
+.ctl.is-slim .ctl-play.is-playing {
+  background: var(--m-accent);
+  border-color: var(--m-accent);
+  color: var(--m-accent-ink);
+}
+.ctl.is-slim .ctl-play:hover {
+  border-color: var(--m-border-strong);
+}
+.ctl-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+  min-width: 0;
+  font: 400 10px / 16px var(--m-font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--m-text-4);
+}
+.ctl-top-left {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 6px;
+  min-width: 0;
+}
+.ctl-top-left > * + *::before {
+  content: '·';
+  margin-right: 6px;
+  color: var(--m-text-4);
+}
+.ctl.is-slim .ctl-fcbtn {
+  gap: 5px;
+  margin-left: -4px;
+  padding: 0 4px;
+  color: var(--m-text-3);
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+.ctl.is-slim .ctl-fcbtn:hover {
+  color: var(--m-text);
+}
+.ctl.is-slim .ctl-fcinfo.is-missing,
+.ctl.is-slim .ctl-replay,
+.ctl.is-slim .ctl-clock {
+  color: var(--m-text-3);
+}
+.ctl.is-slim .ctl-clock time {
+  color: var(--m-text-2);
+}
+.ctl-zones-key {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px 14px;
+}
+.ctl-zones-key .ctl-zone {
+  position: static;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: inherit;
+  letter-spacing: inherit;
+}
+.ctl-handle-row {
+  position: relative;
+  height: 18px;
+}
+.ctl-handle-label {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font: 400 11.5px / 18px var(--m-font-mono);
+  color: var(--m-text);
+  white-space: nowrap;
+  text-transform: uppercase;
+  cursor: help;
+}
+.ctl-handle-label.is-start,
+.ctl-handle-label.is-end {
+  transform: none;
+}
+.ctl.is-slim .ctl-handle-label .ctl-time {
+  font-size: 11.5px;
+  font-weight: 400;
+}
+.ctl.is-slim .ctl-handle-label .ctl-kind {
+  display: inline;
+}
+.ctl-handle-label .ctl-kind.is-observation {
+  color: var(--m-fire-3);
+}
+.ctl-handle-label .ctl-kind.is-stale {
+  color: var(--m-stale);
+}
+.ctl-handle-label .ctl-kind.is-forecast {
+  color: var(--m-forecast);
+}
+.ctl-handle-label .ctl-kind.is-beyond {
+  color: var(--m-text-3);
+}
+.ctl.is-slim .ctl-lanes.is-dim {
+  opacity: 0.55;
+}
+.ctl.is-slim .ctl-lane-obs {
+  stroke: var(--m-fire);
+  stroke-width: 2;
+}
+.ctl.is-slim .ctl-lane-fc {
+  stroke-width: 2;
+  stroke-dasharray: 6 5;
+}
+.ctl.is-slim .ctl-now {
+  stroke: var(--m-text-body);
+  stroke-width: 1.5;
+}
+.ctl.is-slim .ctl-thumb {
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  background: var(--m-accent);
+  box-shadow:
+    0 0 0 3px rgba(245, 192, 96, 0.35),
+    0 0 16px rgba(255, 122, 61, 0.7);
+}
+.ctl.is-slim .ctl-thumb.is-stale {
+  box-shadow:
+    0 0 0 3px rgba(232, 176, 74, 0.6),
+    0 0 16px rgba(255, 122, 61, 0.7);
+}
+.ctl.is-slim .ctl-thumb.is-beyond,
+.ctl.is-slim .ctl-thumb.is-out {
+  background: var(--m-text-3);
+  box-shadow: 0 0 0 3px rgba(154, 154, 154, 0.35);
+}
+.ctl.is-slim .ctl-marker {
+  width: 6px;
+  height: 6px;
+  margin-left: -3px;
+  top: 2px;
+  border: 0;
+}
+.ctl.is-slim .ctl-stops {
+  height: 18px;
+}
+.ctl.is-slim .ctl-stop {
+  top: 0;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font: 400 10px / 18px var(--m-font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--m-text-3);
+}
+.ctl.is-slim .ctl-stop.is-forecast:not(.is-off) {
+  color: var(--m-text-3);
+}
+.ctl.is-slim .ctl-stop.is-stale {
+  color: var(--m-stale);
+}
+.ctl.is-slim .ctl-stop:hover {
+  color: var(--m-text);
+  background: var(--m-hover);
+}
+.ctl.is-slim .ctl-stop.is-active {
+  background: none;
+  color: var(--m-text);
+  text-decoration: underline;
+  text-decoration-color: var(--m-accent);
+  text-underline-offset: 3px;
+}
+.ctl.is-slim .ctl-stop.is-off {
+  color: var(--m-text-4);
+}
+@media (max-width: 760px) {
+  .ctl.is-slim {
+    gap: 12px;
+  }
+  .ctl.is-slim .ctl-zones-key {
+    display: none;
+  }
+}
