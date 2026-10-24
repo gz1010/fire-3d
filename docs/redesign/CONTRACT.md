@@ -3796,6 +3796,48 @@ px, entry box top 172, right column top 76 / right 16 / bottom 16 / 336 px, dock
 px, view dock right 368 / bottom 140, disclaimer pill left 16 / bottom 136 — the screen's numbers. Public and Command
 (`brief4-h5-mapcheck-*.png`) are unchanged against `brief4-h2-*.png` apart from H3+H4's own work in progress.
 
+**Review fixes** (step h5-fix, 2026-10-24; two reviews of H5, design and behaviour; per finding in
+`reports/brief4-h5-fix.json`, screenshots `docs/screenshots/brief4-h5-fix-*.png`). Where this differs from the text
+above, this paragraph is what the code does. No H2 frozen file was edited; the map workspace is untouched (every new
+rule is scoped to `.app`, `.fx-bar`, `.minibar`, `.fx-empty*` or a Forensic-only component).
+- *Top bar below 1024 px* (H5-DF-1, H5-m2, PLAN-4 decision h): the view pill drops to a row of its own under the bar's
+  left end (`.fx-bar .tb-centre` absolute, `top: 100% + 8`); `.app-header` grows by `--fx-view-row` (48 px; phones 46)
+  so the measured `--safe-top` starts below that row and the compass, ⟲ ⟳ and the entry controls sit under the pill;
+  the bar keeps its 40 px row and the right column keeps top 76 (from `--header-h`). No control overlaps another from
+  761 to 1023 px (checked at 761, 768, 800, 820, 834, 900, 960, 1000 px; before: up to 90 px of overlap). Found while
+  re-measuring and fixed with it: at 761-900 px the view dock hides its two selects (they are in View options, as on
+  phones; the scale ran off the left edge at 768-820 px), and in a dock narrower than 560 px the timeline's range tabs
+  wrap to a line of their own, right-aligned (`@container dockmain`; they ran over the time at 768-900 px).
+- *Phones* (H5-DF-4, H5-m3, H5-B1): the bar holds back, the picker and four tool pills (View options, Analysis, Share,
+  Settings, 10 px apart); a second row holds the view pill (left) and "Hide panels" (`.fx-hide`, right); the compass row
+  starts below it at every width (320-430 px: no overlap; before, the pill covered ⟳ at 360-375 px). Touch targets are
+  44 px: transparent `::before` hit areas on the back button, the picker (44 px tall), the tool pills, the view pill's
+  buttons, the entry buttons and ⟲ ⟳ (now 40 px, 4 px apart), never into a neighbour's (sampled with
+  `elementFromPoint` at 360, 390 and 430 px; the 48 px compass is round). The MiniBar ("H" or "Hide panels"): the view
+  pill hides on phones (`.minibar .tb-view.minibar-view` outweighs `topbar.css .tb-view`, which used to win), the
+  fire's name is the only item that shrinks, the bar is at most the screen's width less its margins below 1024 px, and
+  "Panels H" (44 px target on phones) is always inside it; tapping it restores the panels (checked at 320-1440 px).
+- *Fixed copy with no fire* (H5-M1, H5-DF-2): `OpenFireFirst` ends with `footer.fx-empty-foot` holding
+  `FixedCopy variant="pill"` (`PROTOTYPE_LINE` · `NOT_ALL_CLEAR`), a row of its own under the list (never over it), on
+  desktop and phones; test `ui/shell/ForensicWorkspace.test.ts`. The no-fire bar hides "Forensic · 3D analysis" below
+  1024 px and the logo on phones (they ran under the centred pill).
+- *Disclaimer pill and the view dock* (H5-DF-3, H5-m1): the pill sits one row higher from 761 to 1399 px (was 1279);
+  from 1400 px its `max-width` is `100% − --safe-right − 560px`, so it wraps rather than meets the view dock.
+- *Place and dates* (H5-DF-6): `.fx-place` is a wrapping flex row: one line ("Monterey County · Oct 19, 2026 – present")
+  while it fits, else the dates on a line of their own under the place; the " · " sits in the 18 px before the dates and
+  is clipped (`clip-path`) when they wrap; each line ellipsises only when it alone is too long (the dates' inner span
+  carries the ellipsis). The "Fire-3d" word hides at ≤ 1400 px (the logo stays), so at 1281-1400 px the dates show whole
+  (1366 px: was cut to "Oct 19, 2026 – pr…"); the place line still hides at ≤ 1280 px.
+- *Timeline NOW / T₀* (H5-DF-5): the word starts 14 px right of its mark (`Timeline.tsx NOW_LABEL_DX`), clear of the
+  16 px knob and its 3 px ring at the default time; the time bubble keeps the space above the handle. The
+  FORECAST / HINDCAST word shows when its window is wider than 100 px (was 90), so the two never meet.
+- *Weather card* (H5-DF-7): the sub line may use its cell's right padding (`.wx-sub { margin-right: -10px }`), so "of
+  100 (Fosberg)" shows whole in the 336 px column; in the 316 px column (`@container wx (max-width: 300px)`) it is 9 px
+  with −0.02em tracking. The foot reads "gusts 19 mph · ROS potential 76 ch/h"; the Open-Meteo credit is unchanged.
+- *Model output labelled experimental* (H5-m4; the rule, not a regression): the Forecast probability legend reads
+  "P(burned by t)" with an "experimental model" tag, and the Analysis tab's "Runs" and "Selected run" headings carry
+  "experimental model" / "experimental" tags (`.exp-tag`: the modeled amber `#f5c060`, dashed, as the map's MODEL tag).
+
 #### Final check — as built
 
 _To be filled by the final check._
