@@ -15,4 +15,4 @@ Ports: API 8732, Vite 5192.
 - Screenshots docs/screenshots/brief4-h2-*.png retaken (Forensic unchanged) and viewed.
 
 ## Next
-- Commit and push; stop servers 8732 / 5192.
+- Committed 5b119fd and pushed; servers 8732 / 5192 stopped. Step finished.

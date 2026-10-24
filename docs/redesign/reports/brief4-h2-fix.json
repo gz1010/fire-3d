@@ -2,30 +2,126 @@
   "step": "brief4-h2-fix",
   "summary": "Fixes for the two H2 reviews (design fidelity; behaviour/features/safety). All 3 majors and every minor were fixed; DF-11 and DF-18 partly (reasons below). Safety: the Command readout no longer credits demo, synthetic or local record values to an agency (issuer only when the bundle used that agency's incident record); the 'Observed fire' label and the location check's 'Not burned by' never carry a forecast or future time (past the latest observation they say 'Latest' and its own time). Behaviour: a north-up 2D map stays north up after Forensic and back (the map's own heading is restored unless the user turned the Forensic camera); ⟲ ⟳ are visible in 2D in every map chrome (default row: a short turn row under it); a town search's message and text survive the chrome swap when the fire closes. Design: basemap menu opens upward with readable two-line items; selected-point label stacks its coordinates or flips instead of running under the column or off screen, with the screen's ' · ' separator; area labels and 'Outside modeled area' labels stay off the map's own labels and the chrome; slim timeline forecast at full #f5c060 and amber stale LATEST; off-palette blue, orange links and pre-handoff feed colours replaced by tokens; opaque feed bar; 400 px search box; label halo; status age never truncated; 'Demo' badge in Command's bar; mono section titles; credits folded below 1280 px.",
   "findings": [
-    {"id": "DF-1", "outcome": "fixed", "how": "MapControls BasemapMenu up (placement top-start) for bar anchor='bottom'; map-bridge.css .select-pop items wrap: label line, hint indented under it (also fixes Public). Seen: menu at y 599-808 above the bar, labels readable (scratch v-basemap.png)."},
-    {"id": "DF-2", "outcome": "fixed", "how": "pinLabel.ts pinLabelLayout: stacked coordinates option (STACKED_COST 8) and OFFSCREEN_COST_PER_PX 10; SelectionPin measures both forms (.fxm-pin.is-stacked). Lower Sugarloaf 1024 x 768: stacked up-right inside the free area; 390 px phone: stacked, inside the screen; tests for both and a dot within a label width of the right edge."},
-    {"id": "DF-3", "outcome": "fixed", "how": "areaLabels.ts Blocked predicate on placeLeader/placeAlong; CommandAreaLabels tests each candidate box against the incident and event label/circle layers (queryRenderedFeatures) and drops the label when no slot is free (phone Lower Sugarloaf: dropped, no overlap)."},
-    {"id": "DF-4", "outcome": "fixed", "how": "compactTimeline.css: slim dimmed copy at opacity 1, only its observed lane at .55; forecast dashes full #f5c060 at the default handle."},
-    {"id": "DF-5", "outcome": "fixed", "how": ".ctl.is-slim .ctl-stop.is-active.is-stale keeps --m-stale; the underline alone marks the active stop."},
-    {"id": "DF-6", "outcome": "fixed", "how": "--m-info: #cfcfcf (wall-clock mark and NOW glyph, Public satellite icon, feed imagery/camera kinds, location.css); wall-clock tooltip now says 'grey dotted mark'."},
-    {"id": "DF-7", "outcome": "fixed", "how": ".on-link, .on-link-btn, .uf-link, .os-link (and .xs-caption-more) use --m-accent-text, underlined; sampled rgb(224,224,224) on an open official row."},
-    {"id": "DF-8", "outcome": "fixed", "how": "updatesFeed.css kind tags: observation --m-fire-3, estimate --m-fire-4 dashed, model --m-forecast dotted, official --m-official-ink, annotation --m-text-2; #8ee0a8 x3 -> --m-official-ink; #ff9ccd -> --m-alert."},
-    {"id": "DF-9", "outcome": "fixed", "how": ".uf-bar background --m-panel-raised (rgba(26,26,26,.96)); items no longer show through."},
-    {"id": "DF-10", "outcome": "fixed", "how": ".cmd-search-pop .loc-search {width: 100%}: box 1012-1412 = the 400 px popover."},
-    {"id": "DF-11", "outcome": "partly fixed", "how": "Below 1280 px Command folds the credits behind '© Credits' (CreditsFooter fold, CREDITS_FOLD_QUERY; every text kept): +85 px for the readout at 1024 x 768. Not moved: the official block at the point stays under MODEL (PLAN-4 §3.2 'always shown under MODEL'; an evacuation order at the selected point outranks record values that the Official now column's record row also shows: acres, containment, its own time). The rows scroll into view with the fade on short windows; at 1440 x 1000 on real fires the Incident ID row is still partly below the fold (wrapped WFIGS issuer labels)."},
-    {"id": "DF-12", "outcome": "fixed", "how": ".cmd-label and the selected-point label get a four-layer dark halo (0 0 2px 1, 0 0 4px .95, 0 0 8px .9, 0 1px 2px .9 of rgba(12,12,12)); the coloured meta line sits on a soft dark plate (rgba(12,12,12,.6) + a 5 px feather). Reviewer method (text transparent, 90th-percentile background) on Eaton aerial at z9: meta 2.57:1 -> above 5.6:1 (halo alone gave 3.76), pin label 4.25 -> 4.88."},
-    {"id": "DF-13", "outcome": "fixed", "how": "ImageryChip status: platform and pixel size in .xs-status-head (ellipsis), the age in .xs-status-tail (flex none; 'VIIRS NOAA-… 11 H AGO' at 1024); Public chip text in its own ellipsis box ('No recent satellite i…')."},
-    {"id": "DF-14", "outcome": "fixed", "how": "map/aoiLabels.ts aoiLabelBox / aoiSidesInside; the controller filters fx-aoi-label to the sides whose box stays inside the safe area (moveend, idle, safe-area change; tests). fixture-live 1440: the east and west labels next to the columns are hidden, north and south shown."},
-    {"id": "DF-15", "outcome": "fixed", "how": "Command's bar shows the short 'Demo' badge at every width; the full 'Demo · simulated data' is the badge's accessible text (visually hidden span), its tooltip and the readout's demo note. The place now reads 'Santa Lucia Range, Los Pa…' at 1440."},
-    {"id": "DF-16", "outcome": "fixed", "how": "areaLabels.ts observedLabelMeta + seriesAcresAt: '≈6,695 ac · Oct 22, 13:30 PDT' (the reconstructed area from the hourly series, the Analysis Fire Area line; '≈' marks the estimate; hectares in metric); falls back to the time-only line when the longer one has no room."},
-    {"id": "DF-17", "outcome": "fixed", "how": "markers.ts fmtLatLon(lat, lon, digits, sep); the pin label renders 'lat · lon' as two spans (so it can stack)."},
-    {"id": "DF-18", "outcome": "partly fixed", "how": "The floating bar's text gets the readout's halo and the logo a drop-shadow on the map (topbar.css), so place labels no longer run through the title. The top band's own gradient and hiding country/state labels there stay with H3+H4, who build the Command overview (PLAN-4 decision c, §4)."},
-    {"id": "DF-19", "outcome": "fixed", "how": ".cro-more-body .mw-eyebrow: 600 10.5px JetBrains Mono, letter-spacing .14em, --m-text-3 (measured 1.47 px tracking)."},
-    {"id": "H2-B1", "outcome": "fixed", "how": "observedLabelMeta clamps to manifest.time_range.now_ms: at +72 h the label reads 'Latest · Oct 22, 13:30 PDT'; unit tests for the clamp and the one-minute tolerance. Same clamp for the location check's 'Not burned by …' (locationCheck.ts not_burned asOfMs; test)."},
-    {"id": "H2-B2", "outcome": "fixed", "how": "handoff.ts: map -> Forensic remembers the map heading; Forensic -> map uses returnBearing(forensic, turnedInForensic, mapBearing): the Forensic heading only after the user's own turn there (a drag that changed the heading, or a north-up / turn command), else the map's own. handoff.test.ts (4 tests) and a browser check: 0 -> Forensic 337.5 -> 0; -60 -> -60; still 2D, pitch 0."},
-    {"id": "H2-B3", "outcome": "fixed", "how": "readoutText.ts recordIssuer(issuer, manifest.data_sources, demo): the tag and the agency ID sub-line only when the bundle lists CAL FIRE or the NIFC WFIGS incident record and is not demo; else 'Record updated' and 'Reported location (incident data)'. Tests with CAL FIRE, WFIGS, synthetic and missing manifests."},
-    {"id": "H2-m1", "outcome": "fixed", "how": "Default MapControls (Public fire, overview, Command on phones) show ⟲ ⟳ in 2D on a short row under the main row (.fxm-turn-row, 44 px on phones); 3D keeps them in the orbit row. H3+H4 still switch Public to 'compact' / 'bar'."},
-    {"id": "H2-m2", "outcome": "fixed", "how": "searchUi.ts carry (SearchCarry, CARRY_MS 1500, freshCarry): when a fire opens or closes or the preset changes, a box with a message or result list open hands its text and popover to the next chrome's box (saved from zustand subscriptions before React renders the next chrome). Browser check: Command 'Monterey' -> pick -> fire closes -> overview box shows 'Monterey' and 'Showing Monterey, CA … click the map.'"}
+    {
+      "id": "DF-1",
+      "outcome": "fixed",
+      "how": "MapControls BasemapMenu up (placement top-start) for bar anchor='bottom'; map-bridge.css .select-pop items wrap: label line, hint indented under it (also fixes Public). Seen: menu at y 599-808 above the bar, labels readable (scratch v-basemap.png)."
+    },
+    {
+      "id": "DF-2",
+      "outcome": "fixed",
+      "how": "pinLabel.ts pinLabelLayout: stacked coordinates option (STACKED_COST 8) and OFFSCREEN_COST_PER_PX 10; SelectionPin measures both forms (.fxm-pin.is-stacked). Lower Sugarloaf 1024 x 768: stacked up-right inside the free area; 390 px phone: stacked, inside the screen; tests for both and a dot within a label width of the right edge."
+    },
+    {
+      "id": "DF-3",
+      "outcome": "fixed",
+      "how": "areaLabels.ts Blocked predicate on placeLeader/placeAlong; CommandAreaLabels tests each candidate box against the incident and event label/circle layers (queryRenderedFeatures) and drops the label when no slot is free (phone Lower Sugarloaf: dropped, no overlap)."
+    },
+    {
+      "id": "DF-4",
+      "outcome": "fixed",
+      "how": "compactTimeline.css: slim dimmed copy at opacity 1, only its observed lane at .55; forecast dashes full #f5c060 at the default handle."
+    },
+    {
+      "id": "DF-5",
+      "outcome": "fixed",
+      "how": ".ctl.is-slim .ctl-stop.is-active.is-stale keeps --m-stale; the underline alone marks the active stop."
+    },
+    {
+      "id": "DF-6",
+      "outcome": "fixed",
+      "how": "--m-info: #cfcfcf (wall-clock mark and NOW glyph, Public satellite icon, feed imagery/camera kinds, location.css); wall-clock tooltip now says 'grey dotted mark'."
+    },
+    {
+      "id": "DF-7",
+      "outcome": "fixed",
+      "how": ".on-link, .on-link-btn, .uf-link, .os-link (and .xs-caption-more) use --m-accent-text, underlined; sampled rgb(224,224,224) on an open official row."
+    },
+    {
+      "id": "DF-8",
+      "outcome": "fixed",
+      "how": "updatesFeed.css kind tags: observation --m-fire-3, estimate --m-fire-4 dashed, model --m-forecast dotted, official --m-official-ink, annotation --m-text-2; #8ee0a8 x3 -> --m-official-ink; #ff9ccd -> --m-alert."
+    },
+    {
+      "id": "DF-9",
+      "outcome": "fixed",
+      "how": ".uf-bar background --m-panel-raised (rgba(26,26,26,.96)); items no longer show through."
+    },
+    {
+      "id": "DF-10",
+      "outcome": "fixed",
+      "how": ".cmd-search-pop .loc-search {width: 100%}: box 1012-1412 = the 400 px popover."
+    },
+    {
+      "id": "DF-11",
+      "outcome": "partly fixed",
+      "how": "Below 1280 px Command folds the credits behind '© Credits' (CreditsFooter fold, CREDITS_FOLD_QUERY; every text kept): +85 px for the readout at 1024 x 768. Not moved: the official block at the point stays under MODEL (PLAN-4 §3.2 'always shown under MODEL'; an evacuation order at the selected point outranks record values that the Official now column's record row also shows: acres, containment, its own time). The rows scroll into view with the fade on short windows; at 1440 x 1000 on real fires the Incident ID row is still partly below the fold (wrapped WFIGS issuer labels)."
+    },
+    {
+      "id": "DF-12",
+      "outcome": "fixed",
+      "how": ".cmd-label and the selected-point label get a four-layer dark halo (0 0 2px 1, 0 0 4px .95, 0 0 8px .9, 0 1px 2px .9 of rgba(12,12,12)); the coloured meta line sits on a soft dark plate (rgba(12,12,12,.6) + a 5 px feather). Reviewer method (text transparent, 90th-percentile background) on Eaton aerial at z9: meta 2.57:1 -> above 5.6:1 (halo alone gave 3.76), pin label 4.25 -> 4.88."
+    },
+    {
+      "id": "DF-13",
+      "outcome": "fixed",
+      "how": "ImageryChip status: platform and pixel size in .xs-status-head (ellipsis), the age in .xs-status-tail (flex none; 'VIIRS NOAA-… 11 H AGO' at 1024); Public chip text in its own ellipsis box ('No recent satellite i…')."
+    },
+    {
+      "id": "DF-14",
+      "outcome": "fixed",
+      "how": "map/aoiLabels.ts aoiLabelBox / aoiSidesInside; the controller filters fx-aoi-label to the sides whose box stays inside the safe area (moveend, idle, safe-area change; tests). fixture-live 1440: the east and west labels next to the columns are hidden, north and south shown."
+    },
+    {
+      "id": "DF-15",
+      "outcome": "fixed",
+      "how": "Command's bar shows the short 'Demo' badge at every width; the full 'Demo · simulated data' is the badge's accessible text (visually hidden span), its tooltip and the readout's demo note. The place now reads 'Santa Lucia Range, Los Pa…' at 1440."
+    },
+    {
+      "id": "DF-16",
+      "outcome": "fixed",
+      "how": "areaLabels.ts observedLabelMeta + seriesAcresAt: '≈6,695 ac · Oct 22, 13:30 PDT' (the reconstructed area from the hourly series, the Analysis Fire Area line; '≈' marks the estimate; hectares in metric); falls back to the time-only line when the longer one has no room."
+    },
+    {
+      "id": "DF-17",
+      "outcome": "fixed",
+      "how": "markers.ts fmtLatLon(lat, lon, digits, sep); the pin label renders 'lat · lon' as two spans (so it can stack)."
+    },
+    {
+      "id": "DF-18",
+      "outcome": "partly fixed",
+      "how": "The floating bar's text gets the readout's halo and the logo a drop-shadow on the map (topbar.css), so place labels no longer run through the title. The top band's own gradient and hiding country/state labels there stay with H3+H4, who build the Command overview (PLAN-4 decision c, §4)."
+    },
+    {
+      "id": "DF-19",
+      "outcome": "fixed",
+      "how": ".cro-more-body .mw-eyebrow: 600 10.5px JetBrains Mono, letter-spacing .14em, --m-text-3 (measured 1.47 px tracking)."
+    },
+    {
+      "id": "H2-B1",
+      "outcome": "fixed",
+      "how": "observedLabelMeta clamps to manifest.time_range.now_ms: at +72 h the label reads 'Latest · Oct 22, 13:30 PDT'; unit tests for the clamp and the one-minute tolerance. Same clamp for the location check's 'Not burned by …' (locationCheck.ts not_burned asOfMs; test)."
+    },
+    {
+      "id": "H2-B2",
+      "outcome": "fixed",
+      "how": "handoff.ts: map -> Forensic remembers the map heading; Forensic -> map uses returnBearing(forensic, turnedInForensic, mapBearing): the Forensic heading only after the user's own turn there (a drag that changed the heading, or a north-up / turn command), else the map's own. handoff.test.ts (4 tests) and a browser check: 0 -> Forensic 337.5 -> 0; -60 -> -60; still 2D, pitch 0."
+    },
+    {
+      "id": "H2-B3",
+      "outcome": "fixed",
+      "how": "readoutText.ts recordIssuer(issuer, manifest.data_sources, demo): the tag and the agency ID sub-line only when the bundle lists CAL FIRE or the NIFC WFIGS incident record and is not demo; else 'Record updated' and 'Reported location (incident data)'. Tests with CAL FIRE, WFIGS, synthetic and missing manifests."
+    },
+    {
+      "id": "H2-m1",
+      "outcome": "fixed",
+      "how": "Default MapControls (Public fire, overview, Command on phones) show ⟲ ⟳ in 2D on a short row under the main row (.fxm-turn-row, 44 px on phones); 3D keeps them in the orbit row. H3+H4 still switch Public to 'compact' / 'bar'."
+    },
+    {
+      "id": "H2-m2",
+      "outcome": "fixed",
+      "how": "searchUi.ts carry (SearchCarry, CARRY_MS 1500, freshCarry): when a fire opens or closes or the preset changes, a box with a message or result list open hands its text and popover to the next chrome's box (saved from zustand subscriptions before React renders the next chrome). Browser check: Command 'Monterey' -> pick -> fire closes -> overview box shows 'Monterey' and 'Showing Monterey, CA … click the map.'"
+    }
   ],
   "files_changed": [
     "web/src/App.tsx",
@@ -87,5 +183,8 @@
     "The phone 'Observed fire' label is dropped where every slot would cover the fire's REPORTED label or event dots (by design: the legend names the layer)."
   ],
   "notes_for_others": "H3+H4: map/aoiLabels.ts filters 'Outside modeled area' to the safe area for every chrome, so new [data-chrome] regions with --chrome-side keep it clear. CommandAreaLabels' placement now also avoids the map's incident and event labels/points (areaLabels.ts Blocked) - the LeaderLabels engine can reuse the predicate. SearchBox hands its open message to the next chrome's box (searchUi.ts carry) when a fire opens/closes or the preset changes; a new chrome only needs to mount SearchBox. The default MapControls row now has a 2D turn row; 'compact' / 'bar' are unchanged. H5: handoff.ts tracks the user's Forensic turns from sceneStore (cameraCommand kinds other than frame-fire / zoom-in / zoom-out, and heading changes while interacting); H5's new 'rotate' / 'set-heading' commands count automatically. Apply flyTo.bearingDeg in CameraRig.",
-  "commits": []
+  "commits": [
+    "5b119fd brief 4 H2 review fixes: issuer guard, observed-label time, hand-off heading, labels, controls, colours",
+    "(this commit) brief 4 H2 review fixes: report commit list, progress notes"
+  ]
 }
