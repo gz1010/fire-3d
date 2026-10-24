@@ -26,5 +26,7 @@ Ports: API 8740, Vite 5200.
   into a popover by H2b), hand-off + tint 5/5. Screenshots docs/screenshots/brief4-h2c-*.png (8), all viewed.
 - CONTRACT 15.5 H2c paragraph, reports/brief4-h2c.json, gates green (lint 55, all src/scene).
 
-## Next
-- commit + push; stop servers 8740 / 5200.
+- Committed 933ed03 and pushed; reduced motion checked (E turns at once, no transitions); servers 8740 / 5200 stopped.
+
+## Status
+H2c finished.
