@@ -18,7 +18,7 @@ with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     from fastapi.testclient import TestClient
 
-from fire3d import bundle, config
+from fire3d import bundle, catalog, config
 from fire3d.api import app as app_mod
 from fire3d.api.jobs import JobManager, set_manager
 from fire3d.contracts import (
@@ -52,10 +52,14 @@ pytestmark = pytest.mark.skipif(not IDS, reason="no real bundles in data/inciden
 
 
 @pytest.fixture(scope="module")
-def client():
+def client(tmp_path_factory):
     mp = pytest.MonkeyPatch()
     mp.setattr(config, "LIVE_ENABLED", False)
     mp.setattr(config, "INCIDENTS_DIR", REAL_ROOT)           # the published bundles, read-only
+    # an empty HTTP cache: the answers must not depend on how fresh the developer's data/cache lists are (a fresh live
+    # list plus a day-old cached WFIGS lookup turned the unknown id's 404 into a 503)
+    mp.setattr(config, "CACHE_DIR", tmp_path_factory.mktemp("http-cache"))
+    catalog.clear_cache()
     m = JobManager()
     set_manager(m)
     app_mod.AIRCRAFT_CACHE.clear()
@@ -65,6 +69,7 @@ def client():
     m.shutdown()
     set_manager(None)
     mp.undo()
+    catalog.clear_cache()
 
 
 def _no_secret(body: bytes) -> None:
