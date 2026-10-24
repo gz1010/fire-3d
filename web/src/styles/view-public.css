@@ -534,6 +534,9 @@
   color: #d0d0d0;
   white-space: nowrap;
 }
+.pfv-date-day {
+  white-space: nowrap;
+}
 
 /* the distance chip (light blue: the selected point / distance colour) */
 .pfv-dist-wrap {

@@ -22,8 +22,13 @@ export function FireTitle({ chip = true, compact = false }: { chip?: boolean; co
         {summary && <span className="mw-sr-only">{fireLabel(summary.name)} · </span>}
         {place ?? summary?.name ?? (loading ? 'Loading the fire…' : 'Fire')}
       </h1>
-      {date && <p className="pfv-date">{date}</p>}
+      {date && <p className="pfv-date">{keepDatesWhole(date)}</p>}
       {chip && summary && <DistanceChip compact={compact} />}
     </div>
   )
+}
+
+/** Each "DEC 15 2025" in the line stays on one line where the line wraps (phones): it breaks between words only. */
+function keepDatesWhole(line: string) {
+  return line.split(/([A-Z]{3} \d{1,2} \d{4})/).map((part, i) => (i % 2 ? <span key={i} className="pfv-date-day">{part}</span> : part))
 }

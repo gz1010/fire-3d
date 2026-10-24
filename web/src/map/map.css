@@ -253,9 +253,8 @@
   outline: none;
   box-shadow: var(--m-focus-ring);
 }
-.fxm-compass svg {
-  transition: transform 80ms linear;
-}
+/* no transition: the needle follows the map's heading every frame already, and a CSS transition spun it the long way
+   round when the heading crossed ±180° (brief 4 final check) */
 .fxm-compass-n {
   fill: var(--m-danger);
 }
