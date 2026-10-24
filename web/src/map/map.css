@@ -290,6 +290,170 @@
   }
 }
 
+/* compass drag (brief 4, decision f): the pointer turns the needle; no page scroll or pinch while dragging it */
+.fxm-compass {
+  touch-action: none;
+  cursor: grab;
+}
+.fxm-compass:disabled {
+  cursor: default;
+}
+.fxm-compass.is-dragging {
+  cursor: grabbing;
+}
+.fxm-compass.is-dragging svg {
+  transition: none;
+}
+
+/* ---------------------------------------------------------------- variants (brief 4, CONTRACT §15.2) */
+/* bar: one glass bar as the handoff's Main details (Main.dc.html "Map controls"): padding 6, gap 8, radius 12;
+   36 px buttons with hairline borders on no fill; 2D/3D as a recessed pair of 30 px mono buttons, the active one
+   accent with dark ink (map-bridge.css). */
+.fxm-ctl.is-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px;
+  background: rgba(14, 14, 14, 0.7);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  backdrop-filter: blur(22px) saturate(140%);
+  border: 1px solid rgba(200, 200, 200, 0.18);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+.fxm-ctl.is-bar .fxm-ctl-row {
+  justify-content: flex-start;
+  gap: 8px;
+}
+.fxm-ctl.is-bar .seg {
+  padding: 3px;
+  gap: 2px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+}
+.fxm-ctl.is-bar .seg-btn {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-family: var(--m-font-mono);
+  font-size: 13px;
+}
+.fxm-ctl.is-bar .seg-btn:not([aria-checked='true']) {
+  color: var(--m-text-2);
+}
+.fxm-ctl.is-bar .fxm-icon-btn,
+.fxm-ctl.is-compact .fxm-icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--m-text-body);
+}
+.fxm-ctl.is-bar .fxm-icon-btn {
+  border: 1px solid var(--m-border);
+}
+.fxm-ctl.is-bar .select-btn,
+.fxm-ctl.is-bar .fxm-return,
+.fxm-ctl.is-bar .fxm-orbit-text {
+  height: 36px;
+  padding: 0 12px;
+  gap: 8px;
+  border: 1px solid var(--m-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--m-text-body);
+  font-size: 13px;
+}
+.fxm-ctl.is-bar .select-btn .caret {
+  color: var(--m-text-3);
+}
+.fxm-ctl.is-bar .fxm-icon-btn:hover:not(:disabled),
+.fxm-ctl.is-bar .select-btn:hover:not(:disabled),
+.fxm-ctl.is-bar .fxm-return:hover:not(:disabled),
+.fxm-ctl.is-bar .fxm-orbit-text:hover:not(:disabled),
+.fxm-ctl.is-compact .fxm-icon-btn:hover:not(:disabled) {
+  background: var(--m-hover);
+}
+.fxm-ctl.is-bar .fxm-ctl-sep {
+  height: 24px;
+}
+/* ⟲ compass ⟳ read as one group */
+.fxm-turn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.fxm-layers.is-on {
+  border-color: rgba(255, 122, 61, 0.55);
+  color: var(--m-accent);
+}
+.fxm-ctl.is-bar .fxm-orbit {
+  justify-content: flex-start;
+  gap: 8px;
+}
+.fxm-ctl.is-bar .fxm-orbit-hint {
+  left: 0;
+  right: auto;
+}
+/* the handoff's compass: orange north, grey south */
+.fxm-ctl.is-bar .fxm-compass-n,
+.fxm-ctl.is-compact .fxm-compass-n {
+  fill: var(--m-fire);
+}
+.fxm-ctl.is-bar .fxm-compass-s,
+.fxm-ctl.is-compact .fxm-compass-s {
+  fill: #d0d0d0;
+  fill-opacity: 0.5;
+}
+.fxm-ctl.is-bar .fxm-compass.is-rotated,
+.fxm-ctl.is-compact .fxm-compass.is-rotated {
+  border-color: rgba(255, 122, 61, 0.55);
+}
+
+/* compact: a vertical cluster (zoom in / out, ⟲ compass ⟳) on the same glass */
+.fxm-ctl.is-compact {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: rgba(14, 14, 14, 0.7);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  backdrop-filter: blur(22px) saturate(140%);
+  border: 1px solid rgba(200, 200, 200, 0.18);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+.fxm-ctl.is-compact .fxm-icon-btn {
+  border: 1px solid transparent;
+}
+.fxm-ctl-sep.is-h {
+  width: 20px;
+  height: 1px;
+  margin: 3px 0;
+}
+.fxm-ctl.is-compact .fxm-pitch {
+  right: -4px;
+}
+/* phones: 44 px touch targets (decision h) */
+@media (max-width: 760px) {
+  .fxm-ctl.is-compact .fxm-icon-btn,
+  .fxm-ctl.is-bar .fxm-icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+  .fxm-ctl.is-bar .select-btn,
+  .fxm-ctl.is-bar .fxm-return,
+  .fxm-ctl.is-bar .fxm-orbit-text {
+    height: 44px;
+  }
+  .fxm-ctl.is-bar .seg-btn {
+    height: 38px;
+  }
+}
+
 /* 3D orbit group (brief 2, O-R14): its own row under the controls, right-aligned */
 .fxm-orbit {
   position: relative;
@@ -329,6 +493,11 @@
   font-size: var(--m-fs-sm);
   line-height: 1.4;
   z-index: 3;
+}
+/* a bar at the bottom of the screen (Command): the hint opens upwards */
+.fxm-orbit-hint.is-above {
+  top: auto;
+  bottom: calc(100% + 8px);
 }
 
 /* ------------------------------------------------------------------------------------------ legend */

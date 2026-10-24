@@ -24,6 +24,10 @@
 //     (useStore.focusIncidentFromMap, map/focus.ts) and zooming out returns to the overview, without moving the camera;
 //     the markers stay at every zoom (lighter while a fire is open), other prepared fires in view show their latest
 //     perimeter (map/nearbyPerimeters.ts), and unprepared fires a "Spread not prepared yet" chip.
+// Brief 4 (H2c, decisions f, j, k): the map turns in 2D as in 3D and keeps its heading when 2D / 3D changes; it is
+// the rotation target of state/rotation.ts (Q / E / N), takes Safari's two-finger trackpad twist (lib/rotateGesture.ts,
+// counted as the user's own move) and the compass drag (actions.setBearing); the aerial photos' tint follows the view
+// (actions.setTint, basemapStyle.ts AERIAL_TINT), never the fire, official or selection layers.
 import {
   Map as MapLibreMap,
   LngLat,
@@ -42,18 +46,21 @@ import type { ForecastLayerName, ForecastManifest, IncidentManifest, IncidentSum
 import { HOUR_MS, loadRasterSet, type LoadedLayer, type RasterSet } from '../data/rasters'
 import { aoiBounds, fireBounds, type LonLatBox } from '../lib/fireBounds'
 import { aoiCornersLonLat, localToLonLat, overlayMapping } from '../lib/reproject'
+import { stepDeg } from '../lib/compass'
+import { attachRotateGesture } from '../lib/rotateGesture'
 import { fmtAt, timeFmt, type TimeFmt } from '../lib/time'
 import { mountOfficialLayers, type OfficialLayersHandle } from '../official/mapLayer'
 import { useAnnotations } from '../state/annotations'
 import { showFireCard } from '../state/fireCard'
 import { findFire, overviewFires, PAST_YEAR, SEASON_YEAR, type OverviewCatalog } from '../state/overview'
+import { registerRotation } from '../state/rotation'
 import { readUrlParams } from '../state/runtime'
 import { useStore } from '../state/store'
 import { getTimeFormat } from '../state/timeZone'
 import { pendingMapFlyTo, useWorkspace, type Basemap, type MapFlyTo, type MapLayerKey, type Perspective, type SafeInsets } from '../state/workspace'
 import { buildFeedItems, selectFeedItem } from '../ui/feed/feedModel'
 import type { FeedItem } from '../ui/feed/types'
-import { BUILDINGS_3D_LAYER, DARK, HILLSHADE_SOURCE, IMAGERY_SOURCE, loadBasemap, TERRAIN_SOURCE, VECTOR_SOURCE, type DerivedStyle } from './basemapStyle'
+import { aerialTintPaint, BUILDINGS_3D_LAYER, DARK, HILLSHADE_SOURCE, IMAGERY_LAYER, IMAGERY_SOURCE, loadBasemap, TERRAIN_SOURCE, VECTOR_SOURCE, type DerivedStyle, type TintLevel } from './basemapStyle'
 import { maskGeometry } from './contours'
 import { MapInput } from './userInput'
 import { allFocusCandidates, CENTRAL_FRACTION, chipTargets, FocusHold, focusUnlessHeld, FOCUS_DEBOUNCE_MS, FOCUS_OUT_ZOOM, type FocusCurrent, type FocusView } from './focus'
@@ -135,7 +142,12 @@ const RASTER_WAIT_MS = 6000
 /** A safe-area change this soon after a completed fit (the layout still settling as data arrives) fits the goal again,
  *  so an instant fit (reduced motion) ends where an animated one does. */
 const SETTLE_MS = 2000
-const CANVAS_LABEL = 'Map. Arrow keys pan, plus and minus zoom, Shift + arrow keys rotate (and tilt in 3D); click to select a location or a fire.'
+const CANVAS_LABEL = 'Map. Arrow keys pan, plus and minus zoom, Shift + arrow keys rotate (and tilt in 3D), Q and E turn the map, N puts north up; click to select a location or a fire.'
+/** Durations of the rotate buttons / keys and of north up (0 with reduced motion). */
+const ROTATE_MS = 300
+const NORTH_MS = 450
+/** How long the aerial photos take to change tint when the view changes (0 with reduced motion). */
+const TINT_MS = 400
 
 /** Update counters for verification (window.__mapStats): how often overlays were recomputed and how long it took.
  *  Development builds only: every use sits behind import.meta.env.DEV, which production builds compile out. */
@@ -261,6 +273,11 @@ export class MapController {
   private nearbyList: NearbyFire[] = []
   private nearbyKey = ''
   private readonly nearbyLoader = new NearbyLoader(fetchJson, bundleUrl)
+  /** The aerial photos' tint (decision j); kept across basemap switches. */
+  private tint: TintLevel = useMapRuntime.getState().tint
+  /** The heading the rotate buttons / keys are easing to: a second press while the first still turns adds 15° to it,
+   *  not to wherever the animation happens to be. */
+  private rotGoal: number | null = null
 
   constructor(container: HTMLElement) {
     const ws = useWorkspace.getState()
@@ -290,6 +307,7 @@ export class MapController {
 
     this.bindMapEvents()
     this.bindInputEvents(container)
+    this.bindRotation(container)
     this.subscribe()
     this.extras = bindExtrasLayers(this.map)
     // NWS outlines below the evacuation zones and fire layers; their labels and the highlight below map-core's top layers
@@ -423,7 +441,7 @@ export class MapController {
   private async applyBasemap(basemap: Basemap): Promise<void> {
     const seq = ++this.basemapSeq
     const url = import.meta.env.DEV && this.devFail.has('basemap') ? `${UNREACHABLE}/style.json` : BASEMAP_STYLE[basemap]
-    const derived = applyDevFailures(await loadBasemap(basemap, url), this.devFail)
+    const derived = applyDevFailures(await loadBasemap(basemap, url, this.tint), this.devFail)
     if (this.destroyed || seq !== this.basemapSeq) return
     this.derived = derived
     setProvider('basemap', derived.vector ? 'ok' : 'failed', derived.vector ? null : 'OpenFreeMap style did not load')
@@ -486,6 +504,8 @@ export class MapController {
     for (const layer of overviewLayers(theme, { narrow: this.narrowLabels })) map.addLayer(layer)
     for (const layer of topLayers(theme)) map.addLayer(layer)
     this.applyLayerVisibility(null)
+    // a tint asked for while this style was loading
+    this.applyTint(false)
     if (useWorkspace.getState().perspective === '3d') this.enableTerrain()
     else useMapRuntime.setState({ terrainOn: false })
     this.updateBuildings()
@@ -904,6 +924,8 @@ export class MapController {
     this.input.ours(() => this.map.easeTo({ padding, duration: animate ? motionMs(250) : 0 }))
   }
 
+  /** 2D / 3D: the camera tilts (3D) or looks straight down (2D) and keeps its heading both ways (brief 4 decision k;
+   *  north up only on request: the compass, N, "North up"). */
   private applyPerspective(p: Perspective, animate: boolean): void {
     const map = this.map
     const duration = animate ? motionMs(900) : 0
@@ -912,7 +934,7 @@ export class MapController {
       this.enableTerrain()
       this.input.ours(() => map.easeTo({ pitch: Math.max(map.getPitch(), PITCH_3D), duration }))
     } else {
-      this.input.ours(() => map.easeTo({ pitch: 0, bearing: 0, duration }))
+      this.input.ours(() => map.easeTo({ pitch: 0, duration }))
       const done = () => {
         if (useWorkspace.getState().perspective !== '2d' || this.destroyed) return
         map.setTerrain(null)
@@ -1109,13 +1131,29 @@ export class MapController {
       frameFire: () => this.frameRequest('fire'),
       frameArea: () => this.frameRequest('area'),
       frameOverview: () => this.frameRequest('overview'),
-      rotateBy: (deg) => ease({ bearing: this.map.getBearing() + deg }, 300),
+      rotateBy: (deg) => {
+        if (!Number.isFinite(deg)) return
+        // a press while the previous turn still runs continues from that turn's end
+        const from = this.rotGoal != null && this.map.isRotating() ? this.rotGoal : this.map.getBearing()
+        const to = stepDeg(from, deg)
+        this.rotGoal = to
+        ease({ bearing: to }, ROTATE_MS)
+      },
       tiltBy: (deg) => {
         if (useWorkspace.getState().perspective !== '3d') return
         ease({ pitch: Math.max(0, Math.min(MAX_PITCH_3D, this.map.getPitch() + deg)) }, 300)
       },
       topDown: () => ease({ pitch: 0 }, 450),
-      northUp: () => ease({ bearing: 0 }, 450),
+      northUp: () => {
+        this.rotGoal = 0
+        ease({ bearing: 0 }, NORTH_MS)
+      },
+      setBearing: (deg) => this.turnTo(deg),
+      setTint: (level) => {
+        if (level === this.tint) return
+        this.tint = level
+        this.applyTint(true)
+      },
       zoomBy: (delta) => {
         // the zoom buttons are the user's move: an official area's focus hold ends
         this.focusHold.release()
@@ -1131,6 +1169,53 @@ export class MapController {
         setProvider('imagery', 'idle')
         useWorkspace.getState().setBasemapFallback(null)
       },
+    }
+  }
+
+  /** Set the heading at once (the compass drag, Safari's trackpad twist). `gesture`: the browser event of a user's
+   *  gesture, passed to MapLibre as the move's originalEvent, so the move is the user's (it ends the opening framing
+   *  and a focus hold, like a drag on the map); without it the move is one of our own commands, like the buttons. */
+  private turnTo(deg: number, gesture?: Event): void {
+    if (!Number.isFinite(deg) || this.destroyed) return
+    this.rotGoal = null
+    if (gesture) this.input.input()
+    this.input.ours(() => this.map.jumpTo({ bearing: deg }, gesture ? { originalEvent: gesture } : undefined))
+  }
+
+  /** The visible view's rotation for Q / E / N (state/rotation.ts), and Safari's trackpad twist on the map. */
+  private bindRotation(container: HTMLElement): void {
+    const actions = useMapRuntime.getState().actions
+    if (actions) {
+      this.domUnsubs.push(
+        registerRotation({
+          rotateBy: (deg) => actions.rotateBy(deg),
+          northUp: () => actions.northUp(),
+          setBearing: (deg) => actions.setBearing(deg),
+          bearing: () => this.map.getBearing(),
+        }),
+      )
+    }
+    let start = 0
+    this.domUnsubs.push(
+      attachRotateGesture(container, {
+        start: () => {
+          start = this.map.getBearing()
+        },
+        // the content turns with the fingers: heading = heading at start − twist
+        rotate: (delta, e) => this.turnTo(stepDeg(start, -delta), e),
+        end: () => {},
+      }),
+    )
+  }
+
+  /** Paint the aerial photos at the current tint (decision j); a no-op on the other basemaps. */
+  private applyTint(animate: boolean): void {
+    if (useMapRuntime.getState().tint !== this.tint) useMapRuntime.setState({ tint: this.tint })
+    if (!this.styleReady || !this.map.getLayer(IMAGERY_LAYER)) return
+    const ms = animate ? motionMs(TINT_MS) : 0
+    for (const [k, v] of Object.entries(aerialTintPaint(this.tint))) {
+      this.map.setPaintProperty(IMAGERY_LAYER, `${k}-transition`, { duration: ms, delay: 0 })
+      this.map.setPaintProperty(IMAGERY_LAYER, k, v)
     }
   }
 
@@ -1209,6 +1294,8 @@ export class MapController {
       this.focusTimer = 0
       // a gesture (drag, wheel, keys, touch, double click) takes the camera
       if (e.originalEvent == null) return
+      // and the heading: the next ⟲ ⟳ / Q / E turns from where the gesture leaves the map
+      this.rotGoal = null
       this.focusHold.release()
       this.framing.userGesture()
       if (useStore.getState().incidentId == null) this.overviewFireFly = false

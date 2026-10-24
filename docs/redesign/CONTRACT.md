@@ -3304,6 +3304,51 @@ map + 1, `styles/atmosphere.css`), a stub with no visual effect; `views.ts atmos
 under SwiftShader). `__mapChrome().unobstructed` at 1440×1000: Public overview 0.724, Public fire (Lower Sugarloaf)
 0.763, Command `fixture-live` 0.508, Command overview 0.713.
 
+**H2c (rotation, globe-like dimming, basemap tint, 2026-10-24).** Rotation (decisions f, k). `lib/compass.ts` (pure):
+`normalizeDeg(d)` → [0, 360), `signedDeg(d)` → (−180, 180], `angleDelta(a, b)` (shortest signed turn),
+`stepDeg(d, step)` (exactly one step, signed), `pointerBearing(cx, cy, x, y, deadPx? = 0)` (screen angle as a compass
+bearing, null within `deadPx` of the centre), `dragHeading(start, turned)` (= start − turned: the needle follows the
+pointer), `headingLabel(d)` ("045°"), `isRotated(d)` (> 0.5°). `state/rotation.ts`: `RotationTarget`,
+`registerRotation(t)` (the last registered target is the visible view), `rotationTarget()`, `rotateView(deg)` and
+`viewNorthUp()` (return whether a view took it), `ROTATE_STEP_DEG = 15`, `rotationKey(e)` (q / e / n, no Ctrl / Meta /
+Alt), `runRotationKey(key)`, `popoverOpen(doc, target?)` with `POPOVER_SELECTOR = '.popover, [data-popover],
+.loc-results, .fxm-legend-pop'` (mark any other popover with `data-popover`; a key from inside a dialog, menu or list
+box also counts). `state/runtime.ts useHotkeys`: Q −15°, E +15°, N north up, outside text fields and never while a
+popover is open. `ui/useCompassDrag({ bearing, setBearing, northUp, rotateBy?, disabled? }) → { props, dragging }`
+(spread `props` on the compass button: pointer capture, a press moving < 4 px is a click = `northUp`, `setBearing` at
+most once per frame, ← / → turn 15°, Escape during a drag restores the heading). `lib/rotateGesture.ts
+attachRotateGesture(el, { start, rotate(deltaDeg, event), end }, { thresholdDeg? = 4 }) → detach` (Safari
+`gesturestart/change/end`, `preventDefault` on each, delta measured from the threshold; the view sets heading = start −
+delta). Map: `MapActions.setBearing(deg)` (instant `jumpTo` inside `this.input.ours`) and `setTint(level)`; `rotateBy`
+continues from the previous turn's goal while that turn still runs (a user gesture clears the goal); `applyPerspective`
+eases only the pitch, so 2D ↔ 3D keeps the heading; the controller registers its `RotationTarget` and attaches the
+Safari twist to the map container (`turnTo(deg, gestureEvent)`: `input.input()` + `jumpTo(…, { originalEvent })`, so the
+twist is the user's own move). Hand-off (`ui/shell/handoff.ts`): map → Forensic `flyToLocal(x, z, distance,
+bearingDeg = the live map bearing)`; Forensic → map `view.bearing = cam.bearingDeg` in 2D and 3D. `MapControls({ variant?:
+'bar' | 'compact', anchor?: 'top' | 'bottom' = 'top', layers?: boolean, className? })`: no variant = today's row (the
+compass drags; ⟲ ⟳ stay in the 3D orbit row); `bar` = 2D/3D, basemap, ⟲ compass ⟳ (`.fxm-turn` group), −, +, framing,
+optional Layers icon (`data-panel-toggle="layers"`), styled as Main details (glass .7, radius 12, 36 px hairline
+buttons, mono 2D/3D), with the 3D orbit row (tilt ±, Top-down, North up) on the side away from `anchor`; `compact` =
+vertical +, −, ⟲, compass, ⟳ (44 px buttons on phones). Compass of `bar` / `compact`: the screens' 14×18 needle, north
+`--m-fire`. One-time hint `ROTATE_HINT` (key `fire3d.rotateHintSeen`; in `bar` also in 2D). Development builds take
+`?ctl=bar|compact` to force a variant (screenshots). Dimming (decision g): `map/atmosphere.ts` (pure)
+`vignetteStrength(zoom)`, `vignetteChanged(prev, next)` (≥ .02 or reaching .25 / 1), `vignetteGeometry(w, h, insets)`
+(safe-area centre, radius half its shorter side, insets scaled like the map padding, radius ≥ a fifth of the map's
+shorter side), `defaultTint(edges)`. `MapAtmosphere` keeps its App.tsx mount but renders nothing in place: it creates
+`div.mw-atmo[aria-hidden][data-edges]` and inserts it in MapLibre's canvas container right after the canvas, without a
+z-index, so the map's own DOM overlays (selection pin, markers, hover popups) paint above the dimming, the provider
+notices (z-index 2) too, and the chrome above all; `--mw-vignette` / `--mw-vig-x` / `-y` / `-r` are written from
+`useMapRuntime` / `useWorkspace` subscriptions and a ResizeObserver (no React render per frame). `styles/atmosphere.css`:
+`::before` vignette, `::after` the screens' edge stops (Command left `min(540px, 38vw)`, right `min(500px, 35vw)`, bottom
+230, top 120; fire left `min(560px, 42vw)`; overview top / bottom `min(200px, 24vh)`; ≤ 760 px Command and fire use a top
+140 + bottom 160 instead of the sides; no edges while panels are hidden (`.mw.is-collapsed`)); transitions off under
+reduced motion. Tint (decision j): `basemapStyle.ts` `TintLevel`, `AERIAL_TINT` (overview −0.85 / brightness-max .64,
+fire −0.6 / .68, none 0 / 1), `aerialTintPaint(level)`, `deriveAerial(base, tint?)`, `deriveBasemap(…, tint?)`,
+`fallbackStyle(basemap, tint?)`, `loadBasemap(basemap, url?, tint?)`; the controller paints only `fx-usgs-imagery`
+(transition `motionMs(400)`) and keeps the tint across basemap switches; `useMapRuntime.tint` (in effect) and
+`tintRequest`; `MapAtmosphere` applies `tintRequest ?? defaultTint(edges)` (overview → 'overview', fire and Command →
+'fire'); a chrome that wants another calls `map/useMapTint.ts useMapTint(level | null)` while mounted.
+
 #### H3+H4 (Public overview, Public fire view, Command overview) — as built
 
 _To be filled by H3+H4._

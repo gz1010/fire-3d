@@ -3,10 +3,12 @@
 // scale, provider health, the forecast display choice and what the overlays currently show (for the legend).
 // Brief 2 adds the camera actions of the controls (orbit group, "Incident" toggle, "Try aerial again"), the framing
 // state (dev handle / tests: wait for `framing === 'done'`) and the fire bounds (I4). The aerial fallback itself lives in
-// the workspace store (basemapFallback, set by the controller).
+// the workspace store (basemapFallback, set by the controller). Brief 4 (H2c) adds setBearing (compass drag) and the
+// basemap tint (setTint, the tint in effect and a chrome's request).
 import type { Map as MapLibreMap } from 'maplibre-gl'
 import { create } from 'zustand'
 import type { LonLatBox } from '../lib/fireBounds'
+import type { TintLevel } from './basemapStyle'
 import type { FrameGoal, FramingPhase } from './framing'
 import type { ForecastFrame, ForecastView } from './overlayModel'
 
@@ -72,6 +74,12 @@ export interface MapActions {
   tiltBy(deg: number): void
   topDown(): void
   northUp(): void
+  /** Brief 4 (decision f): set the compass heading at once (the compass drag; no animation). */
+  setBearing(deg: number): void
+  /** Brief 4 (decision j): how much the aerial photos are greyed and darkened (overview, fire / Command, none). The
+   *  dark basemap is neutral grey already and Roads stay as published; fire, official and selection layers are never
+   *  tinted. Kept across basemap switches. */
+  setTint(level: TintLevel): void
   /** Zoom in / out by `delta` levels (relative to the opening fit while it is still flying). */
   zoomBy(delta: number): void
   /** End the aerial fallback and load the USGS photos again. */
@@ -99,6 +107,10 @@ export interface MapRuntimeState {
   /** Brief 3 (§14.11): the visible map area inside the safe-area padding [w, s, e, n], updated when the camera settles
    *  (the overview list's "in this view"); null before the map has settled once. */
   viewBox: LonLatBox | null
+  /** Brief 4 (decision j): the basemap tint in effect (set through actions.setTint). */
+  tint: TintLevel
+  /** Brief 4: a chrome's tint request (map/useMapTint.ts), null = the view's default (MapAtmosphere). */
+  tintRequest: TintLevel | null
 }
 
 export const useMapRuntime = create<MapRuntimeState>()((set) => ({
@@ -115,6 +127,8 @@ export const useMapRuntime = create<MapRuntimeState>()((set) => ({
   framedKind: null,
   fireBounds: null,
   viewBox: null,
+  tint: 'fire',
+  tintRequest: null,
 }))
 
 /** Set one provider's status (no-op when unchanged). */

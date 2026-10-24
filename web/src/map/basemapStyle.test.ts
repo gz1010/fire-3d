@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { validateStyleMin } from '@maplibre/maplibre-gl-style-spec'
 import {
   AERIAL_MAJOR_ROAD,
+  AERIAL_TINT,
+  aerialTintPaint,
   BUILDING_COLORS,
   BUILDINGS_3D_LAYER,
   BUILDINGS_MINZOOM,
@@ -128,6 +130,9 @@ describe('basemap styles', () => {
     const img = a.style.layers[1] as unknown as { paint: Record<string, number> }
     expect(img.paint['raster-saturation']).toBeLessThan(0)
     expect(img.paint['raster-brightness-max']).toBeLessThan(1)
+    // the default tint is today's fire-view look (brief 4 decision j)
+    expect(img.paint['raster-saturation']).toBe(-0.6)
+    expect(img.paint['raster-brightness-max']).toBe(0.68)
     const label = a.style.layers.find((l) => l.id === 'place_city') as { paint: Record<string, unknown> }
     expect(label.paint['text-halo-width']).toBeGreaterThan(1)
     // major roads at about 0.45 alpha so they do not compete with the fire edge
@@ -135,6 +140,27 @@ describe('basemap styles', () => {
     expect(major.paint['line-color']).toBe(AERIAL_MAJOR_ROAD)
     expect(AERIAL_MAJOR_ROAD).toMatch(/0\.45\)$/)
     expect(order).not.toContain('building-3d')
+  })
+
+  it('tint (brief 4 decision j): paint on the photo layer only, greyer on the national overview, none = as published', () => {
+    expect(AERIAL_TINT.overview.saturation).toBeLessThanOrEqual(-0.8)
+    expect(AERIAL_TINT.fire).toEqual({ saturation: -0.6, brightnessMax: 0.68 })
+    expect(AERIAL_TINT.none).toEqual({ saturation: 0, brightnessMax: 1 })
+    expect(aerialTintPaint('overview')).toEqual({ 'raster-saturation': AERIAL_TINT.overview.saturation, 'raster-brightness-max': AERIAL_TINT.overview.brightnessMax })
+    for (const level of ['overview', 'fire', 'none'] as const) {
+      const a = deriveAerial(base(), level)
+      const img = a.style.layers.find((l) => l.id === IMAGERY_LAYER) as unknown as { paint: Record<string, number> }
+      expect(img.paint).toMatchObject(aerialTintPaint(level))
+      expect(img.paint['raster-contrast']).toBe(0.06)
+      // only the photos carry the tint: no other layer's colour depends on it
+      const others = a.style.layers.filter((l) => l.id !== IMAGERY_LAYER)
+      expect(JSON.stringify(others)).toBe(JSON.stringify(deriveAerial(base(), 'fire').style.layers.filter((l) => l.id !== IMAGERY_LAYER)))
+      const f = fallbackStyle('aerial', level).style.layers.find((l) => l.id === IMAGERY_LAYER) as unknown as { paint: Record<string, number> }
+      expect(f.paint).toEqual(aerialTintPaint(level))
+    }
+    // the dark and road maps have no photo layer to tint (dark is neutral grey already; Roads stay as published)
+    expect(ids(deriveDark(base()).style)).not.toContain(IMAGERY_LAYER)
+    expect(ids(deriveRoads(base()).style)).not.toContain(IMAGERY_LAYER)
   })
 
   it('fallback keeps a usable map without OpenFreeMap (no labels, says so via vector: false)', () => {
