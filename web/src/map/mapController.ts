@@ -68,6 +68,7 @@ import { boundsCenter, Framing, goalFor, latestPerimeter, LOWER48_BOUNDS, LOWER4
 import { drapedLayers, HATCH_IMAGE, hatchImage, incidentLabelField, LAYER_GROUPS, LYR, SRC, topLayers, type MapTheme } from './layers'
 import { recordHoverLines, zoneHoverLines } from './hoverText'
 import { fmtLatLon, SelectionPin } from './markers'
+import { COVERS_POINT_COST, COVERS_TEXT_COST, type ScreenBox } from './pinLabel'
 import { EMPTY_OVERLAYS, motionMs, patchOverlays, setProvider, useMapRuntime, type MapActions } from './mapStore'
 import {
   aoiFeatures,
@@ -1677,8 +1678,10 @@ export class MapController {
     const c = map.getContainer()
     const i = useWorkspace.getState().safeInsets
     const free = { left: i.left, top: i.top, right: c.clientWidth - i.right, bottom: c.clientHeight - i.bottom }
-    const layers = [LYR.incidentLabel, LYR.incidentCircle, LYR.eventsCircle, LYR.eventsLabel].filter((id) => map.getLayer(id))
-    this.pin.place(map, free, layers.length ? (b) => map.queryRenderedFeatures([[b.left, b.top], [b.right, b.bottom]], { layers }).length > 0 : undefined)
+    const text = [LYR.incidentLabel, LYR.eventsLabel].filter((id) => map.getLayer(id))
+    const points = [LYR.incidentCircle, LYR.eventsCircle].filter((id) => map.getLayer(id))
+    const hits = (b: ScreenBox, layers: string[]) => layers.length > 0 && map.queryRenderedFeatures([[b.left, b.top], [b.right, b.bottom]], { layers }).length > 0
+    this.pin.place(map, free, (b) => (hits(b, text) ? COVERS_TEXT_COST : 0) + (hits(b, points) ? COVERS_POINT_COST : 0))
   }
 
   // ------------------------------------------------------------------------------------------------ data

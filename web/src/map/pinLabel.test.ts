@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { overflowPx, pinLabelBox, pinLabelSide, type ScreenBox } from './pinLabel'
+import { COVERS_POINT_COST, COVERS_TEXT_COST, OVERFLOW_COST_PER_PX, overflowPx, pinLabelBox, pinLabelSide, type ScreenBox } from './pinLabel'
 
 // a 1440 × 1000 map with Command's columns: the readout on the left, "Official now" on the right
 const FREE: ScreenBox = { left: 472, top: 84, right: 1008, bottom: 790 }
@@ -36,8 +36,20 @@ describe('selected point label placement', () => {
 
   it('moves off another label when a free corner is clean', () => {
     const fireLabel: ScreenBox = { left: 620, top: 360, right: 760, bottom: 400 }
-    const hits = (b: ScreenBox) => b.left < fireLabel.right && b.right > fireLabel.left && b.top < fireLabel.bottom && b.bottom > fireLabel.top
+    const hits = (b: ScreenBox) => (b.left < fireLabel.right && b.right > fireLabel.left && b.top < fireLabel.bottom && b.bottom > fireLabel.top ? COVERS_TEXT_COST : 0)
     expect(pinLabelSide({ x: 700, y: 400 }, LABEL, FREE, 'up-right', hits)).toBe('down-right')
+  })
+
+  it('weighs what it would hide: a few pixels under the chrome cost more than covering a dot, less than text', () => {
+    // Command at 1440 px (fixture-live): up-right runs 17 px past the free area and over the fire's label, up-left
+    // covers the fire's label, down-right runs 17 px past, down-left covers two key-event dots
+    const covers = (_b: ScreenBox, side: string) =>
+      ({ 'up-right': COVERS_TEXT_COST, 'up-left': COVERS_TEXT_COST, 'down-right': 0, 'down-left': COVERS_POINT_COST })[side] ?? 0
+    expect(pinLabelSide({ x: 803, y: 383 }, LABEL, FREE, 'up-right', covers)).toBe('down-left')
+    // 17 px under the chrome is worse than covering text; 10 px is not
+    expect(OVERFLOW_COST_PER_PX * 17).toBeGreaterThan(COVERS_TEXT_COST)
+    expect(OVERFLOW_COST_PER_PX * 10).toBeLessThan(COVERS_TEXT_COST)
+    expect(COVERS_POINT_COST).toBeLessThan(COVERS_TEXT_COST)
   })
 
   it('keeps the current corner on a tie (no flip-flop while panning)', () => {

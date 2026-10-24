@@ -93,15 +93,15 @@ export class SelectionPin {
     this.shown = true
   }
 
-  /** Put the label in the corner that stays inside `free` (screen px of the map container) and off other labels
-   *  (`blocked`); call when the map settles, the safe area changes or the selection changes. */
-  place(map: MapLibreMap, free: ScreenBox, blocked?: (box: ScreenBox, side: PinSide) => boolean): void {
+  /** Put the label in the corner that stays inside `free` (screen px of the map container) and hides the least
+   *  (`covers`: pinLabel.ts costs); call when the map settles, the safe area changes or the selection changes. */
+  place(map: MapLibreMap, free: ScreenBox, covers?: (box: ScreenBox, side: PinSide) => number): void {
     if (!this.shown) return
     const w = this.chip.offsetWidth
     const h = this.chip.offsetHeight
     if (!w || !h) return
     const p = map.project(this.marker.getLngLat())
-    const side = pinLabelSide({ x: p.x, y: p.y }, { w, h }, free, this.side, blocked)
+    const side = pinLabelSide({ x: p.x, y: p.y }, { w, h }, free, this.side, covers)
     if (side === this.side) return
     this.side = side
     this.root.classList.toggle('is-left', side.endsWith('left'))

@@ -31,21 +31,25 @@ export function overflowPx(b: ScreenBox, free: ScreenBox): number {
   return Math.max(0, free.left - b.left) + Math.max(0, b.right - free.right) + Math.max(0, free.top - b.top) + Math.max(0, b.bottom - free.bottom)
 }
 
-/** A label that covers another label costs as much as running this far under the chrome. */
-const BLOCKED_COST = 40
+/** Costs: each pixel under the chrome (its text sits right there), covering another label's text, covering a dot. A
+ *  label covering text costs as much as running ~13 px under the chrome; a dot only as much as 5 px. */
+export const OVERFLOW_COST_PER_PX = 3
+export const COVERS_TEXT_COST = 40
+export const COVERS_POINT_COST = 15
 
-/** Which corner the selection label takes: the least overflow out of the free map area plus a fixed cost for covering
- *  another label (`blocked`). Ties keep the current side (no flip-flop while panning), else the preference order. */
+/** Which corner the selection label takes: the cheapest by `OVERFLOW_COST_PER_PX` × the pixels outside the free map area
+ *  plus `covers(box, side)` (what it would hide: COVERS_TEXT_COST, COVERS_POINT_COST or their sum). Ties keep the
+ *  current corner (no flip-flop while panning), else the preference order. */
 export function pinLabelSide(
   dot: { x: number; y: number },
   size: { w: number; h: number },
   free: ScreenBox,
   current: PinSide,
-  blocked: (box: ScreenBox, side: PinSide) => boolean = () => false,
+  covers: (box: ScreenBox, side: PinSide) => number = () => 0,
 ): PinSide {
   const cost = (side: PinSide) => {
     const b = pinLabelBox(dot.x, dot.y, size.w, size.h, side)
-    return overflowPx(b, free) + (blocked(b, side) ? BLOCKED_COST : 0)
+    return OVERFLOW_COST_PER_PX * overflowPx(b, free) + covers(b, side)
   }
   const costs = new Map(PIN_SIDES.map((s) => [s, cost(s)] as const))
   const best = Math.min(...costs.values())
