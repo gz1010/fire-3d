@@ -64,7 +64,11 @@
     "browser_checks": "39/39 (scratch Playwright): hidden layers in Public and back in Command, newest perimeter only and filled, time = latest observation, leader + point, no timeline / updates / picker / drawer, facts wording, search pill centred and focused, leader steps aside for it, Escape, location card with the Command link and no model block, Command round trip with its time held and given back, ?t= applied in Command, distance chip text and toggle, location not in the URL, hidden-tab pause, reduced motion, X back to the overview."
   },
   "gates": "typecheck ok / lint 55 warnings, all in src/scene (none added) / tests 99 files: 1365 passed, 2 skipped, 0 failed / build ok",
-  "commits": [],
+  "commits": [
+    "2bf0575 brief 4 H4: work-in-progress snapshot (fire view builder mid-step; gates not yet run)",
+    "91f6186 brief 4 H4: Public fire view finished (contrast, phone sheet, key over controls, screenshots, CONTRACT 15.5, report)",
+    "(this commit) brief 4 H4: report commit list"
+  ],
   "known_issues": [
     "Credits wrap in the 30 px bar (two lines at 1440 px, four at 1024 px): App.tsx (frozen) folds them behind '© Credits' only on phones and in Command below 1280 px. On 1024 x 768 the facts scroll under their sticky foot (sources and 'Not an all-clear' stay in view).",
     "App.tsx's 'Skip to timeline' skip link has no target in the fire view; it is hidden there by CSS (App.tsx is frozen). The orchestrator may want a fire-view skip link (e.g. 'Skip to the official facts').",
