@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fire-3d · Willow · Command</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0c0c0c}
+a{color:#e0e0e0}a:hover{color:#ffffff}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,a:focus-visible{outline:2px solid #ff7a3d;outline-offset:2px}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 1000px; overflow: hidden; background: #0c0c0c; color: #e6e6e6; font-family: Inter, system-ui, sans-serif;">
+
+<!-- Map -->
+<img src="../assets/command-map.jpg" alt="Aerial map of the Willow fire south of Turquoise Lake near Leadville Junction, showing the observed fire area and the modeled spread" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;">
+<div aria-hidden="true" style="position: absolute; inset: 0; background: #333333; mix-blend-mode: color; opacity: {{tint}}; pointer-events: none;"></div>
+<div aria-hidden="true" style="position: absolute; inset: 0; background: radial-gradient(ellipse 40% 52% at 53% 60%, rgba(12,12,12,0) 50%, rgba(12,12,12,0.55) 82%, rgba(12,12,12,0.85) 100%); pointer-events: none;"></div>
+<div aria-hidden="true" style="position: absolute; left: 0; top: 0; bottom: 0; width: 540px; background: linear-gradient(90deg, rgba(12,12,12,0.93) 0%, rgba(12,12,12,0.72) 62%, rgba(12,12,12,0) 100%); pointer-events: none;"></div>
+<div aria-hidden="true" style="position: absolute; right: 0; top: 0; bottom: 0; width: 500px; background: linear-gradient(270deg, rgba(12,12,12,0.93) 0%, rgba(12,12,12,0.72) 62%, rgba(12,12,12,0) 100%); pointer-events: none;"></div>
+<div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 230px; background: linear-gradient(0deg, rgba(12,12,12,0.96) 0%, rgba(12,12,12,0) 100%); pointer-events: none;"></div>
+<div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 120px; background: linear-gradient(180deg, rgba(12,12,12,0.9) 0%, rgba(12,12,12,0) 100%); pointer-events: none;"></div>
+
+<!-- Map markers and leaders -->
+<svg width="1440" height="1000" viewBox="0 0 1440 1000" style="position: absolute; inset: 0; pointer-events: none;" aria-hidden="true">
+<line x1="616" y1="557" x2="641" y2="526" stroke="#e6e6e6" stroke-opacity="0.55" stroke-dasharray="2 3"></line>
+<circle cx="616" cy="557" r="8" fill="none" stroke="#f0f0f0" stroke-width="1.6"></circle>
+<circle cx="616" cy="557" r="2.2" fill="#f0f0f0"></circle>
+<circle cx="641" cy="526" r="16" fill="#9fd6ff" fill-opacity="0.16"></circle>
+<circle cx="641" cy="526" r="6" fill="#9fd6ff" stroke="#e8f6ff" stroke-width="1.5"></circle>
+<path d="M648 520 L700 470 H760" fill="none" stroke="#9fd6ff" stroke-opacity="0.7" stroke-width="0.9"></path>
+<path d="M610 563 L580 598 H532" fill="none" stroke="#e6e6e6" stroke-opacity="0.5" stroke-width="0.9"></path>
+<path d="M790 300 L840 252 H900" fill="none" stroke="#ff9a5a" stroke-opacity="0.75" stroke-width="0.9"></path>
+<path d="M962 582 L1000 622 H1040" fill="none" stroke="#f5c060" stroke-opacity="0.75" stroke-width="0.9"></path>
+</svg>
+<div style="position: absolute; left: 764px; top: 456px; font-family: JetBrains Mono, monospace; font-size: 12px; color: #cfeaff; text-shadow: 0 1px 6px #000; pointer-events: none;">39.23708° N · 106.43677° W<div style="font-size: 9.5px; letter-spacing: 0.14em; color: #9fd6ff;">SELECTED</div></div>
+<div style="position: absolute; left: 400px; top: 584px; width: 128px; text-align: right; font-family: JetBrains Mono, monospace; font-size: 12px; color: #e6e6e6; text-shadow: 0 1px 6px #000; pointer-events: none;">Willow<div style="font-size: 9.5px; letter-spacing: 0.14em; color: #9a9a9a;">REPORTED</div></div>
+<div style="position: absolute; left: 904px; top: 236px; text-shadow: 0 1px 6px #000; pointer-events: none;"><div style="font-size: 13px; font-weight: 600; color: #f0f0f0;">Observed fire</div><div style="font-family: JetBrains Mono, monospace; font-size: 10.5px; color: #ff9a5a;">7,359 AC · OCT 23 14:30 MDT</div></div>
+<div style="position: absolute; left: 1044px; top: 608px; text-shadow: 0 1px 6px #000; pointer-events: none;"><div style="font-size: 13px; font-weight: 600; color: #f0f0f0;">Modeled spread</div><div style="font-family: JetBrains Mono, monospace; font-size: 10.5px; color: #f5c060;">BY OCT 26 14:30 · EXPERIMENTAL</div></div>
+
+<!-- Top bar -->
+<header style="position: absolute; top: 20px; left: 28px; right: 28px; height: 40px; display: flex; align-items: center; gap: 14px;">
+<div style="flex: 1 1 0; display: flex; align-items: center; gap: 12px; min-width: 0;">
+<a href="Main.dc.html" aria-label="Back to all fires" style="width: 36px; height: 36px; flex-shrink: 0; border-radius: 999px; display: flex; align-items: center; justify-content: center; background: rgba(14,14,14,0.6); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid rgba(200,200,200,0.18);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e6e6e6" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 5 L8 12 L15 19"></path></svg></a>
+<span style="font-size: 18px; font-weight: 600; color: #f0f0f0;">Willow</span>
+<span style="display: flex; align-items: center; gap: 6px; font-family: JetBrains Mono, monospace; font-size: 10.5px; letter-spacing: 0.14em; color: #ff9a5a;"><span style="width: 7px; height: 7px; border-radius: 999px; background: #ff6a2a; box-shadow: 0 0 8px #ff6a2a;"></span>LIVE</span>
+<span style="font-size: 13px; color: #8a8a8a; white-space: nowrap;">Leadville, Colorado</span>
+</div>
+<div role="group" aria-label="View" style="display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: rgba(14,14,14,0.6); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid rgba(200,200,200,0.18);">
+<a href="FireView.dc.html" style="padding: 7px 16px; border-radius: 999px; font-size: 13px; color: #cfcfcf; text-decoration: none;">Public</a>
+<span aria-current="page" style="padding: 7px 16px; border-radius: 999px; font-size: 13px; font-weight: 600; background: #ff7a3d; color: #1a0a03;">Command</span>
+<button type="button" style="padding: 7px 16px; border: 0; border-radius: 999px; font-size: 13px; color: #cfcfcf; background: transparent;">Forensic</button>
+</div>
+<div style="flex: 1 1 0; display: flex; justify-content: flex-end; align-items: center; gap: 10px;">
+<span style="font-family: JetBrains Mono, monospace; font-size: 10.5px; letter-spacing: 0.1em; color: #9a9a9a; white-space: nowrap;">VIIRS NOAA · 375 M · <span style="color: #e8b04a;">6.2 H AGO</span></span>
+<button type="button" aria-label="Analysis" style="width: 36px; height: 36px; border-radius: 999px; display: flex; align-items: center; justify-content: center; background: rgba(14,14,14,0.6); border: 1px solid rgba(200,200,200,0.18);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#e6e6e6" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 20 V10 M10 20 V4 M16 20 V13 M22 20 H2"></path></svg></button>
+<button type="button" aria-label="Check an address" style="width: 36px; height: 36px; border-radius: 999px; display: flex; align-items: center; justify-content: center; background: rgba(14,14,14,0.6); border: 1px solid rgba(200,200,200,0.18);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#e6e6e6" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20 L16 16"></path></svg></button>
+<button type="button" aria-label="Layers" style="width: 36px; height: 36px; border-radius: 999px; display: flex; align-items: center; justify-content: center; background: rgba(14,14,14,0.6); border: 1px solid rgba(200,200,200,0.18);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#e6e6e6" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 L21 8 L12 13 L3 8 Z"></path><path d="M3 12 L12 17 L21 12"></path><path d="M3 16 L12 21 L21 16"></path></svg></button>
+</div>
+</header>
+
+<!-- Left readout -->
+<section aria-label="Selected point" style="position: absolute; left: 40px; top: 100px; width: 420px;">
+<div style="display: flex; align-items: center; justify-content: space-between;">
+<span style="font-family: JetBrains Mono, monospace; font-size: 10.5px; letter-spacing: 0.14em; color: #9a9a9a;">SELECTED POINT</span>
+<span style="display: flex; gap: 4px;">
+<button type="button" aria-label="Copy coordinates" style="width: 30px; height: 30px; border: 0; border-radius: 8px; background: transparent; display: flex; align-items: center; justify-content: center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9a9a9a" stroke-width="1.8" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"></rect><path d="M16 8 V5 A1 1 0 0 0 15 4 H5 A1 1 0 0 0 4 5 V15 A1 1 0 0 0 5 16 H8"></path></svg></button>
+<button type="button" aria-label="Center map on point" style="width: 30px; height: 30px; border: 0; border-radius: 8px; background: transparent; display: flex; align-items: center; justify-content: center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9a9a9a" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="6.5"></circle><path d="M12 2 V5 M12 19 V22 M2 12 H5 M19 12 H22"></path></svg></button>
+<button type="button" aria-label="Clear selected point" style="width: 30px; height: 30px; border: 0; border-radius: 8px; background: transparent; display: flex; align-items: center; justify-content: center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9a9a9a" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6 L18 18 M18 6 L6 18"></path></svg></button>
+</span>
+</div>
+<div style="font-family: JetBrains Mono, monospace; font-size: 30px; line-height: 36px; font-weight: 500; color: #f0f0f0; margin-top: 4px;">39.23708° N<br>106.43677° W</div>
+<div style="font-family: JetBrains Mono, monospace; font-size: 11px; line-height: 16px; color: #8a8a8a; margin-top: 8px;">39°14′13.5″ N · 106°26′12.4″ W · UTM 13N 376001 E 4344069 N · WGS84</div>
+<p style="margin: 14px 0 0; font-size: 14px; line-height: 21px; color: #e6e6e6;">Inside the mapped fire area. Burned around <span style="font-family: JetBrains Mono, monospace; font-size: 13px;">Jun 28, 16:44 MDT</span> (estimate), <span style="font-family: JetBrains Mono, monospace; font-size: 13px;">0.7 mi</span> from the edge.</p>
+<div style="display: flex; gap: 6px; margin-top: 8px;">
+<span style="padding: 1px 7px; border-radius: 999px; border: 1px solid #ff9a5a; font-family: JetBrains Mono, monospace; font-size: 9.5px; font-weight: 600; letter-spacing: 0.1em; color: #ff9a5a;">MAPPED JUL 12 · 01:21</span>
+<span style="padding: 1px 7px; border-radius: 999px; border: 1px solid #e8b04a; font-family: JetBrains Mono, monospace; font-size: 9.5px; font-weight: 600; letter-spacing: 0.1em; color: #e8b04a;">STALE · 104 D</span>
+</div>
+<p style="margin: 12px 0 0; font-size: 13px; line-height: 19px; color: #bdbdbd;"><span style="padding: 1px 7px; margin-right: 6px; border-radius: 999px; border: 1px dashed #f5c060; font-family: JetBrains Mono, monospace; font-size: 9.5px; font-weight: 600; letter-spacing: 0.1em; color: #f5c060;">MODEL</span>This spot was already inside the burned area when the run started (<span style="font-family: JetBrains Mono, monospace; font-size: 12px;">Oct 23, 14:30 MDT</span>).</p>
+<div style="height: 1px; background: rgba(200,200,200,0.22); margin: 18px 0 4px;"></div>
+<div style="display: flex; align-items: baseline; gap: 10px; padding: 8px 0;"><span style="font-family: JetBrains Mono, monospace; font-size: 22px; font-weight: 500; color: #f0f0f0;">7,359<span style="font-size: 12px; color: #bdbdbd; margin-left: 4px;">ac</span></span><span style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.12em; color: #9a9a9a;">— BURNED</span></div>
+<div style="display: flex; align-items: baseline; gap: 10px; padding: 8px 0;"><span style="font-family: JetBrains Mono, monospace; font-size: 22px; font-weight: 500; color: #f0f0f0;">92<span style="font-size: 12px; color: #bdbdbd; margin-left: 3px;">%</span></span><span style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.12em; color: #9a9a9a;">— CONTAINED</span></div>
+<div style="padding: 8px 0 0;"><span style="font-family: JetBrains Mono, monospace; font-size: 17px; font-weight: 500; color: #f0f0f0;">39.23359° N · 106.44033° W</span></div>
+<div style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.12em; color: #9a9a9a; padding-bottom: 8px;">— REPORTED LOCATION · USFS VIA NIFC WFIGS</div>
+<div style="display: flex; align-items: baseline; gap: 10px; padding: 8px 0;"><span style="font-family: JetBrains Mono, monospace; font-size: 17px; font-weight: 500; color: #f0f0f0;">2026-willow-548a8d</span><span style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.12em; color: #9a9a9a;">— INCIDENT ID</span></div>
+</section>
+
+<!-- Right: official notices -->
+<section aria-label="Official now" style="position: absolute; right: 40px; top: 100px; width: 380px;">
+<div style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px;">
+<span style="font-family: JetBrains Mono, monospace; font-size: 10.5px; font-weight: 600; letter-spacing: 0.14em; color: #8fd3a8;">OFFICIAL NOW</span>
+<span style="font-family: JetBrains Mono, monospace; font-size: 10px; letter-spacing: 0.08em; color: #8a8a8a;">TIMES IN MDT</span>
+</div>
+<sc-for list="{{notices}}" as="n" hint-placeholder-count="4">
+<div style="border-top: 1px solid rgba(200,200,200,0.12);">
+<button type="button" onClick="{{n.toggle}}" aria-expanded="{{n.expanded}}" style="width: 100%; display: flex; align-items: flex-start; gap: 10px; padding: 12px 0; border: 0; background: transparent; text-align: left;">
+<span style="width: 7px; height: 7px; flex-shrink: 0; margin-top: 6px; border-radius: 999px; background: {{n.dot}};"></span>
+<span style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;">
+<span style="font-size: 13px; line-height: 18px; color: #e6e6e6;"><strong style="font-weight: 600; color: #f0f0f0;">{{n.title}}</strong> — {{n.verdict}}</span>
+<span style="font-family: JetBrains Mono, monospace; font-size: 10px; letter-spacing: 0.06em; color: #8a8a8a;">{{n.meta}}</span>
+</span>
+<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8a8a8a" stroke-width="2" aria-hidden="true" style="margin-top: 4px; flex-shrink: 0;"><path d="{{n.chevron}}"></path></svg>
+</button>
+<sc-if value="{{n.open}}" hint-placeholder-val="{{false}}">
+<p style="margin: -4px 0 12px 17px; font-size: 12px; line-height: 18px; color: #bdbdbd;">{{n.detail}}</p>
+</sc-if>
+</div>
+</sc-for>
+<div style="border-top: 1px solid rgba(200,200,200,0.12); padding-top: 12px; display: flex; flex-direction: column; gap: 8px;">
+<p style="margin: 0; font-size: 12px; line-height: 18px; color: #bdbdbd;">Fire-3d's modeled spread is experimental and is not an evacuation order. Follow local officials.</p>
+<a href="#updates" style="font-size: 12px; display: flex; align-items: center; gap: 4px;">View all updates<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M9 6 L15 12 L9 18"></path></svg></a>
+</div>
+</section>
+
+<!-- Legend + scale -->
+<div style="position: absolute; right: 40px; top: 820px; display: flex; align-items: center; gap: 16px; font-size: 12px; color: #cfcfcf;">
+<span style="display: flex; align-items: center; gap: 6px;"><span style="width: 14px; height: 9px; background: rgba(170,55,20,0.7); border: 1px solid #ff8a3c;"></span>Observed</span>
+<span style="display: flex; align-items: center; gap: 6px;"><span style="width: 14px; height: 9px; background: repeating-linear-gradient(45deg, #f5c060 0 2px, rgba(0,0,0,0) 2px 4px); border: 1px solid #f5c060;"></span>Modeled</span>
+<span style="display: flex; align-items: center; gap: 6px;"><span style="width: 14px; height: 0; border-top: 1.5px solid #ff8a3c;"></span>Perimeter</span>
+<span style="display: flex; align-items: center; gap: 6px;"><span style="width: 9px; height: 9px; border-radius: 999px; background: #9fd6ff;"></span>Selected</span>
+<span style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px; margin-left: 6px;"><span style="font-family: JetBrains Mono, monospace; font-size: 10.5px; color: #bdbdbd;">1 mi</span><span style="width: 134px; height: 4px; box-sizing: border-box; border: 1.5px solid #cfcfcf; border-top: 0;"></span></span>
+</div>
+
+<!-- Timeline -->
+<section aria-label="Timeline" style="position: absolute; left: 40px; right: 40px; top: 876px; height: 72px;">
+<div style="position: absolute; left: 0; top: 18px; display: flex; gap: 6px;">
+<button type="button" onClick="{{play}}" aria-label="{{playLabel}}" style="width: 40px; height: 40px; border-radius: 999px; display: flex; align-items: center; justify-content: center; background: rgba(14,14,14,0.6); border: 1px solid rgba(200,200,200,0.2);">
+<sc-if value="{{playing}}" hint-placeholder-val="{{false}}"><svg width="13" height="13" viewBox="0 0 24 24" fill="#f0f0f0" aria-hidden="true"><path d="M6 4 H10 V20 H6 Z M14 4 H18 V20 H14 Z"></path></svg></sc-if>
+<sc-if value="{{notPlaying}}" hint-placeholder-val="{{true}}"><svg width="13" height="13" viewBox="0 0 24 24" fill="#f0f0f0" aria-hidden="true"><path d="M7 4 L20 12 L7 20 Z"></path></svg></sc-if>
+</button>
+</div>
+<div style="position: absolute; left: 64px; right: 0; top: 0; height: 72px;">
+<div style="position: absolute; left: 0; top: 4px; font-family: JetBrains Mono, monospace; font-size: 10px; letter-spacing: 0.1em; color: #8a8a8a;">ISSUED OCT 23 18:01 · NOW 20:43 MDT</div>
+<!-- track -->
+<div style="position: absolute; left: 0; top: 38px; width: 68%; height: 2px; background: #ff6a2a;"></div>
+<div style="position: absolute; left: 68%; right: 0; top: 38px; height: 2px; background: repeating-linear-gradient(90deg, #f5c060 0 6px, rgba(0,0,0,0) 6px 11px);"></div>
+<div style="position: absolute; left: 1%; top: 24px; display: flex; gap: 4px;"><span style="width: 5px; height: 5px; border-radius: 9px; background: #ff8a3c;"></span><span style="width: 5px; height: 5px; border-radius: 9px; background: #ff8a3c;"></span><span style="width: 5px; height: 5px; border-radius: 9px; background: #ff8a3c;"></span><span style="width: 5px; height: 5px; border-radius: 9px; background: #f5c060;"></span></div>
+<div style="position: absolute; left: 38%; top: 24px; width: 5px; height: 5px; border-radius: 9px; background: #bdbdbd;"></div>
+<div style="position: absolute; left: 68%; top: 30px; width: 1.5px; height: 18px; background: #e6e6e6;"></div>
+<!-- stop buttons -->
+<sc-for list="{{stops}}" as="s" hint-placeholder-count="5">
+<button type="button" onClick="{{s.pick}}" aria-label="{{s.aria}}" style="position: absolute; left: {{s.left}}; top: 26px; width: 26px; height: 26px; margin-left: -13px; border: 0; padding: 0; border-radius: 999px; background: transparent; display: flex; align-items: center; justify-content: center;"><span style="width: 6px; height: 6px; border-radius: 999px; background: #cfcfcf; opacity: 0.6;"></span></button>
+</sc-for>
+<!-- handle -->
+<div style="position: absolute; left: {{handleLeft}}; top: 30px; width: 18px; height: 18px; margin-left: -9px; border-radius: 999px; background: #ff7a3d; box-shadow: {{handleRing}}; pointer-events: none;"></div>
+<div style="position: absolute; left: {{handleLeft}}; top: 4px; transform: translateX({{labelShift}}); font-family: JetBrains Mono, monospace; font-size: 11.5px; color: #f0f0f0; white-space: nowrap; text-shadow: 0 1px 6px #000; pointer-events: none;">{{stopLabel}} <span style="color: {{stopKindColor}};">· {{stopKind}}</span></div>
+<div style="position: absolute; left: 0; top: 52px; font-family: JetBrains Mono, monospace; font-size: 10px; letter-spacing: 0.1em; color: #8a8a8a;">JUN 28</div>
+<div style="position: absolute; left: 68%; top: 52px; transform: translateX(-50%); font-family: JetBrains Mono, monospace; font-size: 10px; letter-spacing: 0.1em; color: #e8b04a; white-space: nowrap;">LATEST 14:30 · 6 H AGO</div>
+<div style="position: absolute; left: 79%; top: 52px; transform: translateX(-50%); font-family: JetBrains Mono, monospace; font-size: 10px; color: #8a8a8a;">+24H</div>
+<div style="position: absolute; left: 89.5%; top: 52px; transform: translateX(-50%); font-family: JetBrains Mono, monospace; font-size: 10px; color: #8a8a8a;">+48H</div>
+<div style="position: absolute; right: 0; top: 52px; font-family: JetBrains Mono, monospace; font-size: 10px; color: #8a8a8a;">+72H</div>
+</div>
+</section>
+
+<!-- Attribution -->
+<div style="position: absolute; left: 0; right: 0; top: 974px; display: flex; justify-content: space-between; gap: 16px; padding: 0 40px; font-family: JetBrains Mono, monospace; font-size: 10px; color: #6f6f6f; white-space: nowrap; overflow: hidden;"><span>RESEARCH PROTOTYPE — NOT FOR OPERATIONAL USE</span><span>OpenFreeMap · © OpenMapTiles · © OpenStreetMap · USDA, USGS · MapLibre · Open-Meteo · NWS · FEMA IPAWS via OpenFEMA (not endorsed by FEMA)</span></div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"tint":{"editor":"range","default":0.35,"min":0,"max":1,"step":0.05,"section":"Map"},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+constructor(props) {
+super(props);
+this.state = { stop: 0, playing: false, open: {} };
+}
+componentWillUnmount() { if (this.timer) clearInterval(this.timer); }
+togglePlay() {
+if (this.state.playing) {
+clearInterval(this.timer); this.timer = null;
+this.setState({ playing: false });
+} else {
+this.timer = setInterval(() => {
+const next = this.state.stop + 1;
+if (next > 4) { clearInterval(this.timer); this.timer = null; this.setState({ playing: false }); }
+else this.setState({ stop: next });
+}, 1200);
+this.setState({ playing: true, stop: this.state.stop >= 4 ? 0 : this.state.stop });
+}
+}
+renderVals() {
+const stops = [
+{ left: '8%', label: 'JUL 12 · 21:20 MDT', kind: 'OBSERVED', stale: true, forecast: false },
+{ left: '68%', label: 'OCT 23 · 14:30 MDT', kind: 'LATEST OBSERVATION', stale: true, forecast: false },
+{ left: '79%', label: 'OCT 24 · 14:30 MDT', kind: 'FORECAST +24 H', stale: false, forecast: true },
+{ left: '89.5%', label: 'OCT 25 · 14:30 MDT', kind: 'FORECAST +48 H', stale: false, forecast: true },
+{ left: '100%', label: 'OCT 26 · 14:30 MDT', kind: 'FORECAST +72 H', stale: false, forecast: true }
+];
+const cur = stops[this.state.stop];
+const shift = this.state.stop === 0 ? '0%' : (this.state.stop === 4 ? '-100%' : '-50%');
+const noticeData = [
+{ id: 'evac', dot: '#9a9a9a', title: 'Evacuations', verdict: 'zones not available in Colorado', meta: 'FOLLOW LOCAL OFFICIALS', detail: 'Official evacuation zones are not available in this state (Colorado). Follow local officials.' },
+{ id: 'nifc', dot: '#ff7a3d', title: 'NIFC incident record', verdict: '7,359 ac · 92% contained · active', meta: 'USFS VIA NIFC WFIGS · OCT 22 13:28 MDT · CHECKED 9 MIN AGO', detail: 'Updated by USFS (USDA Forest Service) via NIFC WFIGS on Oct 22, 13:28 MDT. Open the record for the full incident history.' },
+{ id: 'wx', dot: '#8fd3a8', title: 'Fire weather', verdict: 'no Red Flag Warning or Fire Weather Watch', meta: 'NWS · ARCHIVED COPY · CHECKED 1.6 H AGO', detail: 'No Red Flag Warning or Fire Weather Watch in effect at this time near this fire. Not an all-clear.' },
+{ id: 'local', dot: '#8fd3a8', title: "Local officials' alerts", verdict: "none in FEMA's archive here", meta: 'FEMA ARCHIVE · CHECKED 2.7 H AGO', detail: 'Not an all-clear: most local alerts are not relayed. Fire-3d lists only the local alerts the National Weather Service relays (about 1 in 20 fire and evacuation alerts in 2024–26).' }
+];
+const open = this.state.open;
+return {
+tint: this.props.tint ?? 0.35,
+notices: noticeData.map((n) => ({
+...n,
+open: !!open[n.id],
+expanded: open[n.id] ? 'true' : 'false',
+chevron: open[n.id] ? 'M6 9 L12 15 L18 9' : 'M9 6 L15 12 L9 18',
+toggle: () => this.setState({ open: { ...this.state.open, [n.id]: !this.state.open[n.id] } })
+})),
+stops: stops.map((s, i) => ({ left: s.left, aria: 'Jump to ' + s.label + ', ' + s.kind.toLowerCase(), pick: () => this.setState({ stop: i }) })),
+handleLeft: cur.left,
+labelShift: shift,
+stopLabel: cur.label,
+stopKind: cur.kind,
+stopKindColor: cur.forecast ? '#f5c060' : (cur.stale ? '#e8b04a' : '#ff9a5a'),
+handleRing: cur.stale ? '0 0 0 3px rgba(232,176,74,0.6), 0 0 16px rgba(255,122,61,0.7)' : '0 0 0 3px rgba(245,192,96,0.35), 0 0 16px rgba(255,122,61,0.7)',
+playing: this.state.playing,
+notPlaying: !this.state.playing,
+playLabel: this.state.playing ? 'Pause timeline' : 'Play timeline',
+play: () => this.togglePlay()
+};
+}
+}
+</script>
+</body>
+</html>
