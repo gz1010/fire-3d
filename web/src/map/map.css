@@ -56,8 +56,8 @@
   max-width: 240px;
   padding: 3px 8px;
   border-radius: var(--m-radius-sm);
-  border: 1px solid rgba(34, 211, 238, 0.55);
-  background: rgba(8, 20, 28, 0.9);
+  border: 1px solid rgba(143, 208, 255, 0.55);
+  background: rgba(10, 16, 20, 0.9);
   color: var(--m-select-strong);
   font-family: var(--m-font-ui);
   font-size: var(--m-fs-sm);

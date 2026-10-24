@@ -9,24 +9,10 @@ import { useStore } from '../state/store'
 import { useTimeFormat } from '../state/timeZone'
 import { IconButton } from './controls'
 import { IncidentPicker } from './IncidentPicker'
+import { Logo } from './Logo'
 import { AnalysisMenu, SettingsMenu, ShareButton, ViewMenu } from './Menus'
 
-export function Logo({ size = 24 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden className="logo">
-      <defs>
-        <linearGradient id="logo-flame" x1="0" y1="1" x2="0" y2="0">
-          <stop offset="0" stopColor="#b8321a" />
-          <stop offset="0.55" stopColor="#ff6a2b" />
-          <stop offset="1" stopColor="#ffd28a" />
-        </linearGradient>
-      </defs>
-      <path d="M2.5 25.5 L11 12.5 L15.2 18 L20.5 9.5 L29.5 25.5 Z" fill="none" stroke="var(--gold)" strokeWidth="1.7" strokeLinejoin="round" />
-      <path d="M6.6 25.5 L11 19 L15.2 23.4 L20.5 15.4 L25.6 25.5" fill="none" stroke="var(--gold)" strokeOpacity="0.45" strokeWidth="1.1" strokeDasharray="0.1 2.1" strokeLinecap="round" />
-      <path d="M17.6 25.4c-2.9-1-3.9-3.9-2.4-6.4.5 1.4 1.4 2 2.4 2-.5-2.5 1-4.9 3.4-5.8-.5 1.9.5 3.4 1.5 4.4 1 1.4 1 3.9-.5 5.3-1 .5-2.9 1-4.4.5z" fill="url(#logo-flame)" />
-    </svg>
-  )
-}
+export { Logo } from './Logo'
 
 function Brand() {
   return (

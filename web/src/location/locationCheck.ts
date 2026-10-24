@@ -75,6 +75,9 @@ function locationType(p: SelectedLocation): string {
       return p.approximate ? 'Event location (estimated)' : 'Event location'
     case 'incident':
       return 'Incident reported location (where the incident was reported, not necessarily where it started)'
+    case 'device':
+      // brief 4: the browser's own location after the user asked for it; it is not sent anywhere
+      return p.approximate ? 'Your location from your browser (approximate; it stays in your browser)' : 'Your location from your browser (it stays in your browser)'
   }
 }
 

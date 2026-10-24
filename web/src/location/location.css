@@ -27,13 +27,13 @@
   gap: 2px;
   padding: 5px 5px 5px 11px;
   background: var(--m-panel-strong);
-  border-color: rgba(91, 157, 255, 0.5);
+  border-color: var(--m-border-strong);
   box-shadow: var(--m-shadow);
 }
 .loc-search-box:focus-within {
-  border-color: rgba(91, 157, 255, 0.85);
+  border-color: rgba(208, 208, 208, 0.7);
   box-shadow:
-    0 0 0 2px rgba(91, 157, 255, 0.25),
+    0 0 0 2px rgba(208, 208, 208, 0.2),
     var(--m-shadow);
 }
 .loc-search-label {
@@ -138,7 +138,7 @@
 }
 .loc-search-status.is-ok {
   color: var(--m-text);
-  border-color: rgba(34, 211, 238, 0.4);
+  border-color: rgba(143, 208, 255, 0.4);
 }
 .loc-search-status.is-warn {
   color: var(--m-warn);
@@ -197,7 +197,7 @@
 }
 .mw .loc-result:focus-visible,
 .mw .loc-fire-row:focus-visible {
-  box-shadow: inset 0 0 0 2px rgba(91, 157, 255, 0.7);
+  box-shadow: inset 0 0 0 2px #d0d0d0;
 }
 .loc-result-icon {
   flex: none;
@@ -704,11 +704,11 @@
 }
 .loc-kind.is-unknown {
   color: var(--m-warn);
-  border-color: rgba(251, 191, 36, 0.55);
+  border-color: rgba(232, 176, 74, 0.55);
 }
 .loc-kind.is-approximate {
   color: var(--m-select-strong);
-  border-color: rgba(34, 211, 238, 0.55);
+  border-color: rgba(143, 208, 255, 0.55);
   border-style: dashed;
   vertical-align: 1px;
 }
@@ -838,7 +838,7 @@
 }
 .loc-coord-dot.is-selected {
   background: var(--m-select);
-  box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.25);
+  box-shadow: 0 0 0 2px rgba(143, 208, 255, 0.25);
 }
 .loc-coord-row {
   display: flex;

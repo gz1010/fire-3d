@@ -53,7 +53,7 @@ import { getTimeFormat } from '../state/timeZone'
 import { pendingMapFlyTo, useWorkspace, type Basemap, type MapFlyTo, type MapLayerKey, type Perspective, type SafeInsets } from '../state/workspace'
 import { buildFeedItems, selectFeedItem } from '../ui/feed/feedModel'
 import type { FeedItem } from '../ui/feed/types'
-import { BUILDINGS_3D_LAYER, HILLSHADE_SOURCE, IMAGERY_SOURCE, loadBasemap, TERRAIN_SOURCE, VECTOR_SOURCE, type DerivedStyle } from './basemapStyle'
+import { BUILDINGS_3D_LAYER, DARK, HILLSHADE_SOURCE, IMAGERY_SOURCE, loadBasemap, TERRAIN_SOURCE, VECTOR_SOURCE, type DerivedStyle } from './basemapStyle'
 import { maskGeometry } from './contours'
 import { MapInput } from './userInput'
 import { allFocusCandidates, CENTRAL_FRACTION, chipTargets, FocusHold, focusUnlessHeld, FOCUS_DEBOUNCE_MS, FOCUS_OUT_ZOOM, type FocusCurrent, type FocusView } from './focus'
@@ -165,7 +165,7 @@ const catalogOf = (): OverviewCatalog => {
 }
 
 function initialStyle(): StyleSpecification {
-  return { version: 8, glyphs: OPENFREEMAP_GLYPHS, sources: {}, layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#0b1119' } }] }
+  return { version: 8, glyphs: OPENFREEMAP_GLYPHS, sources: {}, layers: [{ id: 'background', type: 'background', paint: { 'background-color': DARK.background } }] }
 }
 
 /** Point the providers listed in the dev-only ?mapfail= at an unreachable host (compiled out of production). */

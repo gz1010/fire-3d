@@ -1,5 +1,5 @@
 // The three Public/Command basemaps (BRIEF §3, §5), derived at runtime from OpenFreeMap's published styles:
-//   dark    OpenFreeMap "dark" restyled to the chrome's navy palette (Image 1): subdued land, water and roads,
+//   dark    OpenFreeMap "dark" restyled to the chrome's neutral greys (brief 4 handoff): subdued land, water and roads,
 //           brighter place labels with halos, plus light terrain shading from Mapterhorn.
 //   roads   OpenFreeMap "liberty" (road / navigation style) with the same terrain shading.
 //   aerial  USGS Imagery Only (dated orthoimagery), desaturated and darkened (Image 2), with liberty's roads as thin
@@ -39,7 +39,7 @@ export const BUILDINGS_3D_LAYER = 'fx-buildings-3d'
 export const BUILDINGS_MINZOOM = 15
 const BUILDINGS_FADE_FROM = 14.5
 /** Muted building colours per basemap (never coloured by fire state) and their opacity. */
-export const BUILDING_COLORS: Record<Basemap, string> = { dark: '#4a5566', roads: '#a8a095', aerial: '#c3c9d1' }
+export const BUILDING_COLORS: Record<Basemap, string> = { dark: '#555555', roads: '#a8a095', aerial: '#c3c9d1' }
 export const BUILDING_OPACITY = 0.6
 
 /** The legend caveat for today's OpenStreetMap shapes over a burned area (brief 2, decision 8). */
@@ -47,33 +47,34 @@ export function buildingsCaveat(hasFire: boolean): string {
   return `3D shapes: today's OpenStreetMap; buildings destroyed by ${hasFire ? 'this fire' : 'a fire'} may be missing; not a damage assessment`
 }
 
-/** Navy palette of the dark basemap (kept close to the --m-bg / --m-text tokens in styles/map-tokens.css). */
+/** Neutral grey palette of the dark basemap (brief 4: greys plus hazard colour; kept close to the --m-bg / --m-text
+ *  tokens in styles/map-tokens.css). Water keeps a faint cool tint so it still reads as water. */
 export const DARK = {
-  background: '#0b1119',
-  water: '#0c2134',
-  waterway: '#12304a',
-  waterLabel: '#6f8fb3',
-  residential: '#131c27',
-  wood: '#0e1915',
-  park: '#0f1c18',
-  building: '#17202b',
-  buildingOutline: '#212c39',
-  aeroway: '#18222e',
-  path: '#253244',
-  minor: '#212c3a',
-  majorCasing: 'rgba(72,88,108,0.85)',
-  majorInner: '#2a3647',
-  motorwayCasing: 'rgba(92,108,128,0.9)',
-  motorwayInner: '#394656',
-  rail: '#263140',
-  boundary: '#3d4c5e',
-  roadLabel: '#98a5b3',
-  motorwayLabel: '#b9c4cf',
-  halo: 'rgba(8,12,18,0.92)',
-  cityLabel: '#e6ebf1',
-  townLabel: '#cfd8e2',
-  villageLabel: '#b7c3cf',
-  minorPlaceLabel: '#9aa8b7',
+  background: '#0c0c0c',
+  water: '#161b20',
+  waterway: '#1d242b',
+  waterLabel: '#8b949d',
+  residential: '#151515',
+  wood: '#111311',
+  park: '#121412',
+  building: '#1a1a1a',
+  buildingOutline: '#252525',
+  aeroway: '#1b1b1b',
+  path: '#2b2b2b',
+  minor: '#262626',
+  majorCasing: 'rgba(98,98,98,0.85)',
+  majorInner: '#303030',
+  motorwayCasing: 'rgba(120,120,120,0.9)',
+  motorwayInner: '#404040',
+  rail: '#2d2d2d',
+  boundary: '#4a4a4a',
+  roadLabel: '#a3a3a3',
+  motorwayLabel: '#c4c4c4',
+  halo: 'rgba(10,10,10,0.92)',
+  cityLabel: '#ececec',
+  townLabel: '#d6d6d6',
+  villageLabel: '#bfbfbf',
+  minorPlaceLabel: '#a6a6a6',
 } as const
 
 export interface DerivedStyle {
@@ -108,7 +109,7 @@ function hillshadeLayer(kind: 'dark' | 'light'): LayerSpecification {
         ? {
             'hillshade-exaggeration': 0.5,
             'hillshade-shadow-color': 'rgba(0,0,0,0.6)',
-            'hillshade-highlight-color': 'rgba(150,178,208,0.13)',
+            'hillshade-highlight-color': 'rgba(190,190,190,0.12)',
             'hillshade-accent-color': 'rgba(0,0,0,0.2)',
           }
         : {

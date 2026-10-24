@@ -3,7 +3,12 @@
 //
 //   node scripts/shot.mjs <url> <out.png> [--wait 6000] [--w 1720] [--h 1080] [--dpr 1]
 //        [--eval "<js, may be async; runs after load>"] [--eval-after-wait "<js>"] [--settle 1200]
-//        [--backend auto|gpu|swiftshader] [--fail-on-error]
+//        [--backend auto|gpu|swiftshader] [--fail-on-error] [--shot-timeout 30000] [--quality low]
+//
+// --shot-timeout <ms>  timeout of page.screenshot() itself (Playwright's default is 30 s; a Forensic scene under
+//                      SwiftShader needs minutes to deliver a frame).
+// --quality low        before the app's first render, sets the Forensic scene to low quality with depth of field off
+//                      (useStore quality 'low', dof false): a cheaper scene for software rendering. The map is unaffected.
 //
 // It first tries the GPU (ANGLE Metal) and checks that WebGL2 really works; otherwise it falls back to SwiftShader.
 // Prints the WebGL backend, console errors/warnings and page errors, then writes the PNG.
@@ -12,10 +17,10 @@ import { mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { chromium } from 'playwright'
 
-const USAGE = 'usage: node scripts/shot.mjs <url> <out.png> [--wait ms] [--w px] [--h px] [--dpr n] [--eval js] [--eval-after-wait js] [--settle ms] [--backend auto|gpu|swiftshader] [--fail-on-error]'
+const USAGE = 'usage: node scripts/shot.mjs <url> <out.png> [--wait ms] [--w px] [--h px] [--dpr n] [--eval js] [--eval-after-wait js] [--settle ms] [--backend auto|gpu|swiftshader] [--fail-on-error] [--shot-timeout ms] [--quality low]'
 
 function parseArgs(argv) {
-  const opts = { wait: 6000, w: 1720, h: 1080, dpr: 1, settle: 1200, backend: 'auto', eval: null, evalAfterWait: null, failOnError: false }
+  const opts = { wait: 6000, w: 1720, h: 1080, dpr: 1, settle: 1200, backend: 'auto', eval: null, evalAfterWait: null, failOnError: false, shotTimeout: null, quality: null }
   const pos = []
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
@@ -33,6 +38,8 @@ function parseArgs(argv) {
       case '--eval': opts.eval = next(); break
       case '--eval-after-wait': opts.evalAfterWait = next(); break
       case '--fail-on-error': opts.failOnError = true; break
+      case '--shot-timeout': opts.shotTimeout = Number(next()); break
+      case '--quality': opts.quality = next(); break
       case '-h':
       case '--help':
         console.log(USAGE)
@@ -44,6 +51,8 @@ function parseArgs(argv) {
     }
   }
   if (pos.length !== 2) throw new Error(USAGE)
+  if (opts.shotTimeout != null && !(Number.isFinite(opts.shotTimeout) && opts.shotTimeout >= 0)) throw new Error('--shot-timeout needs a number of milliseconds (0 = no timeout)')
+  if (opts.quality != null && opts.quality !== 'low') throw new Error("--quality supports only 'low'")
   return { url: pos[0], out: resolve(pos[1]), ...opts }
 }
 
@@ -123,6 +132,26 @@ async function main() {
   const failed = []
   try {
     const context = await browser.newContext({ viewport: { width: opts.w, height: opts.h }, deviceScaleFactor: opts.dpr })
+    if (opts.quality === 'low') {
+      // The app assigns window.__store when state/store.ts loads, before anything renders: catch that assignment and
+      // lower the scene settings at once (the Forensic scene is lazy and mounts later).
+      await context.addInitScript(() => {
+        let store
+        Object.defineProperty(window, '__store', {
+          configurable: true,
+          get: () => store,
+          set: (s) => {
+            store = s
+            try {
+              s.setState({ quality: 'low', dof: false })
+            } catch (e) {
+              console.warn(`[shot] --quality low: could not set the store (${e})`)
+            }
+          },
+        })
+      })
+      console.log('[shot] quality: low (scene quality low, depth of field off)')
+    }
     const page = await context.newPage()
     page.on('console', (msg) => {
       const t = msg.type()
@@ -138,8 +167,15 @@ async function main() {
       await runJs(page, opts.evalAfterWait, '--eval-after-wait')
       await page.waitForTimeout(opts.settle)
     }
+    if (opts.quality === 'low') {
+      const q = await page.evaluate(() => {
+        const st = window.__store?.getState()
+        return st ? `quality ${st.quality}, depth of field ${st.dof ? 'on' : 'off'}` : 'no store handle'
+      })
+      console.log(`[shot] scene settings at capture: ${q}`)
+    }
     mkdirSync(dirname(opts.out), { recursive: true })
-    await page.screenshot({ path: opts.out })
+    await page.screenshot({ path: opts.out, ...(opts.shotTimeout != null ? { timeout: opts.shotTimeout } : {}) })
     console.log(`[shot] wrote ${opts.out} (${opts.w}x${opts.h} @${opts.dpr}x) after ${((Date.now() - t0) / 1000).toFixed(1)} s`)
   } finally {
     await browser.close()

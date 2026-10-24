@@ -5,6 +5,20 @@ import { switchWorkspace } from './handoff'
 
 export type View = 'public' | 'command' | 'forensic'
 
+/** Which chrome the map workspace shows (brief 4, CONTRACT §15.2): the overview (no fire, both presets), Public in a
+ *  fire, or Command in a fire. Exactly one is mounted; the map underneath never remounts. */
+export type MapChrome = 'overview' | 'public-fire' | 'command-fire'
+
+export function mapChromeOf(hasFire: boolean, preset: Preset): MapChrome {
+  if (!hasFire) return 'overview'
+  return preset === 'command' ? 'command-fire' : 'public-fire'
+}
+
+/** The atmosphere's edge gradients for a chrome (map/MapAtmosphere.tsx data-edges). */
+export function atmosphereEdgesOf(chrome: MapChrome): 'overview' | 'fire' | 'command' {
+  return chrome === 'overview' ? 'overview' : chrome === 'command-fire' ? 'command' : 'fire'
+}
+
 export const VIEWS: { value: View; label: string; tip: string }[] = [
   { value: 'public', label: 'Public', tip: 'Map of the fire in plain language: location checks, official information and updates' },
   { value: 'command', label: 'Command', tip: 'Denser map view: model runs, coordinates, identifiers and source times up front' },

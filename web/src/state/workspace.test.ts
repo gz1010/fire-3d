@@ -95,6 +95,31 @@ describe('workspace store', () => {
     expect(s.overviewFilter).toBe('season')
   })
 
+  it('brief 4: the Public overview starts minimal and no device location is known', () => {
+    const s = useWorkspace.getInitialState()
+    expect(s.overviewDetails).toBe(false)
+    expect(s.device).toBeNull()
+  })
+
+  it('brief 4: "Show details" and the device location are memory only (never in the URL)', () => {
+    const ws = useWorkspace.getState()
+    ws.setOverviewDetails(true)
+    expect(useWorkspace.getState().overviewDetails).toBe(true)
+    ws.setDevice({ lat: 47.42, lon: -120.31, accuracyM: 30, tMs: 1 })
+    expect(useWorkspace.getState().device).toEqual({ lat: 47.42, lon: -120.31, accuracyM: 30, tMs: 1 })
+    const u = writeWorkspaceParams(new URL('http://x/?incident=a'), { ...useWorkspace.getState() })
+    expect(u.search).not.toMatch(/47\.42|120\.31|details|device/)
+    // invalid coordinates are ignored; a bad accuracy becomes unknown; null clears
+    ws.setDevice({ lat: 99, lon: 0, accuracyM: 5, tMs: 2 })
+    expect(useWorkspace.getState().device?.tMs).toBe(1)
+    ws.setDevice({ lat: 40, lon: -105, accuracyM: Number.NaN, tMs: 3 })
+    expect(useWorkspace.getState().device).toEqual({ lat: 40, lon: -105, accuracyM: null, tMs: 3 })
+    ws.setDevice(null)
+    expect(useWorkspace.getState().device).toBeNull()
+    ws.setOverviewDetails(false)
+    expect(useWorkspace.getState().overviewDetails).toBe(false)
+  })
+
   it('opens and closes fire cards; a new point or another fire closes the card', () => {
     const ws = useWorkspace.getState()
     ws.setFireCard('2026-a')

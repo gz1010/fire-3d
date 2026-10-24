@@ -21,7 +21,7 @@ const FEED_TOPICS: Record<Exclude<FeedTopic, EventKind>, TopicStyle> = {
   camera: { Icon: Camera, color: 'var(--m-info)', label: 'Camera' },
   record: { Icon: ShieldAlert, color: 'var(--m-official, #e8edf3)', label: 'Agency record' },
   'local-alert': { Icon: Megaphone, color: 'var(--m-evac-order)', label: "Local officials' alert" },
-  'fire-weather': { Icon: Flag, color: 'var(--m-nws, #f472b6)', label: 'Fire weather alert' },
+  'fire-weather': { Icon: Flag, color: 'var(--m-alert)', label: 'Fire weather alert' },
   quiet: { Icon: EyeOff, color: 'var(--m-text-2)', label: 'No new heat seen' },
 }
 

@@ -1,0 +1,10 @@
+/* Map atmosphere (owner: H2c; brief 4 decision g, CONTRACT §15.1): the layer between the MapLibre canvas
+   (.mw-map, z-index --m-z-map) and the floating chrome (--m-z-chrome). It never catches pointer events and is hidden
+   from assistive technology. data-edges="overview" | "fire" | "command" selects the static edge gradients; the
+   vignette reads --mw-vignette and --mw-vig-x/-y/-r. H2a ships only the layer itself (no visual effect yet). */
+.mw-atmo {
+  position: absolute;
+  inset: 0;
+  z-index: calc(var(--m-z-map) + 1);
+  pointer-events: none;
+}

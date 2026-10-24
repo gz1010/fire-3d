@@ -60,7 +60,7 @@ describe('basemap styles', () => {
     expect(layers.filter((l) => l.type !== 'symbol').map((l) => l.id)[0]).toBe('background')
   })
 
-  it('dark: navy palette, terrain shading above land areas and below water lines / roads, labels last', () => {
+  it('dark: neutral grey palette, terrain shading above land areas and below water lines / roads, labels last', () => {
     const b = base()
     const d = deriveDark(b)
     const order = ids(d.style)
@@ -72,7 +72,7 @@ describe('basemap styles', () => {
     const wood = d.style.layers.find((l) => l.id === 'landcover_wood') as { paint: Record<string, unknown> }
     expect(wood.paint['fill-pattern']).toBeUndefined() // missing sprite image in OpenFreeMap's sprite
     const bg = d.style.layers[0] as { paint: Record<string, unknown> }
-    expect(bg.paint['background-color']).toBe('#0b1119')
+    expect(bg.paint['background-color']).toBe('#0c0c0c')
     expect(d.style.sources[HILLSHADE_SOURCE]).toMatchObject({ type: 'raster-dem', encoding: 'terrarium', tileSize: 512 })
     expect(d.style.sources[TERRAIN_SOURCE]).toMatchObject({ type: 'raster-dem', encoding: 'terrarium' })
     expect(d.style.sources[HILLSHADE_SOURCE]).not.toBe(d.style.sources[TERRAIN_SOURCE])
@@ -111,7 +111,7 @@ describe('basemap styles', () => {
       expect(b.paint['fill-extrusion-height']).toEqual(['coalesce', ['get', 'render_height'], 0])
       expect(validateStyleMin({ ...d.style, glyphs: 'https://example.com/{fontstack}/{range}.pbf' } as never)).toEqual([])
     }
-    expect(BUILDING_COLORS).toEqual({ dark: '#4a5566', roads: '#a8a095', aerial: '#c3c9d1' })
+    expect(BUILDING_COLORS).toEqual({ dark: '#555555', roads: '#a8a095', aerial: '#c3c9d1' })
     expect(buildingsCaveat(true)).toBe("3D shapes: today's OpenStreetMap; buildings destroyed by this fire may be missing; not a damage assessment")
     expect(buildingsCaveat(false)).toContain('destroyed by a fire may be missing')
   })

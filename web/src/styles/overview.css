@@ -1,6 +1,7 @@
 /* Brief 2 shell additions (owner: shell; CONTRACT §13 shell): the California overview list (right column on desktop,
-   peek sheet on phones), the fire card (left column on desktop, bottom sheet on phones), the header title and
-   "← All fires", the "Official" tag, the not-prepared and missing-fire notices, and Forensic's "Open a fire first".
+   peek sheet on phones), the fire card (left column on desktop, bottom sheet on phones), the header title,
+   the "Official" tag and the not-prepared and missing-fire notices (Forensic's "Open a fire first" moved to
+   forensic-entry.css in brief 4).
    Sizes follow the brief 2 minimums (civilian audit R9): body 13 px, meta 12 px, tags and headings 11 px. */
 
 /* ------------------------------------------------------------------------------------------------ tag */
@@ -24,6 +25,7 @@
 }
 
 /* ------------------------------------------------------------------------------------------------ header */
+/* the overview's title in the floating top bar: "United States · all fires" (Main.dc.html: 15 px, the tail grey) */
 .mw-hdr-title {
   margin: 0;
   min-width: 0;
@@ -31,20 +33,13 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--m-fs-lg);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.005em;
+  color: var(--m-text);
 }
 .mw-hdr-title-sub {
-  color: var(--m-text-2);
-  font-weight: 500;
-}
-.mw-allfires {
-  flex: none;
-  height: 32px;
-  padding: 0 10px 0 8px;
-}
-.mw-updates-toggle .mw-btn-label {
-  font-size: var(--m-fs-sm);
+  color: var(--m-text-3);
+  font-weight: 400;
 }
 
 /* ------------------------------------------------------------------------------------------------ fire card slot */
@@ -136,7 +131,7 @@
   padding: 9px 10px 9px;
   border: 1px solid var(--m-official-line);
   border-radius: var(--m-radius-sm);
-  background: rgba(5, 9, 14, 0.45);
+  background: var(--m-panel-soft);
 }
 .fc-source {
   display: flex;
@@ -539,18 +534,6 @@
   .mw-hdr-title {
     font-size: var(--m-fs-md);
   }
-  .mw-allfires {
-    width: 34px;
-    padding: 0;
-  }
-  .mw-allfires .mw-btn-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-  }
   /* the fire card is a bottom sheet, like the location card */
   .mw-firecard {
     --chrome-side: bottom;
@@ -586,78 +569,6 @@
   }
 }
 
-/* ------------------------------------------------------------------------------------------------ Forensic: no fire */
-.fx-empty {
-  display: flex;
-  flex-direction: column;
-}
-.fx-empty-head {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  height: 52px;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--m-border);
-  background: var(--m-panel-strong);
-  flex: none;
-}
-.fx-empty-where {
-  flex: 1 1 auto;
-  min-width: 0;
-  color: var(--m-text-2);
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.fx-empty-main {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 16px;
-  padding: 24px 16px;
-  overflow: auto;
-}
-.fx-empty-list {
-  display: flex;
-  flex-direction: column;
-  width: min(460px, 100%);
-  max-height: calc(100vh - 100px);
-  min-height: 0;
-}
-.fx-empty-text {
-  padding: 10px 14px 4px;
-  font-size: var(--m-fs-md);
-  color: var(--m-text-2);
-}
-.fx-empty-actions {
-  padding: 6px 14px 4px;
-}
-.fx-empty-card {
-  width: min(340px, 100%);
-  flex: none;
-}
-@media (max-width: 760px) {
-  .fx-empty-main {
-    flex-direction: column;
-    align-items: stretch;
-    padding: 12px 8px;
-  }
-  .fx-empty-main.has-card .fx-empty-list {
-    display: none;
-  }
-  .fx-empty-list,
-  .fx-empty-card {
-    width: auto;
-    max-height: none;
-  }
-  .fx-empty-where {
-    display: none;
-  }
-}
-
 /* ------------------------------------------------------------------------------------------------ updates panel */
 /* phones: the labelled Updates button and its official badge (orders, warnings, fire weather alerts) */
 .mw-updates-toggle {
@@ -679,7 +590,7 @@
   background: var(--m-evac-order);
 }
 .mw-hdr-badge.is-fire-weather {
-  background: var(--m-nws, #f472b6);
+  background: var(--m-alert);
   color: #1a0b14;
 }
 /* "Official now" (official-web) sits above data status and the feed */
@@ -799,16 +710,17 @@
 }
 
 /* ------------------------------------------------------------------------------------------------ satellite chip */
-/* wide screens: official-web's ImageryChip in the header bar, right above the map controls; its caption (while an
-   image is shown) hangs below the bar over the map */
+/* wide screens: official-web's ImageryChip in the top bar's right slot; its caption (while an image is shown) hangs
+   below the bar over the map */
 .mw-hdr-chip {
   display: flex;
   justify-content: flex-end;
-  align-items: flex-start;
+  align-items: center;
   flex: 0 1 var(--m-chip-w);
   min-width: 120px;
-  height: 32px;
+  height: 36px;
   overflow: visible;
+  text-shadow: none;
 }
 .mw-hdr-chip > * {
   width: 100%;
@@ -816,17 +728,9 @@
 
 /* ------------------------------------------------------------------------------------------------ phones (C-R2) */
 @media (max-width: 760px) {
-  /* the labelled Updates button (U-R4): its label stays visible on phones */
-  .mw-hdr-toggle.mw-updates-toggle {
-    width: auto;
-    padding: 0 8px;
-  }
-  .mw-hdr-toggle.mw-updates-toggle .mw-btn-label {
-    position: static;
-    width: auto;
-    height: auto;
-    overflow: visible;
-    clip: auto;
+  /* the labelled Updates button (U-R4): its label stays visible on phones (IconPill .has-label) */
+  .tb-icon.mw-updates-toggle {
+    padding: 0 10px;
   }
   /* the research note and the credits on one line; the full credits open above the bottom row */
   .mw-footer.is-narrow {
@@ -879,17 +783,20 @@
   }
 }
 
-/* the fire's name keeps its room in the header; Command's identifier chip gives way first (the coordinate strip shows
-   the full identifier) */
-.mw-hdr-start .picker-btn {
-  flex: 0 0 auto;
-}
-.mw-hdr-start .mw-id-chip {
+/* the fire's name keeps its room in the top bar; Command's identifier chip and the place give way first (the
+   coordinate strip shows the full identifier) */
+.mw-header .tb-left .picker-btn {
   flex: 0 1 auto;
-  max-width: 200px;
+  max-width: 320px;
+}
+@media (max-width: 1279px) {
+  .mw-header .tb-left .picker-btn {
+    max-width: 220px;
+  }
 }
 @media (max-width: 760px) {
-  .mw-hdr-start .picker-btn {
+  .mw-header .tb-left .picker-btn {
     flex: 1 1 auto;
+    max-width: none;
   }
 }

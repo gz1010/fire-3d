@@ -139,7 +139,7 @@ export function cameraLayerGroup(data: CamerasResponse | null, selectedId: strin
           type: 'circle',
           source: CAMERA_SOURCE,
           filter: ['==', ['get', 'id'], selectedId ?? ''],
-          paint: { 'circle-radius': 13, 'circle-color': 'rgba(34,211,238,0.16)', 'circle-stroke-color': EXTRAS_COLORS.select, 'circle-stroke-width': 2 },
+          paint: { 'circle-radius': 13, 'circle-color': EXTRAS_COLORS.selectSoft, 'circle-stroke-color': EXTRAS_COLORS.select, 'circle-stroke-width': 2 },
         },
       },
       {

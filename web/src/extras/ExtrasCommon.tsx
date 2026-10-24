@@ -48,11 +48,11 @@ export function CameraGlyph({ variant, size = 18 }: { variant: 'wildfire' | 'tra
   const filled = variant === 'wildfire'
   return (
     <svg className="xs-cam-glyph" width={size} height={size} viewBox="0 0 18 18" aria-hidden="true">
-      <rect x="2.2" y="5.4" width="13.6" height="9.3" rx="2.2" fill="#0b1119" />
-      <rect x="6.2" y="3" width="5.6" height="3.8" rx="1" fill="#0b1119" />
-      <rect x="3" y="6.25" width="12" height="7.5" rx="1.6" fill={filled ? '#e8edf3' : 'none'} stroke="#e8edf3" strokeWidth={filled ? 0 : 1.3} />
-      <rect x="6.8" y="4.4" width="4.4" height="2.4" rx="0.8" fill={filled ? '#e8edf3' : 'none'} stroke="#e8edf3" strokeWidth={filled ? 0 : 1.1} />
-      <circle cx="9" cy="10" r="2.4" fill={filled ? '#0b1119' : 'none'} stroke="#e8edf3" strokeWidth={filled ? 0 : 1.1} />
+      <rect x="2.2" y="5.4" width="13.6" height="9.3" rx="2.2" fill="#0c0c0c" />
+      <rect x="6.2" y="3" width="5.6" height="3.8" rx="1" fill="#0c0c0c" />
+      <rect x="3" y="6.25" width="12" height="7.5" rx="1.6" fill={filled ? '#f0f0f0' : 'none'} stroke="#f0f0f0" strokeWidth={filled ? 0 : 1.3} />
+      <rect x="6.8" y="4.4" width="4.4" height="2.4" rx="0.8" fill={filled ? '#f0f0f0' : 'none'} stroke="#f0f0f0" strokeWidth={filled ? 0 : 1.1} />
+      <circle cx="9" cy="10" r="2.4" fill={filled ? '#0c0c0c' : 'none'} stroke="#f0f0f0" strokeWidth={filled ? 0 : 1.1} />
     </svg>
   )
 }

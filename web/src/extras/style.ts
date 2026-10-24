@@ -9,11 +9,13 @@ export const EXTRAS_COLORS = {
   evacOrder: '#e0459b', // --m-evac-order
   evacWarning: '#a78bfa', // --m-evac-warning
   evacOther: '#7aa2f7', // --m-evac-other
-  text: '#e8edf3', // --m-text
-  text2: '#a7b3c0', // --m-text-2
-  bg: '#0b1119', // --m-bg
-  select: '#22d3ee', // --m-select
-  halo: 'rgba(8,12,18,0.92)',
+  text: '#f0f0f0', // --m-text
+  text2: '#cfcfcf', // --m-text-2
+  bg: '#0c0c0c', // --m-bg
+  select: '#9fd6ff', // --m-select
+  /** --m-select-soft at .16: the selected camera's halo */
+  selectSoft: 'rgba(159,214,255,0.16)',
+  halo: 'rgba(10,10,10,0.92)',
 } as const
 
 /**

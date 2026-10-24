@@ -58,7 +58,9 @@ export function ContainmentBar({ pct }: { pct: number | null }) {
   )
 }
 
-export function IncidentPicker() {
+/** The picker. `variant` styles its trigger: 'pill' (default; the LIVE / year chip inside, Forensic) or 'title' (the
+ *  fire's name as the map top bar's 18 px title with a caret; the bar shows LIVE / the year next to it, brief 4). */
+export function IncidentPicker({ variant = 'pill' }: { variant?: 'pill' | 'title' } = {}) {
   const summary = useStore((s) => s.summary)
   const mode = useStore((s) => s.mode)
   const loading = useStore((s) => s.incidentLoading)
@@ -71,13 +73,13 @@ export function IncidentPicker() {
       <button
         ref={anchor}
         type="button"
-        className={`picker-btn ${open ? 'is-open' : ''}`}
+        className={`picker-btn${variant === 'title' ? ' is-title' : ''}${open ? ' is-open' : ''}`}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
         data-tip={open ? undefined : 'Choose an incident'}
       >
-        {summary ? (
+        {summary && variant === 'pill' ? (
           isLive ? (
             <span className="chip chip-live live-chip">
               <i className="live-dot" />

@@ -19,7 +19,19 @@ export type Preset = 'public' | 'command'
 export type Perspective = '2d' | '3d'
 export type Basemap = 'dark' | 'roads' | 'aerial'
 export type Units = 'us' | 'metric'
-export type SelectionSource = 'click' | 'coords' | 'address' | 'event' | 'incident'
+/** Who placed the selected point. 'device' (brief 4): the browser's own location, after the user asked for it. */
+export type SelectionSource = 'click' | 'coords' | 'address' | 'event' | 'incident' | 'device'
+
+/** The browser's location (brief 4, CONTRACT §15.3): set only after an explicit click on "Use my location"
+ *  (navigator.geolocation, no outside service). It never leaves the browser: not sent, not in the URL, not stored. */
+export interface DeviceLocation {
+  lat: number
+  lon: number
+  /** Accuracy radius in metres as the browser reports it; null when unknown. */
+  accuracyM: number | null
+  /** When the browser fixed it (epoch ms). */
+  tMs: number
+}
 
 /** The selected point (WGS84). Shown as the cyan pin, in the coordinate strip and in the location card. */
 export interface SelectedLocation {
@@ -142,6 +154,11 @@ export interface WorkspaceState {
   overviewFilter: OverviewFilter
   /** Brief 3 (§14.11): the overview list shows every fire of the filter ("Show all") instead of those in the map view. */
   overviewShowAll: boolean
+  /** Brief 4 (decision d): the Public overview's "Show details" (controls bar, fire list, readout, scale, legend).
+   *  Default false (minimal); the Command overview always shows its details. Memory only (not in the URL). */
+  overviewDetails: boolean
+  /** Brief 4: the browser's location after the user asked for it; null = not shared. Never in the URL, never stored. */
+  device: DeviceLocation | null
 
   setWorkspace: (w: Workspace) => void
   /** Switch preset; the effective basemap follows the new preset's default unless the user picked one. */
@@ -173,6 +190,9 @@ export interface WorkspaceState {
   setFireCard: (id: string | null) => void
   setOverviewFilter: (f: OverviewFilter) => void
   setOverviewShowAll: (all: boolean) => void
+  setOverviewDetails: (open: boolean) => void
+  /** Store (or clear with null) the browser's location; invalid coordinates are ignored. */
+  setDevice: (d: DeviceLocation | null) => void
 }
 
 /** Basemap of a preset when the user has not picked one (decision 5: Public opens on aerial with labels). */
@@ -291,6 +311,8 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
   fireCardId: null,
   overviewFilter: 'season',
   overviewShowAll: false,
+  overviewDetails: false,
+  device: null,
 
   setWorkspace: (workspace) => set({ workspace }),
   setPreset: (preset) => set((s) => ({ preset, basemap: effectiveBasemap({ ...s, preset }) })),
@@ -334,6 +356,13 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
   setFireCard: (fireCardId) => set((s) => (s.fireCardId === fireCardId ? {} : { fireCardId })),
   setOverviewFilter: (overviewFilter) => set({ overviewFilter }),
   setOverviewShowAll: (overviewShowAll) => set({ overviewShowAll }),
+  setOverviewDetails: (overviewDetails) => set((s) => (s.overviewDetails === overviewDetails ? {} : { overviewDetails })),
+  setDevice: (d) => {
+    if (d == null) return set({ device: null })
+    if (!validLat(d.lat) || !validLon(d.lon)) return
+    const accuracyM = d.accuracyM != null && Number.isFinite(d.accuracyM) && d.accuracyM >= 0 ? d.accuracyM : null
+    set({ device: { lat: d.lat, lon: d.lon, accuracyM, tMs: d.tMs } })
+  },
 }))
 
 // Switching incidents (also overview -> fire and fire -> overview): the view belongs to the previous incident or the

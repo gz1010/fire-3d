@@ -1,0 +1,433 @@
+/* Shared floating chrome of brief 4 (owner: H2, frozen; CONTRACT §15.2): the top bar family (ui/shell/TopBar.tsx),
+   the fixed copy (ui/shell/FixedCopy.tsx) and the "value — LABEL" readout rows (ui/shell/Readout.tsx). Values are
+   the handoff screens' (docs/redesign/handoff-4/screens/*.dc.html). Used by both workspaces, so only the global
+   --m-* tokens (map-tokens.css :root) are read here, never the workspace-scoped re-pointed ones. */
+
+/* ------------------------------------------------------------------------------------------------ top bar */
+/* The bar floats: no background of its own. It positions itself (top / sides from the tokens); the empty space
+   between its items lets map drags through. Plain text on it gets a soft shadow so it reads on bright map areas
+   until the view's edge gradients (map/MapAtmosphere.tsx) are behind it. */
+.tb {
+  --tb-x: var(--m-topbar-x);
+  position: absolute;
+  top: var(--m-topbar-top);
+  left: var(--tb-x);
+  right: var(--tb-x);
+  height: var(--m-topbar-h);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0;
+  color: var(--m-text);
+  font: 400 13px / 1.3 var(--m-font-ui);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+.tb-inset-forensic {
+  --tb-x: 20px;
+}
+@media (max-width: 760px) {
+  .tb,
+  .tb-inset-forensic {
+    --tb-x: var(--m-topbar-x);
+    gap: 8px;
+  }
+}
+.tb-side {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.tb-right {
+  justify-content: flex-end;
+  gap: 10px;
+}
+.tb-centre {
+  flex: none;
+  display: flex;
+  align-items: center;
+}
+.tb-side > *,
+.tb-centre > * {
+  pointer-events: auto;
+}
+.tb-side > * {
+  flex: none;
+}
+.tb-sep {
+  width: 1px;
+  height: 18px;
+  flex: none;
+  background: rgba(200, 200, 200, 0.25);
+}
+
+/* glass items: back, icon pills, view pill (rgba(14,14,14,.6) + blur(18px), hairline .18) */
+.tb-icon,
+.tb-view {
+  background: rgba(14, 14, 14, 0.6);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(200, 200, 200, 0.18);
+  text-shadow: none;
+}
+
+/* brand */
+.tb-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  user-select: none;
+}
+.tb-brand .logo {
+  flex: none;
+  filter: none;
+}
+.tb-brand-name {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--m-text);
+  white-space: nowrap;
+}
+.tb-inset-forensic .tb-brand {
+  gap: 7px;
+}
+.tb-inset-forensic .tb-brand-name {
+  font-size: 16px;
+}
+
+/* view pill */
+.tb-view {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+}
+.tb-view-btn {
+  height: 32px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--m-text-2);
+  font: 400 13px / 1 var(--m-font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+.tb-view-sm .tb-view-btn {
+  height: 28px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+.tb-view-btn:hover:not([aria-checked='true']) {
+  background: var(--m-hover);
+  color: var(--m-text);
+}
+.tb-view-btn[aria-checked='true'] {
+  background: var(--m-accent);
+  color: var(--m-accent-ink);
+  font-weight: 600;
+  cursor: default;
+}
+
+/* round icon buttons (36 px): back, Analysis, Check an address, Layers, menus */
+.tb-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 999px;
+  color: var(--m-text-body);
+  font: 500 12px / 1 var(--m-font-ui);
+  cursor: pointer;
+  flex: none;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.tb-icon:hover:not(:disabled) {
+  background: rgba(40, 40, 40, 0.78);
+  border-color: var(--m-border-strong);
+  color: var(--m-text);
+}
+.tb-icon.is-on {
+  background: var(--m-accent);
+  border-color: var(--m-accent);
+  color: var(--m-accent-ink);
+}
+.tb-icon.is-on:hover:not(:disabled) {
+  background: var(--m-accent-bg-hover);
+  border-color: var(--m-accent-bg-hover);
+  color: var(--m-accent-ink);
+}
+.tb-icon:focus-visible,
+.tb-view-btn:focus-visible,
+.tb-status.is-button:focus-visible {
+  outline: 2px solid var(--m-accent);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+.tb-icon > svg {
+  flex: none;
+}
+/* the label is the accessible name; a pill that shows it (e.g. the phones' "Updates") adds .has-label */
+.tb-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.tb-icon.has-label {
+  width: auto;
+  padding: 0 12px;
+}
+.tb-icon.has-label .tb-label {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip: auto;
+}
+
+/* LIVE dot / year chip */
+.tb-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 500 10.5px / 1 var(--m-font-mono);
+  letter-spacing: 0.14em;
+  color: var(--m-fire-3);
+  white-space: nowrap;
+}
+.tb-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--m-fire);
+  box-shadow: 0 0 8px var(--m-fire);
+}
+.tb-year {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid var(--m-border-strong);
+  font: 500 10.5px / 1 var(--m-font-mono);
+  letter-spacing: 0.1em;
+  color: var(--m-text-2);
+  white-space: nowrap;
+}
+
+/* status text (data source + age) and place */
+.tb-status {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font: 400 10.5px / 1.3 var(--m-font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--m-text-3);
+  white-space: nowrap;
+}
+.tb-status.is-button {
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+.tb-status.is-button:hover {
+  color: var(--m-text-2);
+}
+.tb-status .is-stale {
+  color: var(--m-stale);
+}
+.tb-place {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  color: var(--m-text-4);
+  white-space: nowrap;
+}
+.tb-side > .tb-place,
+.tb-side > .tb-status {
+  flex: 0 1 auto;
+}
+.tb-date {
+  font-family: var(--m-font-mono);
+  font-size: 11px;
+}
+
+/* ------------------------------------------------------------------------------------------------ fixed copy */
+/* "Research prototype — not for operational use" (+ "Not an all-clear. Follow local officials.") per view:
+   line (Main, centred one line), corner (Command, mono caps), bar (fire view, mono), pill (Forensic, glass) */
+.fxc {
+  margin: 0;
+}
+.fxc-line {
+  max-width: 640px;
+  text-align: center;
+  font: 400 12px / 18px var(--m-font-ui);
+  color: var(--m-text-2b);
+}
+.fxc-lead {
+  font-family: var(--m-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #d0d0d0;
+}
+.fxc-corner {
+  font: 400 10px / 14px var(--m-font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  /* the screen's #6f6f6f is under 4.5:1 on the ground: the quiet meta grey instead (decision l) */
+  color: var(--m-text-4);
+}
+.fxc-bar {
+  font: 400 11px / 1.4 var(--m-font-mono);
+  color: var(--m-text-4);
+}
+.fxc-pill {
+  display: inline-block;
+  max-width: 100%;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(14, 14, 14, 0.6);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(200, 200, 200, 0.16);
+  font: 400 11px / 1.4 var(--m-font-ui);
+  color: var(--m-text-2b);
+}
+.fxc-sep {
+  color: var(--m-text-4);
+}
+
+/* ------------------------------------------------------------------------------------------------ readout rows */
+/* "value unit — LABEL": value mono 22 px (26 / 17), unit 12 px #bdbdbd, label 10.5 px 600 .12em #9a9a9a */
+.ro-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 10px;
+  row-gap: 2px;
+  padding: 8px 0;
+  min-width: 0;
+}
+.ro-value {
+  min-width: 0;
+  font: 500 var(--m-readout-fs) / 1.2 var(--m-font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--m-text);
+  overflow-wrap: anywhere;
+}
+.ro-26 .ro-value {
+  font-size: var(--m-readout-lg);
+}
+.ro-17 .ro-value {
+  font-size: 17px;
+}
+.ro-unit {
+  margin-left: 4px;
+  font-size: 12px;
+  color: var(--m-text-2b);
+}
+.ro-26 .ro-unit {
+  font-size: 13px;
+}
+.ro-label {
+  font: 600 10.5px / 1.3 var(--m-font-ui);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--m-text-3);
+}
+.ro-row.is-stale .ro-value {
+  color: var(--m-stale);
+}
+.ro-row.is-official .ro-value {
+  color: var(--m-official-ink);
+}
+.ro-row.is-alert .ro-value {
+  color: var(--m-alert);
+}
+.ro-copy {
+  align-self: center;
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--m-text-3);
+  cursor: pointer;
+}
+.ro-copy:hover {
+  background: var(--m-hover);
+  color: var(--m-text);
+}
+.ro-copy:focus-visible {
+  outline: 2px solid var(--m-accent);
+  outline-offset: 1px;
+}
+.ro-sub {
+  flex-basis: 100%;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--m-text-2b);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tb-view-btn,
+  .tb-icon {
+    transition: none;
+  }
+}
+
+/* ------------------------------------------------------------------------------------------------ title picker */
+/* the incident picker's trigger as the bar's title (IncidentPicker variant="title"): "Willow ▾" 18 px / 600 on the
+   map, glass only on hover / while open */
+.picker-btn.is-title,
+:root[data-workspace='map'] .picker-btn.is-title {
+  height: 36px;
+  min-width: 0;
+  max-width: 320px;
+  gap: 6px;
+  padding: 0 8px;
+  border-radius: 10px;
+  border-color: transparent;
+  background: transparent;
+}
+.picker-btn.is-title .picker-name {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--m-text);
+}
+.picker-btn.is-title .picker-caret {
+  color: var(--m-text-3);
+}
+.picker-btn.is-title:hover,
+.picker-btn.is-title.is-open,
+:root[data-workspace='map'] .picker-btn.is-title:hover,
+:root[data-workspace='map'] .picker-btn.is-title.is-open {
+  background: rgba(14, 14, 14, 0.6);
+  border-color: rgba(200, 200, 200, 0.18);
+}
