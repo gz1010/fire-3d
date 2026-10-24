@@ -1,0 +1,68 @@
+{
+  "step": "brief4-h5",
+  "summary": "H5 (Forensic restyle and rotation) finished. Forensic now matches screens/ForensicView.dc.html and renders/ForensicView.jpg: greys plus the orange accent for the UI, the green terrain and gold scene graphics kept. theme.css carries the Forensic tokens (greys, --gold* = the accent family, --accent-ink, --text-body, --link, --fire-3, handoff chart colours, layout vars --bar-top / --edge); every hard-coded gold in controls.css, theme.css, header.css, overlays.css, layout.css, panel.css, dock.css and scene/overlays/overlays.css became the accent or a grey (the map workspace keeps its look: its tokens and map-bridge.css resolve to the same values; Public and Command screenshots compared with H2's). The header is H2's floating TopBar (back = close the fire and go to the map overview, logo, the picker as the '● LIVE Willow ▾' glass pill, place and dates, the ViewPill in the centre, Incident | Aircraft tabs, View options / Analysis / Share / Settings / Hide panels as 34 px IconPills); the floating '.fx-ws-switch' is gone, and the collapsed MiniBar keeps a small ViewPill. 'Frame fire' and 'Charts & key events' sit under the compass; the disclaimer is FixedCopy 'pill' (PROTOTYPE_LINE + NOT_ALL_CLEAR) above the timeline; a 120 px top gradient sits behind the bar (no vignette, no tint). Right panel 336 px / top 76 / radius 16 with accent tab underline, mono group heads, accent check boxes, grey sliders, swatches in their data colours; Incident Overview starts collapsed; the weather grid as the screen with flame length #ff9a5a. Timeline dock left 16 / right 368 / bottom 16 / 112 px: accent play 36 px, accent range tabs, light knob with accent ring, orange past hatch, amber forecast hatch; the charts row unchanged when opened. Compass: 60 px grey dial, orange north, drag to turn (ui/useCompassDrag.ts), ⟲ ⟳ beside it, 'heading · tilt' under it. View dock: scale, 2D/3D accent, '1.5× ▾' / 'High ▾' selects, depth of field, frame, full screen. The 'Zoom in on a fire or pick one' empty state uses the floating bar and a grey glass panel. Rotation (decisions f, k): sceneStore commands 'rotate' (deg) and 'set-heading' (deg); CameraRig rotates in 2D with the top-down polar clamp (azimuth only), keeps the heading across 2D↔3D, frame-fire keeps the heading, registers a RotationTarget (Q / E / N), takes Safari's twist and a touch twist (scene/camera/heading.ts TwistTracker, tested), stops the controls' damping inertia when a command arrives, and applies store.flyTo.bearingDeg (the map's heading on the hand-off). Browser checks 23/23 and layout measurements match the screen's numbers.",
+  "files_changed": [
+    "web/src/styles/theme.css",
+    "web/src/styles/layout.css",
+    "web/src/styles/controls.css",
+    "web/src/styles/header.css",
+    "web/src/styles/panel.css",
+    "web/src/styles/dock.css",
+    "web/src/styles/overlays.css",
+    "web/src/styles/forensic-entry.css",
+    "web/src/styles/forensic-narrow.css",
+    "web/src/ui/feed/keyEvents.css",
+    "web/src/ui/Header.tsx",
+    "web/src/ui/Menus.tsx",
+    "web/src/ui/RightPanel.tsx",
+    "web/src/ui/IncidentOverview.tsx",
+    "web/src/ui/WeatherCard.tsx",
+    "web/src/ui/Timeline.tsx",
+    "web/src/ui/Charts.tsx",
+    "web/src/ui/AnalysisTab.tsx",
+    "web/src/ui/shell/ForensicWorkspace.tsx",
+    "web/src/scene/sceneStore.ts",
+    "web/src/scene/camera/CameraRig.tsx",
+    "web/src/scene/camera/heading.ts (new)",
+    "web/src/scene/camera/heading.test.ts (new)",
+    "web/src/scene/overlays/SceneOverlays.tsx",
+    "web/src/scene/overlays/overlays.css",
+    "web/src/scene/overlays/SelectionPin.tsx",
+    "docs/redesign/CONTRACT.md (15.5 'H5 (Forensic) — as built')",
+    "docs/redesign/progress/brief4-h5.md",
+    "docs/redesign/reports/brief4-h5.json",
+    "docs/screenshots/brief4-h5-*.png"
+  ],
+  "screenshots": [
+    "docs/screenshots/brief4-h5-forensic-fixture-live.png",
+    "docs/screenshots/brief4-h5-forensic-lower-sugarloaf.png",
+    "docs/screenshots/brief4-h5-forensic-rotated-2d.png",
+    "docs/screenshots/brief4-h5-forensic-empty.png",
+    "docs/screenshots/brief4-h5-forensic-charts.png",
+    "docs/screenshots/brief4-h5-forensic-phone.png",
+    "docs/screenshots/brief4-h5-forensic-1024.png",
+    "docs/screenshots/brief4-h5-mapcheck-public-fire.png",
+    "docs/screenshots/brief4-h5-mapcheck-command-fixture-live.png"
+  ],
+  "comparison": {
+    "forensic_vs_render": "fixture-live at 1440x1000 next to renders/ForensicView.jpg: same floating bar (back, logo, LIVE name pill, place and dates, centred view pill with Forensic in the accent, Incident | Aircraft, five round tools), compass at 20/80 with the heading line, Frame fire / Charts & key events under it, right column at 76/16/16 with 336 px, view dock right 368 / bottom 140, disclaimer pill left 16 / bottom 136, timeline dock 16/368/16 at 112 px, accent play and range tabs. Extra versus the mockup, kept on purpose: the demo badge, the ⟲ ⟳ buttons beside the compass, 'Not an all-clear. Follow local officials.' in the pill (decision i-8), the Hide panels pill, the forecast window and NOW mark on the track.",
+    "map_vs_h2": "Public fire (Lower Sugarloaf) and Command (fixture-live) are unchanged against brief4-h2-*.png in colours and panels; the only differences are H3+H4's work in progress (compact controls, rotate hint placement)."
+  },
+  "measured": {
+    "layout_1440x1000": { "bar": "20/20/40", "compass": "left 20 top 80 60 px", "entry_top": 172, "right_column": "top 76 right 16 bottom 16 width 336", "dock": "left 16 right 368 bottom 16 height 112", "view_dock": "right 368 bottom 140", "pill": "left 16 bottom 136" },
+    "browser_checks": { "rotation_and_handoff": "23/23 (Q/E/N, ⟲ ⟳, compass drag, click and arrows, 2D keeps heading and turns by Q / right-drag / Ctrl+drag, no inertia drift, 3D keeps heading, Safari twist, touch twist, Forensic→map 30°, map −50° → Forensic 310°, reduced motion)" }
+  },
+  "gates": "typecheck ok / lint 56 warnings: the 55 baseline in src/scene (none added by H5) + 1 in src/map/mapController.ts (the other chain's work in progress) / tests 98 files: 1361 passed, 2 skipped, 1 failed (src/state/fireCard.test.ts, which reads the other chain's mapController.ts; no H5 test fails; new scene/camera/heading.test.ts 7 passed) / build ok",
+  "known_issues": [
+    "The other chain's in-progress mapController.ts currently adds a lint warning and fails src/state/fireCard.test.ts; nothing in H5's files does.",
+    "Safari two-finger trackpad rotation and the touch twist are checked with synthetic events only (GestureEvents; CDP touch points); a person should try them on a Mac and a phone.",
+    "IncidentPicker is restyled for Forensic in CSS only (header.css .picker-btn:not(.is-title)); its 'LIVE' text is hidden on phones by font-size 0 (still read out).",
+    "CameraRig.stopInertia clears two private fields of three.js OrbitControls (r186: _sphericalDelta, _panOffset): there is no public call; re-check after a three.js upgrade.",
+    "Long fire names still truncate the place / dates line in the bar at 1440 px (two lines below 1600 px; the full text is in the tooltip); ≤ 1280 px the place line hides.",
+    "On phones the view dock hides the exaggeration and quality selects (both are in View options); the compass row and the view pill row share the top of a 390 px screen tightly.",
+    "Incident Overview now starts collapsed for everyone without a stored choice (the screen); the record facts are one click away.",
+    "The map's own compass (map/map.css .fxm-compass svg, H3+H4) keeps an 80 ms transition, which spins the needle the long way when the bearing crosses ±180°; the Forensic needle has none."
+  ],
+  "notes_for_others": "Global CSS changed by H5 (theme.css, controls.css, header.css, overlays.css, layout.css): hard-coded golds are now the accent or greys; the map workspace's values are unchanged because map-tokens.css re-points the tokens and map-bridge.css covers the rest (Public and Command screenshots compared). New theme tokens usable anywhere: --accent-ink, --accent-hover, --text-body, --link, --fire-3, --bar-top, --edge. Forensic-only overrides are scoped with :root[data-workspace='forensic'] (menu icons grey; range sliders grey via --range-fill / --range-ring). sceneStore.issueCameraCommand(kind, deg?) now takes 'rotate' and 'set-heading'; CameraRig registers the Forensic RotationTarget, so Q / E / N work in Forensic. No H2 frozen file was edited. H3+H4: map/map.css .fxm-compass svg has a transition that spins the needle across ±180° (consider dropping it as H5 did). The scratch checks (session scratchpad, not in the repo): h5-rotate-check.mjs, h5-measure.mjs, h5-shots.sh, h5-needle.mjs.",
+  "commits": []
+}

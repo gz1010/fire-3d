@@ -40,7 +40,10 @@ function IncidentMeta() {
   const tr = manifest?.time_range
   const start = tr?.start_ms ?? summary.started_ms
   const end = summary.mode === 'live' ? null : (summary.contained_ms ?? tr?.end_ms ?? null)
-  const dates = `${fmtDayDate(start, tf.tz, { year: 'always' })} – ${end ? fmtDayDate(end, tf.tz, { year: 'always' }) : 'present'}`
+  // "Jun 28, 2026 – present"; a past fire within one year: "Sep 1 – Nov 14, 2025"
+  const dates = end
+    ? `${fmtDayDate(start, tf.tz, { year: 'auto', refMs: end })} – ${fmtDayDate(end, tf.tz, { year: 'always' })}`
+    : `${fmtDayDate(start, tf.tz, { year: 'always' })} – present`
   const where = [summary.location, summary.county ? `${summary.county} County` : null, summary.state ?? null].filter(Boolean).join(', ')
   // TopBarPlace's look (.tb-place, .tb-date), on one line on wide screens and as two lines (place over dates) where
   // the bar is tight, so the dates stay readable beside a long name (styles/header.css)
@@ -67,7 +70,7 @@ function HeaderTabs() {
   const active = live ? tab : 'incident'
   return (
     <div className="hdr-tabs" role="tablist" aria-label="Context">
-      <button type="button" role="tab" aria-selected={active === 'incident'} className="hdr-tab" onClick={() => setTab('incident')}>
+      <button type="button" role="tab" aria-selected={active === 'incident'} className="hdr-tab" data-tip="Incident: layers, analysis, evidence and notes" onClick={() => setTab('incident')}>
         <MapIcon size={13} aria-hidden="true" />
         Incident
       </button>

@@ -16,9 +16,10 @@
   .app.fx-dock-min .dock .ke {
     display: none;
   }
+  /* the screen's 112 px timeline dock */
   .app.fx-dock-min .dock .tl {
     border-bottom: 0;
-    padding-bottom: 6px;
+    padding-bottom: 0;
   }
 }
 

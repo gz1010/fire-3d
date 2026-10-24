@@ -269,8 +269,14 @@
   .fx-bar .tb-left > .tb-sep {
     display: none;
   }
+  /* Incident | Aircraft as icons (and the aircraft count); the words stay the tabs' accessible names and tooltips */
   .fx-bar .hdr-tab {
     padding: 0 9px;
+    gap: 4px;
+    font-size: 0;
+  }
+  .fx-bar .hdr-tab .count-badge {
+    font-size: 10px;
   }
 }
 

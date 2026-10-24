@@ -3587,7 +3587,120 @@ _H4: to be filled._
 
 #### H5 (Forensic) — as built
 
-_To be filled by H5._
+Built 2026-10-24 by H5 (one builder; report `reports/brief4-h5.json`, screenshots `docs/screenshots/brief4-h5-*.png`,
+progress `progress/brief4-h5.md`). Forensic matches `screens/ForensicView.dc.html` / `renders/ForensicView.jpg` in
+layout and colour; every datum, layer, control and behaviour of the Forensic workspace is kept. Where this differs from
+§15.1-15.4, this sub-section is what the code does.
+
+**Tokens** (`styles/theme.css`, Forensic values; the map workspace still re-points the shared names to its `--m-*`
+tokens). Greys: `--bg-0 #0c0c0c`, `--bg-1 #141414`, `--glass rgba(14,14,14,.62)`, `--glass-strong .8`, `--glass-soft .5`,
+`--glass-raised rgba(26,26,26,.94)`, `--glass-blur blur(22px) saturate(140%)`, `--hairline rgba(200,200,200,.16)` (soft
+.08, strong .28), `--text #f0f0f0`, new `--text-body #e6e6e6`, `--text-2 #bdbdbd`, `--text-3 #9a9a9a`, `--text-4 #7a7a7a`,
+new `--link #e0e0e0`, `--shadow 0 12px 32px rgba(0,0,0,.4)`, `--focus-ring 0 0 0 2px #d0d0d0`. UI accent: `--gold #ff7a3d`
+(the names keep "gold" so components follow by value), `--gold-bright #f0f0f0` (the light highlight text, as the map's
+`--m-accent-text`), `--gold-dim/-soft/-faint/-ghost` = the accent at .55 / .28 / .14 / .07, new `--accent-ink #1a0a03`,
+`--accent-hover #ff8d57`. Status: `--ok #8fd3a8`, `--warn #e8b04a`, `--danger #f87171`, new `--fire-3 #ff9a5a`. Charts:
+`--chart-observed #ff8a3c`, `--chart-forecast #f5c060`, `--chart-band rgba(245,192,96,.2)`, `--chart-cursor #e6e6e6`,
+greyed axis and grid. Kept: `--lattice-*`, `--fire`, `--fire-*`, `--ember`, `--ev-*`, `--ac-*`, `--chart-frp`,
+`--chart-terrain` and every three.js colour (green terrain, gold scene graphics). Layout: new `--bar-top 20px`, `--edge
+16px`; `--header-h 40px`, `--panel-w 336px` (316 px ≤ 1280 px); `--safe-*` follow the new frame. Links are light grey and
+underlined (`a`, global; the map keeps its own rule in `map-bridge.css`). Range sliders: `--range-fill` / `--range-ring`
+(set only under `html[data-workspace='forensic']`: grey `#cfcfcf` fill, plain light thumb; the map keeps the accent).
+
+**Global CSS** (`theme.css`, `controls.css`, `header.css`, `overlays.css`, `layout.css`): every hard-coded gold became the
+accent or a grey: `.seg-btn[aria-checked]` and `.btn-solid` accent + `--accent-ink`, `.switch` / `.check` / `.spinner` /
+`.progress-fill` / `.fc-pill` accent, `.tab` underline without glow, chips' frames, `.popover` `rgba(18,18,18,.92)`,
+`.tooltip` `rgba(20,20,20,.96)`, `.ov-card` `rgba(14,14,14,.82)`, `.card-link` grey underlined, empty notes, inputs,
+corner marks. Forensic-only (scoped `:root[data-workspace='forensic']`): menu icons grey. The map workspace's look is
+unchanged (its tokens and `map-bridge.css` resolve to the same values); Public and Command checked against the H2
+screenshots (`brief4-h5-mapcheck-*.png`).
+
+**Top bar** (`ui/Header.tsx`, `styles/header.css`): H2's `TopBar inset="forensic" className="fx-bar"` inside
+`.app-header` (top 20, sides 20, height 40; the bar fills it). Left: `BackButton` "Back to all fires" (switches to the map,
+then `goToOverview()`: history-aware, the map's overview framing), `TopBarBrand size 22`, a hairline, the
+`IncidentPicker` (pill variant, restyled in CSS only: 36 px glass pill, "● LIVE" mono `#ff9a5a` without the chip frame, or
+the year as the bar's grey chip; name 16/600; caret; the map's `is-title` trigger is untouched), then the place in
+`TopBarPlace`'s classes (`.tb-place.fx-place`: "<County> County", else `placeLine(summary)`, and the mono dates "Jun 28,
+2026 – present" / "Sep 1 – Nov 14, 2025"; one line with " · " above 1600 px, place over dates below, hidden ≤ 1280 px;
+the full location and the coordinates in the tooltip). Centre: `ViewPill className="fx-bar-view"`. Right: the Incident | Aircraft (n) tabs as a glass pill group
+(active = light wash), then `nav.hdr-actions`: `ViewMenu` ("View options", eye), `AnalysisMenu`, `ShareButton`,
+`SettingsMenu` and "Hide panels (H)" as 34 px `IconPill`s (`.fx-tool`; a menu's pill is accent while open; Share is
+`aria-disabled` without a fire). Settings' keyboard list adds Q / E (turn 15°) and N (north up). The tagline is dropped;
+≤ 1180 px the brand name hides. A 2 px busy line runs along the window's top edge. Collapsed
+("H"): `MiniBar` is a glass pill (logo, name, ● LIVE / year, time, accent play, a small `ViewPill`, "Panels H") — the view
+switch stays reachable now that the floating one is gone.
+
+**Workspace** (`ui/shell/ForensicWorkspace.tsx`, `styles/forensic-entry.css`, `layout.css`): the floating `.fx-ws-switch`
+is removed. `.fx-ws` (left `safe-left + 8`, top `safe-top + 100`) holds "Frame fire" / "Charts & key events" (the
+screen's glass box, 36 px rows; phones "Layers & analysis") and the demo badge (amber mono pill). `.fx-topfade`: the
+screen's 120 px top gradient inside `.app-canvas` (above the terrain, under the scene controls). `.fx-note`: `FixedCopy
+variant="pill"` (`PROTOTYPE_LINE` · `NOT_ALL_CLEAR`) left 16, 4 px above the dock (it follows the dock's height); 761-1279
+px one row higher (the view controls need the row); the right column's old footer line is gone. Right column
+(`.rcol`): top 76, right 16, bottom 16, 336 px; `.rp` radius 16, cards 14. Dock: left 16, right 368, bottom 16; with the
+timeline only it is 110 px tall (the screen's 112); "Charts & key events" opens the unchanged charts row.
+
+**No fire** (`OpenFireFirst`): the floating `TopBar` (back = "Back to the map", logo, "Forensic · 3D analysis", the view
+pill) over the ground; "Zoom in on a fire or pick one" as a grey glass panel (radius 16, title 18/600) with the same text,
+"Back to the map", the fire list and the fire card.
+
+**Right panel** (`styles/panel.css`, `ui/RightPanel.tsx`, `ui/LayersTab.tsx` unchanged markup): tabs 14 px with the 2 px
+accent underline, count chip grey, the Evidence warnings dot accent; group heads mono 10.5 .16em with count and the eye
+toggle grey; rows 18 px accent check boxes with dark ticks, 26×18 swatches (data colours kept; their dark bases neutral),
+13 px names, grey sliders, mono 10.5 %; Incident Overview starts collapsed (`defaultOpen={false}`, the choice remembered
+under `fire3d:card:overview`) with the agency link; Weather & Fire Behavior (`ui/WeatherCard.tsx`): the screen's grid
+(icon + label on one line, mono 18 px value, mono sub line), header wraps, "at fire front", ANL grey / FCST amber stamp;
+flame length `#ff9a5a` (red from 8 ft), other warn tones `#e8b04a`; icons kept.
+
+**Timeline and charts** (`styles/dock.css`, `ui/Timeline.tsx`, `ui/Charts.tsx`): title 14/600, step buttons grey, play
+36 px accent with dark ink and a soft glow, speed "1 h/s ▾" outlined, time mono 15 px white + zone + T+ grey, range tabs
+All / 7 d / 72 h mono accent, window text grey; track grey, past part orange-hatched, forecast window hatched in the
+modeled amber (pattern and label), NOW / T₀ mark `#ff9a5a`, handle a 16 px light knob with the accent ring and a grey
+bubble. Key Events: accent current / selected marks, kind glyphs in the map feed's colours (`ui/feed/keyEvents.css`).
+Charts: the profile's modeled part amber-hatched, cursor light grey, readouts grey glass.
+
+**Scene overlays** (`scene/overlays/SceneOverlays.tsx`, `overlays.css`): grey glass (`rgba(14,14,14,.6)` + blur 18,
+hairline .16, radius 12). Compass: a 60 px dial (48 on phones) at `safe-top + 8` / `safe-left + 8` with the screen's
+needle (north `#ff7a3d`, south `#9a9a9a`; no CSS transition, so crossing north never spins it the long way), "338° · 29°"
+(heading · tilt) under it, ⟲ ⟳ (`.sc-turn`, 15°) beside it.
+View dock (right `safe-right + 4`, bottom `safe-bottom`): scale (light grey bar), 2D / 3D accent with dark ink, the
+exaggeration and quality `<select>`s drawn as "1.5× ▾" / "High ▾", depth of field (on = light wash), frame fire, full
+screen; on phones the two selects hide (both are in View options). Probe readout and quality toast grey. The 3D
+selection pin is light blue (`#9fd6ff` / `#cfeaff`, `scene/overlays/SelectionPin.tsx`).
+
+**Rotation** (decisions f, k). `scene/sceneStore.ts`: `CameraCommandKind` adds `'rotate'` and `'set-heading'`;
+`CameraCommand.deg?`; `issueCameraCommand(kind, deg?)`. `scene/camera/heading.ts` (pure, tested): `headingOfAzimuth(az)`
+(= −azimuth, [0, 360)), `azimuthOfHeading(deg)`, `turnedAzimuth(az, deg)`, `TWIST_THRESHOLD_DEG` (4), `TwistTracker`
+(two touch points → `{ start, turned }` once past the threshold; a pinch never turns). `scene/camera/CameraRig.tsx`:
+controls rotate in 2D too, with the polar angle clamped to top-down (`minPolarAngle = maxPolarAngle = POLAR_2D`), so a
+right-drag, Ctrl / Shift / Cmd + drag or a two-finger drag turn the azimuth only; 2D ↔ 3D keeps the heading (3D gets back
+its last tilt); commands run from a store subscription (one per frame while the compass is dragged, no re-render):
+`rotate` tweens 0.35 s and continues from a running turn's goal (repeated Q / E add up), `set-heading` is instant (it
+joins a running animation's goal), `reset-north` tweens to 0, and during another animation (2D ↔ 3D, a fly-to) a turn
+changes that animation's goal heading instead of cutting it short; a command also stops the controls' leftover drag
+inertia (`stopInertia`: three.js damping would otherwise keep turning after a right-drag); `frame-fire` keeps the heading (north up only on
+request; a new fire is still framed from the SSE by default); `store.flyTo.bearingDeg` sets the heading of the fly-to
+(the map's heading on the hand-off). The rig registers a `RotationTarget` (`state/rotation.ts`: Q / E / N reach it;
+`bearing()` reads the live camera), attaches Safari's twist (`lib/rotateGesture.ts`) and a touch twist to the canvas;
+every turn is a camera command, so `ui/shell/handoff.ts` sees the user's turn and the map gets the Forensic heading
+back. The compass uses `ui/useCompassDrag.ts` (drag around the dial = `set-heading`; click = north up; ← → on it = 15°).
+
+**Medium screens and phones.** ≤ 1180 px the Incident | Aircraft tabs show their icons (and the aircraft count) with
+the words as accessible names and tooltips; 761-1279 px the disclaimer pill sits one row above the view dock. Phones
+(`styles/forensic-narrow.css`): the bar keeps back, the picker (the LIVE dot, the name) and the five tool pills; the
+view pill drops to a row under the bar's right end; the dial is 48 px; entry controls in a row under it; the pill
+above the view dock; the right column stays the bottom sheet and the dock the timeline only (play 32 px, time 13 px).
+
+**Checked** (scratch Playwright, Chrome + SwiftShader at 1440×1000, not in the repo). Rotation 23/23
+(`h5-rotate-check.mjs`): Forensic opens at 337.5°; N → 0°; E → 15°; Q Q pressed together → 345° (whole steps); ⟳ / ⟲;
+a quarter-turn compass drag → −90°; compass click → north; → on the focused compass → +15°; 2D keeps 60° top-down; Q in
+2D; right-drag and Ctrl + drag turn the 2D view with the polar angle still 0.03°; a right-drag's inertia does not drift
+after N ⟲ ⟲ (330°); back to 3D keeps 330° at 61° tilt; a synthetic Safari twist of 30° → −26°; a CDP two-finger touch
+twist of 40° → −36°; Forensic → map carries the user's Forensic turn (30° → map 30°); map −50° → `flyTo.bearingDeg −50`
+→ Forensic 310°; reduced motion: no transitions on the play button, compass, view pill or busy line, and E still turns.
+Layout (`h5-measure.mjs`, fixture-live): bar 20 / 20 / 40 px, view pill centred (589 px each side), compass 20 / 80 / 60
+px, entry box top 172, right column top 76 / right 16 / bottom 16 / 336 px, dock left 16 / right 368 / bottom 16 / 112
+px, view dock right 368 / bottom 140, disclaimer pill left 16 / bottom 136 — the screen's numbers. Public and Command
+(`brief4-h5-mapcheck-*.png`) are unchanged against `brief4-h2-*.png` apart from H3+H4's own work in progress.
 
 #### Final check — as built
 

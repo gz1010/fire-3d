@@ -17,3 +17,15 @@
   TwistTracker), flyTo.bearingDeg applied. Compass: 60 px grey dial, orange N, drag via useCompassDrag, ⟲ ⟳ beside.
 - First screenshots (fixture-live 1440, phone) viewed; phone fixes (dial 48, view pill row, dock selects hidden on
   phones as they are in View options, timeline row).
+- Rotation checks (scratch `h5-rotate-check.mjs`): first runs failed on timing (SwiftShader 0.5-4 fps; the published
+  heading lags) and one Vite HMR reload; rewritten to wait for the expected heading. Found and fixed: a right-drag's
+  damping inertia kept turning after a command (CameraRig `stopInertia`), a turn during 2D↔3D cut the tilt animation
+  short (now it changes that animation's goal), the needle's CSS transition spun the long way across north (removed).
+  Final run 23/23.
+- Layout measured against the screen (bar, compass, entry box, right column, dock 112 px after trimming the timeline's
+  padding, view dock, disclaimer pill): all match. 1024 px: header tabs icon-only ≤ 1180 px so the right side clears the
+  view pill. Place line: "<County> County" over the dates below 1600 px; one-year ranges drop the first year.
+- Public and Command screenshots vs H2: unchanged by H5's global CSS (differences are H3+H4's work in progress).
+- Gates (H5 files): typecheck ok; lint 55 in src/scene + 1 in the other chain's mapController.ts; tests: 1 failure in
+  the other chain's fireCard.test.ts (reads mapController.ts), none in H5 files; build ok. CONTRACT 15.5 "H5 as built",
+  report written. Finished.

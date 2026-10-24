@@ -88,9 +88,9 @@
   outline-offset: 2px;
   box-shadow: none;
 }
+/* no transition on the needle: crossing north (5° → 355°) would spin it the long way round */
 .sc-compass svg {
   display: block;
-  transition: transform 0.08s linear;
 }
 .sc-needle-n {
   fill: #ff7a3d;
@@ -466,7 +466,6 @@
     animation: none;
     left: 30%;
   }
-  .sc-compass svg,
   .sc-compass,
   .sc-seg,
   .sc-icon-btn {
