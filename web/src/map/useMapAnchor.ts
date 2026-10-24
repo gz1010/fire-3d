@@ -17,24 +17,26 @@ export function useMapAnchor(lngLat: readonly [number, number] | null): MapAncho
   const map = useMapRuntime((s) => s.map)
   const lon = lngLat?.[0]
   const lat = lngLat?.[1]
-  const [anchor, setAnchor] = useState<MapAnchor | null>(null)
+  const valid = map != null && lon != null && lat != null && Number.isFinite(lon) && Number.isFinite(lat)
+  const key = valid ? `${lon},${lat}` : ''
+  // the projection of the point named by `key` (a point that changed is not shown until projected)
+  const [state, setState] = useState<{ key: string; anchor: MapAnchor } | null>(null)
   useEffect(() => {
-    if (!map || lon == null || lat == null || !Number.isFinite(lon) || !Number.isFinite(lat)) {
-      setAnchor(null)
-      return
-    }
+    if (!map || !valid || lon == null || lat == null) return
     let raf = 0
     const update = () => {
       raf = 0
       const p = map.project([lon, lat])
       const c = map.getContainer()
       const inView = p.x >= 0 && p.y >= 0 && p.x <= c.clientWidth && p.y <= c.clientHeight
-      setAnchor((cur) => (cur && Math.abs(cur.x - p.x) < 0.5 && Math.abs(cur.y - p.y) < 0.5 && cur.inView === inView ? cur : { x: p.x, y: p.y, inView }))
+      setState((cur) =>
+        cur && cur.key === key && Math.abs(cur.anchor.x - p.x) < 0.5 && Math.abs(cur.anchor.y - p.y) < 0.5 && cur.anchor.inView === inView ? cur : { key, anchor: { x: p.x, y: p.y, inView } },
+      )
     }
     const schedule = () => {
       if (!raf) raf = requestAnimationFrame(update)
     }
-    update()
+    schedule()
     map.on('move', schedule)
     map.on('resize', schedule)
     return () => {
@@ -42,6 +44,6 @@ export function useMapAnchor(lngLat: readonly [number, number] | null): MapAncho
       map.off('resize', schedule)
       if (raf) cancelAnimationFrame(raf)
     }
-  }, [map, lon, lat])
-  return anchor
+  }, [map, valid, key, lon, lat])
+  return state && state.key === key && valid ? state.anchor : null
 }

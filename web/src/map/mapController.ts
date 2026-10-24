@@ -634,7 +634,7 @@ export class MapController {
     const dataKey = `${this.overviewVersion}|${ws.units}|${cardId ?? ''}|${hidden.join(',')}`
     if (dataKey !== this.overviewDataKey) {
       this.overviewDataKey = dataKey
-      const data = overviewData(splitOverview(this.overviewSet, { hidden, cardId }), ws.units)
+      const data = overviewData(splitOverview(this.overviewSet, { hidden, cardId }), ws.units, cardId)
       for (const g of OVERVIEW_GROUPS) this.setData(OVERVIEW_SOURCES[g], data[g])
     }
     const chipKey = this.chipIds.join(',')

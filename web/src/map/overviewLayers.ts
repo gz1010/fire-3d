@@ -259,8 +259,19 @@ export const LABEL_ANCHORS: Readonly<Record<LabelSide, readonly Anchor[]>> = {
   e: ['right', 'top', 'bottom'],
   ee: ['right'],
 }
-/** The label's distance from the marker centre (ems) for a marker radius `r` (px), as the radial offset gives it. */
+/** The card's selection ring reaches this far past its marker (ring at r + 6, half its 2.5 px stroke; rounded up): the
+ *  card fire's label stands clear of it (feature property `lr`, the radius its label keeps away from). */
+export const CARD_RING_PX = 8
+/** The largest `lr`: a large fire whose card is open. */
+export const LABEL_R_MAX_PX = MARKER_MAX_PX + CARD_RING_PX
+/** The label's distance from the marker centre (ems) for a label radius `r` (px), as the radial offset gives it. */
 export const labelOffsetEm = (r: number): number => 0.45 + r / 12
+/** `text-radial-offset` of a wide map's labels: labelOffsetEm of the feature's `lr`, growing from z7 to z10 as the
+ *  markers do (zoomed), so a label never touches its marker or the card's ring when zoomed in. */
+export function labelRadialOffset(): unknown {
+  const at = (scale: number) => ['+', 0.45, ['/', ['*', scale, ['get', 'lr']], 12]]
+  return ['interpolate', ['linear'], ['zoom'], 7, at(1), 10, at(ZOOM_GROWTH)]
+}
 /** MapLibre's anchor-offset list ("top", [0, 1.2], …) for some anchors at one marker radius. */
 export function anchorOffsets(anchors: readonly Anchor[], r: number): (Anchor | [number, number])[] {
   const d = Math.round(labelOffsetEm(r) * 1000) / 1000
@@ -268,23 +279,23 @@ export function anchorOffsets(anchors: readonly Anchor[], r: number): (Anchor | 
   return anchors.flatMap((a) => [a, off[a]])
 }
 /** `text-variable-anchor-offset` of a narrow map's labels: below NARROW_LABEL_MAX_ZOOM by the fire's `side`, else the
- *  default anchors; the offset follows the marker radius `r` as `text-radial-offset` does on wide maps. */
+ *  default anchors; the offset follows the label radius `lr` as `text-radial-offset` does on wide maps. */
 export function narrowLabelAnchorOffset(): unknown {
   const forSide = (side: LabelSide) => [
     'interpolate',
     ['linear'],
-    ['get', 'r'],
+    ['get', 'lr'],
     MARKER_MIN_PX,
     ['literal', anchorOffsets(LABEL_ANCHORS[side], MARKER_MIN_PX)],
-    MARKER_MAX_PX,
-    ['literal', anchorOffsets(LABEL_ANCHORS[side], MARKER_MAX_PX)],
+    LABEL_R_MAX_PX,
+    ['literal', anchorOffsets(LABEL_ANCHORS[side], LABEL_R_MAX_PX)],
   ]
   const bySide = ['match', ['get', 'side'], 'ww', forSide('ww'), 'w', forSide('w'), 'e', forSide('e'), 'ee', forSide('ee'), forSide('c')]
   return ['step', ['zoom'], bySide, NARROW_LABEL_MAX_ZOOM, forSide('c')]
 }
 
 /** One point feature per fire (agency coordinates); `pinned` features are labelled at every zoom. */
-export function overviewFeatures(fires: readonly IncidentSummary[], units: Units, o: { pinned?: boolean } = {}): FeatureCollection {
+export function overviewFeatures(fires: readonly IncidentSummary[], units: Units, o: { pinned?: boolean; cardId?: string | null } = {}): FeatureCollection {
   const features: Feature<Geometry>[] = []
   fires.forEach((s, i) => {
     if (!validPoint(s)) return
@@ -304,6 +315,7 @@ export function overviewFeatures(fires: readonly IncidentSummary[], units: Units
         kind,
         acres: acresOf(s),
         r,
+        lr: r + (o.cardId != null && s.id === o.cardId ? CARD_RING_PX : 0),
         dot: DOT_PX[kind],
         hit: Math.max(HIT_MIN_PX, r + 3),
         sort: sortKey(s),
@@ -320,10 +332,10 @@ export function overviewFeatures(fires: readonly IncidentSummary[], units: Units
   return { type: 'FeatureCollection', features }
 }
 
-/** The three sources' data for a split. */
-export function overviewData(split: OverviewSplit, units: Units): Record<OverviewGroup, FeatureCollection> {
+/** The three sources' data for a split (`cardId`: the fire whose card is open, always pinned). */
+export function overviewData(split: OverviewSplit, units: Units, cardId: string | null = null): Record<OverviewGroup, FeatureCollection> {
   return {
-    pinned: overviewFeatures(split.pinned, units, { pinned: true }),
+    pinned: overviewFeatures(split.pinned, units, { pinned: true, cardId }),
     active: overviewFeatures(split.active, units),
     other: overviewFeatures(split.other, units),
   }
@@ -681,7 +693,7 @@ export function overviewLayers(theme: MapTheme, o: { narrow?: boolean } = {}): L
         'text-font': FONT,
         'text-size': 12,
         'text-variable-anchor': [...LABEL_ANCHORS.c],
-        'text-radial-offset': ['+', 0.45, ['/', ['get', 'r'], 12]],
+        'text-radial-offset': labelRadialOffset(),
         // a narrow map's national view: labels grow towards the middle of the country (takes over the two above)
         ...(o.narrow ? { 'text-variable-anchor-offset': narrowLabelAnchorOffset() } : {}),
         'text-justify': 'auto',

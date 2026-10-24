@@ -111,8 +111,8 @@ export interface MapRuntimeState {
   tint: TintLevel
   /** Brief 4: a chrome's tint request (map/useMapTint.ts), null = the view's default (MapAtmosphere). */
   tintRequest: TintLevel | null
-  /** Brief 4 H3 (decision e): fires whose MapLibre label the leader-line overlay replaces (map/LeaderLabels.tsx: the
-   *  ones it names, and the smaller ones past its 12); the map leaves their own labels out. Sorted; [] = none. */
+  /** Brief 4 H3 (decision e): fires whose MapLibre label the leader-line overlay replaces below z5 (map/LeaderLabels.tsx:
+   *  every candidate, named or not); the map leaves their own labels out. Sorted; [] = none. */
   leaderIds: readonly string[]
 }
 

@@ -3490,7 +3490,100 @@ chrome), Command keys 27/27, hand-off and tint 5/5; reduced motion turns at once
 
 #### H3+H4 (Public overview, Public fire view, Command overview) — as built
 
-_To be filled by H3+H4._
+**H3 (Public overview, Command overview, click to fire view, markers, locate-me, leader labels)**, built 2026-10-24
+(report `reports/brief4-h3.json`, screenshots `docs/screenshots/brief4-h3-*.png`, notes `progress/brief4-h3.md`).
+Where this differs from §15.1-15.4, this paragraph is what the code does.
+- *Overview chrome* (`ui/shell/OverviewChrome.tsx`; layout `styles/view-public.css`, every rule under
+  `.mw[data-view='overview']`): one chrome for both presets. Bar: `TopBarBrand`, "United States · all fires", `ViewPill`;
+  right `ui/public/OverviewStatus.tsx` ("OCT 24 2026 · 203 ACTIVE": the viewer's local date `barDate`, then
+  `activeCountPart`, never "0" when the lists could not be read: "LOADING FIRES", "FIRE LIST UNAVAILABLE", "FIRE LISTS
+  UNAVAILABLE"; tooltip `ACTIVE_COUNT_TIP`, which ends with §14.14 `LIST_ABSENCE`), `ShowPanelsPill`, `CompactMenu`.
+  Search row `.ovw-search#mw-search`, centred at `--m-chrome-top`: `SearchBox({ variant: 'pill' })` (52 px pill; the
+  label "Check an address: street, town, ZIP code or coordinates" for screen readers only; `PILL_PLACEHOLDER` "Check an
+  address, town, ZIP or coordinates", phones `PILL_PLACEHOLDER_SHORT` "Address, town or ZIP"; hints, messages and
+  results under the pill, as wide as it) and `location/LocateButton.tsx`.
+- *Public minimal* (`overviewDetails` false, the default): + `MapControls variant="compact"` (right edge, above the
+  pill), `FixedCopy variant="line"` centred above the credits (phones: `LIST_ABSENCE_SHORT` + "Follow local
+  officials."), the credits centred in mono 10 px, `ui/public/ShowDetailsPill.tsx` (bottom right; count
+  `ui/public/useOverviewCount.ts` = `overviewFires(catalog, filter).length`, a spinner while the lists load; name "Show
+  details: list of N fires"; showing the details also opens `panels.updates`). A selected point's location card (and
+  Command's fire card) is the left column at left 28, top `--ovw-row2` (chrome-top + 76 = 160), under the controls bar
+  when the details show.
+- *Details* (Public after the pill; Command always, without the pill, decision c): `MapControls variant="bar" layers`
+  top left; "Fires in the lower 48" (`OverviewPanel({ closeHidesDetails?, sheetPeek? })`, right 12, top 160, 472 px;
+  in Public its close button is "Hide details"; restyled in `styles/overview.css` under the overview root: mono OFFICIAL
+  NOW, the NWS block in a pink frame, accent tabs, the outlined OFFICIAL source pill, 16 / 13 / mono 15 px rows); the
+  overview readout (`CoordinateStrip` compact, mono .14em eyebrows) with the scale bar beside it; the legend (600 px).
+  Shorter or narrower windows (`ui/public/overviewLayout.ts`): below 1080 px high or 1280 px wide the list runs down to
+  the disclaimer row (`--ovw-low` 88 px) and the legend sits left of it; the scale bar gives way below 1280 px (below
+  1400 px on short windows); below 1200 px the legend is in the Layers panel (`OVERVIEW_LEGEND_IN_PANEL_QUERY`,
+  `LayersPanel`), as on phones. The menu's "Fires (lower 48)" (< 1024 px) also shows the details in Public.
+- *The overview map stays put* when its panels come and go (`mapController.applySafeInsets`: with no fire open and no
+  framing settling, the point at the middle of the new free area keeps its pixel; the new padding applies to the next
+  framing, e.g. "All states" or a search). No more shifted, cut-off lower 48 after "Show details".
+- *Phones* (decision h): bar (logo, title, menu), full-width search pill + 44 px locate, the compact cluster bottom
+  right, the pill opens the fire list sheet (`panels.updates`), the disclaimer and "© Credits" at the bottom; pill and
+  cluster give way to an open card or sheet. Command keeps the default controls row, the peek bar and the coordinate
+  line. The skip link "Skip to the fire list" lands on the pill while no list is shown (`#mw-updates`).
+- *Locate-me* (`location/locate.ts`, pure, tested; `LocateButton.tsx`): only a click asks the browser
+  (`getCurrentPosition({ enableHighAccuracy: false, timeout: 15 s, maximumAge: 60 s })`, no outside location service) →
+  `setDevice(deviceFromPosition(pos))` + `selectLocation(deviceSelection(d), { fly: true, zoom: deviceZoom(accuracy) })`
+  (`source 'device'`, label "Your location", approximate when coarser than 100 m or unknown). Denied / unavailable /
+  timeout / unsupported / insecure: `LOCATE_MESSAGES` under the button (dismissable; never a default place). Memory only:
+  not in the URL, not in browser storage. The point is checked like a map click (Fire-3d's own `/api/geo/lookup`,
+  `/api/extras/evacuations`, `/api/official/local-alerts`), so the card's line is now "Your location from your browser
+  (not saved or added to the link)" (`location/locationCheck.ts`; H2's "it stays in your browser" was not exact).
+- *Click → fire view* (decision b): `state/fireCard.ts openFireView(id)` = `setFireCard(null)` + `selectIncident(id,
+  { source: 'card' })` (the fire already open is only framed again), `opensFireView()` (map workspace and Public),
+  `pickFire(id, row?)` = the fire view in Public, `showFireCard` in Command and Forensic; `fireActions.ts` re-exports
+  them. Callers: the list row, the marker and its label (`mapController.openFireFromOverview`), the leader labels, the
+  search box's fire result (`pickFireCard`), the location card's nearest-fire rows (`OverviewCard.openOrShow`; prepared
+  fires still open through `openFromSearch`). On the map, a chip or another fire's outline opens that fire's view in
+  Public (`openFireView`) and its card in Command; the open fire's own marker opens its card in Command only. Zoom focus
+  and the "Spread not prepared yet" chips are off in Public (`evaluateFocus`: no chips, `keepShownFocus()`; a preset
+  switch re-evaluates); the overview view kept for Back may be any zoom in Public. History rules are unchanged: one push
+  from the overview (`fromOverview`), Back / X = `goToOverview()` (history.back). Browser checks 9/9 (list row, marker,
+  leader label → fire view; Back and browser Back; zooming out keeps the fire view; details kept; Command → fire card).
+- *Markers* (`map/overviewLayers.ts`, decision e): `markerKind(s)` small / active / large / other and `markerRadius(s)`
+  (`MARKER_PX` 7 / 11 / 15 / 4.5; `DOT_PX` 1.4 / 2.2 / 2.8 / 0); `PALETTE` (exported; dark and aerial: fill
+  rgba(255,138,60,.10), ring rgba(255,192,138,.8), dot #fff3dc, other rings rgba(240,217,176,.8), groups of other fires
+  .5; light: darker equivalents) with a faint dark casing; groups `groupRadius(n)` = min(36, 10 + 4.2·√n)
+  (`CLUSTER_RADIUS_EXPR` by `point_count`), a centre dot each, "28 FIRES" (`groupLabelText`, Noto Sans Bold 13 with the
+  unit at .62, `GROUP_TICK_IMAGE` tick, data-driven `GROUP_TICK_OFFSET` / `GROUP_TEXT_OFFSET` on the upper-right edge),
+  the count layers placed above the names (names keep clear of them); full size at a desktop's national zoom, 1.2x by
+  z10, 0.65x at a phone's national view (z2, full at z3.5). New layers `OVR.activeDot`, `pinnedDot`, `activeClusterDot`,
+  `otherClusterDot`; `labelFilters(leaderIds)`. Names keep clear of their marker: feature property `lr` (the radius a
+  label keeps away from: `r`, plus `CARD_RING_PX` 8 for the fire whose card is open, so its name clears the selection
+  ring), `labelRadialOffset()` growing with the markers from z7 to z10. The legend (`MapLegend`) follows: new swatches (`.fxm-sw-fire-active /
+  -large / -past / -group-* / -small-active / -nws`), "Fire weather alert (NWS)" while alerts are in effect on the
+  overview, details copy for sizes by type and the preset's click.
+- *Leader-line labels* (decision e; `map/leaderLayout.ts`, pure, tested: `layoutLeaders(items, { free, obstacles,
+  circles, max })`, `leaderCandidates`, `gutterEdge`, `labelBox`, `segmentHitsRect`, `circleHitsRect`, `rectsOverlap`,
+  `leaderAcres`, `LEADER_MAX` 12; `map/LeaderLabels.tsx`, mounted by the overview chrome): at most 12 (5 on maps under
+  500 px) of the large active fires and fires of 20,000 ac or more that MapLibre draws as single markers, largest first,
+  below z5; a gutter column at the free map's left edge for the westernmost, else diagonals; off the chrome, the markers,
+  group centres and counts and the basemap's place names; recomputed on moveend, resize, chrome or unit change and once
+  the map is idle after new marker data (never on every idle: that fed back); during pans and turns they follow their
+  markers per frame, hidden while zooming; a click = `pickFire`. **Differs from decision e's fallback:** below z5
+  `useMapRuntime.leaderIds` hides the MapLibre labels of every candidate, named or not (past the 12th, or with no free
+  spot): MapLibre cannot keep its labels clear of this DOM overlay, and those labels ran across the leaders and names;
+  from z5 the map's own labels show as before and the fire list names every fire.
+  For H4: `map/useMapAnchor.ts useMapAnchor([lon, lat]) → { x, y, inView } | null` (follows the map per frame) and the
+  geometry helpers above draw the fire view's circle-to-point leader.
+- *Rotate hint* (H2 known issue): `RotateHint` floats in the page (portal, `position: fixed`, `.fxm-orbit-hint
+  .is-floating`) at `map/hintPlacement.ts placeHint(ctl, size, view, obstacles, prefer)` (tested): beside the controls
+  (above / below sliding sideways, or to a side), inside the window, over no `[data-chrome]` region or banner; seen
+  after 2.5 s on screen, so a chrome that swaps at load (a linked fire opening over the overview) no longer uses it up.
+- *Atmosphere and tint*: soft plates behind the bar's logo and title and behind its status (`atmosphere.css`, overview,
+  phones too); edges "overview" and tint "overview" as H2 set them.
+- *Public fire view*: only `MapControls variant="compact"` here (H4 places it and builds the view).
+- *Measured* (decision l): every overview text run, text made transparent with halos kept, 90th-percentile background
+  per line box: min 4.94:1 (Public minimal and details at the national zoom over aerial with the overview tint, the
+  Bonneville salt flats at z10 and White Sands at z11, the Command overview on the dark basemap); no panel alpha or
+  gradient had to change. `__mapChrome().unobstructed` at 1440×1000 (decision m: recorded, no target): Public minimal
+  0.90, Public details 0.55, Command overview 0.56. Locate-me checks 7/7.
+
+_H4: to be filled._
 
 #### H5 (Forensic) — as built
 

@@ -15,6 +15,7 @@ import {
   DIM_OPACITY,
   DOT_PX,
   anchorOffsets,
+  CARD_RING_PX,
   GROUP_TEXT_OFFSET,
   GROUP_TICK_IMAGE,
   GROUP_TICK_OFFSET,
@@ -24,6 +25,9 @@ import {
   isPinned,
   isSmallActive,
   LABEL_ANCHORS,
+  LABEL_R_MAX_PX,
+  labelOffsetEm,
+  labelRadialOffset,
   labelMinZoom,
   labelSide,
   NARROW_LABEL_MAX_ZOOM,
@@ -51,6 +55,7 @@ import {
   selectedFilter,
   sortKey,
   splitOverview,
+  ZOOM_GROWTH,
 } from './overviewLayers'
 
 function fire(over: Partial<IncidentSummary>): IncidentSummary {
@@ -440,16 +445,36 @@ describe('layers', () => {
     const parsed = createPropertyExpression(narrowLabelAnchorOffset() as never, spec)
     expect(parsed.result).toBe('success')
     const expr = parsed.value as unknown as { evaluate: (g: { zoom: number }, f: unknown) => { values: unknown[] } }
-    const at = (zoom: number, side: string, r: number) => expr.evaluate({ zoom }, { type: 'Point', properties: { side, r }, geometry: { type: 'Point', coordinates: [0, 0] } }).values
-    // (at the radius stops: the offsets in between are interpolated, as MapLibre does)
-    expect(at(2.1, 'ww', MARKER_MAX_PX)).toEqual(anchorOffsets(['left'], MARKER_MAX_PX))
+    const at = (zoom: number, side: string, lr: number) => expr.evaluate({ zoom }, { type: 'Point', properties: { side, lr }, geometry: { type: 'Point', coordinates: [0, 0] } }).values
+    // (at the label-radius stops: the offsets in between are interpolated, as MapLibre does)
+    expect(at(2.1, 'ww', LABEL_R_MAX_PX)).toEqual(anchorOffsets(['left'], LABEL_R_MAX_PX))
     expect(at(2.1, 'ee', MARKER_MIN_PX)).toEqual(anchorOffsets(['right'], MARKER_MIN_PX))
-    expect(at(2.1, 'w', MARKER_MAX_PX)).toEqual(anchorOffsets(LABEL_ANCHORS.w, MARKER_MAX_PX))
-    expect(at(2.1, 'c', MARKER_MAX_PX)).toEqual(anchorOffsets(LABEL_ANCHORS.c, MARKER_MAX_PX))
-    expect(at(NARROW_LABEL_MAX_ZOOM, 'ww', MARKER_MAX_PX)).toEqual(anchorOffsets(LABEL_ANCHORS.c, MARKER_MAX_PX))
+    expect(at(2.1, 'w', LABEL_R_MAX_PX)).toEqual(anchorOffsets(LABEL_ANCHORS.w, LABEL_R_MAX_PX))
+    expect(at(2.1, 'c', LABEL_R_MAX_PX)).toEqual(anchorOffsets(LABEL_ANCHORS.c, LABEL_R_MAX_PX))
+    expect(at(NARROW_LABEL_MAX_ZOOM, 'ww', LABEL_R_MAX_PX)).toEqual(anchorOffsets(LABEL_ANCHORS.c, LABEL_R_MAX_PX))
     // features carry their side
     const fc = overviewFeatures([fire({ id: 'a', lon: -121.5, lat: 40 })], 'us')
     expect(fc.features[0].properties?.side).toBe('ww')
+  })
+
+  it('labels keep clear of their marker when zoomed in, and of the card\'s selection ring', () => {
+    const spec = (latest as unknown as { layout_symbol: Record<string, never> }).layout_symbol['text-radial-offset']
+    const parsed = createPropertyExpression(labelRadialOffset() as never, spec)
+    expect(parsed.result).toBe('success')
+    const expr = parsed.value as unknown as { evaluate: (g: { zoom: number }, f: unknown) => number }
+    const at = (zoom: number, lr: number) => expr.evaluate({ zoom }, { type: 'Point', properties: { lr }, geometry: { type: 'Point', coordinates: [0, 0] } })
+    // 12 px text: the label starts this many px from the marker centre
+    const px = (em: number) => em * 12
+    expect(px(at(5, MARKER_PX.large))).toBeCloseTo(px(labelOffsetEm(MARKER_PX.large)))
+    expect(px(at(10, MARKER_PX.large))).toBeGreaterThan(MARKER_PX.large * ZOOM_GROWTH + 4)
+    // the card fire: its label radius covers the ring (r + 6, stroke 2.5) at every zoom
+    const pinned = overviewFeatures([active('l', 172_912), active('s', 2)], 'us', { pinned: true, cardId: 's' }).features
+    const lr = (id: string) => pinned.find((f) => f.properties?.id === id)?.properties?.lr as number
+    expect(lr('l')).toBe(MARKER_PX.large)
+    expect(lr('s')).toBe(MARKER_PX.small + CARD_RING_PX)
+    expect(CARD_RING_PX).toBeGreaterThanOrEqual(6 + 2.5 / 2)
+    for (const z of [5, 7, 8.5, 10]) expect(px(at(z, lr('s')))).toBeGreaterThan((MARKER_PX.small + 6) * (z >= 10 ? ZOOM_GROWTH : 1) + 1.25)
+    expect(overviewData(splitOverview([active('s', 2)], { cardId: 's' }), 'us', 's').pinned.features[0].properties?.lr).toBe(MARKER_PX.small + CARD_RING_PX)
   })
 
   it('draw order: active marks above other fires, pinned above both; labels above markers, pinned labels placed first', () => {

@@ -8,10 +8,10 @@
 // other and the selected point's label. Recomputed when the map settles, the window or the chrome changes, or the fire
 // lists change (once the map is idle with them), never on the map's own idle otherwise (that would feed back); during a
 // pan or a turn the labels follow their markers (one projection each per frame); hidden while
-// zooming and from z5, where the map's own labels take over (with no collisions to manage). The map leaves out its
-// own labels of the fires named here, and of the smaller ones past the 12th (they would run across the leaders); a fire
-// among the 12 largest that found no free spot keeps its own label (useMapRuntime.leaderIds → overviewLayers
-// .labelFilters).
+// zooming and from z5, where the map's own labels take over (with no collisions to manage). Below z5 the map leaves out
+// its own labels of every candidate (useMapRuntime.leaderIds → overviewLayers.labelFilters): of the ones named here,
+// and of the ones not named (past the 12th, or with no free spot), whose MapLibre labels ran across the leaders and the
+// names (MapLibre cannot keep clear of this overlay); the fire list names them all.
 import type { MapGeoJSONFeature, Map as MapLibreMap } from 'maplibre-gl'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { pickFire } from '../state/fireCard'
@@ -70,18 +70,9 @@ function chromeRects(host: DOMRect): Rect[] {
   return out
 }
 
-/** Where MapLibre first puts a fire's own label (overviewLayers LABEL_ANCHORS: under the marker, centred; Noto Sans
- *  12 px "Name · 9,575 ac"), estimated. */
-function mapLabelBox(c: LeaderItem & { name: string; acres: number }, units: 'us' | 'metric'): Rect {
-  const text = `${c.name} · ${Math.round(units === 'metric' ? c.acres * 0.40468564224 : c.acres).toLocaleString('en-US')} ${units === 'metric' ? 'ha' : 'ac'}`
-  const w = textWidth(text, '400 12px "Noto Sans", sans-serif') + 8
-  const top = c.at.y + c.r + 4
-  return { left: c.at.x - w / 2, top, right: c.at.x + w / 2, bottom: top + 18 }
-}
-
 interface Layout {
   spots: Spot[]
-  /** Candidates past the cap (smaller than every named one): their map labels stay hidden too. */
+  /** The other candidates: their map labels stay hidden too below z5. */
   quiet: string[]
 }
 
@@ -148,27 +139,15 @@ function computeSpots(map: MapLibreMap, insets: { top: number; right: number; bo
   const byId = new Map(candidates.map((x) => [x.id, x]))
   // a phone's national view holds the lower 48 in a few hundred pixels: fewer names
   const max = c.clientWidth < NARROW_MAP_PX ? NARROW_LEADER_MAX : LEADER_MAX
-  let placed = layoutLeaders(candidates, { free, obstacles, circles, max })
-  // the fires among the largest that found no spot keep the map's own label ("Name · 9,575 ac", MapLibre's first
-  // place: centred under the marker): a second pass keeps the named ones off those labels
-  const cut = placed.length >= max ? candidates.findIndex((c) => c.id === placed[placed.length - 1].id) : candidates.length
-  const shown = new Set(placed.map((p) => p.id))
-  const unplaced = candidates.slice(0, cut + 1).filter((c) => !shown.has(c.id) && c.at.x >= free.left && c.at.x <= free.right && c.at.y >= free.top && c.at.y <= free.bottom)
-  if (unplaced.length) {
-    const own = unplaced.map((c) => mapLabelBox(c, units))
-    const skip = new Set(unplaced.map((c) => c.id))
-    placed = layoutLeaders(
-      candidates.filter((c) => !skip.has(c.id)),
-      { free, obstacles: [...obstacles, ...own], circles, max },
-    )
-  }
+  const placed = layoutLeaders(candidates, { free, obstacles, circles, max })
   const spots = placed.map((s) => {
     const x = byId.get(s.id)!
     return { ...s, name: x.name, meta: leaderAcres(x.acres, units), lngLat: x.lngLat }
   })
-  // past the cap: every candidate after the last one named (the ones before it that found no spot keep their labels)
-  const last = placed.length >= max ? Math.max(cut, candidates.findIndex((c) => c.id === placed[placed.length - 1].id)) : candidates.length
-  const quiet = candidates.slice(last + 1).map((c) => c.id)
+  // every other candidate keeps quiet at this zoom: the map's own label could not keep clear of the named ones (it
+  // knows nothing of this overlay), and from z5 on the map's labels take over
+  const named = new Set(placed.map((p) => p.id))
+  const quiet = candidates.filter((c) => !named.has(c.id)).map((c) => c.id)
   return { spots, quiet }
 }
 
