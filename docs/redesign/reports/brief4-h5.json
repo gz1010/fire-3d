@@ -49,8 +49,18 @@
     "map_vs_h2": "Public fire (Lower Sugarloaf) and Command (fixture-live) are unchanged against brief4-h2-*.png in colours and panels; the only differences are H3+H4's work in progress (compact controls, rotate hint placement)."
   },
   "measured": {
-    "layout_1440x1000": { "bar": "20/20/40", "compass": "left 20 top 80 60 px", "entry_top": 172, "right_column": "top 76 right 16 bottom 16 width 336", "dock": "left 16 right 368 bottom 16 height 112", "view_dock": "right 368 bottom 140", "pill": "left 16 bottom 136" },
-    "browser_checks": { "rotation_and_handoff": "23/23 (Q/E/N, ⟲ ⟳, compass drag, click and arrows, 2D keeps heading and turns by Q / right-drag / Ctrl+drag, no inertia drift, 3D keeps heading, Safari twist, touch twist, Forensic→map 30°, map −50° → Forensic 310°, reduced motion)" }
+    "layout_1440x1000": {
+      "bar": "20/20/40",
+      "compass": "left 20 top 80 60 px",
+      "entry_top": 172,
+      "right_column": "top 76 right 16 bottom 16 width 336",
+      "dock": "left 16 right 368 bottom 16 height 112",
+      "view_dock": "right 368 bottom 140",
+      "pill": "left 16 bottom 136"
+    },
+    "browser_checks": {
+      "rotation_and_handoff": "23/23 (Q/E/N, ⟲ ⟳, compass drag, click and arrows, 2D keeps heading and turns by Q / right-drag / Ctrl+drag, no inertia drift, 3D keeps heading, Safari twist, touch twist, Forensic→map 30°, map −50° → Forensic 310°, reduced motion)"
+    }
   },
   "gates": "typecheck ok / lint 56 warnings: the 55 baseline in src/scene (none added by H5) + 1 in src/map/mapController.ts (the other chain's work in progress) / tests 98 files: 1361 passed, 2 skipped, 1 failed (src/state/fireCard.test.ts, which reads the other chain's mapController.ts; no H5 test fails; new scene/camera/heading.test.ts 7 passed) / build ok",
   "known_issues": [
@@ -64,5 +74,11 @@
     "The map's own compass (map/map.css .fxm-compass svg, H3+H4) keeps an 80 ms transition, which spins the needle the long way when the bearing crosses ±180°; the Forensic needle has none."
   ],
   "notes_for_others": "Global CSS changed by H5 (theme.css, controls.css, header.css, overlays.css, layout.css): hard-coded golds are now the accent or greys; the map workspace's values are unchanged because map-tokens.css re-points the tokens and map-bridge.css covers the rest (Public and Command screenshots compared). New theme tokens usable anywhere: --accent-ink, --accent-hover, --text-body, --link, --fire-3, --bar-top, --edge. Forensic-only overrides are scoped with :root[data-workspace='forensic'] (menu icons grey; range sliders grey via --range-fill / --range-ring). sceneStore.issueCameraCommand(kind, deg?) now takes 'rotate' and 'set-heading'; CameraRig registers the Forensic RotationTarget, so Q / E / N work in Forensic. No H2 frozen file was edited. H3+H4: map/map.css .fxm-compass svg has a transition that spins the needle across ±180° (consider dropping it as H5 did). The scratch checks (session scratchpad, not in the repo): h5-rotate-check.mjs, h5-measure.mjs, h5-shots.sh, h5-needle.mjs.",
-  "commits": []
+  "commits": [
+    "f17b7fd brief 4 H3/H5: work-in-progress snapshot (orchestrator; holds H5's first tokens, header, panels, rotation)",
+    "464f1ba brief 4 H3/H5: work-in-progress snapshot (orchestrator)",
+    "80ffc02 brief 4 H3/H5: work-in-progress snapshot (orchestrator; H5 rotation fixes, weather card, place line)",
+    "db098f8 brief 4 H5: Forensic restyle and rotation finished (dock 112 px, medium-screen bar, CONTRACT 15.5, report)",
+    "(this commit) brief 4 H5: report commit list"
+  ]
 }
