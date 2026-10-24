@@ -255,7 +255,7 @@
   .fx-empty-head .tb-back::before {
     content: '';
     position: absolute;
-    inset: -4px;
+    inset: -5px;
   }
   .fx-empty-head .tb-view-btn {
     position: relative;

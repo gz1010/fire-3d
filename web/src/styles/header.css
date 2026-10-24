@@ -684,7 +684,7 @@
     inset: -7px;
   }
   .minibar .minibar-panels::before {
-    inset: -6px -3px;
+    inset: -7px -3px;
   }
   .minibar .minibar-panels {
     min-height: 32px;

@@ -141,7 +141,7 @@ export function PublicFireChrome({ credits }: { credits: ReactNode }) {
             <DistanceChip compact />
           </div>
         ) : (
-          <div className={`pfv-left${fit.tight ? ' is-tight' : ''}`}>
+          <div className={`pfv-left${fit.level > 0 ? ' is-snug' : ''}${fit.level > 1 ? ' is-tight' : ''}${fit.level > 2 ? ' is-tighter' : ''}`}>
             <div className="pfv-circle-slot" data-chrome="circle">
               <HazardCircle ref={circle} />
             </div>

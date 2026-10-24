@@ -78,13 +78,14 @@
     width: 34px;
     height: 34px;
   }
+  /* (insets count from the padding box, inside the 1 px border: 34 px pills → 32 + 2 × 6) */
   .app .fx-bar .tb-icon::before {
     content: '';
     position: absolute;
-    inset: -5px;
+    inset: -6px;
   }
   .app .fx-bar .tb-back::before {
-    inset: -4px;
+    inset: -5px;
   }
   .app .fx-bar .picker-btn:not(.is-title) {
     position: relative;
@@ -92,7 +93,7 @@
   .app .fx-bar .picker-btn:not(.is-title)::before {
     content: '';
     position: absolute;
-    inset: -4px 0;
+    inset: -5px 0;
   }
   /* the second row: the view pill on the left, "Hide panels" on the right */
   .app .fx-bar .tb-centre {
