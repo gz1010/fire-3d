@@ -11,6 +11,7 @@ import type { Detection, ForecastManifest, IncidentManifest, Perimeter } from '.
 import { HOUR_MS, NEVER_MIN } from '../data/rasters'
 import { localToLonLat, type LonLat, type UtmGrid } from '../lib/reproject'
 import { fmtAt, type TimeFmt } from '../lib/time'
+import { ringPolygons } from './fireProfile'
 
 /** --m-* tokens used by map paint (keep equal to styles/map-tokens.css). */
 export const TOKENS = {
@@ -18,6 +19,8 @@ export const TOKENS = {
   selectStrong: '#cfeaff',
   fireObserved: '#ff6a2a',
   fireObservedGlow: 'rgba(255,106,42,0.55)',
+  /** --m-fire-observed-fill: the Public fire view's "fire area" (the newest perimeter, filled). */
+  fireObservedFill: 'rgba(160,50,20,0.6)',
   fireFront: '#ffb27a',
   perimeter: '#ff8a3c',
   perimeterOld: 'rgba(255,138,60,0.45)',
@@ -266,6 +269,14 @@ export function perimeterFeatures(perimeters: readonly Perimeter[], grid: UtmGri
     },
   }))
   return { fc: { type: 'FeatureCollection', features }, latest }
+}
+
+/** The Public fire view's fire area (brief 4 H4): one perimeter's rings grouped into polygons with their holes
+ *  (fireProfile.ringPolygons; the backend writes exteriors and holes unlabelled), for a fill. */
+export function perimeterArea(p: Perimeter, grid: UtmGrid): FeatureCollection {
+  const rings = perimeterRings(p, grid)
+  const polys = ringPolygons(rings).map((idx) => idx.map((i) => rings[i]))
+  return polygons(polys, { t: p.t_ms })
 }
 
 const footprintCache = new WeakMap<Detection, LonLat[]>()

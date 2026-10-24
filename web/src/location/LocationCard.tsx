@@ -7,7 +7,9 @@
 // overview (no fire open) the card shows the official line and the nearest fires (OverviewCard).
 // Brief 3 (§14.9): every time is in the fire's own zone with the preset's clock, and the reliability block names the
 // zone ("Times: Mountain Time (MDT), the fire's local time").
-import { ChevronDown } from 'lucide-react'
+// Brief 4 H4 (decision a): in the Public fire view the card shows no model output: its model sentence (and the details'
+// model section) is replaced by "The experimental spread model for this spot is in Command ›", which opens Command.
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { useOfficialAtPoint, type OfficialInfo } from '../official/hooks'
 import { useStore } from '../state/store'
@@ -19,6 +21,8 @@ import { useOpenFireAccuracy } from '../state/accuracy'
 import { OverviewCard } from './OverviewCard'
 import { useLocationCheck } from './useLocationCheck'
 import { useNarrow } from './useNarrow'
+import { MODEL_IN_COMMAND } from '../ui/public/fireView'
+import { applyView } from '../ui/shell/views'
 import './location.css'
 
 export function LocationCard() {
@@ -52,6 +56,9 @@ function Line({ l, technical }: { l: CardLine; technical: boolean }) {
 function LocationCardBody({ sel, official }: { sel: SelectedLocation; official: OfficialInfo }) {
   const { card, block, coverage, loadingFire, fireName, zone, preset } = useLocationCheck(sel, official)
   const command = preset === 'command'
+  // the Public fire view: no model output here (decision a); the card points to Command for it
+  const fireView = !command
+  const shownCard = fireView ? withoutModel(card) : card
   const detailsOpen = useCardPrefs((s) => s.detailsOpen[preset])
   const narrow = useNarrow()
   // phones: a short bottom sheet until the user asks for more; every new point starts short again
@@ -71,18 +78,40 @@ function LocationCardBody({ sel, official }: { sel: SelectedLocation; official: 
         <NearBlock card={card} />
       )}
       <OfficialSection block={block} compact={compact} />
-      {!loadingFire && <ReasonsBlock card={card} compact={compact} command={command} />}
+      {!loadingFire && <ReasonsBlock card={shownCard} compact={compact} command={command} withModel={!fireView} />}
+      {!loadingFire && fireView && <ModelInCommand />}
       {loadingFire ? null : compact ? (
         <button type="button" className="mw-btn is-sm loc-expand" aria-expanded="false" onClick={() => setExpandedFor(selKey)}>
           <ChevronDown size={13} aria-hidden="true" /> More about this location
         </button>
       ) : (
         <>
-          <ReliabilityBlock card={card} zone={zone} />
-          <Details card={card} command={command} open={detailsOpen} onToggle={(open) => useCardPrefs.getState().setDetailsOpen(preset, open)} />
+          <ReliabilityBlock card={shownCard} zone={zone} />
+          <Details card={shownCard} command={command} open={detailsOpen} onToggle={(open) => useCardPrefs.getState().setDetailsOpen(preset, open)} />
         </>
       )}
     </CardFrame>
+  )
+}
+
+/** The card without the model (the Public fire view, decision a): no model sentence, no model section in the details. */
+function withoutModel(card: LocationCardModel): LocationCardModel {
+  return {
+    ...card,
+    summary: { ...card.summary, model: null, run: null, reliability: card.summary.reliability.filter((l) => l.key !== 'model') },
+    details: card.details.filter((s) => s.key !== 'forecast'),
+    sources: card.sources.filter((s) => s.kind !== 'model'),
+  }
+}
+
+/** The Public fire view's stand-in for the model block: the model is in Command. */
+export function ModelInCommand() {
+  return (
+    <p className="loc-model-command">
+      <button type="button" className="mw-link-btn" onClick={() => applyView('command')}>
+        {MODEL_IN_COMMAND} <ChevronRight size={12} aria-hidden="true" />
+      </button>
+    </p>
   )
 }
 

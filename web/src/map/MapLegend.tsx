@@ -13,6 +13,10 @@
 // scale bar at its end and a "Legend details" button that opens the same details upward. H3 (Main.dc.html legend): the
 // overview's marker swatches follow the restyled markers (transparent circles with a centre dot, sized by type; groups
 // "N FIRES"), and the NWS fire weather outlines get an entry while alerts are in effect on the overview.
+// H4 (FireView.dc.html, decision a): in Public with a fire open the legend follows the fire view's map profile
+// (map/fireProfile.ts: the newest perimeter filled, the reported location, no model, estimate, detections, modeled area
+// or events), and `variant="key"` is only the "Legend details" button and its details, for the fire view's own key
+// (ui/public/FireKey.tsx).
 import { ChevronDown, Info } from 'lucide-react'
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { ExtrasLegend, ExtrasNotice, LegendSwatch } from '../extras/ExtrasCommon'
@@ -27,6 +31,7 @@ import { Segmented } from '../ui/controls'
 import { useDismiss, useNow } from '../ui/hooks'
 import { BUILDINGS_MINZOOM, buildingsCaveat } from './basemapStyle'
 import { ScaleBar } from './MapAttribution'
+import { mapProfileOf, profileLayers } from './fireProfile'
 import { useMapRuntime } from './mapStore'
 import { DETECTION_RECENT_H, DETECTION_WINDOW_H, GOES_WINDOW_H, RECENT_H, type ForecastView } from './overlayModel'
 import { LABEL_ACTIVE_Z5_ACRES, LABEL_MIN_ACRES, PINNED_MIN_ACRES } from './overviewLayers'
@@ -55,16 +60,19 @@ function Row({ sw, children, title }: { sw: string; children: ReactNode; title?:
   )
 }
 
-export type MapLegendVariant = 'row' | 'chips'
+export type MapLegendVariant = 'row' | 'chips' | 'key'
 
 export function MapLegend({ inline, variant = 'row' }: { inline?: boolean; variant?: MapLegendVariant } = {}) {
-  const layers = useWorkspace((s) => s.mapLayers)
+  const userLayers = useWorkspace((s) => s.mapLayers)
   const hasSelection = useWorkspace((s) => s.selection != null)
   const basemap = useWorkspace((s) => s.basemap)
   const overviewFilter = useWorkspace((s) => s.overviewFilter)
   const perspective = useWorkspace((s) => s.perspective)
   const publicPreset = useWorkspace((s) => s.preset === 'public')
   const hasIncident = useStore((s) => s.incidentId != null)
+  // the Public fire view draws less (decision a): its legend says only what is drawn
+  const fireView = mapProfileOf(publicPreset ? 'public' : 'command', hasIncident) === 'public-fire'
+  const layers = profileLayers(fireView ? 'public-fire' : 'full', userLayers)
   const startedMs = useStore((s) => s.summary?.started_ms ?? null)
   const vectorOk = useMapRuntime((s) => s.providers.basemap.state !== 'failed')
   const closeZoom = useMapRuntime((s) => (s.camera?.zoom ?? 0) >= BUILDINGS_FROM_ZOOM)
@@ -143,7 +151,8 @@ export function MapLegend({ inline, variant = 'row' }: { inline?: boolean; varia
       {showObserved && <Row sw="observed">Observed fire</Row>}
       {showForecast && <Row sw={fcOff ? 'forecast-off' : 'forecast'}>{fcShort}</Row>}
       {showDet && <Row sw="detection">Heat detections</Row>}
-      {showPer && <Row sw="perimeter">Perimeter</Row>}
+      {showPer && (fireView ? <Row sw="fire-area">Latest perimeter</Row> : <Row sw="perimeter">Perimeter</Row>)}
+      {fireView && <Row sw="reported">Reported location</Row>}
       {showNearby && <Row sw="nearby">{overview ? 'Prepared fire perimeter' : 'Other fire perimeter'}</Row>}
       {showSel && <Row sw="selection">Selected location</Row>}
       {extrasCompact.map((x) => (
@@ -280,7 +289,18 @@ export function MapLegend({ inline, variant = 'row' }: { inline?: boolean; varia
           </ul>
         </section>
       )}
-      {showPer && (
+      {showPer && fireView && (
+        <section>
+          <h3>
+            <Swatch kind="fire-area" /> Latest perimeter
+          </h3>
+          <p>
+            The newest fire perimeter the agency published{per.latestMs ? ` (${at(per.latestMs)})` : ''}, filled: the area inside its line, as mapped then. The
+            fire may have changed since. Earlier perimeters, the burned-area estimate from satellite detections and the experimental model are in Command.
+          </p>
+        </section>
+      )}
+      {showPer && !fireView && (
         <section>
           <h3>
             <Swatch kind="perimeter" /> Agency perimeter
@@ -301,7 +321,7 @@ export function MapLegend({ inline, variant = 'row' }: { inline?: boolean; varia
           </p>
         </section>
       )}
-      {ready && (
+      {ready && !fireView && (
         <section>
           <h3>
             <Swatch kind="aoi" /> Modeled area
@@ -312,9 +332,13 @@ export function MapLegend({ inline, variant = 'row' }: { inline?: boolean; varia
       {hasIncident && (
         <section>
           <h3>
-            <Swatch kind="incident" /> Reported location
+            <Swatch kind={fireView ? 'reported' : 'incident'} /> Reported location
           </h3>
-          <p>The incident's reported coordinates. This is not the exact ignition point. Click it for the fire card.</p>
+          <p>
+            {fireView
+              ? "The incident's reported coordinates in the agency record (the orange dot the circle's line points to). This is not the exact ignition point."
+              : "The incident's reported coordinates. This is not the exact ignition point. Click it for the fire card."}
+          </p>
         </section>
       )}
       {showSel && (
@@ -356,14 +380,15 @@ export function MapLegend({ inline, variant = 'row' }: { inline?: boolean; varia
       </section>
     )
   const chips = variant === 'chips'
+  const key = variant === 'key'
   return (
-    <section ref={root} className={`mw-legend fxm-legend${chips ? ' is-chips' : ''}`} aria-label="Map legend">
+    <section ref={root} className={`mw-legend fxm-legend${chips ? ' is-chips' : ''}${key ? ' is-key' : ''}`} aria-label="Map legend">
       <div className="fxm-legend-anchor">
-        {compact}
+        {!key && compact}
         {chips && <ScaleBar />}
         <button type="button" className="fxm-legend-toggle" aria-expanded={open} aria-controls="fxm-legend-details" onClick={() => setOpen((o) => !o)} data-tip="What the map layers mean">
           <Info size={13} aria-hidden="true" />
-          <span>{chips ? 'Legend details' : 'Details'}</span>
+          <span>{chips || key ? 'Legend details' : 'Details'}</span>
           <ChevronDown size={12} aria-hidden="true" className={open ? 'is-open' : ''} />
         </button>
         {open && <div className="fxm-legend-pop">{details}</div>}

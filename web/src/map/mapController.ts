@@ -28,6 +28,11 @@
 // the rotation target of state/rotation.ts (Q / E / N), takes Safari's two-finger trackpad twist (lib/rotateGesture.ts,
 // counted as the user's own move) and the compass drag (actions.setBearing); the aerial photos' tint follows the view
 // (actions.setTint, basemapStyle.ts AERIAL_TINT), never the fire, official or selection layers.
+// Brief 4 (H4, decision a): in Public with a fire open the map draws the fire view's profile (map/fireProfile.ts): the
+// newest perimeter whatever the timeline time (filled), the official layers and the other fires; no modeled spread,
+// observed burned-area raster, detections, modeled-area boundary or event markers, and the reported location is drawn
+// by the fire view's own overlay (ui/public/ReportedPoint.tsx) instead of the map's ring and label. The user's layer
+// choices are kept for Command.
 import {
   Map as MapLibreMap,
   LngLat,
@@ -65,6 +70,7 @@ import { maskGeometry } from './contours'
 import { MapInput } from './userInput'
 import { allFocusCandidates, CENTRAL_FRACTION, chipTargets, FocusHold, focusUnlessHeld, FOCUS_DEBOUNCE_MS, FOCUS_OUT_ZOOM, type FocusCurrent, type FocusView } from './focus'
 import { boundsCenter, Framing, goalFor, latestPerimeter, LOWER48_BOUNDS, LOWER48_START, mapCovered, zoomForBounds, type CameraPose, type FrameGoal } from './framing'
+import { mapProfileOf, newestPerimeter, profileLayers, type MapProfile } from './fireProfile'
 import { drapedLayers, HATCH_IMAGE, hatchImage, incidentLabelField, LAYER_GROUPS, LYR, SRC, topLayers, type MapTheme } from './layers'
 import { recordHoverLines, zoneHoverLines } from './hoverText'
 import { fmtLatLon, SelectionPin } from './markers'
@@ -84,6 +90,7 @@ import {
   forecastPixels,
   lines,
   observedPixels,
+  perimeterArea,
   perimeterFeatures,
   polygons,
   type FeatureCollection,
@@ -224,6 +231,10 @@ export class MapController {
   private lastRun = 0
   private dirty = { observed: true, forecast: true, vectors: true, statics: true }
   private keys = { obs: '', fc: '', det: '', perim: '', ev: '' }
+  /** What the map draws per layer key as last applied (the user's choices less the profile's; null: not applied yet). */
+  private shownLayers: Record<MapLayerKey, boolean> | null = null
+  /** The profile the profile-only layers (modeled area, reported ring and label) were last set for. */
+  private shownProfile: MapProfile | null = null
   private feed = new Map<string, FeedItem>()
   private tiles: Record<ProviderKey, { ok: number; err: number }> = { vector: { ok: 0, err: 0 }, imagery: { ok: 0, err: 0 }, terrain: { ok: 0, err: 0 } }
   private terrainBroken = false
@@ -373,10 +384,12 @@ export class MapController {
         if (s.preset !== p.preset && this.styleReady && this.map.getLayer(LYR.incidentLabel)) this.map.setLayoutProperty(LYR.incidentLabel, 'text-field', incidentLabelField(s.preset) as never)
         // zoom focus and the "Spread not prepared yet" chips are Command's (brief 4 decision b): re-evaluate the view
         if (s.preset !== p.preset) this.scheduleFocus()
+        // Public in a fire draws the fire view's profile (brief 4 H4, decision a)
+        if (s.preset !== p.preset) this.applyLayerVisibility()
         if (s.perspective !== p.perspective) this.applyPerspective(s.perspective, true)
         if (s.selection !== p.selection || s.mapLayers.selection !== p.mapLayers.selection) this.updatePin()
         if (s.mapFlyTo && s.mapFlyTo.nonce !== this.flyNonce) this.flyRequested(s.mapFlyTo)
-        if (s.mapLayers !== p.mapLayers) this.applyLayerVisibility(p.mapLayers)
+        if (s.mapLayers !== p.mapLayers) this.applyLayerVisibility()
         if (s.safeInsets !== p.safeInsets) {
           this.applySafeInsets(true)
           this.placeScreenLabels()
@@ -416,6 +429,8 @@ export class MapController {
           this.keys.ev = ''
           this.nearbyKey = ''
           this.markDirty('vectors')
+          // opening or leaving a fire changes the profile in Public
+          this.applyLayerVisibility()
         }
         const manifestChanged = s.manifest !== p.manifest
         if (manifestChanged || s.forecast !== p.forecast) this.loadRasters()
@@ -494,7 +509,7 @@ export class MapController {
     const empty = (id: string) => {
       if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: EMPTY as never, tolerance: 0.2 })
     }
-    for (const id of [SRC.observedEdge, SRC.forecastLines, SRC.forecastHatch, SRC.perimeters, SRC.nearby, SRC.detections, SRC.detectionPoints, SRC.aoi, SRC.aoiLabels, SRC.events, SRC.incident])
+    for (const id of [SRC.observedEdge, SRC.forecastLines, SRC.forecastHatch, SRC.perimeters, SRC.perimeterArea, SRC.nearby, SRC.detections, SRC.detectionPoints, SRC.aoi, SRC.aoiLabels, SRC.events, SRC.incident])
       empty(id)
     // the overview's three sources: pinned (never grouped), active and other fires (grouped in MapLibre's worker)
     const width = map.getContainer().clientWidth
@@ -523,7 +538,9 @@ export class MapController {
     for (const layer of overviewLayers(theme, { narrow: this.narrowLabels })) map.addLayer(layer)
     for (const layer of topLayers(theme, useWorkspace.getState().preset)) map.addLayer(layer)
     this.aoiFilterKey = '' // the new label layer has no filter yet
-    this.applyLayerVisibility(null)
+    this.shownLayers = null
+    this.shownProfile = null
+    this.applyLayerVisibility()
     // a tint asked for while this style was loading
     this.applyTint(false)
     if (useWorkspace.getState().perspective === '3d') this.enableTerrain()
@@ -566,7 +583,8 @@ export class MapController {
     // keep the declared stacking order: insert below the next draped layer that exists, else below the buildings / labels
     const next = order.slice(i + 1).find((l) => map.getLayer(l.id))
     map.addLayer(order[i], next?.id ?? this.derived.overlayBeforeId ?? this.derived.labelLayerId ?? undefined)
-    this.applyLayerVisibility(null)
+    this.shownLayers = null
+    this.applyLayerVisibility()
   }
 
   private setData(id: string, fc: FeatureCollection): void {
@@ -575,9 +593,23 @@ export class MapController {
     if (import.meta.env.DEV) mapStats.vectorSets++
   }
 
-  private applyLayerVisibility(prev: Record<MapLayerKey, boolean> | null): void {
+  /** Public with a fire open (the fire view) or the full map (decision a). */
+  private profile(): MapProfile {
+    return mapProfileOf(useWorkspace.getState().preset, useStore.getState().incidentId != null)
+  }
+
+  /** What the map draws per layer key: the user's choices less what the profile leaves out. */
+  private effectiveLayers(): Record<MapLayerKey, boolean> {
+    return profileLayers(this.profile(), useWorkspace.getState().mapLayers)
+  }
+
+  /** Show / hide the layer groups for what the map draws now (the user's choices and the profile), and the
+   *  profile-only layers: the modeled-area boundary and the map's own reported-location ring and label (the fire view
+   *  draws its own point). Only what changed since the last call is touched. */
+  private applyLayerVisibility(): void {
     if (!this.styleReady) return
-    const layers = useWorkspace.getState().mapLayers
+    const prev = this.shownLayers
+    const layers = this.effectiveLayers()
     for (const [key, ids] of Object.entries(LAYER_GROUPS) as [keyof typeof LAYER_GROUPS, readonly string[]][]) {
       if (prev && prev[key] === layers[key]) continue
       for (const id of ids) if (this.map.getLayer(id)) this.map.setLayoutProperty(id, 'visibility', layers[key] ? 'visible' : 'none')
@@ -585,6 +617,19 @@ export class MapController {
       // the forecast leaves out what the observed layer shows, so it follows the observed layer both ways
       if (key === 'observed') this.markDirty('observed', 'forecast')
       else if (layers[key]) this.markDirty(key === 'forecast' ? 'forecast' : 'vectors')
+    }
+    this.shownLayers = layers
+    const profile = this.profile()
+    if (profile !== this.shownProfile) {
+      const fireView = profile === 'public-fire'
+      for (const id of [LYR.aoiCasing, LYR.aoiLine, LYR.aoiLabel, LYR.incidentCircle, LYR.incidentLabel])
+        if (this.map.getLayer(id)) this.map.setLayoutProperty(id, 'visibility', fireView ? 'none' : 'visible')
+      // the perimeters switch between "by the timeline time" and "the newest" (and its fill)
+      if (this.shownProfile != null) {
+        this.keys.perim = ''
+        this.markDirty('vectors')
+      }
+      this.shownProfile = profile
     }
     if (prev && prev.selection !== layers.selection) this.updatePin()
   }
@@ -1882,7 +1927,7 @@ export class MapController {
     const s = useStore.getState()
     const m = readyManifest(s.manifest)
     const b = this.bufs
-    const layers = useWorkspace.getState().mapLayers
+    const layers = this.effectiveLayers()
     const obs = this.layer('observed_arrival')
     const map = this.map
     if (!m || !b) {
@@ -1969,18 +2014,24 @@ export class MapController {
   private updateVectors(): void {
     const s = useStore.getState()
     const m = readyManifest(s.manifest)
-    const layers = useWorkspace.getState().mapLayers
+    const layers = this.effectiveLayers()
     const t = s.timeMs
-    // perimeters
-    const per = m && layers.perimeters ? (s.perimeters?.perimeters ?? []) : []
-    const shownPer = per.filter((p) => p.t_ms <= t).length
+    // perimeters: those published by the timeline time; the Public fire view shows the newest only, whatever the time,
+    // filled (decision a)
+    const fireView = this.profile() === 'public-fire'
+    const all = m && layers.perimeters ? (s.perimeters?.perimeters ?? []) : []
+    const newest = fireView ? newestPerimeter(all) : null
+    const per = fireView ? (newest ? [newest] : []) : all
+    const perT = fireView ? Infinity : t
+    const shownPer = per.filter((p) => p.t_ms <= perT).length
     const tf = getTimeFormat()
     // the labels carry times in the fire's zone and the preset's clock: a preset switch relabels them
-    const perKey = `${m?.id}|${per.length}|${shownPer}|${tf.tz}|${tf.clock}`
+    const perKey = `${m?.id}|${fireView ? 'newest' : 'by-time'}|${per.length}|${shownPer}|${tf.tz}|${tf.clock}`
     if (perKey !== this.keys.perim) {
       this.keys.perim = perKey
-      const { fc, latest } = m ? perimeterFeatures(per, m.grid, t, tf) : { fc: EMPTY, latest: null }
+      const { fc, latest } = m ? perimeterFeatures(per, m.grid, perT, tf) : { fc: EMPTY, latest: null }
       this.setData(SRC.perimeters, fc)
+      this.setData(SRC.perimeterArea, m && newest ? perimeterArea(newest, m.grid) : EMPTY)
       patchOverlays({ perimeter: { latestMs: latest?.t_ms ?? null, count: fc.features.length } })
     }
     // detections

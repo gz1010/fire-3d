@@ -3,6 +3,8 @@
 // their messages) in a popover under the bar, right-aligned, 400 px wide. The button is the popover's toggle; "/" and
 // fireActions.focusSearch() open it and focus the box; Escape (once the box has no message or result list open) and an
 // outside click close it, focus going back to the button. The open state lives in searchUi.ts (searchOpen).
+// Brief 4 H4: the Public fire view uses the same button in its top-right cluster with `variant="pill"`: the overview's
+// centred search pill (SearchBox variant "pill") opens under the title instead of the right-aligned popover.
 import { Search } from 'lucide-react'
 import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { IconPill } from '../ui/shell/TopBar'
@@ -15,7 +17,9 @@ const isTextField = (t: EventTarget | null) => {
   return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)
 }
 
-export function CommandSearch() {
+export function CommandSearch({ variant = 'popover' }: { variant?: 'popover' | 'pill' } = {}) {
+  const pill = variant === 'pill'
+  const popId = pill ? 'pfv-search-pop' : 'cmd-search-pop'
   const open = useSearchUi((s) => s.searchOpen)
   const setOpen = useSearchUi((s) => s.setSearchOpen)
   const root = useRef<HTMLSpanElement | null>(null)
@@ -71,12 +75,12 @@ export function CommandSearch() {
         tip="Check an address, town, ZIP code or coordinates (/)"
         expanded={open}
         aria-haspopup="dialog"
-        aria-controls={open ? 'cmd-search-pop' : undefined}
+        aria-controls={open ? popId : undefined}
         onClick={() => setOpen(!open)}
       />
       {open && (
-        <div className="cmd-search-pop" id="cmd-search-pop" role="dialog" aria-label="Check an address" data-popover="">
-          <SearchBox />
+        <div className={pill ? 'pfv-search-pop' : 'cmd-search-pop'} id={popId} role="dialog" aria-label="Check an address" data-popover="">
+          <SearchBox variant={pill ? 'pill' : undefined} />
         </div>
       )}
     </span>

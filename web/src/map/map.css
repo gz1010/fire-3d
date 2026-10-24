@@ -738,6 +738,24 @@
   border-radius: 50%;
   border: 2.5px solid var(--m-text);
 }
+/* the Public fire view (brief 4 H4, FireView.dc.html): the newest perimeter filled ("fire area") and the reported
+   location's orange dot with its light ring */
+.fxm-sw-fire-area {
+  width: 20px;
+  height: 12px;
+  border: 1.5px solid var(--m-perimeter);
+  border-radius: 2px;
+  background: rgba(160, 50, 20, 0.6);
+}
+.fxm-sw-reported {
+  width: 12px;
+  height: 12px;
+  margin: 0 3px;
+  border-radius: 50%;
+  border: 2px solid #ffd79a;
+  background: radial-gradient(circle, #fff6e4 0 1.5px, var(--m-fire) 2px);
+  box-shadow: 0 0 0 4px rgba(255, 106, 42, 0.22);
+}
 /* overview fire markers (map/overviewLayers.ts PALETTE, brief 4): a transparent orange circle (#ff8a3c at 10 %, a
    #ffc08a ring at 80 %) with a white-hot centre dot (#fff3dc) for active fires, sized by type; a small hollow #f0d9b0
    ring for fires that are not active */

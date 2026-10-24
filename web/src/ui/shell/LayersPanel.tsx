@@ -5,6 +5,9 @@
 // is switched on shows its panel under its toggle (status, official wording, times, limits, credits and terms).
 // Brief 2: Public opens on aerial photos and Command on the dark map unless the user picks a basemap here (a pick wins
 // in both presets); on the California overview only the basemap, legend, units and the Forensic pointer apply.
+// Brief 4 H4 (decision a): the Public fire view keeps the basemap, the perimeters, the selected location, the official
+// and optional sources and the units; the model's and the estimates' toggles (and the forecast run) are Command's, said
+// in a note with a link (map/fireProfile.ts PUBLIC_FIRE_HIDDEN).
 import { Box, RotateCcw, X } from 'lucide-react'
 import { useEffect, useRef, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
@@ -25,6 +28,9 @@ import { ENSEMBLE_LABEL } from '../options'
 import { switchWorkspace } from './handoff'
 import { NARROW_QUERY, useDrawerFocus, useMediaQuery } from './hooks'
 import { OVERVIEW_LEGEND_IN_PANEL_QUERY } from '../public/overviewLayout'
+import { PUBLIC_FIRE_HIDDEN } from '../../map/fireProfile'
+import { LAYERS_IN_COMMAND } from '../public/fireView'
+import { applyView } from './views'
 
 const BASEMAPS: { value: Basemap; desc: string }[] = [
   { value: 'dark', desc: 'Subdued roads and places; fire layers stand out' },
@@ -211,6 +217,8 @@ export function LayersPanel() {
   const units = useWorkspace((s) => s.units)
   const command = useWorkspace((s) => s.preset === 'command')
   const overview = useStore((s) => s.incidentId == null)
+  // the Public fire view (decision a): no model or estimate toggles here
+  const fireView = !command && !overview
   const changed = useWorkspace((s) => (Object.keys(DEFAULT_MAP_LAYERS) as MapLayerKey[]).some((k) => s.mapLayers[k] !== DEFAULT_MAP_LAYERS[k]))
   const narrow = useMediaQuery(NARROW_QUERY)
   // brief 4 H3: below 1200 px the overview has no room for its legend on the map (the fire list needs the height); it
@@ -269,10 +277,18 @@ export function LayersPanel() {
               }
             >
               <ul className="mw-check-list">
-                {LAYERS.map((l) => (
-                  <LayerRow key={l.key} k={l.key} label={l.label} desc={l.desc} />
+                {LAYERS.filter((l) => !fireView || !PUBLIC_FIRE_HIDDEN.includes(l.key)).map((l) => (
+                  <LayerRow key={l.key} k={l.key} label={l.label} desc={fireView && l.key === 'perimeters' ? 'The newest agency fire perimeter, filled, with the time it was mapped' : l.desc} />
                 ))}
               </ul>
+              {fireView && (
+                <p className="mw-set-note">
+                  {LAYERS_IN_COMMAND}.{' '}
+                  <button type="button" className="mw-link-btn" onClick={() => applyView('command')}>
+                    Open Command ›
+                  </button>
+                </p>
+              )}
             </Section>
             <Section title="Official and optional sources">
               <ul className="mw-check-list">
@@ -282,9 +298,11 @@ export function LayersPanel() {
               </ul>
               <p className="mw-set-note">Fire-3d's modeled spread is experimental and is not an evacuation instruction. Follow local officials.</p>
             </Section>
-            <Section title="Forecast shown">
-              <ForecastRunPicker />
-            </Section>
+            {!fireView && (
+              <Section title="Forecast shown">
+                <ForecastRunPicker />
+              </Section>
+            )}
           </>
         )}
         <Section title="Units">
