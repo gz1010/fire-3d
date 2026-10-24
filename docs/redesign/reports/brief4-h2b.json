@@ -1,0 +1,65 @@
+{
+ "summary": "Brief 4 H2b: Command in a fire rebuilt after CommandView.dc.html, keeping every PLAN-4 section 7 feature. No panels on the map: a floating top bar (back, the fire's name as the incident picker, LIVE or the year, place, demo badge; the view pill; the satellite status line, Show panels, Updates on phones, Analysis, Check an address, Layers, compact menu). Left readout (location/CommandReadout.tsx): selected point header with copy / centre / clear, the point in mono 30 px, DMS / UTM / WGS84 line, the near sentence with Mapped / Estimate / Stale tags, the dated MODEL line with the accuracy and 'unknown, not low' line, the official block at the point (unchanged wording), 'value - LABEL' rows from the agency record (Burned, Contained, Record updated with issuer, Reported location with issuer + copy / centre, Incident ID + copy + agency id) and 'More about this spot' (run figure, run and quantiles, reasons, reliability, details; remembered per preset). The location check is now a shared hook (useLocationCheck) so the Public card is unchanged. Right column: OfficialNow variant 'command' (one-line rows: dot, title - verdict, mono meta with issuer, own time and checked; open = today's body; orders/warnings, NWS alerts and local alerts in effect start open), the foot with NOT_ALL_CLEAR, 'View all updates' opening the glass panel (rows, Data status, Updates feed). The rows scroll between head and foot. Bottom: H2c's MapControls bar (left) and the legend chips with the scale and 'Legend details' (right), the slim full-width timeline (same parts and keys), FixedCopy corner + full credits. DOM map labels with leaders for 'Observed fire' and 'Modeled spread' (areaLabels.ts placement, tested). Check an address = the unchanged SearchBox in a 400 px popover under the bar; '/' and focusSearch() open it first. Phones: readout as a peek card above the timeline, Official now in the Updates sheet, fixed copy wraps whole. Contrast measured (decision l) and a soft text halo added; no gradient or panel alpha changed.",
+ "files": [
+  "web/src/ui/shell/CommandFireChrome.tsx",
+  "web/src/styles/view-command.css",
+  "web/src/location/CommandReadout.tsx",
+  "web/src/location/CommandReadout.test.ts",
+  "web/src/location/CommandSearch.tsx",
+  "web/src/location/CommandAreaLabels.tsx",
+  "web/src/location/areaLabels.ts",
+  "web/src/location/areaLabels.test.ts",
+  "web/src/location/readoutText.ts",
+  "web/src/location/readoutText.test.ts",
+  "web/src/location/useLocationCheck.ts",
+  "web/src/location/LocationCard.tsx",
+  "web/src/location/CoordinateStrip.tsx",
+  "web/src/location/describe.ts",
+  "web/src/location/describe.test.ts",
+  "web/src/location/searchUi.ts",
+  "web/src/ui/feed/OfficialNow.tsx",
+  "web/src/ui/feed/officialNowCommand.test.ts",
+  "web/src/ui/shell/UpdatesPanel.tsx",
+  "web/src/ui/shell/fireActions.ts",
+  "web/src/ui/timeline/CompactTimeline.tsx",
+  "web/src/ui/timeline/compactTimeline.css",
+  "web/src/map/MapLegend.tsx",
+  "web/src/extras/ImageryChip.tsx",
+  "web/src/styles/map-layout.css",
+  "docs/redesign/CONTRACT.md",
+  "docs/redesign/progress/brief4-h2b.md",
+  "docs/redesign/reports/brief4-h2b.json"
+ ],
+ "verification": {
+  "gates": "typecheck clean; lint 55 warnings, all in src/scene (none added); tests 87 files, 1271 passed, 2 skipped (pre-existing skipIf on local data), 0 failed; build ok",
+  "browser_checks": "Scratch Playwright (Chrome + SwiftShader, not in the repo), Command fixture-live at 1440x1000, 27/27: '/' opens the search popover and focuses the box; typing q e n there does not turn the map; Escape closes it and focus returns to the button; the button toggles it (aria-expanded); an outside press closes it; focusSearch() opens it first and focuses the box; E turns 15 degrees and N returns north (popover closed); four official rows, Enter toggles one, aria-controls points at the open body; View all updates opens the panel with Data status and the feed, focus to its heading; Show fewer returns, focus back on View all updates; 'More about this spot' opens with Enter; H hides the panels with the readout's point kept and brings them back; no page errors. Also checked by screenshot: Layers and Analysis drawers, the satellite status (click shows the image, chevron opens More images), Legend details popover, phones with the readout card open and the Updates sheet.",
+  "contrast": "Decision l, composited contrast of every chrome text run (text made transparent with its halo kept, 90th-percentile background luminance under each run vs its colour): Lower Sugarloaf aerial at the opening view 117 runs, min 5.47:1 (before the halo 5.43); Eaton aerial at the opening view min 5.43:1; Eaton aerial zoomed out to z8 (weakest vignette, bright city labels under the right column) min 4.77:1, 4.05:1 before (on-row-meta #8a8a8a). Fix: a soft dark text halo on Command's text-on-map (readout and column, including the row buttons, whose browser style dropped the inherited shadow). No gradient or panel alpha changed.",
+  "map_share": "__mapChrome().unobstructed (decision m): fixture-live 1440x1000 0.515, Lower Sugarloaf 1440x1000 0.505, fixture-live 1024x768 0.387, 390x844 0.754."
+ },
+ "screenshots": [
+  "docs/screenshots/brief4-h2b-command-fixture-live.png",
+  "docs/screenshots/brief4-h2b-command-vs-render.png",
+  "docs/screenshots/brief4-h2b-command-lower-sugarloaf-aerial.png",
+  "docs/screenshots/brief4-h2b-official-row-open.png",
+  "docs/screenshots/brief4-h2b-view-all-updates.png",
+  "docs/screenshots/brief4-h2b-fire-card.png",
+  "docs/screenshots/brief4-h2b-command-1024.png",
+  "docs/screenshots/brief4-h2b-phone.png",
+  "docs/screenshots/brief4-h2b-phone-readout-open.png",
+  "docs/screenshots/brief4-h2b-phone-updates.png"
+ ],
+ "contract_deviations": [
+  "The leader labels are a DOM overlay (location/CommandAreaLabels.tsx) rather than MapLibre symbol labels: Inter and JetBrains Mono as the screen, leaders that avoid the selection label; they hide while the map moves and are recomputed when it settles.",
+  "The incident's own MapLibre label still reads '<name> / Reported location' (the screen's mono 'REPORTED'): it lives in map/layers.ts, which is not this step's file and is shared with Public.",
+  "fireActions.focusSearch() (ui/shell/fireActions.ts, not in this step's list) gained one line: when no search input is mounted but #mw-search is, it opens the Command popover first; the task asked for this behaviour."
+ ],
+ "known_issues": [
+  "At 1440x1000 the readout is taller than the room left on real and demo fires (the official block at the point and the extra Record updated row are not in the mockup): it scrolls with a bottom fade, so 'More about this spot' and sometimes the Incident ID row start below the fold. At 1024x768 more of it scrolls.",
+  "The selected point's map label (map/markers.ts, orchestrator's simpler marker) always sits to the right of the dot: at 1024 px and on phones it can run under the right column text or off the screen. A flip to the left when it would leave the safe area would fix it (not this step's file).",
+  "MapLibre's own 'Outside modeled area' labels can show faintly behind the column texts where the edge gradients thin out (around x = 1000-1050 at 1440 px).",
+  "Forensic's styles/dock.css defines .ro-row / .ro-label for its chart readout (white-space: nowrap, a grid, line-height 1.6); they leak into the shared ReadoutRow. Command restates the values under .cro-rows; H3+H4's fire facts will need the same or a rename by the orchestrator / H5.",
+  "Chromes still remount on preset switches (H2a known issue): the open state of official rows, 'View all updates' and the search popover reset when switching Public <-> Command.",
+  "Disabled timeline stops for a fire without a forecast run keep today's dotted strike-through style ('HINDCAST START +24H …')."
+ ],
+ "notes_for_integrator": "Shared files untouched (TopBar, topbar.css, fixedCopy, Readout, map-tokens, map-bridge, App.tsx, views.ts). One line in ui/shell/fireActions.ts (focusSearch opens the Command popover). For the orchestrator: (1) rename or scope Forensic's .ro-row/.ro-label in styles/dock.css (H5) so ReadoutRow does not inherit white-space: nowrap; (2) map/markers.ts: flip the selected label to the left when it would leave the safe area; (3) map/layers.ts incident label 'REPORTED' in Command if wanted. Mark any other popover in Command with data-popover so Q / E / N stay off while it is open (the search popover already is)."
+}

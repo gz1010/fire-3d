@@ -3349,6 +3349,59 @@ fire −0.6 / .68, none 0 / 1), `aerialTintPaint(level)`, `deriveAerial(base, ti
 `tintRequest`; `MapAtmosphere` applies `tintRequest ?? defaultTint(edges)` (overview → 'overview', fire and Command →
 'fire'); a chrome that wants another calls `map/useMapTint.ts useMapTint(level | null)` while mounted.
 
+**H2b (Command in a fire, 2026-10-24).** `ui/shell/CommandFireChrome.tsx CommandFireChrome({ credits })` (layout in
+`styles/view-command.css`, every rule scoped to `.mw[data-view='command-fire']`; variables `--cmd-x` 40 / `--cmd-top`
+chrome-top + 16 / `--cmd-left-w` 420 / `--cmd-right-w` 380, 1024-1279 px 28 / 360 / 320, ≤ 1023 px 20 / 320 / 290). Bar
+left: `AllFiresBack`, `IncidentPicker variant="title"`, `LiveDot`, `TopBarPlace`, `DemoBadge`; centre `ViewPill`; right:
+`ImageryChip variant="status"` (wide screens, panels shown), `ShowPanelsPill`, `UpdatesToggle`, `AnalysisPill`,
+`location/CommandSearch.tsx CommandSearch()` ("Check an address" `IconPill`, the unchanged `SearchBox` in a 400 px
+right-aligned `role="dialog"` popover `#cmd-search-pop[data-popover]` under the bar; open state `searchUi.ts
+searchOpen` / `setSearchOpen`; "/" and `fireActions.focusSearch()` open it first and focus the box; Escape with no
+result list open and an outside press close it, focus back on the button), `LayersPill`, `CompactMenu`. The incident ID
+chip left the bar (readout row). Left: `location/CommandReadout.tsx CommandReadout()` (no panel; scrolls with a bottom
+fade when taller than the room left) = header (`readoutText.ts selectedLabel(sel)`: "Selected point", "Entered point",
+"Selected address · approximate", …; copy, centre, clear), the point in mono `--m-coord-xl` on two lines,
+`coordinateLine(lat, lon, utmZone)` ("DMS · UTM 10N … E … N · WGS84"), the near sentence `nearSentence(n)` with
+outlined tags (Mapped / Estimate + basis, Stale + age; `describe.ts NearHere` gains `edge`, `basis`, `staleFor`), the
+MODEL line (dashed tag, the model's own dated sentence, the accuracy line with "Outside the modeled area is unknown, not
+low."), the official block at the point (`OfficialSection compact`, unchanged wording), `RecordRows()` (`ReadoutRow`s
+from the list summary only: Burned, Contained, Record updated · issuer, Reported location · issuer with copy and centre,
+Incident ID with copy and the agency id line, demo note) and "More about this spot" (`<details>`, open state per preset
+in `cardPrefs.detailsOpen`: the run figure as a row, run and quantiles, `ReasonsBlock`, `ReliabilityBlock`,
+`DetailsBody`). Empty state "Click the map or search to select a point" + the rows. The check itself moved to
+`location/useLocationCheck.ts useLocationCheck(sel, official) → LocationCheckView`, shared with the Public
+`LocationCard` (unchanged output). The fire card of another fire floats in the readout's place (as before). Right:
+`UpdatesPanel` on wider Command screens renders the column (`.mw-updates-panel.is-column`, no panel): `OfficialNow
+({ variant: 'command' })` — header "Official now" (+ "at the replay time") and "Times in PDT" (`PST/PDT` when the replay
+and today differ; tooltip = `zoneLine`), one-line rows `CommandRow` (a button with `aria-expanded`/`aria-controls`: tone
+dot, **title** — verdict, mono meta = issuer · the item's own time · checked; open = today's body unchanged with Show /
+Source / More), rows with an evacuation order or warning, an NWS alert in effect or a local officials' alert in effect
+start open (and open once when they become one), foot `COMMAND_OFFICIAL_FOOT` ("Fire-3d's modeled spread is experimental
+and is not an evacuation order. Not an all-clear. Follow local officials."); the rows scroll between the head and the
+foot with a fade while more is below; "View all updates" opens the glass panel (`.is-command-panel`: the same rows,
+`DataStatus`, `UpdatesFeed`; "Show fewer" returns; focus moves to the panel heading and back), "Hide" collapses it as
+before. Phones keep the Updates sheet with these rows. Bottom (`.mw-bottom.cmd-bottom`): row 1 = `MapControls
+variant="bar" anchor="bottom"` (left) and `MapLegend({ variant: 'chips' })` (right: plain chips, the scale bar at the
+end, "Legend details" opening the same details upward); row 2 = `CompactTimeline({ variant: 'slim' })` (full width, no
+card, same parts and keys: play, the mono issue / now or replay line, the forecast details button, the parts key, the
+handle label with what the time is, past solid / forecast dashed / unavailable dotted, key-event markers, stop labels
+with their disabled reasons, stale ring); row 3 = `FixedCopy variant="corner"` (`PROTOTYPE_LINE` + `NOT_ALL_CLEAR`)
+and the credits (mono 10 px, every text kept, wraps). Map labels: `location/CommandAreaLabels.tsx` (DOM, `aria-hidden`,
+z-index map + 2, hidden while the map moves) and pure `location/areaLabels.ts` (`rankAnchors`, `placeAlong`,
+`placeLeader`, `pickAnchor`, `labelWidth`, `overlaps`): "Observed fire" + the shown time and "Modeled spread" + "By
+<time> · experimental", anchored on the drawn outline (`queryRenderedFeatures` on `fx-observed-edge` /
+`fx-forecast-line-10`), leaders as the screen (up-right / down-right, then flipped, then mirrored left), kept inside the
+safe area and off the selection label (`.fxm-pin-chip`). Text on the map carries a soft dark halo (decision l).
+Phones (≤ 760 px): bar = back, name, Updates, search, menu; LIVE / demo badge and the map controls under it; the readout
+is a card above the timeline with a one-line peek (selected point, else the reported location; 44 px copy / expand),
+opening on a new pick; the fixed copy wraps (both lines whole) beside "© Credits"; the legend is in the Layers sheet.
+`ImageryChip({ variant: 'status' })`: `TopBarStatus`-style mono line (age amber when stale), click = show / hide the
+image, chevron = "More images", same caption. Measured: composited contrast of every chrome text run (text made
+transparent, 90th-percentile background) ≥ 5.47:1 on Lower Sugarloaf aerial at the opening view, ≥ 4.77:1 on Eaton
+aerial zoomed out to z8 (4.05 before the halo); no gradient or panel alpha changed. `__mapChrome().unobstructed`:
+`fixture-live` 1440×1000 0.515, Lower Sugarloaf 0.505, 1024×768 0.387, 390×844 0.754. Screenshots
+`docs/screenshots/brief4-h2b-*.png`.
+
 #### H3+H4 (Public overview, Public fire view, Command overview) — as built
 
 _To be filled by H3+H4._

@@ -40,3 +40,12 @@ Ports: API 8732, Vite 5192 (a Vite on 5192 -> 8732 was already running from H2a;
   note for the orchestrator.
 - Next: fixes, then screenshots (fixture-live, Lower Sugarloaf aerial, expanded row, View all, fire card, 1024, phone),
   CONTRACT 15.5 H2b, report, commit.
+
+## Finished (2026-10-24)
+- Fixes committed (daf3e11): area label candidates + flipped leaders, column rows scroll between head and foot,
+  row wrapping, text halo (incl. row buttons: their browser style dropped the inherited shadow), phones (fixed copy
+  wraps whole, readout card, Updates sheet padding), search popover data-popover; tests for labels + readout rows.
+- Keyboard check 27/27 (scratch h2b-keys.mjs). Contrast: Lower Sugarloaf aerial min 5.47, Eaton aerial z8 min 4.77.
+- __mapChrome().unobstructed: 1440 fixture-live 0.515, Lower Sugarloaf 0.505, 1024 0.387, phone 0.754.
+- Screenshots brief4-h2b-*.png (10, all viewed), CONTRACT 15.5 H2b paragraph, reports/brief4-h2b.json.
+- Servers 8732 / 5192 stopped at the end.
