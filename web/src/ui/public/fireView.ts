@@ -284,6 +284,9 @@ export interface FactsInput {
   fireWeather: FireWeatherOfficial
   /** The local officials' line while a message is in effect (officialSummary.localAlertsLine), else null. */
   local: SummaryLine | null
+  /** The past time the official rows describe (a past fire: the panel time, an hour or more before now), else null.
+   *  Alerts in effect then read "Was in effect" with that date, so an archived alert is never read as current. */
+  pastMs?: number | null
   demo: boolean
   tf: TimeFmt
   nowMs: number
@@ -305,7 +308,7 @@ export function recordFigures(i: Pick<FactsInput, 'summary' | 'record'>): { acre
   return { acres: s && num(s.acres) ? s.acres : null, contained: s && num(s.percent_contained) ? s.percent_contained : null, updatedMs: s && num(s.updated_ms) ? s.updated_ms : null }
 }
 
-function fireWeatherRow(f: FireWeatherOfficial, nowMs: number): FactRow {
+function fireWeatherRow(f: FireWeatherOfficial, nowMs: number, pastLabel: string | null): FactRow {
   const base = { key: 'fire-weather' as const, label: 'Red Flag Warning (NWS)', size: 17 as const }
   const nws = f.archived ? 'NWS, archived copy' : 'NWS'
   const live = f.alerts.filter((a) => a.phase === 'active' || a.phase === 'upcoming')
@@ -315,10 +318,10 @@ function fireWeatherRow(f: FireWeatherOfficial, nowMs: number): FactRow {
     return {
       ...base,
       // the alert's own words and times: "In effect — RED FLAG WARNING (NWS)", "until Oct 20, 18:00 PDT · NWS Boise ID"
-      value: a.phase === 'upcoming' ? 'Starting soon' : 'In effect',
+      value: pastLabel ? (a.phase === 'upcoming' ? 'Was about to start' : 'Was in effect') : a.phase === 'upcoming' ? 'Starting soon' : 'In effect',
       label: `${a.event} (NWS)`,
       tone: 'alert',
-      sub: join([a.timeText, shortSender(a.senderName), a.archived || f.archived ? 'archived copy' : null, more, 'a weather warning, not an evacuation order']),
+      sub: join([pastLabel, a.timeText, shortSender(a.senderName), a.archived || f.archived ? 'archived copy' : null, more, 'a weather warning, not an evacuation order']),
       link: https(a.url) ? { url: a.url as string, label: 'NWS alert' } : null,
     }
   }
@@ -404,6 +407,8 @@ export function fireFacts(i: FactsInput): FactRow[] {
   const s = i.summary
   const tz = i.tf.tz
   const fig = recordFigures(i)
+  // a past fire: say when the official rows describe ("as of Jan 10, 2025"), never a bare "In effect"
+  const pastLabel = i.pastMs != null && num(i.pastMs) ? `as of ${fmtDayDate(i.pastMs, tz, { year: 'always', refMs: i.nowMs })}` : null
   const rows: FactRow[] = [
     { key: 'burned', value: fig.acres != null ? Math.round(fig.acres).toLocaleString('en-US') : 'Not given', unit: fig.acres != null ? 'ac' : undefined, label: 'Burned', size: fig.acres != null ? 26 : 17 },
     { key: 'contained', value: fig.contained != null ? String(Math.round(fig.contained)) : 'Not given', unit: fig.contained != null ? '%' : undefined, label: 'Contained', size: fig.contained != null ? 26 : 17 },
@@ -415,9 +420,10 @@ export function fireFacts(i: FactsInput): FactRow[] {
     const lon = `${Math.abs(s.lon).toFixed(3)}°${s.lon >= 0 ? 'E' : 'W'}`
     rows.push({ key: 'reported', value: `${lat}, ${lon}`, label: 'Reported', size: 22, copy: `${s.lat.toFixed(5)}, ${s.lon.toFixed(5)}` })
   }
-  rows.push(fireWeatherRow(i.fireWeather, i.nowMs))
+  rows.push(fireWeatherRow(i.fireWeather, i.nowMs, pastLabel))
   rows.push(evacuationRow(i.evacuation, s?.state ?? null, i.nowMs, i.tf))
-  if (i.local) rows.push({ key: 'local', value: "Alert in effect", label: "Local officials' alert", size: 17, tone: 'alert', sub: i.local.text, link: i.local.link ?? null })
+  if (i.local)
+    rows.push({ key: 'local', value: pastLabel ? 'Was in effect' : 'Alert in effect', label: "Local officials' alert", size: 17, tone: 'alert', sub: join([pastLabel, i.local.text]), link: i.local.link ?? null })
   if (fig.updatedMs != null)
     rows.push({ key: 'updated', value: fmtDayDate(fig.updatedMs, tz, { year: updateYear(startMs, fig.updatedMs, i.nowMs, tz), refMs: i.nowMs }), unit: fmtClock(fig.updatedMs, i.tf, { zone: true }), label: 'Last official update', size: 26 })
   else rows.push({ key: 'updated', value: 'No update time given', label: 'Last official update', size: 17 })

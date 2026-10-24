@@ -112,6 +112,9 @@ export function MapDataState() {
   )
 }
 
+/** The official rows describe a past time once the panel time is this far before now (a past fire's replay). */
+const PAST_VIEW_MS = 60 * 60_000
+
 /** `more` (the desktop column, PublicFireChrome useFactsFit): rows are hidden below; the foot shows "More below", which
  *  scrolls them into view with `onMore`. */
 export function FireFacts({ rowsOnly = false, peek = false, more = false, onMore }: { rowsOnly?: boolean; peek?: boolean; more?: boolean; onMore?: () => void } = {}) {
@@ -122,7 +125,9 @@ export function FireFacts({ rowsOnly = false, peek = false, more = false, onMore
   const tf = useTimeFormat()
   const nowMs = useNow(30_000)
   const local = useMemo(() => localAlertsLine(info.local, tf, panelMs, metric), [info.local, tf, panelMs, metric])
-  const input = { summary, record: info.calfire, evacuation: info.evacuation, fireWeather: info.fireWeather, local, demo, tf, nowMs }
+  // a past fire's official rows describe the panel time (PAST_VIEW_MS or more before now), not today
+  const pastMs = nowMs - panelMs >= PAST_VIEW_MS ? panelMs : null
+  const input = { summary, record: info.calfire, evacuation: info.evacuation, fireWeather: info.fireWeather, local, pastMs, demo, tf, nowMs }
   const rows = fireFacts(input)
   const src = factsSource(input)
   const shown = peek ? rows.filter((r) => r.key === 'burned' || r.key === 'contained') : rows

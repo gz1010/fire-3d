@@ -3255,6 +3255,9 @@ export function viewNorthUp(): void                  // N
 
 - `PROTOTYPE_LINE` and `NOT_ALL_CLEAR` on every view (Public overview line: "RESEARCH PROTOTYPE · Not for operational
   use. " + §14.14 `LIST_ABSENCE`).
+- Fire view facts on a past fire (orchestrator follow-up, Oct 24): an alert in effect at the time shown reads "Was in
+  effect" (or "Was about to start") with "as of <date>" first in its sub-line, never a bare "In effect"
+  (`fireView.ts` `FactsInput.pastMs`, set by `FireFacts` when the panel time is an hour or more before now).
 - Fire view key: "Latest perimeter · <source> · <its own time> (<age>)" (+ Stale), "No mapped perimeter yet · reported
   location (<issuer>)", "No perimeter published yet". Facts: evacuation "Not available in this state" (§14.14 short
   form; never "N/A"), fire weather "None in effect". Distance chip: "<n> mi · <direction> of you", with what it measures

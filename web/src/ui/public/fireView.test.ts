@@ -273,6 +273,25 @@ describe('facts (decision i-1, i-2: verbatim, own times, never N/A)', () => {
     expect(none.sub).toContain('not an all-clear')
   })
 
+  it('says an alert on a past fire "Was in effect" with the date it describes, never a bare "In effect"', () => {
+    const alert = { id: 'a', event: 'Red Flag Warning', senderName: 'National Weather Service Los Angeles/Oxnard CA', headline: '', url: 'https://mesonet.agron.iastate.edu/x', archived: true, phase: 'active', timeText: 'until Jan 10, 6:00 PM PST', coversReportedLocation: true, nearestKm: 0, ugcs: [], bounds: null } as OfficialAlert
+    const pastMs = Date.UTC(2025, 0, 10, 20)
+    const local = { key: 'local' as const, label: "Local officials' alerts", text: 'Archived alert: “EVACUATION ORDER. LEAVE NOW.” · sent Jan 9, 2025', source: null, tone: 'order' as const, link: null }
+    const rows = fireFacts(input({ fireWeather: fw({ state: 'active', archived: true, alerts: [alert] }), local, pastMs }))
+    const fwRow = rows.find((r) => r.key === 'fire-weather')!
+    expect(fwRow.value).toBe('Was in effect')
+    expect(fwRow.sub).toMatch(/^as of Jan 10, 2025/)
+    expect(fwRow.sub).toContain('until Jan 10, 6:00 PM PST')
+    const localRow = rows.find((r) => r.key === 'local')!
+    expect(localRow.value).toBe('Was in effect')
+    expect(localRow.sub).toMatch(/^as of Jan 10, 2025 · Archived alert/)
+    for (const r of rows) expect(r.value).not.toMatch(/^(Alert )?in effect$/i)
+    // a live fire keeps the present tense
+    const live = fireFacts(input({ fireWeather: fw({ state: 'active', alerts: [{ ...alert, archived: false }] }), local }))
+    expect(live.find((r) => r.key === 'fire-weather')!.value).toBe('In effect')
+    expect(live.find((r) => r.key === 'local')!.value).toBe('Alert in effect')
+  })
+
   it('adds local officials’ alerts only while one is in effect', () => {
     expect(fireFacts(input()).some((r) => r.key === 'local')).toBe(false)
     const local = { key: 'local' as const, label: "Local officials' alerts", text: 'Alert from Lake County: “Leave now” · sent Oct 24, 9:00 AM MDT', source: null, tone: 'order' as const, link: { url: 'https://example.gov/a', label: 'Lake County' } }
