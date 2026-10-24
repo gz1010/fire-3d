@@ -44,7 +44,7 @@ import { fmtAt, localYear, recordYearMode, zoneAbbr, zoneLine } from '../../lib/
 import { useTimeFormat, useZoneSource } from '../../state/timeZone'
 import { useWorkspace } from '../../state/workspace'
 import { useNow } from '../hooks'
-import { NOT_ALL_CLEAR } from '../shell/fixedCopy'
+import { NOT_ALL_CLEAR } from '../shell/fixedCopyText'
 import { NOT_AN_ORDER } from './feedMeta'
 
 function SourceLink({ href, children }: { href: string | null | undefined; children: ReactNode }) {

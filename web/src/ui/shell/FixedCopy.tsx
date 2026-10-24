@@ -3,9 +3,9 @@
 //   corner  Command: mono caps in the bottom-left corner, + "Not an all-clear. Follow local officials."
 //   bar     fire view: mono in the bottom bar
 //   pill    Forensic: a small glass pill, + "Not an all-clear. Follow local officials."
-// `extra` replaces the variant's default follow-up text (fixedCopy.ts defaultExtra); null = none. Styles:
+// `extra` replaces the variant's default follow-up text (fixedCopyText.ts defaultExtra); null = none. Styles:
 // styles/topbar.css (.fxc-*). Positioning belongs to the view's chrome.
-import { fixedCopyExtra, PROTOTYPE_LEAD, PROTOTYPE_LINE, PROTOTYPE_TAIL, type FixedCopyVariant } from './fixedCopy'
+import { fixedCopyExtra, PROTOTYPE_LEAD, PROTOTYPE_LINE, PROTOTYPE_TAIL, type FixedCopyVariant } from './fixedCopyText'
 import '../../styles/topbar.css'
 
 export function FixedCopy({ variant, extra, className }: { variant: FixedCopyVariant; extra?: string | null; className?: string }) {

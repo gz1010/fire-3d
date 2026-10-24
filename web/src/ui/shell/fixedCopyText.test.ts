@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { LIST_ABSENCE } from '../../state/overview'
 import { FixedCopy } from './FixedCopy'
-import { defaultExtra, fixedCopyText, NOT_ALL_CLEAR, PROTOTYPE_LINE } from './fixedCopy'
+import { defaultExtra, fixedCopyText, NOT_ALL_CLEAR, PROTOTYPE_LINE } from './fixedCopyText'
 
 const text = (h: string) => h.replace(/<[^>]+>/g, '').replace(/&#x27;/g, "'")
 

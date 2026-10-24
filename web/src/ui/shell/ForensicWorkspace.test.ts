@@ -8,7 +8,7 @@ import { useStore } from '../../state/store'
 import { useWorkspace } from '../../state/workspace'
 import { restoreSsrState, ssrState } from '../ssr.testutil'
 import ForensicWorkspace from './ForensicWorkspace'
-import { NOT_ALL_CLEAR, PROTOTYPE_LINE } from './fixedCopy'
+import { NOT_ALL_CLEAR, PROTOTYPE_LINE } from './fixedCopyText'
 
 const decode = (h: string) => h.replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
 const text = (h: string) => decode(h.replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ')

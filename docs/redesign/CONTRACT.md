@@ -3197,7 +3197,7 @@ export function IconPill(p: { icon: ReactNode; label: string; tip?: string; pres
 export function TopBarStatus(p: { parts: string[]; staleFrom?: number; tip?: string; onClick?: () => void }): JSX.Element
 // ui/Logo.tsx (re-exported by ui/Header.tsx)
 export function Logo(p: { size?: number }): JSX.Element
-// ui/shell/fixedCopy.ts + FixedCopy.tsx
+// ui/shell/fixedCopyText.ts + FixedCopy.tsx
 export const PROTOTYPE_LINE = 'Research prototype — not for operational use'
 export const NOT_ALL_CLEAR = 'Not an all-clear. Follow local officials.'
 export function FixedCopy(p: { variant: 'line' | 'corner' | 'bar' | 'pill'; extra?: string }): JSX.Element
@@ -3292,7 +3292,7 @@ workspace are `--m-accent-text` and underlined (a `:where()` rule in `map-bridge
   `TopBarStatus({ parts, staleFrom?, tip?, onClick? })`; `TopBarPlace({ place, date?, tip? })`. Pure helpers
   `ui/shell/topBarText.ts` (`placeLine(summary)`, `statusSegments(parts, staleFrom)`).
 - `ui/Logo.tsx Logo({ size? = 24 })` (width; 26:22), re-exported by `ui/Header.tsx`.
-- `ui/shell/fixedCopy.ts`: `PROTOTYPE_LINE`, `NOT_ALL_CLEAR`, `PROTOTYPE_LEAD`, `PROTOTYPE_TAIL`, `defaultExtra(variant)`
+- `ui/shell/fixedCopyText.ts`: `PROTOTYPE_LINE`, `NOT_ALL_CLEAR`, `PROTOTYPE_LEAD`, `PROTOTYPE_TAIL`, `defaultExtra(variant)`
   (line → `LIST_ABSENCE`, corner / pill → `NOT_ALL_CLEAR`, bar → none), `fixedCopyText(variant, extra?)`;
   `FixedCopy({ variant, extra?, className? })` (`extra` undefined = the default, null = none; `.fxc-*`).
 - `ui/shell/Readout.tsx ReadoutRow({ value, unit?, label, size? = 22, tone?, sub?, copy? })` (`.ro-row .ro-<size>

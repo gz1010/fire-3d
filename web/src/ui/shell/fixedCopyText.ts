@@ -1,5 +1,6 @@
 // Fixed copy every view keeps (brief 4, HANDOFF "Fixed copy"; CONTRACT §15.4, frozen after H2). Exact strings: tests
-// and the views read them from here, never retype them.
+// and the views read them from here, never retype them. Named fixedCopyText.ts, not fixedCopy.ts: next to the component
+// FixedCopy.tsx, a name differing only by case broke the app on macOS (case-insensitive disks; lib/fileNames.test.ts).
 import { LIST_ABSENCE } from '../../state/overview'
 
 export const PROTOTYPE_LINE = 'Research prototype — not for operational use'

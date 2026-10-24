@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { NOT_ALL_CLEAR } from '../shell/fixedCopy'
+import { NOT_ALL_CLEAR } from '../shell/fixedCopyText'
 import { NOT_AN_ORDER } from './feedMeta'
 import { COMMAND_OFFICIAL_FOOT } from './OfficialNow'
 
