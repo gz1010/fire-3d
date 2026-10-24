@@ -521,3 +521,29 @@ shots in ~50-65 s.
 9. Forensic screenshots need the new `shot.mjs` flags; frame rates are not measurable under SwiftShader.
 10. Changing Public's click flow and turning zoom focus off in Public changes brief-2 decision 10 behaviour; Back/history
     must stay correct (`state/history.ts`).
+
+## 11. Orchestrator decisions (2026-10-24; these settle §6)
+
+- **a. Public inside a fire: option A** as written (fire view, newest perimeter only, no model output, timeline,
+  updates feed or picker in Public; search behind an icon; the card's model block replaced by the Command link;
+  unprepared and no-perimeter states as written; time set to the latest observation on entry).
+- **b. Click → fire view: option A** (direct `openFireView(id)`, one history push; zoom focus off in Public; Command and
+  Forensic keep the fire card; group click zooms in).
+- **c. Command overview: option A** (Main's layout with details shown, no "Show details" pill; built by H3+H4).
+- **d. Show details: as recommended.** Pill count = fires the map shows for the current filter; the default filter stays
+  `season`. List-down and missing-fire banners stay visible.
+- **e. Markers: as recommended**, with groups sized by HANDOFF.md's formula `10 + 4.2·√n` (the written spec), capped at
+  36 px. Group labels stay MapLibre text (Noto Sans); leader labels are the DOM overlay (P1 in H3+H4, but expected).
+- **f. Rotation: as recommended** (buttons, compass drag with click = north up, Q / E / N, Safari gesture, Forensic 2D).
+- **g. Globe dimming: option A** (CSS circular vignette following zoom; Public and Command, 2D and 3D; not Forensic).
+- **h. Narrow screens: as recommended.**
+- **i. Safety and feature conflicts: all twelve points as written.**
+- **j. Map tint: option A** (basemap paint, never over fire, official or selection layers).
+- **k. Heading kept** across 2D↔3D and the map↔Forensic hand-off.
+- **l. Lighter glass: keep the handoff values, measure contrast, darken only where text fails 4.5:1.**
+- **m. Drop the "≥ 75 % open map" target** for the handoff layouts; record `__mapChrome().unobstructed` per view.
+
+H2 runs as three parts: **H2a** foundation (§4 H2 items 1-3 and 7: tokens, colour mirrors, fonts, TopBar family, Logo,
+FixedCopy, Readout, MapWorkspace split into three chromes, CSS moves, `shot.mjs` flags), then in parallel **H2b**
+Command in a fire (§3.2) and **H2c** rotation in Public/Command + MapAtmosphere + tint (§6 f, g, j, k for the map).
+Ports: H2a and H2b API 8732 / Vite 5192; H2c 8740 / 5200; reviewers 8735 / 5195 and 8736 / 5196.
