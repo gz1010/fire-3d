@@ -359,8 +359,7 @@
   padding-top: 2px;
   border-top: 1px solid var(--cmd-hair-2);
 }
-/* Forensic's chart readout (styles/dock.css) also uses .ro-row with white-space: nowrap and its own grid and line
-   height; restate the shared row's values here so long issuers wrap instead of being cut */
+/* Command's record rows: a little tighter than the shared row; long issuers wrap instead of being cut */
 .cro-rows .ro-row {
   padding: 6px 0;
   white-space: normal;

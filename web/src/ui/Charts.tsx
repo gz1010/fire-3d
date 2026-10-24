@@ -269,14 +269,14 @@ function TimeHover({
         <>
           <span className="xhair" style={{ left: x(t) - M.l }} />
           <div className={`readout ${left ? 'is-left' : ''}`} style={{ left: x(t) - M.l }}>
-            <div className="ro-time mono">
+            <div className="xr-time mono">
               {fmtAt(t, tf)} <span className="muted">{zoneAbbr(t, tf.tz)}</span>
             </div>
             {rs.map((r) => (
-              <div key={r.label} className="ro-row">
+              <div key={r.label} className="xr-row">
                 {r.key}
-                <span className="ro-val mono">{r.value}</span>
-                <span className="ro-label">{r.label}</span>
+                <span className="xr-val mono">{r.value}</span>
+                <span className="xr-label">{r.label}</span>
               </div>
             ))}
           </div>
@@ -955,29 +955,29 @@ function ProfileHover({ samples, manifest, x, y, w, h }: { samples: ProfileSampl
           <span className="xhair" style={{ left: px - PM.l }} />
           <span className="xdot" style={{ left: px - PM.l, top: y(samples.elev[kk]) - PM.t }} />
           <div className={`readout ${px > w - 150 ? 'is-left' : ''}`} style={{ left: px - PM.l }}>
-            <div className="ro-time mono">
+            <div className="xr-time mono">
               {fmtNumber(samples.d[kk] / 1000, 2)} km <span className="muted">along path</span>
             </div>
-            <div className="ro-row">
+            <div className="xr-row">
               <i className="rk rk-line" style={{ ['--c' as string]: 'var(--chart-terrain)' }} />
-              <span className="ro-val mono">{fmtNumber(samples.elev[kk])} m</span>
-              <span className="ro-label">elevation</span>
+              <span className="xr-val mono">{fmtNumber(samples.elev[kk])} m</span>
+              <span className="xr-label">elevation</span>
             </div>
             {slope != null && (
-              <div className="ro-row">
+              <div className="xr-row">
                 <i className="rk" />
-                <span className="ro-val mono">{`${slope >= 0 ? '+' : '−'}${fmtNumber(Math.abs(slope))}%`}</span>
-                <span className="ro-label">grade</span>
+                <span className="xr-val mono">{`${slope >= 0 ? '+' : '−'}${fmtNumber(Math.abs(slope))}%`}</span>
+                <span className="xr-label">grade</span>
               </div>
             )}
             {samples.arr && (
-              <div className="ro-row">
+              <div className="xr-row">
                 <i className="rk rk-band" style={{ ['--c' as string]: 'var(--fire)' }} />
-                <span className="ro-val mono">{arr != null && arr < NEVER_H ? fmtAt(manifest.time_origin_ms + arr * HOUR_MS, tf) : 'unburned'}</span>
-                <span className="ro-label">{arr != null && arr < NEVER_H ? 'fire arrival' : ''}</span>
+                <span className="xr-val mono">{arr != null && arr < NEVER_H ? fmtAt(manifest.time_origin_ms + arr * HOUR_MS, tf) : 'unburned'}</span>
+                <span className="xr-label">{arr != null && arr < NEVER_H ? 'fire arrival' : ''}</span>
               </div>
             )}
-            <div className="ro-hint muted">click to fly there</div>
+            <div className="xr-hint muted">click to fly there</div>
           </div>
         </>
       )}

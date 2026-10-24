@@ -721,13 +721,14 @@
 .readout.is-left {
   transform: translateX(calc(-100% - 10px));
 }
-.ro-time {
+/* the charts' cross-hair readout (xr-*; the ro-* names belong to the shared "value — LABEL" rows, ui/shell/Readout.tsx) */
+.xr-time {
   font-size: 10px;
   color: var(--text-2);
   margin-bottom: 3px;
   white-space: nowrap;
 }
-.ro-row {
+.xr-row {
   display: grid;
   grid-template-columns: 12px auto 1fr;
   align-items: center;
@@ -735,14 +736,14 @@
   line-height: 1.6;
   white-space: nowrap;
 }
-.ro-val {
+.xr-val {
   color: var(--text);
   font-weight: 600;
 }
-.ro-label {
+.xr-label {
   color: var(--text-2);
 }
-.ro-hint {
+.xr-hint {
   margin-top: 3px;
   font-size: 9.5px;
 }

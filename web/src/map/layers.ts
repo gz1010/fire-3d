@@ -236,8 +236,15 @@ export function drapedLayers(theme: MapTheme = 'dark'): LayerSpecification[] {
   return layers
 }
 
-/** Point markers and our labels (added after the basemap labels). */
-export function topLayers(theme: MapTheme = 'dark'): LayerSpecification[] {
+/** The reported location's label: the fire's name, then "Reported location" (Public) or the Command screen's short
+ *  "REPORTED" (handoff-4 CommandView). The hover text explains it in both. */
+export function incidentLabelField(preset: 'public' | 'command' = 'public'): unknown[] {
+  const second = preset === 'command' ? ['REPORTED', { 'font-scale': 0.74 }] : ['Reported location', { 'font-scale': 0.82 }]
+  return ['format', ['get', 'name'], { 'font-scale': 1, 'text-font': ['literal', FONT_BOLD] }, '\n', {}, ...second]
+}
+
+/** Point markers and our labels (added after the basemap labels). `preset` picks the reported location's label. */
+export function topLayers(theme: MapTheme = 'dark', preset: 'public' | 'command' = 'public'): LayerSpecification[] {
   const t = THEME[theme]
   const aerial = theme === 'aerial'
   return [
@@ -342,7 +349,7 @@ export function topLayers(theme: MapTheme = 'dark'): LayerSpecification[] {
       type: 'symbol',
       source: SRC.incident,
       layout: {
-        'text-field': ['format', ['get', 'name'], { 'font-scale': 1, 'text-font': ['literal', FONT_BOLD] }, '\n', {}, 'Reported location', { 'font-scale': 0.82 }],
+        'text-field': incidentLabelField(preset) as never,
         'text-font': FONT_REGULAR,
         'text-size': 12.5,
         'text-anchor': 'top',

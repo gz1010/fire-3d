@@ -3,8 +3,12 @@
 // "SELECTED" and any notes), as in handoff-4/screens/CommandView.dc.html. A dashed halo + "approximate" when the position
 // is approximate (interpolated address, estimated event location); draggable only when the selection is adjustable
 // (dragend -> moveSelection). DOM text only (no HTML strings). A MapLibre Marker follows the terrain in 3D.
+// The label sits up and to the right of the dot, as the screens; it moves to another corner (the leader mirrored) when
+// that one would leave the free map area (the part the chrome leaves open) or cover the fire's own label
+// (map/pinLabel.ts pinLabelSide).
 import { Marker, type Map as MapLibreMap } from 'maplibre-gl'
 import type { SelectedLocation } from '../state/workspace'
+import { pinLabelSide, type PinSide, type ScreenBox } from './pinLabel'
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
@@ -38,8 +42,10 @@ export class SelectionPin {
   private readonly root: HTMLDivElement
   private readonly label: HTMLSpanElement
   private readonly note: HTMLSpanElement
+  private readonly chip: HTMLDivElement
   private onMove: ((lat: number, lon: number) => void) | null = null
   private shown = false
+  private side: PinSide = 'up-right'
 
   constructor() {
     const root = document.createElement('div')
@@ -54,6 +60,7 @@ export class SelectionPin {
     chip.append(this.label, this.note)
     root.append(pinSvg(), chip)
     this.root = root
+    this.chip = chip
     this.marker = new Marker({ element: root, anchor: 'center', draggable: false, opacityWhenCovered: '0.35' })
     this.marker.on('dragend', () => {
       const ll = this.marker.getLngLat()
@@ -84,6 +91,21 @@ export class SelectionPin {
     this.marker.setLngLat([sel.lon, sel.lat])
     if (!this.shown) this.marker.addTo(map)
     this.shown = true
+  }
+
+  /** Put the label in the corner that stays inside `free` (screen px of the map container) and off other labels
+   *  (`blocked`); call when the map settles, the safe area changes or the selection changes. */
+  place(map: MapLibreMap, free: ScreenBox, blocked?: (box: ScreenBox, side: PinSide) => boolean): void {
+    if (!this.shown) return
+    const w = this.chip.offsetWidth
+    const h = this.chip.offsetHeight
+    if (!w || !h) return
+    const p = map.project(this.marker.getLngLat())
+    const side = pinLabelSide({ x: p.x, y: p.y }, { w, h }, free, this.side, blocked)
+    if (side === this.side) return
+    this.side = side
+    this.root.classList.toggle('is-left', side.endsWith('left'))
+    this.root.classList.toggle('is-down', side.startsWith('down'))
   }
 
   remove(): void {

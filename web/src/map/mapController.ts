@@ -65,7 +65,7 @@ import { maskGeometry } from './contours'
 import { MapInput } from './userInput'
 import { allFocusCandidates, CENTRAL_FRACTION, chipTargets, FocusHold, focusUnlessHeld, FOCUS_DEBOUNCE_MS, FOCUS_OUT_ZOOM, type FocusCurrent, type FocusView } from './focus'
 import { boundsCenter, Framing, goalFor, latestPerimeter, LOWER48_BOUNDS, LOWER48_START, mapCovered, zoomForBounds, type CameraPose, type FrameGoal } from './framing'
-import { drapedLayers, HATCH_IMAGE, hatchImage, LAYER_GROUPS, LYR, SRC, topLayers, type MapTheme } from './layers'
+import { drapedLayers, HATCH_IMAGE, hatchImage, incidentLabelField, LAYER_GROUPS, LYR, SRC, topLayers, type MapTheme } from './layers'
 import { recordHoverLines, zoneHoverLines } from './hoverText'
 import { fmtLatLon, SelectionPin } from './markers'
 import { EMPTY_OVERLAYS, motionMs, patchOverlays, setProvider, useMapRuntime, type MapActions } from './mapStore'
@@ -362,11 +362,15 @@ export class MapController {
     this.unsubs.push(
       useWorkspace.subscribe((s, p) => {
         if (s.basemap !== p.basemap) void this.applyBasemap(s.basemap)
+        if (s.preset !== p.preset && this.styleReady && this.map.getLayer(LYR.incidentLabel)) this.map.setLayoutProperty(LYR.incidentLabel, 'text-field', incidentLabelField(s.preset) as never)
         if (s.perspective !== p.perspective) this.applyPerspective(s.perspective, true)
         if (s.selection !== p.selection || s.mapLayers.selection !== p.mapLayers.selection) this.updatePin()
         if (s.mapFlyTo && s.mapFlyTo.nonce !== this.flyNonce) this.flyRequested(s.mapFlyTo)
         if (s.mapLayers !== p.mapLayers) this.applyLayerVisibility(p.mapLayers)
-        if (s.safeInsets !== p.safeInsets) this.applySafeInsets(true)
+        if (s.safeInsets !== p.safeInsets) {
+          this.applySafeInsets(true)
+          this.placePinLabel()
+        }
         if (s.fireCardId !== p.fireCardId) this.updateFireCardRing()
         if (s.overviewFilter !== p.overviewFilter || s.units !== p.units) {
           this.updateOverview()
@@ -502,7 +506,7 @@ export class MapController {
     // grows each label towards the middle of the country (overviewLayers.ts LABEL_ANCHORS)
     this.narrowLabels = width < NARROW_PX
     for (const layer of overviewLayers(theme, { narrow: this.narrowLabels })) map.addLayer(layer)
-    for (const layer of topLayers(theme)) map.addLayer(layer)
+    for (const layer of topLayers(theme, useWorkspace.getState().preset)) map.addLayer(layer)
     this.applyLayerVisibility(null)
     // a tint asked for while this style was loading
     this.applyTint(false)
@@ -1002,6 +1006,7 @@ export class MapController {
     this.updateCamera()
     this.updateAoiInView()
     this.updateViewBox()
+    this.placePinLabel()
     this.publishFraming()
   }
 
@@ -1302,6 +1307,8 @@ export class MapController {
       this.publishFraming()
     })
     map.on('moveend', (e: { originalEvent?: unknown }) => this.onMoveEnd(e.originalEvent != null))
+    // the selection label's corner once the map (and the fire's labels) settle
+    map.on('idle', () => this.placePinLabel())
     map.on('click', (e) => this.onClick(e))
     map.on('mousemove', (e) => this.onHover(e))
     map.on('mouseout', () => this.hideHover())
@@ -1659,6 +1666,19 @@ export class MapController {
   private updatePin(): void {
     const ws = useWorkspace.getState()
     this.pin.update(this.map, ws.selection, ws.mapLayers.selection, (lat, lon) => useWorkspace.getState().moveSelection(lat, lon))
+    this.placePinLabel()
+  }
+
+  /** The selection label's corner (markers.ts pinLabelSide): inside the free map area (the safe area), off the fire's
+   *  own point and label and the key events. Runs when the map settles, the safe area changes or the pin does. */
+  private placePinLabel(): void {
+    if (!this.styleReady) return
+    const map = this.map
+    const c = map.getContainer()
+    const i = useWorkspace.getState().safeInsets
+    const free = { left: i.left, top: i.top, right: c.clientWidth - i.right, bottom: c.clientHeight - i.bottom }
+    const layers = [LYR.incidentLabel, LYR.incidentCircle, LYR.eventsCircle, LYR.eventsLabel].filter((id) => map.getLayer(id))
+    this.pin.place(map, free, layers.length ? (b) => map.queryRenderedFeatures([[b.left, b.top], [b.right, b.bottom]], { layers }).length > 0 : undefined)
   }
 
   // ------------------------------------------------------------------------------------------------ data

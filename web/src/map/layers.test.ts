@@ -1,6 +1,6 @@
 import { validateStyleMin } from '@maplibre/maplibre-gl-style-spec'
 import { describe, expect, it } from 'vitest'
-import { AERIAL_CASING, AERIAL_CLOSE_FILL_OPACITY, drapedLayers, LAYER_GROUPS, LYR, SRC, topLayers, type MapTheme } from './layers'
+import { AERIAL_CASING, AERIAL_CLOSE_FILL_OPACITY, drapedLayers, incidentLabelField, LAYER_GROUPS, LYR, SRC, topLayers, type MapTheme } from './layers'
 
 const THEMES: MapTheme[] = ['dark', 'light', 'aerial']
 
@@ -11,12 +11,12 @@ const layout = (theme: MapTheme, id: string): Paint => (topLayers(theme).find((l
 
 describe('wildfire layers', () => {
   it('are valid MapLibre layers on every theme', () => {
-    for (const theme of THEMES) {
+    for (const [theme, preset] of THEMES.flatMap((t) => [[t, 'public'], [t, 'command']] as const)) {
       const geo = { type: 'geojson' as const, data: { type: 'FeatureCollection' as const, features: [] } }
       const canvas = { type: 'canvas' as const, canvas: 'c', coordinates: [[0, 1], [1, 1], [1, 0], [0, 0]] }
       const sources: Record<string, unknown> = {}
       for (const id of Object.values(SRC)) sources[id] = id === SRC.observedRaster || id === SRC.forecastRaster ? canvas : geo
-      const style = { version: 8, glyphs: 'https://example.com/{fontstack}/{range}.pbf', sprite: 'https://example.com/sprite', sources, layers: [...drapedLayers(theme), ...topLayers(theme)] }
+      const style = { version: 8, glyphs: 'https://example.com/{fontstack}/{range}.pbf', sprite: 'https://example.com/sprite', sources, layers: [...drapedLayers(theme), ...topLayers(theme, preset)] }
       const errors = validateStyleMin(style as never).filter((e) => !/canvas|sprite/i.test(e.message))
       expect(errors).toEqual([])
     }
@@ -66,5 +66,16 @@ describe('wildfire layers', () => {
       expect(hit['circle-opacity']).toBe(0)
       expect((hit['circle-radius'] as number) * 2).toBeGreaterThanOrEqual(22)
     }
+  })
+
+  it('labels the reported location "Reported location" in Public and "REPORTED" in Command (the screen)', () => {
+    expect(incidentLabelField()).toEqual(incidentLabelField('public'))
+    expect(JSON.stringify(incidentLabelField('public'))).toContain('"Reported location"')
+    expect(JSON.stringify(incidentLabelField('command'))).toContain('"REPORTED"')
+    const field = (preset: 'public' | 'command') => (topLayers('dark', preset).find((l) => l.id === LYR.incidentLabel) as unknown as { layout: Paint }).layout['text-field']
+    expect(field('command')).toEqual(incidentLabelField('command'))
+    expect(field('public')).toEqual(incidentLabelField('public'))
+    // the fire's name comes first in both
+    expect(incidentLabelField('command').slice(0, 2)).toEqual(['format', ['get', 'name']])
   })
 })

@@ -64,6 +64,25 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* the label in another corner (markers.ts pinLabelSide): the leader mirrored around the dot */
+.fxm-pin.is-left .fxm-pin-chip {
+  left: auto;
+  right: 52px;
+  align-items: flex-end;
+  text-align: right;
+}
+.fxm-pin.is-down .fxm-pin-chip {
+  top: 25px;
+}
+.fxm-pin.is-left svg {
+  transform: scaleX(-1);
+}
+.fxm-pin.is-down svg {
+  transform: scaleY(-1);
+}
+.fxm-pin.is-left.is-down svg {
+  transform: scale(-1, -1);
+}
 .fxm-pin-note {
   color: var(--m-select);
   font-size: 9.5px;
