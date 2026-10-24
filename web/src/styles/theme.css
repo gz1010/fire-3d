@@ -6,53 +6,65 @@
 :root {
   color-scheme: dark;
 
-  /* background / atmosphere */
-  --bg-0: #060a08;
-  --bg-1: #111a14;
-  --bg-gradient: radial-gradient(120% 90% at 50% 18%, #111a14 0%, #0a110d 46%, #060a08 100%);
+  /* Brief 4 (H5, HANDOFF "Colour: greys plus hazard colour"): the Forensic UI is greys plus the orange accent; the 3D
+     scene keeps its green terrain and gold graphics (--lattice-*, --fire*, --ev-*, --ac-* and the three.js colours are
+     unchanged). The map workspace re-points most of these names to its --m-* tokens (map-tokens.css). */
 
-  /* glass panels */
-  --glass: rgba(9, 14, 11, 0.72);
-  --glass-strong: rgba(9, 14, 11, 0.86);
-  --glass-soft: rgba(9, 14, 11, 0.5);
-  --glass-raised: rgba(20, 28, 22, 0.92);
-  --glass-blur: blur(14px) saturate(120%);
-  --hairline: rgba(232, 214, 170, 0.12);
-  --hairline-soft: rgba(232, 214, 170, 0.07);
-  --hairline-strong: rgba(232, 214, 170, 0.22);
+  /* background / atmosphere */
+  --bg-0: #0c0c0c;
+  --bg-1: #141414;
+  --bg-gradient: radial-gradient(120% 90% at 50% 18%, #161616 0%, #101010 46%, #0c0c0c 100%);
+
+  /* glass panels (screens: rgba(14,14,14,.6-.74) + blur(18-24px) saturate(140%), hairlines rgba(200,200,200,…)) */
+  --glass: rgba(14, 14, 14, 0.62);
+  --glass-strong: rgba(14, 14, 14, 0.8);
+  --glass-soft: rgba(14, 14, 14, 0.5);
+  --glass-raised: rgba(26, 26, 26, 0.94);
+  --glass-blur: blur(22px) saturate(140%);
+  --hairline: rgba(200, 200, 200, 0.16);
+  --hairline-soft: rgba(200, 200, 200, 0.08);
+  --hairline-strong: rgba(200, 200, 200, 0.28);
   --radius: 10px;
   --radius-sm: 6px;
   --radius-xs: 4px;
-  --shadow: 0 10px 34px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 255, 255, 0.025) inset;
+  --shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
   --shadow-pop: 0 18px 50px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.35);
   --surface-1: rgba(255, 255, 255, 0.025);
-  --surface-2: rgba(255, 255, 255, 0.045);
-  --surface-3: rgba(255, 255, 255, 0.075);
+  --surface-2: rgba(255, 255, 255, 0.05);
+  --surface-3: rgba(255, 255, 255, 0.08);
 
   /* text */
-  --text: #ece6d6;
-  --text-2: #9ba394;
-  --text-3: #6b7468;
-  --text-4: #4a5248;
+  --text: #f0f0f0;
+  --text-body: #e6e6e6;
+  --text-2: #bdbdbd;
+  --text-3: #9a9a9a;
+  --text-4: #7a7a7a;
+  --link: #e0e0e0;
 
-  /* accents & status */
-  --gold: #e2be72;
-  --gold-bright: #f3d792;
-  --gold-dim: rgba(226, 190, 114, 0.55);
-  --gold-soft: rgba(226, 190, 114, 0.28);
-  --gold-faint: rgba(226, 190, 114, 0.14);
-  --gold-ghost: rgba(226, 190, 114, 0.07);
+  /* UI accent (selected state: active tab, 2D/3D, range tabs, checked layers, play). The names keep "gold" so every
+     component follows by value; --accent-ink is the text on it. */
+  --gold: #ff7a3d;
+  --gold-bright: #f0f0f0;
+  --gold-dim: rgba(255, 122, 61, 0.55);
+  --gold-soft: rgba(255, 122, 61, 0.28);
+  --gold-faint: rgba(255, 122, 61, 0.14);
+  --gold-ghost: rgba(255, 122, 61, 0.07);
+  --accent-ink: #1a0a03;
+  --accent-hover: #ff8d57;
+
+  /* scene graphics (kept gold: the 3D view keeps its look) */
   --lattice-core: #e8c77e;
   --lattice-falloff: #b08a45;
   --fire: #ff6a2b;
   --fire-soft: rgba(255, 106, 43, 0.18);
   --fire-hot: #fff3c4;
   --fire-mid: #ffb347;
+  --fire-3: #ff9a5a;
   --ember: #b8321a;
   --char: #16130f;
-  --danger: #e5483a;
-  --ok: #8fbf7a;
-  --warn: #f0a35e;
+  --danger: #f87171;
+  --ok: #8fd3a8;
+  --warn: #e8b04a;
   --water: #6fa8b8;
   --sky: #9cc9d9;
   --steel: #8fa8bf;
@@ -75,13 +87,13 @@
   --ac-other: #f0a35e;
   --ac-unknown: #6b7468;
 
-  /* charts */
-  --chart-grid: rgba(255, 255, 255, 0.06);
-  --chart-axis: rgba(236, 230, 214, 0.45);
-  --chart-observed: var(--gold);
-  --chart-forecast: var(--fire);
-  --chart-band: rgba(255, 106, 43, 0.18);
-  --chart-cursor: var(--gold);
+  /* charts (the handoff's wildfire colours: observed orange, modeled amber) */
+  --chart-grid: rgba(200, 200, 200, 0.1);
+  --chart-axis: rgba(230, 230, 230, 0.5);
+  --chart-observed: #ff8a3c;
+  --chart-forecast: #f5c060;
+  --chart-band: rgba(245, 192, 96, 0.2);
+  --chart-cursor: #e6e6e6;
   --chart-frp: #e5483a;
   --chart-terrain: #8b9a7a;
 
@@ -94,19 +106,21 @@
   --fs-md: 13px;
   --fs-lg: 15px;
 
-  /* layout */
-  --header-h: 52px;
-  --panel-w: 360px;
+  /* layout (brief 4: the floating top bar at 20 px, the right panel 336 px, panels 16 px from the edges) */
+  --header-h: 40px;
+  --panel-w: 336px;
   --gap: 12px;
+  --edge: 16px;
+  --bar-top: 20px;
   --dock-h: 300px;
   --keyevents-w: 272px;
-  --focus-ring: 0 0 0 2px rgba(226, 190, 114, 0.55);
+  --focus-ring: 0 0 0 2px #d0d0d0;
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
 
   /* canvas area not covered by UI chrome (for scene HTML overlays: compass, scale bar, view controls, probe) */
-  --safe-top: calc(var(--gap) * 2 + var(--header-h));
-  --safe-right: calc(var(--panel-w) + var(--gap) * 2);
-  --safe-bottom: calc(var(--dock-h) + var(--gap) * 2);
+  --safe-top: calc(var(--bar-top) + var(--header-h) + var(--gap));
+  --safe-right: calc(var(--panel-w) + var(--edge) + var(--gap));
+  --safe-bottom: calc(var(--dock-h) + var(--edge) + var(--gap));
   --safe-left: var(--gap);
 
   /* stacking */
@@ -121,7 +135,6 @@
 
 @media (max-width: 1480px) {
   :root {
-    --panel-w: 336px;
     --keyevents-w: 248px;
   }
 }
@@ -156,15 +169,19 @@ body {
 }
 
 ::selection {
-  background: rgba(226, 190, 114, 0.3);
+  background: rgba(255, 122, 61, 0.3);
 }
 
+/* links as the screens: light grey, underlined (the map workspace has its own rule in map-bridge.css) */
 a {
-  color: var(--gold);
-  text-decoration: none;
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-color: rgba(224, 224, 224, 0.45);
+  text-underline-offset: 2px;
 }
 a:hover {
-  text-decoration: underline;
+  color: #ffffff;
+  text-decoration-color: currentColor;
 }
 
 button,
@@ -194,14 +211,14 @@ button:disabled {
 /* scrollbars */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(232, 214, 170, 0.18) transparent;
+  scrollbar-color: rgba(200, 200, 200, 0.2) transparent;
 }
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 *::-webkit-scrollbar-thumb {
-  background: rgba(232, 214, 170, 0.16);
+  background: rgba(200, 200, 200, 0.18);
   border-radius: 8px;
 }
 
@@ -310,23 +327,24 @@ button:disabled {
   opacity: 0.45;
 }
 .btn-gold {
-  border-color: rgba(226, 190, 114, 0.45);
+  border-color: rgba(255, 122, 61, 0.45);
   color: var(--gold);
   background: var(--gold-faint);
 }
 .btn-gold:hover:not(:disabled) {
-  background: rgba(226, 190, 114, 0.22);
-  border-color: rgba(226, 190, 114, 0.7);
+  background: rgba(255, 122, 61, 0.22);
+  border-color: rgba(255, 122, 61, 0.7);
   color: var(--gold-bright);
 }
+/* the accent button: orange with dark ink (the screens' play / active state) */
 .btn-solid {
   border-color: transparent;
-  color: #17130a;
-  background: linear-gradient(180deg, #ecca83, #d4ad5f);
+  color: var(--accent-ink);
+  background: var(--gold);
   font-weight: 600;
 }
 .btn-solid:hover:not(:disabled) {
-  background: linear-gradient(180deg, #f3d792, #ddb86b);
+  background: var(--accent-hover);
   border-color: transparent;
 }
 .btn-ghost {
@@ -367,32 +385,36 @@ button:disabled {
 }
 .chip-ok {
   color: var(--ok);
-  border-color: rgba(143, 191, 122, 0.4);
+  border-color: rgba(143, 211, 168, 0.4);
 }
 .chip-warn {
   color: var(--warn);
-  border-color: rgba(240, 163, 94, 0.4);
+  border-color: rgba(232, 176, 74, 0.4);
 }
 .chip-danger {
   color: var(--danger);
-  border-color: rgba(229, 72, 58, 0.45);
+  border-color: rgba(248, 113, 113, 0.45);
 }
 .chip-gold {
   color: var(--gold);
-  border-color: rgba(226, 190, 114, 0.4);
+  border-color: rgba(255, 122, 61, 0.4);
 }
 .chip-muted {
   color: var(--text-3);
   border-color: var(--hairline-soft);
 }
 
-/* gold-filled range sliders */
+/* filled range sliders: the accent in the map workspace, light grey in Forensic (the screen's layer sliders) */
+:root[data-workspace='forensic'] {
+  --range-fill: #cfcfcf;
+  --range-ring: transparent;
+}
 input[type='range'] {
   -webkit-appearance: none;
   appearance: none;
   height: 3px;
   border-radius: 2px;
-  background: linear-gradient(to right, var(--gold) 0 var(--fill, 50%), rgba(255, 255, 255, 0.12) var(--fill, 50%) 100%);
+  background: linear-gradient(to right, var(--range-fill, var(--gold)) 0 var(--fill, 50%), rgba(200, 200, 200, 0.2) var(--fill, 50%) 100%);
   outline: none;
   cursor: pointer;
 }
@@ -406,12 +428,12 @@ input[type='range']::-webkit-slider-thumb {
   height: 11px;
   border-radius: 50%;
   background: var(--text);
-  border: 2px solid var(--gold);
-  box-shadow: 0 0 0 3px rgba(226, 190, 114, 0);
+  border: 2px solid var(--range-ring, var(--gold));
+  box-shadow: 0 0 0 3px rgba(200, 200, 200, 0);
   transition: box-shadow 0.15s var(--ease);
 }
 input[type='range']:hover::-webkit-slider-thumb {
-  box-shadow: 0 0 0 3px rgba(226, 190, 114, 0.18);
+  box-shadow: 0 0 0 3px rgba(200, 200, 200, 0.2);
 }
 input[type='range']:disabled::-webkit-slider-thumb {
   border-color: var(--text-3);
@@ -422,10 +444,10 @@ input[type='range']::-moz-range-thumb {
   height: 9px;
   border-radius: 50%;
   background: var(--text);
-  border: 2px solid var(--gold);
+  border: 2px solid var(--range-ring, var(--gold));
 }
 
-/* tabs with a gold underline */
+/* tabs with an accent underline (2 px, no glow: the screens) */
 .tabs {
   display: flex;
   gap: 18px;
@@ -453,7 +475,6 @@ input[type='range']::-moz-range-thumb {
   height: 2px;
   background: var(--gold);
   border-radius: 2px;
-  box-shadow: 0 0 8px rgba(226, 190, 114, 0.45);
 }
 
 kbd {

@@ -2,14 +2,23 @@
 // 2D/3D toggle, exaggeration, quality, DOF, frame-fire and fullscreen controls, the probe readout near the cursor
 // (hybrid / parametric), the low-FPS quality suggestion and a loading veil. Dark glass, positioned inside the canvas
 // area not covered by app chrome (CSS --safe-*), which is also measured into sceneStore.viewInsets for the camera.
-import { Aperture, Crosshair, Maximize2, Minimize2, X } from 'lucide-react'
+// Brief 4 (H5, ForensicView.dc.html; decision f): grey glass; the compass is the screen's 60 px dial with an orange
+// north needle and "000° · 29°" under it; drag it around its centre to turn the view (ui/useCompassDrag.ts; a click is
+// still north up, ← → on it turn 15°), with ⟲ ⟳ buttons beside it. The view dock: scale, 2D / 3D in the accent, the
+// exaggeration and quality as "1.5× ▾" / "High ▾" (the same selects), depth of field, frame fire, full screen.
+import { Aperture, Crosshair, Maximize2, Minimize2, RotateCcw, RotateCw, X } from 'lucide-react'
 import { useEffect, useRef, useState, type RefObject } from 'react'
+import { headingLabel, isRotated } from '../../lib/compass'
 import { fmtNumber } from '../../lib/format'
 import { fuelInfo } from '../../lib/fuels'
 import { fmtAt, fmtTPlus } from '../../lib/time'
+import { ROTATE_STEP_DEG } from '../../state/rotation'
 import { useStore, type Quality } from '../../state/store'
 import { useTimeFormat } from '../../state/timeZone'
+import { useCompassDrag } from '../../ui/useCompassDrag'
 import { useAssetsError, useAssetsLoading } from '../assets'
+import { camState } from '../camera/cameraState'
+import { headingOfAzimuth } from '../camera/heading'
 import { useSceneStore } from '../sceneStore'
 import './overlays.css'
 
@@ -55,49 +64,51 @@ function SafeAreaProbe({ rootRef }: { rootRef: RefObject<HTMLDivElement | null> 
   return <div ref={ref} className="sc-safe-probe" aria-hidden />
 }
 
+/** ⟲ / ⟳: turn the view 15° left / right (as Q / E). */
+function TurnButton({ dir }: { dir: -1 | 1 }) {
+  const label = dir < 0 ? `Turn left ${ROTATE_STEP_DEG}° (Q)` : `Turn right ${ROTATE_STEP_DEG}° (E)`
+  return (
+    <button type="button" className="sc-icon-btn sc-turn-btn" aria-label={label} data-tip={label} onClick={() => useSceneStore.getState().issueCameraCommand('rotate', dir * ROTATE_STEP_DEG)}>
+      {dir < 0 ? <RotateCcw aria-hidden="true" /> : <RotateCw aria-hidden="true" />}
+    </button>
+  )
+}
+
+/** The compass: the needle points north on screen; drag it around to turn the view, click for north up. */
 function Compass() {
   const bearing = useSceneStore((s) => s.camera?.bearingDeg ?? 0)
   const polar = useSceneStore((s) => s.camera?.polarDeg ?? 0)
-  const issue = useSceneStore((s) => s.issueCameraCommand)
+  const { props, dragging } = useCompassDrag({
+    bearing: () => headingOfAzimuth(camState.azimuth),
+    setBearing: (deg) => useSceneStore.getState().issueCameraCommand('set-heading', deg),
+    northUp: () => useSceneStore.getState().issueCameraCommand('reset-north'),
+    rotateBy: (deg) => useSceneStore.getState().issueCameraCommand('rotate', deg),
+  })
+  const rotated = isRotated(bearing)
+  const heading = headingLabel(bearing)
+  const tilt = Math.round(90 - polar)
+  const label = rotated
+    ? `Compass, heading ${heading}, tilt ${tilt}°: click for north up, drag or press ← → to turn the view`
+    : `Compass, north is up, tilt ${tilt}°: drag or press ← → to turn the view`
+  const tip = rotated ? `Heading ${heading}. Click for north up; drag to turn (Q / E, N)` : 'North is up. Drag to turn the view (Q / E, N for north up)'
   return (
-    <>
-      <button
-        type="button"
-        className="sc-glass sc-compass"
-        title={`Heading ${Math.round(bearing)}° — click to face north`}
-        aria-label="Reset view to north"
-        onClick={() => issue('reset-north')}
-      >
-        <svg viewBox="-24 -24 48 48" style={{ transform: `rotate(${-bearing}deg)` }} aria-hidden>
-          <circle r="20.5" fill="none" stroke="rgba(232,214,170,0.16)" strokeWidth="1" />
-          {Array.from({ length: 24 }, (_, i) => {
-            const a = (i * 15 * Math.PI) / 180
-            const major = i % 6 === 0
-            const r0 = major ? 16.5 : 18.5
-            return (
-              <line
-                key={i}
-                x1={Math.sin(a) * r0}
-                y1={-Math.cos(a) * r0}
-                x2={Math.sin(a) * 20.5}
-                y2={-Math.cos(a) * 20.5}
-                stroke={major ? 'rgba(232,214,170,0.55)' : 'rgba(232,214,170,0.2)'}
-                strokeWidth={major ? 1.1 : 0.8}
-              />
-            )
-          })}
-          <path d="M0 -15 L4.2 0 L0 -2.2 L-4.2 0 Z" fill="#E8C77E" />
-          <path d="M0 15 L4.2 0 L0 2.2 L-4.2 0 Z" fill="rgba(236,230,214,0.28)" />
-          <circle r="1.6" fill="#0b120e" stroke="#E8C77E" strokeWidth="0.8" />
-          <text x="0" y="-8.6" textAnchor="middle" fontSize="5.4" fontFamily="JetBrains Mono, monospace" fontWeight="600" fill="#0b120e" transform="translate(0 0)">
-            N
-          </text>
-        </svg>
-      </button>
-      <div className="sc-compass-tilt" aria-hidden>
-        {Math.round(bearing).toString().padStart(3, '0')}° · {Math.round(90 - polar)}°
+    <div className="sc-compass-wrap">
+      <div className="sc-compass-row">
+        <button type="button" className={`sc-glass sc-compass${dragging ? ' is-dragging' : ''}`} aria-label={label} data-tip={dragging ? undefined : tip} {...props}>
+          <svg width="18" height="26" viewBox="0 0 14 20" style={{ transform: `rotate(${-bearing}deg)` }} aria-hidden="true">
+            <path d="M7 1 L11 10 L3 10 Z" className="sc-needle-n" />
+            <path d="M7 19 L11 10 L3 10 Z" className="sc-needle-s" />
+          </svg>
+        </button>
+        <div className="sc-glass sc-turn" role="group" aria-label="Turn the view">
+          <TurnButton dir={-1} />
+          <TurnButton dir={1} />
+        </div>
       </div>
-    </>
+      <div className="sc-compass-tilt" aria-hidden>
+        {heading} · {tilt}°
+      </div>
+    </div>
   )
 }
 

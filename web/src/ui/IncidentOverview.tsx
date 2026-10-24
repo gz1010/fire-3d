@@ -1,5 +1,6 @@
 // Incident Overview card (SPEC 9.4): name, incident ID, location, start, end / containment, total acres, cause and
-// analysis status. The agencies' feeds give no cause field, so "Cause" shows a value only when the summary carries one.
+// analysis status. Brief 4 (H5, ForensicView.dc.html): starts collapsed to its one-line head with the agency link
+// (the user's choice to open it is remembered, storageKey "overview"). The agencies' feeds give no cause field, so "Cause" shows a value only when the summary carries one.
 import { ExternalLink } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import type { IncidentManifest, IncidentSummary, JobStatus } from '../api/types'
@@ -81,11 +82,11 @@ export function IncidentOverview() {
       title="Incident Overview"
       collapsible
       storageKey="overview"
-      defaultOpen={typeof window === 'undefined' || window.innerHeight >= 960}
+      defaultOpen={false}
       aside={
         summary.url ? (
           <a className="card-link" href={summary.url} target="_blank" rel="noreferrer" data-tip={`Open the ${issuer} incident record`}>
-            {wfigs ? 'NIFC WFIGS' : 'CAL FIRE'} <ExternalLink size={11} />
+            {wfigs ? 'NIFC WFIGS' : 'CAL FIRE'} <ExternalLink size={11} aria-hidden="true" />
           </a>
         ) : undefined
       }

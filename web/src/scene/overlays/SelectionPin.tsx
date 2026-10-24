@@ -1,5 +1,6 @@
 // Selected point in the 3D scene (brief 2 O-R7; owner: shell): the map's shared selection (useWorkspace.selection:
-// a searched address, pasted coordinates, a clicked point) drawn as a cyan pin standing on the terrain, so the point
+// a searched address, pasted coordinates, a clicked point) drawn as a light-blue pin standing on the terrain (brief 4:
+// the handoff's selected-point colour #9fd6ff, as on the map), so the point
 // the location card describes is visible in Forensic too. A click on the terrain sets the selection (ProbeDriver).
 // Constant on-screen size; drawn over the terrain (a ridge never hides it); nothing outside the modeled area, where
 // the scene has no terrain.
@@ -13,8 +14,8 @@ import type { IncidentAssets } from '../assets'
 
 /** The pin's height (world units at a camera distance of 1): ~7 % of the view height at the scene's 35 deg fov. */
 const SIZE = 0.045
-const CYAN = new THREE.Color('#22d3ee')
-const CYAN_STRONG = new THREE.Color('#67e8f9')
+const CYAN = new THREE.Color('#9fd6ff')
+const CYAN_STRONG = new THREE.Color('#cfeaff')
 
 export function SelectionPin({ assets }: { assets: IncidentAssets }) {
   const sel = useWorkspace((s) => s.selection)

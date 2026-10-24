@@ -120,7 +120,16 @@
   pointer-events: none;
 }
 .mw[data-view='overview'] .ovw-note > .fxc {
-  /* text on the bottom gradient (no chip), the bar's halo for bright map areas */
+  /* text on the bottom gradient (no chip, as Main.dc.html), the bar's halo for bright map areas */
+  display: block;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  overflow: visible;
+  white-space: normal;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--m-text-2b);
   text-shadow:
     0 0 3px rgba(12, 12, 12, 0.95),
     0 0 8px rgba(12, 12, 12, 0.9),

@@ -86,9 +86,14 @@ export interface ScanSweep {
   radius: number
 }
 
-export type CameraCommandKind = 'reset-north' | 'frame-fire' | 'zoom-in' | 'zoom-out'
+/** One-shot camera commands. Brief 4 (decision f): 'rotate' turns the heading by `deg` (clockwise positive; Q / E,
+ *  the ⟲ ⟳ buttons, ← → on the compass), 'set-heading' sets it to `deg` at once (compass drag, Safari and touch
+ *  twists); 'reset-north' is heading 0 (N, a compass click). Both work in 2D and 3D. */
+export type CameraCommandKind = 'reset-north' | 'frame-fire' | 'zoom-in' | 'zoom-out' | 'rotate' | 'set-heading'
 export interface CameraCommand {
   kind: CameraCommandKind
+  /** 'rotate': degrees to turn; 'set-heading': the compass heading in degrees. */
+  deg?: number
   nonce: number
 }
 
@@ -121,9 +126,9 @@ export interface SceneState {
   /** Addition: screen insets hidden by UI panels (CSS px). */
   viewInsets: ViewInsets
   setViewInsets: (v: ViewInsets) => void
-  /** Addition: one-shot camera commands (compass click, frame fire, zoom buttons). */
+  /** Addition: one-shot camera commands (compass click and drag, turn buttons, frame fire, zoom buttons). */
   cameraCommand: CameraCommand | null
-  issueCameraCommand: (kind: CameraCommandKind) => void
+  issueCameraCommand: (kind: CameraCommandKind, deg?: number) => void
   /** Addition: true while the user drags/orbits the camera (overlays hide the probe). */
   interacting: boolean
   setInteracting: (v: boolean) => void
@@ -160,7 +165,8 @@ export const useSceneStore = create<SceneState>()((set) => ({
         : { viewInsets: v },
     ),
   cameraCommand: null,
-  issueCameraCommand: (kind) => set((s) => ({ cameraCommand: { kind, nonce: (s.cameraCommand?.nonce ?? 0) + 1 } })),
+  issueCameraCommand: (kind, deg) =>
+    set((s) => ({ cameraCommand: { kind, ...(deg != null && Number.isFinite(deg) ? { deg } : {}), nonce: (s.cameraCommand?.nonce ?? 0) + 1 } })),
   interacting: false,
   setInteracting: (interacting) => set({ interacting }),
   sweep: null,

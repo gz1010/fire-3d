@@ -1,5 +1,7 @@
 // Right column (SPEC 9.4): tabbed panel (Layers / Analysis / Evidence / Notes, or the aircraft list when the
-// header's "Aircraft" tab is active), the Incident Overview card and the Weather & Fire Behavior card.
+// header's "Aircraft" tab is active), the Incident Overview card and the Weather & Fire Behavior card. Brief 4 (H5):
+// 336 px, 16 px from the edges, tabs with an accent underline; the disclaimer moved to the pill above the timeline
+// (ui/shell/ForensicWorkspace.tsx FixedCopy).
 import type { Ref } from 'react'
 import { useStore, type RightTab } from '../state/store'
 import { AircraftPanel } from './AircraftPanel'
@@ -53,7 +55,6 @@ export function RightPanel({ panelRef }: { panelRef?: Ref<HTMLDivElement> }) {
       </section>
       <IncidentOverview />
       <WeatherCard />
-      <p className="rcol-foot">Research prototype — not for operational use</p>
     </aside>
   )
 }

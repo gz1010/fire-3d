@@ -1,4 +1,5 @@
-/* Overlays (SPEC 9.4): status cards, banners, forecast pill, toasts. */
+/* Overlays (SPEC 9.4): status cards, banners, forecast pill, toasts. Brief 4 (H5): grey glass, the orange accent for
+   progress (no gold). */
 
 .ov-card {
   position: relative;
@@ -7,7 +8,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: rgba(9, 14, 11, 0.82);
+  background: rgba(14, 14, 14, 0.82);
   animation: ov-in 0.25s var(--ease);
 }
 @keyframes ov-in {
@@ -74,7 +75,7 @@
   color: var(--ok);
 }
 .build-steps li.is-current {
-  border-color: rgba(226, 190, 114, 0.5);
+  border-color: rgba(255, 122, 61, 0.5);
   color: var(--gold-bright);
   background: var(--gold-ghost);
 }
@@ -197,10 +198,10 @@
 }
 .fc-pill.is-build,
 .fc-pill.is-refresh {
-  border-color: rgba(226, 190, 114, 0.35);
+  border-color: rgba(255, 122, 61, 0.35);
 }
 .fc-pill.is-build .fc-pill-bar i,
 .fc-pill.is-refresh .fc-pill-bar i {
-  background: linear-gradient(90deg, var(--lattice-falloff), var(--gold-bright));
-  box-shadow: 0 0 8px rgba(226, 190, 114, 0.7);
+  background: linear-gradient(90deg, var(--gold-dim), var(--gold));
+  box-shadow: none;
 }

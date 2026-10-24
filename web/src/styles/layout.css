@@ -1,4 +1,6 @@
-/* App shell layout (SPEC 9.4): full-bleed canvas, floating glass header / right column / bottom dock. */
+/* App shell layout (SPEC 9.4; brief 4 H5, ForensicView.dc.html): full-bleed canvas, the floating top bar (no panel of
+   its own, top 20 / sides 20), the right column (336 px, 16 px from the edges, top 76) and the bottom dock (left 16,
+   right 368, bottom 16; 112 px with the timeline only). */
 
 .app {
   position: fixed;
@@ -24,7 +26,7 @@
   display: grid;
   place-items: center;
   background:
-    radial-gradient(circle at 1px 1px, rgba(226, 190, 114, 0.09) 1px, transparent 1.4px) 0 0 / 22px 22px,
+    radial-gradient(circle at 1px 1px, rgba(200, 200, 200, 0.08) 1px, transparent 1.4px) 0 0 / 22px 22px,
     var(--bg-gradient);
   color: var(--text-3);
   font-size: var(--fs-sm);
@@ -32,9 +34,9 @@
 
 .app-header {
   position: absolute;
-  top: var(--gap);
-  left: var(--gap);
-  right: var(--gap);
+  top: var(--bar-top);
+  left: 20px;
+  right: 20px;
   height: var(--header-h);
   z-index: var(--z-header);
   pointer-events: none;
@@ -49,9 +51,9 @@
 
 .rcol {
   position: absolute;
-  top: calc(var(--gap) * 2 + var(--header-h));
-  right: var(--gap);
-  bottom: var(--gap);
+  top: calc(var(--bar-top) + var(--header-h) + var(--edge));
+  right: var(--edge);
+  bottom: var(--edge);
   width: var(--panel-w);
   z-index: var(--z-panels);
   display: flex;
@@ -62,9 +64,9 @@
 
 .dock {
   position: absolute;
-  left: var(--gap);
-  right: calc(var(--panel-w) + var(--gap) * 2);
-  bottom: var(--gap);
+  left: var(--edge);
+  right: calc(var(--panel-w) + var(--edge) * 2);
+  bottom: var(--edge);
   height: var(--dock-h);
   z-index: var(--z-panels);
 }
@@ -130,7 +132,7 @@
 }
 .dot-ok {
   background: var(--ok);
-  box-shadow: 0 0 6px rgba(143, 191, 122, 0.55);
+  box-shadow: 0 0 6px rgba(143, 211, 168, 0.5);
 }
 .dot-danger {
   background: var(--danger);

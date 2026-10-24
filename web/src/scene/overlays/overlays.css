@@ -1,11 +1,12 @@
-/* Scene HTML overlays (SPEC 9.3 / 9.5): dark glass, gold accents, monospace numbers.
+/* Scene HTML overlays (SPEC 9.3 / 9.5): dark glass, monospace numbers. Brief 4 (H5, ForensicView.dc.html): grey glass
+   and the orange UI accent (the 3D scene itself keeps its gold graphics and green terrain).
    Positioned inside the canvas area not covered by app chrome (--safe-top/right/bottom/left from theme.css). */
 
 .sc-root {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background: var(--bg-0, #060a08);
+  background: var(--bg-0, #0c0c0c);
 }
 
 .sc-canvas {
@@ -19,7 +20,7 @@
   pointer-events: none;
   z-index: var(--z-scene-ui, 5);
   font-family: var(--font-ui);
-  color: var(--text, #ece6d6);
+  color: var(--text, #f0f0f0);
 }
 
 .sc-safe-probe {
@@ -33,58 +34,105 @@
 }
 
 .sc-glass {
-  background: var(--glass, rgba(9, 14, 11, 0.72));
-  -webkit-backdrop-filter: var(--glass-blur, blur(14px) saturate(120%));
-  backdrop-filter: var(--glass-blur, blur(14px) saturate(120%));
-  border: 1px solid var(--hairline, rgba(232, 214, 170, 0.12));
-  border-radius: var(--radius, 10px);
-  box-shadow: var(--shadow, 0 10px 34px rgba(0, 0, 0, 0.45));
+  background: rgba(14, 14, 14, 0.6);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(200, 200, 200, 0.16);
+  border-radius: 12px;
+  box-shadow: none;
 }
 
 /* ------------------------------------------------------------------ compass */
-.sc-compass {
+/* the screen's dial (60 px grey glass, orange north needle) at left 20 / top 80, "000° · 29°" under it, ⟲ ⟳ beside */
+.sc-compass-wrap {
   position: absolute;
-  top: calc(var(--safe-top, 12px) + 4px);
-  left: calc(var(--safe-left, 12px) + 4px);
-  width: 52px;
-  height: 52px;
+  top: calc(var(--safe-top, 12px) + 8px);
+  left: calc(var(--safe-left, 12px) + 8px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  pointer-events: none;
+}
+.sc-compass-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sc-compass {
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
   pointer-events: auto;
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
   display: grid;
   place-items: center;
   padding: 0;
+  background: rgba(14, 14, 14, 0.6);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  border-color: rgba(200, 200, 200, 0.18);
+  box-shadow: none;
   transition: border-color 0.15s var(--ease), background 0.15s var(--ease);
 }
 .sc-compass:hover {
-  border-color: var(--hairline-strong, rgba(232, 214, 170, 0.22));
-  background: rgba(14, 21, 17, 0.82);
+  border-color: var(--hairline-strong, rgba(200, 200, 200, 0.28));
+  background: rgba(40, 40, 40, 0.78);
+}
+.sc-compass.is-dragging {
+  cursor: grabbing;
+}
+.sc-compass:focus-visible {
+  outline: 2px solid var(--gold, #ff7a3d);
+  outline-offset: 2px;
+  box-shadow: none;
 }
 .sc-compass svg {
-  width: 46px;
-  height: 46px;
   display: block;
   transition: transform 0.08s linear;
 }
+.sc-needle-n {
+  fill: #ff7a3d;
+}
+.sc-needle-s {
+  fill: #9a9a9a;
+}
 .sc-compass-tilt {
-  position: absolute;
-  top: calc(var(--safe-top, 12px) + 60px);
-  left: calc(var(--safe-left, 12px) + 4px);
-  width: 52px;
-  text-align: center;
-  font: 500 9.5px/1 var(--font-mono);
-  letter-spacing: 0.04em;
-  color: var(--text-3, #6b7468);
+  padding-left: 4px;
+  font: 400 10px/1 var(--font-mono);
+  color: var(--text-3, #9a9a9a);
   font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 4px rgba(12, 12, 12, 0.9);
+  white-space: nowrap;
+}
+/* ⟲ ⟳ (turn 15°) */
+.sc-turn {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  pointer-events: auto;
+  background: rgba(14, 14, 14, 0.6);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  border-color: rgba(200, 200, 200, 0.18);
+  box-shadow: none;
+}
+.sc-turn .sc-turn-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
 }
 
 /* ------------------------------------------------------------------ bottom-right cluster */
 .sc-dock {
   position: absolute;
   right: calc(var(--safe-right, 12px) + 4px);
-  bottom: calc(var(--safe-bottom, 12px) + 4px);
+  bottom: var(--safe-bottom, 12px);
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 8px;
   pointer-events: none;
 }
@@ -95,16 +143,18 @@
 .sc-scale {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   align-items: stretch;
   gap: 3px;
-  padding: 6px 10px 7px;
+  height: 40px;
+  padding: 6px 12px;
   min-width: 96px;
 }
 .sc-scale-labels {
   position: relative;
   height: 11px;
-  font: 500 9.5px/11px var(--font-mono);
-  color: var(--text-2, #9ba394);
+  font: 400 9.5px/11px var(--font-mono);
+  color: var(--text-2, #bdbdbd);
   font-variant-numeric: tabular-nums;
 }
 .sc-scale-labels span {
@@ -121,18 +171,18 @@
 }
 .sc-scale-bar {
   position: relative;
-  height: 6px;
-  border-left: 1px solid var(--gold, #e2be72);
-  border-right: 1px solid var(--gold, #e2be72);
-  border-bottom: 1px solid var(--gold, #e2be72);
+  height: 4px;
+  border-left: 1.2px solid #cfcfcf;
+  border-right: 1.2px solid #cfcfcf;
+  border-bottom: 1.2px solid #cfcfcf;
 }
 .sc-scale-bar::after {
   content: '';
   position: absolute;
   left: 50%;
   bottom: 0;
-  height: 4px;
-  border-left: 1px solid var(--gold-dim, rgba(226, 190, 114, 0.55));
+  height: 3px;
+  border-left: 1px solid rgba(207, 207, 207, 0.55);
 }
 
 .sc-group {
@@ -140,43 +190,49 @@
   align-items: center;
   gap: 2px;
   padding: 3px;
-  height: 36px;
+  height: 40px;
 }
 .sc-seg {
-  height: 28px;
-  min-width: 34px;
-  padding: 0 9px;
-  border-radius: var(--radius-sm, 6px);
-  font: 600 11.5px/1 var(--font-ui);
-  letter-spacing: 0.02em;
-  color: var(--text-2, #9ba394);
+  height: 32px;
+  min-width: 36px;
+  padding: 0 12px;
+  border-radius: 9px;
+  font: 600 13px/1 var(--font-ui);
+  color: var(--text-2, #cfcfcf);
   transition: background 0.15s var(--ease), color 0.15s var(--ease);
 }
 .sc-seg:hover {
-  color: var(--text, #ece6d6);
-  background: var(--surface-2, rgba(255, 255, 255, 0.045));
+  color: var(--text, #f0f0f0);
+  background: var(--surface-2, rgba(255, 255, 255, 0.05));
 }
+/* 2D / 3D: the selected one in the accent with dark ink */
 .sc-seg[aria-pressed='true'] {
-  color: #17130a;
-  background: linear-gradient(180deg, #ecca83, #d4ad5f);
+  color: var(--accent-ink, #1a0a03);
+  background: var(--gold, #ff7a3d);
 }
 
 .sc-icon-btn {
-  width: 30px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
-  border-radius: var(--radius-sm, 6px);
-  color: var(--text-2, #9ba394);
+  border-radius: 9px;
+  color: var(--text-body, #e6e6e6);
   transition: background 0.15s var(--ease), color 0.15s var(--ease);
 }
 .sc-icon-btn:hover {
-  color: var(--text, #ece6d6);
-  background: var(--surface-2, rgba(255, 255, 255, 0.045));
+  color: var(--text, #f0f0f0);
+  background: var(--surface-2, rgba(255, 255, 255, 0.05));
 }
 .sc-icon-btn[aria-pressed='true'] {
-  color: var(--gold, #e2be72);
-  background: var(--gold-faint, rgba(226, 190, 114, 0.14));
+  color: var(--text, #f0f0f0);
+  background: rgba(240, 240, 240, 0.12);
+}
+.sc-icon-btn:focus-visible,
+.sc-seg:focus-visible {
+  outline: 2px solid var(--gold, #ff7a3d);
+  outline-offset: 1px;
+  box-shadow: none;
 }
 .sc-icon-btn svg {
   width: 15px;
@@ -188,55 +244,55 @@
   display: inline-flex;
   align-items: center;
 }
+/* the exaggeration and quality selects as the screen's "1.5× ▾" / "High ▾" text buttons */
 .sc-select select {
   -webkit-appearance: none;
   appearance: none;
-  height: 28px;
-  padding: 0 22px 0 9px;
-  border-radius: var(--radius-sm, 6px);
+  height: 32px;
+  padding: 0 22px 0 10px;
+  border-radius: 9px;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--text, #ece6d6);
-  font: 500 11.5px/1 var(--font-mono);
+  color: var(--text-body, #e6e6e6);
+  font: 400 12px/1 var(--font-mono);
   font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
 .sc-select select:hover {
-  background: var(--surface-2, rgba(255, 255, 255, 0.045));
+  background: var(--surface-2, rgba(255, 255, 255, 0.05));
 }
 .sc-select select:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
+  outline: 2px solid var(--gold, #ff7a3d);
+  outline-offset: 1px;
+  box-shadow: none;
 }
 .sc-select option {
-  background: #121a15;
-  color: var(--text, #ece6d6);
+  background: #161616;
+  color: var(--text, #f0f0f0);
 }
 .sc-select::after {
   content: '';
   position: absolute;
-  right: 9px;
+  right: 10px;
   top: 50%;
-  width: 5px;
-  height: 5px;
-  margin-top: -4px;
-  border-right: 1.5px solid var(--text-3, #6b7468);
-  border-bottom: 1.5px solid var(--text-3, #6b7468);
-  transform: rotate(45deg);
+  margin-top: -2px;
+  border-left: 3.5px solid transparent;
+  border-right: 3.5px solid transparent;
+  border-top: 4px solid var(--text-body, #e6e6e6);
   pointer-events: none;
 }
 .sc-select-label {
   font: 600 9px/1 var(--font-ui);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--text-3, #6b7468);
+  color: var(--text-3, #9a9a9a);
   padding-left: 7px;
 }
 .sc-sep {
   width: 1px;
   height: 18px;
-  background: var(--hairline, rgba(232, 214, 170, 0.12));
-  margin: 0 3px;
+  background: rgba(200, 200, 200, 0.18);
+  margin: 0 2px;
 }
 
 /* ------------------------------------------------------------------ probe readout */
@@ -249,14 +305,15 @@
   padding: 8px 10px 8px;
   font: 400 10.5px/1.55 var(--font-mono);
   font-variant-numeric: tabular-nums;
-  color: var(--text, #ece6d6);
+  color: var(--text, #f0f0f0);
   pointer-events: none;
   will-change: transform;
-  border-color: rgba(226, 190, 114, 0.2);
-  background: rgba(7, 11, 9, 0.78);
+  border-color: rgba(200, 200, 200, 0.2);
+  border-radius: 10px;
+  background: rgba(12, 12, 12, 0.8);
 }
 .sc-probe-coord {
-  color: var(--gold, #e2be72);
+  color: var(--text, #f0f0f0);
   font-weight: 500;
   letter-spacing: 0.01em;
   margin-bottom: 3px;
@@ -268,7 +325,7 @@
   white-space: nowrap;
 }
 .sc-probe-row > span:first-child {
-  color: var(--text-3, #6b7468);
+  color: var(--text-3, #9a9a9a);
   letter-spacing: 0.06em;
 }
 .sc-probe-row > span:last-child {
@@ -276,7 +333,7 @@
   text-overflow: ellipsis;
 }
 .sc-probe-fuel {
-  color: var(--text-2, #9ba394);
+  color: var(--text-2, #bdbdbd);
   font-size: 10px;
   white-space: nowrap;
   overflow: hidden;
@@ -287,7 +344,7 @@
   color: var(--fire-mid, #ffb347);
 }
 .sc-dim {
-  color: var(--text-3, #6b7468);
+  color: var(--text-3, #9a9a9a);
 }
 
 /* ------------------------------------------------------------------ toasts / loading */
@@ -300,11 +357,11 @@
   gap: 10px;
   padding: 8px 10px 8px 12px;
   font-size: var(--fs-sm, 12px);
-  color: var(--text-2, #9ba394);
+  color: var(--text-2, #bdbdbd);
   pointer-events: auto;
 }
 .sc-toast b {
-  color: var(--text, #ece6d6);
+  color: var(--text, #f0f0f0);
   font-weight: 500;
 }
 .sc-toast-btn {
@@ -313,16 +370,16 @@
   border-radius: var(--radius-sm, 6px);
   font-size: var(--fs-xs, 11px);
   font-weight: 600;
-  color: #17130a;
-  background: linear-gradient(180deg, #ecca83, #d4ad5f);
+  color: var(--accent-ink, #1a0a03);
+  background: var(--gold, #ff7a3d);
 }
 .sc-toast-x {
-  color: var(--text-3, #6b7468);
+  color: var(--text-3, #9a9a9a);
   display: grid;
   place-items: center;
 }
 .sc-toast-x:hover {
-  color: var(--text, #ece6d6);
+  color: var(--text, #f0f0f0);
 }
 
 .sc-loading {
@@ -337,14 +394,14 @@
   font: 500 10.5px/1 var(--font-mono);
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--gold, #e2be72);
-  opacity: 0.85;
+  color: var(--text-2, #bdbdbd);
+  opacity: 0.9;
 }
 .sc-loading-bar {
   position: relative;
   width: 160px;
   height: 1px;
-  background: rgba(226, 190, 114, 0.18);
+  background: rgba(200, 200, 200, 0.18);
   overflow: hidden;
 }
 .sc-loading-bar::after {
@@ -354,11 +411,11 @@
   left: -40%;
   width: 40%;
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--gold-bright, #f3d792), transparent);
+  background: linear-gradient(90deg, transparent, var(--gold, #ff7a3d), transparent);
   animation: sc-scan 1.4s var(--ease, ease) infinite;
 }
 .sc-loading-err {
-  color: var(--warn, #f0a35e);
+  color: var(--warn, #e8b04a);
   text-transform: none;
   letter-spacing: 0;
   font-family: var(--font-ui);
@@ -372,12 +429,47 @@
     left: 100%;
   }
 }
+/* phones: a smaller dial (the view pill's row is to its right); the view dock keeps 2D / 3D, depth of field, frame and
+   full screen (the exaggeration and quality are also in the bar's "View options" menu) */
+@media (max-width: 760px) {
+  .sc-compass {
+    width: 48px;
+    height: 48px;
+  }
+  .sc-compass svg {
+    width: 15px;
+    height: 22px;
+  }
+  .sc-turn .sc-turn-btn {
+    width: 28px;
+    height: 28px;
+  }
+  .sc-dock {
+    gap: 6px;
+  }
+  .sc-dock .sc-select,
+  .sc-dock .sc-select + .sc-sep {
+    display: none;
+  }
+  .sc-scale {
+    min-width: 0;
+    padding: 6px 8px;
+  }
+  .sc-seg {
+    min-width: 34px;
+    padding: 0 9px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .sc-loading-bar::after {
     animation: none;
     left: 30%;
   }
-  .sc-compass svg {
+  .sc-compass svg,
+  .sc-compass,
+  .sc-seg,
+  .sc-icon-btn {
     transition: none;
   }
 }

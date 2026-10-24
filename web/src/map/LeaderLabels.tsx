@@ -6,7 +6,8 @@
 // inside a group). Two lines (the name in Inter 12/600, the acres in mono 10), a 0.9 px leader; placed by the pure,
 // greedy map/leaderLayout.ts inside the free map (the safe area), off the chrome, the other markers and groups, each
 // other and the selected point's label. Recomputed when the map settles, the window or the chrome changes, or the fire
-// lists change; during a pan or a turn the labels follow their markers (one projection each per frame); hidden while
+// lists change (once the map is idle with them), never on the map's own idle otherwise (that would feed back); during a
+// pan or a turn the labels follow their markers (one projection each per frame); hidden while
 // zooming and from z5, where the map's own labels take over (with no collisions to manage). The map leaves out its
 // own labels of the fires named here, and of the smaller ones past the 12th (they would run across the leaders); a fire
 // among the 12 largest that found no free spot keeps its own label (useMapRuntime.leaderIds → overviewLayers
@@ -67,6 +68,15 @@ function chromeRects(host: DOMRect): Rect[] {
     out.push({ left: r.left - host.left, top: r.top - host.top, right: r.right - host.left, bottom: r.bottom - host.top })
   })
   return out
+}
+
+/** Where MapLibre first puts a fire's own label (overviewLayers LABEL_ANCHORS: under the marker, centred; Noto Sans
+ *  12 px "Name · 9,575 ac"), estimated. */
+function mapLabelBox(c: LeaderItem & { name: string; acres: number }, units: 'us' | 'metric'): Rect {
+  const text = `${c.name} · ${Math.round(units === 'metric' ? c.acres * 0.40468564224 : c.acres).toLocaleString('en-US')} ${units === 'metric' ? 'ha' : 'ac'}`
+  const w = textWidth(text, '400 12px "Noto Sans", sans-serif') + 8
+  const top = c.at.y + c.r + 4
+  return { left: c.at.x - w / 2, top, right: c.at.x + w / 2, bottom: top + 18 }
 }
 
 interface Layout {
@@ -138,13 +148,26 @@ function computeSpots(map: MapLibreMap, insets: { top: number; right: number; bo
   const byId = new Map(candidates.map((x) => [x.id, x]))
   // a phone's national view holds the lower 48 in a few hundred pixels: fewer names
   const max = c.clientWidth < NARROW_MAP_PX ? NARROW_LEADER_MAX : LEADER_MAX
-  const placed = layoutLeaders(candidates, { free, obstacles, circles, max })
+  let placed = layoutLeaders(candidates, { free, obstacles, circles, max })
+  // the fires among the largest that found no spot keep the map's own label ("Name · 9,575 ac", MapLibre's first
+  // place: centred under the marker): a second pass keeps the named ones off those labels
+  const cut = placed.length >= max ? candidates.findIndex((c) => c.id === placed[placed.length - 1].id) : candidates.length
+  const shown = new Set(placed.map((p) => p.id))
+  const unplaced = candidates.slice(0, cut + 1).filter((c) => !shown.has(c.id) && c.at.x >= free.left && c.at.x <= free.right && c.at.y >= free.top && c.at.y <= free.bottom)
+  if (unplaced.length) {
+    const own = unplaced.map((c) => mapLabelBox(c, units))
+    const skip = new Set(unplaced.map((c) => c.id))
+    placed = layoutLeaders(
+      candidates.filter((c) => !skip.has(c.id)),
+      { free, obstacles: [...obstacles, ...own], circles, max },
+    )
+  }
   const spots = placed.map((s) => {
     const x = byId.get(s.id)!
     return { ...s, name: x.name, meta: leaderAcres(x.acres, units), lngLat: x.lngLat }
   })
   // past the cap: every candidate after the last one named (the ones before it that found no spot keep their labels)
-  const last = placed.length >= max ? candidates.findIndex((c) => c.id === placed[placed.length - 1].id) : candidates.length
+  const last = placed.length >= max ? Math.max(cut, candidates.findIndex((c) => c.id === placed[placed.length - 1].id)) : candidates.length
   const quiet = candidates.slice(last + 1).map((c) => c.id)
   return { spots, quiet }
 }
@@ -195,19 +218,28 @@ export function LeaderLabels() {
       zooming = false
       schedule()
     }
+    // new marker data (the lists, the filter, the units) is placed on the next render: lay out once the map is idle
+    // again. Only then: an 'idle' after our own label filter changes would feed back (the basemap's place names come and
+    // go with the fires' own labels) and the layout would never settle.
+    let afterData = true
     const onData = (e: { sourceId?: string; isSourceLoaded?: boolean }) => {
-      if (e.sourceId?.startsWith('fx-overview-') && e.isSourceLoaded) schedule()
+      if (e.sourceId?.startsWith('fx-overview-') && e.isSourceLoaded) afterData = true
+    }
+    const onIdle = () => {
+      if (!afterData) return
+      afterData = false
+      schedule()
     }
     map.on('zoomstart', onZoomStart)
     map.on('moveend', onMoveEnd)
-    map.on('idle', schedule)
+    map.on('idle', onIdle)
     map.on('sourcedata', onData)
     window.addEventListener('resize', schedule)
     schedule()
     return () => {
       map.off('zoomstart', onZoomStart)
       map.off('moveend', onMoveEnd)
-      map.off('idle', schedule)
+      map.off('idle', onIdle)
       map.off('sourcedata', onData)
       window.removeEventListener('resize', schedule)
       if (raf) cancelAnimationFrame(raf)

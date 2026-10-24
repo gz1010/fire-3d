@@ -788,7 +788,7 @@ const ProfilePlot = memo(function ProfilePlot({ samples, manifest, w, h }: { sam
             <stop offset="1" stopColor="var(--chart-terrain)" stopOpacity="0.03" />
           </linearGradient>
           <pattern id="prof-hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-            <line x1="0" y1="0" x2="0" y2="5" stroke="rgba(255,138,76,0.55)" strokeWidth="1.4" />
+            <line x1="0" y1="0" x2="0" y2="5" stroke="rgba(245,192,96,0.6)" strokeWidth="1.4" />
           </pattern>
         </defs>
         <g className="ax ax-y">

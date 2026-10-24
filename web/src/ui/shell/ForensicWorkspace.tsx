@@ -6,6 +6,10 @@
 // Brief 2 (O-R1, O-R7, decision 10): with no fire focused (the California overview) it says "Zoom in on a fire or pick
 // one" and offers the fire list instead of an empty scene. A map-first entry: desktop opens with a timeline-only dock
 // (charts and Key Events one click away) and a labelled "Frame fire"; phones open with the panel sheet collapsed.
+// Brief 4 (H5, ForensicView.dc.html): the header is the floating top bar with the view pill in its centre (the floating
+// "View" switch is gone); "Frame fire" and "Charts & key events" sit directly under the scene's compass (left 20), the
+// demo badge under them; the disclaimer is a glass pill above the timeline (prototype line + "Not an all-clear"); a
+// 120 px top gradient keeps the bar readable over the terrain (no vignette and no tint in Forensic).
 import { BarChart3, Crosshair, Map as MapIcon, PanelBottomClose, PanelBottomOpen } from 'lucide-react'
 import { lazy, Suspense, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import type { IncidentSummary } from '../../api/types'
@@ -13,16 +17,17 @@ import { useSceneStore } from '../../scene/sceneStore'
 import { useStore } from '../../state/store'
 import { isDemoBundle, useWorkspace } from '../../state/workspace'
 import { BottomDock } from '../BottomDock'
-import { Header, Logo } from '../Header'
+import { Header } from '../Header'
 import { ErrorBanner, ForecastPill, NoLiveNotice, SceneBoundary, StatusOverlay, Toasts } from '../Overlays'
 import { RightPanel } from '../RightPanel'
 import { TooltipLayer } from '../Tooltip'
 import { FireCard } from './FireCard'
+import { FixedCopy } from './FixedCopy'
 import { NARROW_QUERY, useMediaQuery } from './hooks'
 import { switchWorkspace } from './handoff'
 import { parseDockSide, safeInsetsFor, type ChromeRect, type DockSide } from './layout'
 import { OverviewList } from './OverviewPanel'
-import { ViewSwitch } from './WorkspaceSwitch'
+import { BackButton, TopBar, TopBarBrand, ViewPill } from './TopBar'
 import '../../styles/forensic-narrow.css'
 import '../../styles/forensic-entry.css'
 
@@ -74,14 +79,19 @@ function OpenFireFirst() {
   const hasCard = useWorkspace((s) => s.fireCardId != null)
   return (
     <div className="mw fx-empty">
-      <header className="fx-empty-head">
-        <span className="mw-brand">
-          <Logo size={22} />
-          <span className="mw-brand-name">Fire-3d</span>
-        </span>
-        <span className="fx-empty-where">Forensic · 3D analysis</span>
-        <ViewSwitch size="sm" />
-      </header>
+      <TopBar
+        inset="forensic"
+        className="fx-empty-head"
+        left={
+          <>
+            <BackButton onClick={() => switchWorkspace('map')} label="Back to the map" tip="Back to the map of all fires" />
+            <TopBarBrand size={22} />
+            <span className="tb-sep" aria-hidden="true" />
+            <span className="fx-empty-where">Forensic · 3D analysis</span>
+          </>
+        }
+        centre={<ViewPill />}
+      />
       <main className={`fx-empty-main${hasCard ? ' has-card' : ''}`}>
         <section className="mw-panel fx-empty-list" aria-labelledby="fx-empty-title">
           <header className="mw-panel-head">
@@ -108,20 +118,20 @@ function OpenFireFirst() {
   )
 }
 
-/** The labelled entry controls under the view switch: frame the fire, show the charts (desktop) or the panels (phones). */
+/** The labelled entry controls under the compass: frame the fire, show the charts (desktop) or the panels (phones). */
 function EntryControls({ narrow, dockFull, onDock, sheetOpen, onSheet }: { narrow: boolean; dockFull: boolean; onDock: () => void; sheetOpen: boolean; onSheet: () => void }) {
   return (
     <div className="fx-entry glass" role="group" aria-label="3D view">
       <button type="button" className="fx-entry-btn" onClick={() => useSceneStore.getState().issueCameraCommand('frame-fire')} data-tip="Fit the whole fire in view">
-        <Crosshair size={14} /> Frame fire
+        <Crosshair size={15} aria-hidden="true" /> Frame fire
       </button>
       {narrow ? (
         <button type="button" className="fx-entry-btn" aria-expanded={sheetOpen} onClick={onSheet}>
-          {sheetOpen ? <PanelBottomClose size={14} /> : <PanelBottomOpen size={14} />} {sheetOpen ? 'Hide panels' : 'Layers & analysis'}
+          {sheetOpen ? <PanelBottomClose size={15} aria-hidden="true" /> : <PanelBottomOpen size={15} aria-hidden="true" />} {sheetOpen ? 'Hide panels' : 'Layers & analysis'}
         </button>
       ) : (
         <button type="button" className="fx-entry-btn" aria-expanded={dockFull} onClick={onDock} data-tip="Fire area, spread speed and terrain charts, and the key events">
-          <BarChart3 size={14} /> {dockFull ? 'Hide charts' : 'Charts & key events'}
+          <BarChart3 size={15} aria-hidden="true" /> {dockFull ? 'Hide charts' : 'Charts & key events'}
         </button>
       )}
     </div>
@@ -166,6 +176,8 @@ function ForensicScene() {
             </Suspense>
           </SceneBoundary>
         )}
+        {/* the screen's 120 px top gradient behind the floating bar (above the terrain, under the scene's controls) */}
+        <div className="fx-topfade" aria-hidden="true" />
       </div>
       <div className="app-header" ref={header}>
         <Header />
@@ -177,12 +189,6 @@ function ForensicScene() {
         </>
       )}
       <div className="fx-ws">
-        <nav className="fx-ws-switch glass" aria-label="Switch view">
-          <span className="fx-ws-label eyebrow" aria-hidden="true">
-            View
-          </span>
-          <ViewSwitch size="sm" />
-        </nav>
         {!collapsed && (
           <EntryControls narrow={narrow} dockFull={dockFull} onDock={() => setDockFull((v) => !v)} sheetOpen={sheetOpen} onSheet={() => setSheetOpen((v) => !v)} />
         )}
@@ -191,6 +197,9 @@ function ForensicScene() {
             Demo · simulated data
           </span>
         )}
+      </div>
+      <div className="fx-note">
+        <FixedCopy variant="pill" />
       </div>
       <StatusOverlay />
       <div className="top-center">

@@ -87,7 +87,7 @@ function Runner({ manifest, job }: { manifest: IncidentManifest; job: JobStatus 
         <div className="runner-row">
           <span className="label">Start</span>
           <span className="runner-start">
-            <span className="mono gold">
+            <span className="mono runner-time">
               {fmtAt(startMs, tf, { zone: true })}
             </span>
             {manifest.ignition && <span className="mono muted">{fmtTPlus((startMs - manifest.ignition.t_ms) / HOUR_MS)}</span>}

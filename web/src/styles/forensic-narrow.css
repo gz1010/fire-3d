@@ -1,10 +1,11 @@
 /* Forensic workspace on phones (owner: shell). Desktop and tablet keep the SPEC 9.4 layout untouched; below 761 px the
    floating panels would cover the whole scene, so they are rearranged (layout only, same controls):
-     - header: logo, incident picker and icon-only tool menus;
+     - header (brief 4: the floating top bar): back, the incident picker and the round tool pills; the view pill on a
+       row of its own under the bar's right end;
      - right column (Layers / Analysis / Evidence / Notes, overview, weather): a scrollable bottom sheet;
      - bottom dock: the timeline only, above that sheet (the three charts and Key Events need a wider screen; on phones
        they are in the Public/Command Analysis drawer and updates panel);
-     - the workspace switch sits top right under the header.
+     - the compass, its ⟲ ⟳ and the entry controls stay at the top left.
    --chrome-side tells the Forensic safe-area measurement (ForensicWorkspace.tsx) which edge each panel docks to, so the
    camera framing and scene overlays use the scene area above the sheet. Loaded with the lazy Forensic chunk. */
 
@@ -21,39 +22,66 @@
 @media (max-width: 760px) {
   .app {
     --fx-sheet-h: min(42vh, 360px);
+    --bar-top: 8px;
+    --header-h: 44px;
   }
+  /* the floating bar: back, the fire's name (picker), the tool pills; the view pill drops to a row of its own under
+     the bar's right end (as the old switch did); the logo, the place, the dates and the Incident | Aircraft tabs need
+     a wider screen (the Aircraft list stays in the panel sheet's header tab on wider screens only, as before) */
   .app .app-header {
-    top: 8px;
+    top: var(--bar-top);
     left: 8px;
     right: 8px;
-    height: 48px;
+    height: var(--header-h);
   }
-  .app .hdr {
+  .app .fx-bar {
     gap: 6px;
-    padding: 0 4px 0 10px;
   }
-  .app .brand-name,
-  .app .brand-sep,
-  .app .brand-tag,
-  .app .hdr > .hdr-divider,
-  .app .hdr-actions > .hdr-divider,
-  .app .hdr-meta,
-  .app .hdr-tabs {
+  .app .fx-bar .tb-side {
+    gap: 6px;
+  }
+  .app .fx-bar .tb-brand,
+  .app .fx-bar .tb-left > .tb-sep,
+  .app .fx-bar .tb-place,
+  .app .fx-bar .hdr-tabs {
     display: none;
   }
-  .app .hdr .picker-btn {
-    min-width: 0;
-    max-width: none;
+  .app .fx-bar .tb-left {
     flex: 1 1 auto;
   }
-  /* View / Analysis / Share: icon and caret only (the text stays the accessible name) */
-  .app .hdr-menu-btn {
-    font-size: 0;
-    gap: 2px;
-    padding: 0 6px;
+  .app .fx-bar .tb-right {
+    flex: 0 0 auto;
   }
-  .app .hdr-spacer {
-    display: none;
+  .app .fx-bar .picker-btn:not(.is-title) {
+    min-width: 0;
+    max-width: none;
+    flex: 0 1 auto;
+    padding: 0 10px;
+  }
+  .app .fx-bar .picker-btn:not(.is-title) .picker-name {
+    font-size: 15px;
+  }
+  /* the LIVE dot stays; its word gives the name room (still read out) */
+  .app .fx-bar .picker-btn:not(.is-title) .live-chip {
+    font-size: 0;
+    letter-spacing: 0;
+    gap: 0;
+  }
+  .app .fx-bar .hdr-actions {
+    gap: 4px;
+  }
+  .app .fx-bar .tb-icon.fx-tool {
+    width: 34px;
+    height: 34px;
+  }
+  .app .fx-bar .tb-centre {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+  }
+  .app .fx-bar .fx-bar-view .tb-view-btn {
+    height: 30px;
+    padding: 0 12px;
   }
   .app .minibar {
     max-width: calc(100vw - 16px);
@@ -106,17 +134,30 @@
   .app .tl-track {
     height: 54px;
   }
-
-  .app .fx-ws {
-    top: calc(var(--safe-top) + 2px);
-    left: auto;
-    right: 8px;
-    align-items: flex-end;
+  .app .tl-play {
+    width: 32px;
+    height: 32px;
   }
-  .app .fx-ws-switch {
-    padding: 3px;
+  .app .tl-now {
+    margin-left: 2px;
+    font-size: 13px;
   }
-  .app .fx-ws-label {
+  .app .tl-now .muted {
     display: none;
+  }
+
+  /* the entry controls in a row under the compass; the disclaimer pill above the timeline, wrapping */
+  .app .fx-ws {
+    top: calc(var(--safe-top) + 96px);
+  }
+  .app .fx-note {
+    left: 8px;
+    right: 8px;
+    bottom: calc(var(--safe-bottom) + 48px);
+    max-width: none;
+  }
+  .app .fx-note > .fxc-pill {
+    border-radius: 12px;
+    font-size: 10.5px;
   }
 }
