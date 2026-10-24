@@ -800,3 +800,238 @@
     max-width: none;
   }
 }
+
+/* ================================================================================================ brief 4 (H3) */
+/* "Fires in the lower 48" as Main.dc.html (details state): a 472 px glass panel (.74 + blur 24, hairline .18, radius
+   16), title 20 / 600 with a close button, OFFICIAL NOW in mono with the NWS block in a pink frame, the filter tabs
+   (accent), the OFFICIAL source line, the view line and rows (16 / 600 names, 13 px grey places, mono 15 px acres).
+   Scoped to the overview chrome; Forensic's "Open a fire first" list keeps its own look. */
+.mw[data-view='overview'] .ov-panel {
+  background: rgba(14, 14, 14, 0.74);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  backdrop-filter: blur(24px) saturate(140%);
+  border-color: rgba(200, 200, 200, 0.18);
+  border-radius: 16px;
+  box-shadow:
+    inset 0 1px 0 rgba(200, 200, 200, 0.06),
+    0 16px 40px rgba(0, 0, 0, 0.45);
+}
+.mw[data-view='overview'] .ov-panel > .mw-panel-head {
+  min-height: 0;
+  padding: 14px 14px 14px 20px;
+  border-bottom-color: rgba(200, 200, 200, 0.12);
+}
+.mw[data-view='overview'] .ov-panel > .mw-panel-head h2 {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  color: var(--m-text);
+}
+.mw[data-view='overview'] .ov-panel > .mw-panel-head .mw-icon-btn {
+  width: 32px;
+  height: 32px;
+  color: var(--m-text-3);
+}
+/* the official block: no tinted band, the screen's mono heading and the pink NWS frame */
+.mw[data-view='overview'] .ov-official {
+  max-height: 26vh;
+  border-bottom: 0;
+}
+.mw[data-view='overview'] .ov-official .on.is-overview {
+  gap: 8px;
+  padding: 14px 20px 0;
+  border-bottom: 0;
+  background: none;
+  font-size: 13px;
+}
+.mw[data-view='overview'] .ov-official .on-head {
+  gap: 10px;
+  color: #e0e0e0;
+}
+.mw[data-view='overview'] .ov-official .on-head > svg {
+  width: 18px;
+  height: 18px;
+  color: #d0d0d0;
+}
+.mw[data-view='overview'] .ov-official .on-head h3 {
+  font: 600 14px / 1.2 var(--m-font-mono);
+  letter-spacing: 0.08em;
+  color: #e0e0e0;
+}
+.mw[data-view='overview'] .ov-official .on-head-sub {
+  font-size: 13px;
+  color: var(--m-text-3);
+}
+.mw[data-view='overview'] .ov-official .on-row {
+  gap: 6px;
+  padding: 12px 14px;
+  border-color: rgba(238, 122, 160, 0.4);
+  border-radius: 12px;
+  background: rgba(238, 122, 160, 0.06);
+}
+.mw[data-view='overview'] .ov-official .on-row-head {
+  font-size: 14px;
+}
+.mw[data-view='overview'] .ov-official .on-row-icon {
+  color: var(--m-alert);
+}
+.mw[data-view='overview'] .ov-official .on-line {
+  font-size: 14px;
+  color: var(--m-text-body);
+}
+.mw[data-view='overview'] .ov-official .on-official {
+  color: #ff9ab8;
+}
+.mw[data-view='overview'] .ov-official .on-row .on-meta {
+  font-family: var(--m-font-mono);
+  font-size: 12px;
+  color: var(--m-text-3);
+}
+.mw[data-view='overview'] .ov-official .on > .on-meta,
+.mw[data-view='overview'] .ov-official .on-foot {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--m-text-2b);
+}
+/* filter tabs: recessed, the active one accent orange with dark ink, mono counts */
+.mw[data-view='overview'] .ov-panel .ov-filters {
+  padding: 14px 20px 0;
+}
+.mw[data-view='overview'] .ov-panel .ov-filters .seg {
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(200, 200, 200, 0.12);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+}
+.mw[data-view='overview'] .ov-panel .ov-filters .seg-btn {
+  height: 34px;
+  border-radius: 7px;
+  font-size: 14px;
+}
+.mw[data-view='overview'] .ov-panel .ov-filters .seg-count {
+  font-family: var(--m-font-mono);
+  font-size: 12px;
+}
+/* the source line: OFFICIAL as an outlined mono pill */
+.mw[data-view='overview'] .ov-panel .ov-source {
+  gap: 12px;
+  margin: 12px 20px 0;
+  padding: 0 0 12px;
+  border-bottom-color: rgba(200, 200, 200, 0.12);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--m-text-2b);
+}
+.mw[data-view='overview'] .ov-panel .ov-source .mw-tag.is-official {
+  height: auto;
+  padding: 4px 10px;
+  border-color: var(--m-official-ink);
+  font: 600 11px / 1 var(--m-font-mono);
+  letter-spacing: 0.1em;
+}
+.mw[data-view='overview'] .ov-panel .ov-source .ov-refresh {
+  width: 32px;
+  height: 32px;
+}
+.mw[data-view='overview'] .ov-panel .ov-warn {
+  margin: 8px 20px 0;
+  padding: 0 0 8px;
+}
+.mw[data-view='overview'] .ov-panel .ov-viewline {
+  margin: 10px 20px 0;
+  padding: 0 0 8px;
+  border-bottom: 0;
+  font-size: 14px;
+  color: var(--m-text-2b);
+}
+.mw[data-view='overview'] .ov-panel .ov-viewline .mw-link-btn {
+  font-size: 14px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+/* rows */
+.mw[data-view='overview'] .ov-panel .ov-list {
+  padding: 0;
+}
+.mw[data-view='overview'] .ov-panel .ov-list > li + li .ov-row {
+  border-top: 1px solid rgba(200, 200, 200, 0.08);
+}
+.mw[data-view='overview'] .ov-panel .ov-row {
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  gap: 14px;
+  padding: 12px 20px;
+  border-radius: 0;
+}
+.mw[data-view='overview'] .ov-panel .ov-row:first-child {
+  border-top: 1px solid rgba(200, 200, 200, 0.08);
+}
+.mw[data-view='overview'] .ov-panel .ov-dot {
+  border: 0;
+  background: var(--m-fire);
+  box-shadow: 0 0 10px var(--m-fire);
+}
+.mw[data-view='overview'] .ov-panel .ov-dot:is(.is-contained, .is-out) {
+  border: 1.2px solid rgba(240, 217, 176, 0.8);
+  background: transparent;
+  box-shadow: none;
+}
+.mw[data-view='overview'] .ov-panel .ov-main {
+  gap: 2px;
+}
+.mw[data-view='overview'] .ov-panel .ov-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--m-text);
+}
+.mw[data-view='overview'] .ov-panel .ov-sub {
+  font-size: 13px;
+  color: var(--m-text-3);
+}
+.mw[data-view='overview'] .ov-panel .ov-acres {
+  font-size: 15px;
+  color: #e0e0e0;
+}
+.mw[data-view='overview'] .ov-panel .ov-foot {
+  padding: 10px 20px 14px;
+  border-top-color: rgba(200, 200, 200, 0.12);
+  font-size: 12px;
+  color: var(--m-text-2b);
+}
+.mw[data-view='overview'] .ov-panel .ov-state {
+  padding: 16px 20px;
+}
+/* the collapsed list (Command; the menu's "Fires (lower 48)" on a narrow window) */
+.mw[data-view='overview'] .ovw-list > .mw-updates-open {
+  align-self: flex-end;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: rgba(14, 14, 14, 0.66);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  backdrop-filter: blur(22px) saturate(140%);
+}
+@media (max-width: 760px) {
+  .mw[data-view='overview'] .ov-panel {
+    border-radius: 16px 16px 0 0;
+    background: var(--m-panel-strong);
+  }
+  .mw[data-view='overview'] .ov-panel > .mw-panel-head {
+    padding: 8px 8px 8px 16px;
+  }
+  .mw[data-view='overview'] .ov-panel > .mw-panel-head h2 {
+    font-size: 17px;
+  }
+  .mw[data-view='overview'] .ov-panel .ov-row {
+    padding: 11px 16px;
+  }
+  .mw[data-view='overview'] .ov-panel :is(.ov-filters, .ov-official .on.is-overview) {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .mw[data-view='overview'] .ov-panel :is(.ov-source, .ov-viewline) {
+    margin-left: 16px;
+    margin-right: 16px;
+  }
+}

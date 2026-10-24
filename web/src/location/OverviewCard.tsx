@@ -13,7 +13,7 @@ import type { OfficialInfo } from '../official/hooks'
 import { GEO_LOOKUP_CREDIT } from '../lib/dataCredits'
 import { directionWord, distance, area } from '../lib/plainLanguage'
 import { fmtAt, fmtRelative, zoneLine } from '../lib/time'
-import { showFireCard } from '../state/fireCard'
+import { pickFire } from '../state/fireCard'
 import { fireStatus, fireWhere, isActiveFire, listHealth } from '../state/overview'
 import { useStore } from '../state/store'
 import { usePlaceZone, useTimeFormatFor } from '../state/timeZone'
@@ -36,14 +36,15 @@ import './location.css'
 const fireName = (s: Pick<IncidentSummary, 'name'>) => (/\bfire$/i.test(s.name) ? `the ${s.name}` : s.name)
 
 /** A nearest-fire row: a prepared fire opens; another one shows its card the way the overview list does
- *  (state/fireCard.ts: the flight holds the map's zoom focus, so a nearby prepared fire does not open instead). */
+ *  (state/fireCard.ts: the flight holds the map's zoom focus, so a nearby prepared fire does not open instead). In
+ *  Public every row opens the fire view (brief 4 decision b, pickFire). */
 function openOrShow(s: IncidentSummary): void {
   const r = readiness(s)
   if (r === 'ready' || r === 'building') {
     openFromSearch(s.id) // the selected point stays: the card then checks it against the fire
     return
   }
-  showFireCard(s.id, s)
+  pickFire(s.id, s)
 }
 
 function FireRow({ f, units, label }: { f: NearFire; units: ReturnType<typeof useWorkspace.getState>['units']; label?: string }) {

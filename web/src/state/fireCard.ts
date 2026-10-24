@@ -29,3 +29,30 @@ export function showFireCard(id: string, row?: IncidentSummary | null): void {
   ws.setFireCard(id)
   if (fly && onMap) ws.requestMapFlyTo(hold ? { ...fly, source: 'fire-card' } : fly)
 }
+
+/** Open fire `id` in the Public fire view (brief 4 decision b; CONTRACT §15.3): no card, one history entry (state/history.ts
+ *  pushes it, `fromOverview` when the overview was shown), the map frames the fire (state/workspace.ts drops the
+ *  overview's view) and nothing is built. The fire already open is only framed again. */
+export function openFireView(id: string): void {
+  const ws = useWorkspace.getState()
+  ws.setFireCard(null)
+  const st = useStore.getState()
+  if (st.incidentId === id) {
+    ws.returnToIncident()
+    return
+  }
+  void st.selectIncident(id, { source: 'card' })
+}
+
+/** The Public preset on the map opens fires directly (decision b); Command and Forensic keep the fire card. */
+export function opensFireView(): boolean {
+  const ws = useWorkspace.getState()
+  return ws.workspace === 'map' && ws.preset === 'public'
+}
+
+/** Every way of picking a fire on the map (a list row, a marker or its label, a search result, a location card's
+ *  nearest-fire row): the fire view in Public, the fire card in Command and Forensic. */
+export function pickFire(id: string, row?: IncidentSummary | null): void {
+  if (opensFireView()) openFireView(id)
+  else showFireCard(id, row)
+}

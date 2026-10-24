@@ -16,7 +16,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type 
 import type { IncidentSummary } from '../api/types'
 import { distanceM, formatLat, formatLon, type ParsedLatLon } from '../lib/geodesy'
 import { distance } from '../lib/plainLanguage'
-import { showFireCard } from '../state/fireCard'
+import { pickFire } from '../state/fireCard'
 import { useStore } from '../state/store'
 import { useWorkspace, type PanelKey } from '../state/workspace'
 import { addressDetails, addressRange, prettyAddress, useAddressDetails } from './addressStore'
@@ -70,7 +70,16 @@ function readCarry(): { text: string; state: SearchState } | null {
   return c ? { text: c.text, state: { ...INITIAL_SEARCH, popover: c.popover } } : null
 }
 
-export function SearchBox() {
+/** `panel` (default): the labelled box of the fire chromes and Command's popover. `pill` (brief 4, Main.dc.html): the
+ *  overview's centred 52 px pill; its label is kept for screen readers only and the placeholder names what it takes. */
+export type SearchBoxVariant = 'panel' | 'pill'
+
+export const PILL_PLACEHOLDER = 'Check an address, town, ZIP or coordinates'
+/** Phones: the same, short enough for a 390 px screen beside the Search button. */
+export const PILL_PLACEHOLDER_SHORT = 'Address, town, ZIP or coordinates'
+
+export function SearchBox({ variant = 'panel' }: { variant?: SearchBoxVariant } = {}) {
+  const pill = variant === 'pill'
   const [carried] = useState(readCarry)
   const [text, setText] = useState(carried?.text ?? '')
   const [focused, setFocused] = useState(false)
@@ -264,10 +273,11 @@ export function SearchBox() {
   }
 
   /** Fly to a fire and open its card (I3) the way the overview list does (state/fireCard.ts: an unprepared fire holds
-   *  the map's zoom focus, so a nearby prepared fire does not open instead), then close the popover. */
+   *  the map's zoom focus, so a nearby prepared fire does not open instead), then close the popover. Public opens the
+   *  fire view instead (brief 4 decision b, pickFire). */
   const pickFireCard = (s: IncidentSummary) => {
     dispatch({ type: 'close' })
-    showFireCard(s.id, s)
+    pickFire(s.id, s)
     afterPick()
   }
 
@@ -348,7 +358,7 @@ export function SearchBox() {
   return (
     <form
       ref={rootRef}
-      className={`loc-search${open ? ' is-open' : ''}`}
+      className={`loc-search${pill ? ' is-pill' : ''}${open ? ' is-open' : ''}`}
       role="search"
       aria-label="Check an address"
       onSubmit={(e) => {
@@ -358,11 +368,17 @@ export function SearchBox() {
       onKeyDown={onKeyDown}
     >
       <div className="mw-panel loc-search-box">
-        <label className="loc-search-label" htmlFor={inputId}>
-          Check an address <span className="loc-search-label-sub">street, town, ZIP code or coordinates</span>
-        </label>
+        {pill ? (
+          <label className="loc-sr" htmlFor={inputId}>
+            Check an address: street, town, ZIP code or coordinates
+          </label>
+        ) : (
+          <label className="loc-search-label" htmlFor={inputId}>
+            Check an address <span className="loc-search-label-sub">street, town, ZIP code or coordinates</span>
+          </label>
+        )}
         <div className="loc-search-bar">
-          <Search size={15} aria-hidden="true" className="loc-search-icon" />
+          <Search size={pill ? 18 : 15} aria-hidden="true" className="loc-search-icon" />
           <input
             ref={inputRef}
             id={inputId}
@@ -376,7 +392,7 @@ export function SearchBox() {
             maxLength={200}
             aria-describedby={statusId}
             aria-controls={lists ? listId : undefined}
-            placeholder="e.g. 150 N Capitol Blvd, Boise, ID"
+            placeholder={pill ? (narrow ? PILL_PLACEHOLDER_SHORT : PILL_PLACEHOLDER) : 'e.g. 150 N Capitol Blvd, Boise, ID'}
             value={text}
             onFocus={() => {
               setFocused(true)

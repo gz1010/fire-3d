@@ -729,23 +729,47 @@
   border-radius: 50%;
   border: 2.5px solid var(--m-text);
 }
-/* overview fire markers (map/overviewLayers.ts): filled orange + white ring = active; hollow amber = other fires */
+/* overview fire markers (map/overviewLayers.ts PALETTE, brief 4): a transparent orange circle (#ff8a3c at 10 %, a
+   #ffc08a ring at 80 %) with a white-hot centre dot (#fff3dc) for active fires, sized by type; a small hollow #f0d9b0
+   ring for fires that are not active */
 .fxm-sw-fire-active,
+.fxm-sw-fire-large,
 .fxm-sw-fire-past {
-  width: 12px;
-  height: 12px;
-  margin: 0 3px;
+  box-sizing: border-box;
   border-radius: 50%;
 }
 .fxm-sw-fire-active {
-  background: #ff5a1f;
-  border: 2px solid #ffffff;
-  box-shadow: 0 0 0 1.5px rgba(6, 10, 16, 0.72);
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgba(255, 192, 138, 0.8);
+  background: radial-gradient(circle, #fff3dc 0 1.8px, rgba(255, 138, 60, 0.1) 2.3px);
+}
+.fxm-sw-fire-large {
+  width: 22px;
+  height: 22px;
+  margin: 0 -2px;
+  border: 1.2px solid rgba(255, 192, 138, 0.8);
+  background: radial-gradient(circle, #fff3dc 0 2.2px, rgba(255, 138, 60, 0.1) 2.7px);
 }
 .fxm-sw-fire-past {
-  background: rgba(255, 190, 90, 0.2);
-  border: 1.6px solid #ffc46b;
-  box-shadow: 0 0 0 1.5px rgba(6, 10, 16, 0.72);
+  width: 10px;
+  height: 10px;
+  margin: 0 4px;
+  border: 1.2px solid rgba(240, 217, 176, 0.8);
+  background: none;
+}
+/* NWS fire weather alerts on the map: a dashed pink outline (official/style.ts redFlag) */
+.fxm-sw-nws {
+  width: 22px;
+  height: 14px;
+  border: 1.5px dashed var(--m-alert);
+  border-radius: 0;
+  background: rgba(238, 122, 160, 0.12);
+}
+.fxm-legend-mono {
+  font: 500 11px / 1 var(--m-font-mono);
+  letter-spacing: 0.06em;
+  color: #ffe3bd;
 }
 /* 3D buildings: a muted block (shapes only) */
 .fxm-sw-buildings {
@@ -810,41 +834,32 @@
 .fxm-credits a[href='https://open-meteo.com/'] {
   white-space: nowrap;
 }
-/* brief 3 overview groups (map/overviewLayers.ts): a group bubble with its count, a small active dot */
+/* overview groups (map/overviewLayers.ts, brief 4): a larger transparent circle with a centre dot ("N FIRES" beside
+   it on the map); a small active fire: the smallest orange circle */
 .fxm-sw-group-active,
 .fxm-sw-group-past {
-  width: 16px;
-  height: 16px;
-  margin: 0 1px;
+  box-sizing: border-box;
+  width: 26px;
+  height: 26px;
+  margin: -4px -2px;
   border-radius: 50%;
-  box-shadow: 0 0 0 1.5px rgba(6, 10, 16, 0.72);
-  position: relative;
 }
 .fxm-sw-group-active {
-  background: #ff5a1f;
-  border: 2px solid #ffffff;
+  border: 1.2px solid rgba(255, 192, 138, 0.8);
+  background: radial-gradient(circle, #fff3dc 0 2px, rgba(255, 138, 60, 0.1) 2.5px);
 }
 .fxm-sw-group-past {
-  background: rgba(255, 190, 90, 0.3);
-  border: 1.6px solid #ffc46b;
-}
-.fxm-sw-group-active::after,
-.fxm-sw-group-past::after {
-  content: '3';
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  font: 700 8px/1 var(--font-sans, sans-serif);
-  color: #ffffff;
+  border: 1.2px solid rgba(240, 217, 176, 0.55);
+  background: radial-gradient(circle, rgba(240, 217, 176, 0.9) 0 1.6px, rgba(240, 217, 176, 0.04) 2.1px);
 }
 .fxm-sw-small-active {
-  width: 6px;
-  height: 6px;
-  margin: 0 6px;
+  box-sizing: border-box;
+  width: 12px;
+  height: 12px;
+  margin: 0 3px;
   border-radius: 50%;
-  background: #ff5a1f;
-  box-shadow: 0 0 0 1px rgba(6, 10, 16, 0.72);
+  border: 1px solid rgba(255, 192, 138, 0.8);
+  background: radial-gradient(circle, #fff3dc 0 1px, rgba(255, 138, 60, 0.1) 1.5px);
 }
 .fxm-legend-absence {
   color: var(--m-text-2);

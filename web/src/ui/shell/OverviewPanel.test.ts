@@ -220,11 +220,12 @@ describe('phone peek and legend', () => {
     expect(html).not.toMatch(/\d\d:\d\d/) // relative, never a bare clock time in some zone
   })
 
-  it('the legend (overview) carries the group entries and the list-absence line', () => {
+  it('the legend (overview) carries the group entries and the list-absence line (brief 4: markers sized by type)', () => {
     setLists()
     const html = renderToStaticMarkup(createElement(MapLegend as (p: { inline?: boolean }) => ReturnType<typeof MapLegend>, { inline: true }))
     for (const t of [
-      'Group of active fires (number = how many)',
+      'Group of active fires (&quot;28 FIRES&quot;: how many)',
+      'Fire that is not active (contained or out)',
       'Group of other 2026 fires',
       'Small active fire (under 10 acres or size not reported)',
       'Fires (CAL FIRE in California, NIFC WFIGS elsewhere; official records)',

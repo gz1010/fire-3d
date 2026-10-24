@@ -85,5 +85,6 @@ export function goToOverview(): void {
 
 /** A fire picked from a list (the overview list row, the header picker): open its card and fly the map to it. The
  *  same function serves the map marker, the search box's fire result and the location card's nearest fires
- *  (state/fireCard.ts). */
-export { showFireCard } from '../../state/fireCard'
+ *  (state/fireCard.ts). Brief 4 (decision b): in Public those paths open the fire view directly instead
+ *  (`openFireView`: no card, one history entry, no build); `pickFire` picks the right one for the shown preset. */
+export { openFireView, pickFire, showFireCard } from '../../state/fireCard'

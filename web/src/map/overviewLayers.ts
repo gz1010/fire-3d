@@ -8,10 +8,14 @@
 //   - fx-overview-active: the other active fires, grouped when 3 or more are close (radius 28 px, 44 on screens under
 //     500 px) up to z6;
 //   - fx-overview-other: fires that are not active, grouped the same way (radius 40 px) up to z7.
-// Active and other fires never share a group, and active marks draw above other fires. A group's bubble is sized by
-// the largest fire in it (log of its acres), not by the count, which is its label; a small active fire (under 10 acres
-// or no size reported) is a small orange dot without the white ring. Single markers are sized by the square root of the
-// acreage and grow with the zoom (0.6x at z3 to 1x at z7).
+// Active and other fires never share a group, and active marks draw above other fires.
+// Brief 4 (H3, HANDOFF "Fire markers", PLAN-4 decision e): every marker is a transparent circle (fill #ff8a3c at 10 %,
+// a 1-1.2 px #ffc08a ring at 80 %) with a white-hot centre dot (#fff3dc); its size says its type, not its acreage:
+// a small active fire (under 10 acres or no size reported) r7, an active fire r11, a large active fire (5,000 acres or
+// more, the pinned ones) r15, a fire that is not active a hollow #f0d9b0 ring r4.5. A group is sized by how many
+// fires it holds, 10 + 4.2·√n px capped at 36, with "28 FIRES" at its upper right after a short tick (MapLibre text:
+// OpenFreeMap's glyphs have Noto Sans only). Sizes stay at the national zoom and grow to 1.2x by z10; a faint dark
+// casing keeps the thin rings readable over bright photos.
 // Labels "Name · acres", by acres with zoom thresholds (labelMinZoom): pinned fires at every zoom; from z5 active fires
 // of 300 acres or more and any fire of 20,000 or more; from z7 active fires of 10 acres or more and any fire of 1,000
 // or more; the rest from z9 (and on hover). Activity is a bonus only at 300 acres or more, so a tiny active fire never
@@ -40,16 +44,20 @@ export const OVERVIEW_SOURCES: Record<OverviewGroup, string> = {
 
 export const OVR = {
   otherCluster: 'fx-overview-other-cluster',
+  otherClusterDot: 'fx-overview-other-cluster-dot',
   otherCasing: 'fx-overview-other-casing',
   otherPoint: 'fx-overview-other-point',
   otherCount: 'fx-overview-other-count',
   activeCluster: 'fx-overview-active-cluster',
+  activeClusterDot: 'fx-overview-active-cluster-dot',
   activeCasing: 'fx-overview-active-casing',
   activePoint: 'fx-overview-active-point',
+  activeDot: 'fx-overview-active-dot',
   activeCount: 'fx-overview-active-count',
   pinnedCasing: 'fx-overview-pinned-casing',
   pinnedPast: 'fx-overview-pinned-past',
   pinnedLive: 'fx-overview-pinned-live',
+  pinnedDot: 'fx-overview-pinned-dot',
   selected: 'fx-overview-selected',
   otherHit: 'fx-overview-other-hit',
   activeHit: 'fx-overview-active-hit',
@@ -119,23 +127,49 @@ export const CLUSTER = {
 export const NARROW_PX = 500
 /** A click on a group zooms in at most to this zoom (below the focus zoom 8.5, so it never opens a prepared fire). */
 export const CLUSTER_CLICK_MAX_ZOOM = 8
+/** Marker radius by type (px, at z7 and wider; brief 4, HANDOFF): small active, active, large active (pinned), other. */
+export const MARKER_PX = { small: 7, active: 11, large: 15, other: 4.5 } as const
+export type MarkerKind = keyof typeof MARKER_PX
+/** The white-hot centre dot's radius by type (px); fires that are not active have none (a hollow ring). */
+export const DOT_PX = { small: 1.4, active: 2.2, large: 2.8, other: 0 } as const
 /** Marker radius range (px). */
-export const MARKER_MIN_PX = 4
-export const MARKER_MAX_PX = 13
-/** A small active fire's dot radius (px). */
-export const SMALL_DOT_PX = 2.5
+export const MARKER_MIN_PX = MARKER_PX.other
+export const MARKER_MAX_PX = MARKER_PX.large
+/** A group's radius: 10 + 4.2·√n px (HANDOFF; decision e), at most 36 px; its centre dot. */
+export const GROUP_BASE_PX = 10
+export const GROUP_PER_SQRT_PX = 4.2
+export const GROUP_MAX_PX = 36
+export const GROUP_DOT_PX = 2.6
+/** Markers grow to this factor by z10 (no shrink at the national zoom of a desktop screen, about z3.9). */
+export const ZOOM_GROWTH = 1.2
+/** A phone shows the lower 48 at about z2: markers and groups are this much smaller there (full size from z3.5), so a
+ *  group's circle does not cover a whole region of the country. */
+export const SMALL_MAP_SCALE = 0.65
+export const SMALL_MAP_ZOOM = 2
+export const FULL_SIZE_ZOOM = 3.5
 /** Smallest hit radius (px): a 22 px touch target. */
 export const HIT_MIN_PX = 11
 
 const HA_PER_ACRE = 0.40468564224
 
-/** Circle radius by the square root of the acreage: 4 px for tiny fires, 7 px at 10,000 ac, 13 px from about
- *  130,000 ac (sqrt 360), linear in between (at z7 and closer; smaller at the national zoom). */
-export function markerRadius(acres: number | null | undefined): number {
-  const a = typeof acres === 'number' && Number.isFinite(acres) && acres > 0 ? acres : 0
-  const s = Math.sqrt(a)
-  const r = s <= 100 ? MARKER_MIN_PX + (s / 100) * 3 : 7 + ((Math.min(s, 360) - 100) / 260) * 6
-  return Math.round(Math.min(MARKER_MAX_PX, Math.max(MARKER_MIN_PX, r)) * 10) / 10
+/** A fire's marker type (brief 4): not active → other; active under 10 acres or no size → small; active of 5,000
+ *  acres or more → large (never grouped); else active. */
+export function markerKind(s: Pick<IncidentSummary, 'mode' | 'is_active' | 'acres'>): MarkerKind {
+  if (!isActiveFire(s)) return 'other'
+  const a = acresOf(s)
+  if (a < SMALL_MAX_ACRES) return 'small'
+  return a >= PINNED_MIN_ACRES ? 'large' : 'active'
+}
+
+/** A marker's radius (px, at z7 and wider) by its type. */
+export function markerRadius(s: Pick<IncidentSummary, 'mode' | 'is_active' | 'acres'>): number {
+  return MARKER_PX[markerKind(s)]
+}
+
+/** A group's radius (px) for `n` fires: 10 + 4.2·√n, at most 36. */
+export function groupRadius(n: number): number {
+  const c = Number.isFinite(n) && n > 0 ? n : 0
+  return Math.round(Math.min(GROUP_MAX_PX, GROUP_BASE_PX + GROUP_PER_SQRT_PX * Math.sqrt(c)) * 10) / 10
 }
 
 /** "Garnet · 59,844 ac" ("· 24,218 ha" in metric); the trailing " Fire" is left out to keep labels short; names stay
@@ -256,7 +290,8 @@ export function overviewFeatures(fires: readonly IncidentSummary[], units: Units
     if (!validPoint(s)) return
     const live = isActiveFire(s)
     const small = isSmallActive(s)
-    const r = markerRadius(s.acres)
+    const kind = markerKind(s)
+    const r = MARKER_PX[kind]
     features.push({
       type: 'Feature',
       id: i,
@@ -266,8 +301,10 @@ export function overviewFeatures(fires: readonly IncidentSummary[], units: Units
         name: s.name,
         live,
         small: small && !o.pinned,
+        kind,
         acres: acresOf(s),
         r,
+        dot: DOT_PX[kind],
         hit: Math.max(HIT_MIN_PX, r + 3),
         sort: sortKey(s),
         lz: labelMinZoom(s, o.pinned),
@@ -363,10 +400,65 @@ export function clusterClickZoom(expansionZoom: number, currentZoom: number): nu
   return Math.max(currentZoom, Math.min(CLUSTER_CLICK_MAX_ZOOM, z))
 }
 
-const PALETTE = {
-  dark: { casing: 'rgba(6,10,16,0.72)', liveFill: '#ff5a1f', liveRing: '#ffffff', pastFill: 'rgba(255,190,90,0.2)', pastRing: '#ffc46b', groupPastFill: 'rgba(255,190,90,0.3)', ink: '#ffffff', halo: 'rgba(4,7,11,0.9)', liveHalo: 'rgba(120,30,0,0.9)', sel: '#ffffff' },
-  light: { casing: 'rgba(255,255,255,0.85)', liveFill: '#ea4f12', liveRing: '#ffffff', pastFill: 'rgba(161,98,7,0.14)', pastRing: '#a16207', groupPastFill: 'rgba(255,228,180,0.85)', ink: '#16202b', halo: 'rgba(255,255,255,0.95)', liveHalo: 'rgba(120,30,0,0.9)', sel: '#16202b' },
+/** Marker colours (brief 4, HANDOFF): the dark and aerial maps use the screens' values; the light road map darker
+ *  equivalents so the thin rings still read. Mirrored by the legend's swatches (map/map.css .fxm-sw-*). */
+export const PALETTE = {
+  dark: {
+    casing: 'rgba(5,7,3,0.38)',
+    fill: 'rgba(255,138,60,0.10)',
+    ring: 'rgba(255,192,138,0.8)',
+    dot: '#fff3dc',
+    otherRing: 'rgba(240,217,176,0.8)',
+    // groups of fires that are not active: quieter than the active ones (the 2026 season lists about 1,200 of them)
+    otherGroupRing: 'rgba(240,217,176,0.5)',
+    otherFill: 'rgba(240,217,176,0.05)',
+    otherDot: 'rgba(240,217,176,0.9)',
+    count: '#ffe3bd',
+    countUnit: '#ffb27a',
+    otherCount: '#f0d9b0',
+    tick: 'fx-group-tick-dark',
+    ink: '#f0f0f0',
+    halo: 'rgba(5,7,3,0.85)',
+    sel: '#ffffff',
+  },
+  light: {
+    casing: 'rgba(255,255,255,0.7)',
+    fill: 'rgba(234,88,12,0.14)',
+    ring: 'rgba(194,65,12,0.9)',
+    dot: '#7c2d12',
+    otherRing: 'rgba(133,92,20,0.9)',
+    otherGroupRing: 'rgba(133,92,20,0.6)',
+    otherFill: 'rgba(133,92,20,0.06)',
+    otherDot: 'rgba(133,92,20,0.9)',
+    count: '#7c2d12',
+    countUnit: '#9a3412',
+    otherCount: '#6b4a12',
+    tick: 'fx-group-tick-light',
+    ink: '#16202b',
+    halo: 'rgba(255,255,255,0.95)',
+    sel: '#16202b',
+  },
 } as const
+
+/** The short tick between a group's circle and its "N FIRES" label (an icon image: device pixels at pixelRatio 2). */
+export const GROUP_TICK_IMAGE: Record<'dark' | 'light', string> = { dark: PALETTE.dark.tick, light: PALETTE.light.tick }
+export const GROUP_TICK_PX = { w: 6, h: 2 } as const
+export function groupTickImage(theme: 'dark' | 'light'): { image: { width: number; height: number; data: Uint8Array }; options: { pixelRatio: number } } {
+  const w = GROUP_TICK_PX.w * 2
+  const h = GROUP_TICK_PX.h * 2
+  const data = new Uint8Array(w * h * 4)
+  const c = theme === 'dark' ? [255, 178, 122, 180] : [154, 52, 18, 220]
+  // one 0.8 px line (two device rows at half strength) across the image
+  for (let x = 0; x < w; x++)
+    for (const y of [1, 2]) {
+      const i = (y * w + x) * 4
+      data[i] = c[0]
+      data[i + 1] = c[1]
+      data[i + 2] = c[2]
+      data[i + 3] = Math.round(c[3] * (y === 1 ? 0.8 : 0.5))
+    }
+  return { image: { width: w, height: h, data }, options: { pixelRatio: 2 } }
+}
 
 /** Fonts available from OpenFreeMap's glyph server. */
 const FONT = ['Noto Sans Regular']
@@ -441,15 +533,40 @@ export function overviewPaint(dim: boolean): Record<string, Record<string, numbe
   const out: Record<string, Record<string, number>> = {}
   for (const id of [OVR.otherCasing, OVR.activeCasing, OVR.pinnedCasing]) out[id] = { 'circle-stroke-opacity': o }
   for (const id of [OVR.otherPoint, OVR.activePoint, OVR.pinnedPast, OVR.pinnedLive, OVR.otherCluster, OVR.activeCluster]) out[id] = { 'circle-opacity': o, 'circle-stroke-opacity': o }
-  for (const id of [OVR.otherCount, OVR.activeCount, ...OVERVIEW_LABEL_LAYERS]) out[id] = { 'text-opacity': t }
+  for (const id of [OVR.activeDot, OVR.pinnedDot, OVR.activeClusterDot, OVR.otherClusterDot]) out[id] = { 'circle-opacity': o }
+  for (const id of [OVR.otherCount, OVR.activeCount, ...OVERVIEW_LABEL_LAYERS]) out[id] = { 'text-opacity': t, 'icon-opacity': t }
+  for (const id of OVERVIEW_LABEL_LAYERS) out[id] = { 'text-opacity': t }
   return out
 }
 
-/** A radius that grows with the zoom: 0.6x at z3, 1x from z7 (top-level zoom interpolation, as MapLibre requires). */
-const zoomed = (r: unknown): unknown => ['interpolate', ['linear'], ['zoom'], 3, ['*', 0.6, r], 7, r]
+/** A radius that keeps its size at the national zoom and grows to 1.2x by z10; smaller on a phone's national view
+ *  (top-level zoom interpolation, as MapLibre requires). */
+const zoomed = (r: unknown): unknown => ['interpolate', ['linear'], ['zoom'], SMALL_MAP_ZOOM, ['*', SMALL_MAP_SCALE, r], FULL_SIZE_ZOOM, r, 7, r, 10, ['*', ZOOM_GROWTH, r]]
 
-/** A group bubble's radius from its largest fire: 8 px (no size) to 15 px (100,000 ac), by the log of the acres. */
-export const CLUSTER_RADIUS_EXPR: unknown = ['interpolate', ['linear'], ['ln', ['max', 1, ['to-number', ['get', 'max_acres'], 0]]], 0, 8, 6.9, 10, 9.2, 12.5, 11.5, 15]
+/** A group's radius from how many fires it holds (HANDOFF, decision e): 10 + 4.2·√n px, at most 36. */
+const GROUP_R: unknown = ['min', GROUP_MAX_PX, ['+', GROUP_BASE_PX, ['*', GROUP_PER_SQRT_PX, ['sqrt', ['to-number', ['get', 'point_count'], 0]]]]]
+/** The same, smaller on a phone's national view (groups exist up to z7 only). */
+export const CLUSTER_RADIUS_EXPR: unknown = ['interpolate', ['linear'], ['zoom'], SMALL_MAP_ZOOM, ['*', SMALL_MAP_SCALE, GROUP_R], FULL_SIZE_ZOOM, GROUP_R]
+/** The group label's size (px) and its unit's scale ("28" then "FIRES" smaller, as the screen's 13 / 8 px). */
+export const GROUP_LABEL_PX = 13
+export const GROUP_UNIT_SCALE = 0.62
+/** Group sizes sampled for the label offsets (MapLibre cannot build an array from an expression; an interpolation
+ *  between these counts follows 10 + 4.2·√n within a fraction of a pixel up to the 36 px cap at n ≈ 38). */
+const GROUP_SAMPLES = [2, 3, 4, 5, 6, 8, 10, 13, 17, 22, 28, 34, 39]
+/** An offset that follows the group's radius: `f(r)` evaluated at the sampled counts, at the phone's smaller scale up
+ *  to SMALL_MAP_ZOOM and at full size from FULL_SIZE_ZOOM (as CLUSTER_RADIUS_EXPR). */
+function byGroupRadius(f: (r: number) => [number, number]): unknown {
+  const at = (scale: number) => ['interpolate', ['linear'], ['to-number', ['get', 'point_count'], 0], ...GROUP_SAMPLES.flatMap((n) => [n, ['literal', f(groupRadius(n) * scale).map((v) => Math.round(v * 1000) / 1000)]])]
+  return ['interpolate', ['linear'], ['zoom'], SMALL_MAP_ZOOM, at(SMALL_MAP_SCALE), FULL_SIZE_ZOOM, at(1)]
+}
+/** The tick's start (px): the circle's upper-right edge at 45°. */
+export const GROUP_TICK_OFFSET: unknown = byGroupRadius((r) => [r * Math.SQRT1_2, -r * Math.SQRT1_2])
+/** The label's bottom-left corner (ems of GROUP_LABEL_PX): just past the tick's end. */
+export const GROUP_TEXT_OFFSET: unknown = byGroupRadius((r) => [(r * Math.SQRT1_2 + GROUP_TICK_PX.w + 1) / GROUP_LABEL_PX, (-r * Math.SQRT1_2 + 3) / GROUP_LABEL_PX])
+/** "28 FIRES": the count, then the unit in a smaller size and its own colour. */
+export function groupLabelText(unitColor: string): unknown {
+  return ['format', ['get', 'point_count_abbreviated'], {}, ' FIRES', { 'font-scale': GROUP_UNIT_SCALE, 'text-color': unitColor }]
+}
 
 /** The label text at the current zoom: the fire's label once the zoom reaches its `lz`, else '' (no symbol). */
 const LABEL_TEXT: unknown = [
@@ -469,79 +586,70 @@ export function overviewLayers(theme: MapTheme, o: { narrow?: boolean } = {}): L
   const p = theme === 'light' ? PALETTE.light : PALETTE.dark
   const tone = theme === 'light' ? 'light' : 'dark'
   const S = OVERVIEW_SOURCES
-  const casing = (id: string, source: string, filter: Filter | null, extra: unknown): LayerSpecification =>
+  const circle = (id: string, source: string, filter: Filter | null, paint: Record<string, unknown>, sortKey = true): LayerSpecification =>
     ({
       id,
       type: 'circle',
       source,
       ...(filter ? { filter } : {}),
-      layout: { 'circle-sort-key': ['get', 'sort'] },
-      paint: {
-        'circle-radius': zoomed(extra),
-        'circle-color': 'rgba(0,0,0,0)',
-        'circle-stroke-color': p.casing,
-        'circle-stroke-width': 2,
-        'circle-pitch-alignment': 'viewport',
-      },
+      ...(sortKey ? { layout: { 'circle-sort-key': ['get', 'sort'] } } : {}),
+      paint: { 'circle-pitch-alignment': 'viewport', ...paint },
     }) as unknown as LayerSpecification
-  const past = (id: string, source: string, filter: Filter | null): LayerSpecification =>
-    ({
+  // a faint dark ring just outside the marker's own ring: thin rings stay readable over bright photos
+  const casing = (id: string, source: string, filter: Filter | null) =>
+    circle(id, source, filter, { 'circle-radius': zoomed(['+', ['get', 'r'], 1.1]), 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': p.casing, 'circle-stroke-width': 1.4 })
+  // a fire that is not active: a hollow ring
+  const past = (id: string, source: string, filter: Filter | null) =>
+    circle(id, source, filter, { 'circle-radius': zoomed(['get', 'r']), 'circle-color': p.otherFill, 'circle-stroke-color': p.otherRing, 'circle-stroke-width': 1.2 })
+  // an active fire: the transparent orange circle (its centre dot is the next layer)
+  const live = (id: string, source: string, filter: Filter | null) =>
+    circle(id, source, filter, {
+      'circle-radius': zoomed(['get', 'r']),
+      'circle-color': p.fill,
+      'circle-stroke-color': p.ring,
+      'circle-stroke-width': ['case', ['==', ['get', 'kind'], 'large'], 1.2, 1],
+    })
+  const dot = (id: string, source: string, filter: Filter | null) =>
+    circle(id, source, filter, { 'circle-radius': zoomed(['get', 'dot']), 'circle-color': p.dot })
+  const cluster = (id: string, source: string, active: boolean) =>
+    circle(
       id,
-      type: 'circle',
       source,
-      ...(filter ? { filter } : {}),
-      layout: { 'circle-sort-key': ['get', 'sort'] },
-      paint: {
-        'circle-radius': zoomed(['get', 'r']),
-        'circle-color': p.pastFill,
-        'circle-stroke-color': p.pastRing,
-        'circle-stroke-width': 1.6,
-        'circle-pitch-alignment': 'viewport',
-      },
-    }) as unknown as LayerSpecification
-  const live = (id: string, source: string, filter: Filter | null): LayerSpecification =>
-    ({
-      id,
-      type: 'circle',
-      source,
-      ...(filter ? { filter } : {}),
-      layout: { 'circle-sort-key': ['get', 'sort'] },
-      paint: {
-        // small active fires: a fixed dot without the white ring
-        'circle-radius': ['interpolate', ['linear'], ['zoom'], 3, ['case', ['get', 'small'], SMALL_DOT_PX, ['*', 0.6, ['+', ['get', 'r'], 1]]], 7, ['case', ['get', 'small'], SMALL_DOT_PX, ['+', ['get', 'r'], 1]]],
-        'circle-color': p.liveFill,
-        'circle-stroke-color': p.liveRing,
-        'circle-stroke-width': ['case', ['get', 'small'], 0, 2],
-        'circle-pitch-alignment': 'viewport',
-      },
-    }) as unknown as LayerSpecification
-  const cluster = (id: string, source: string, active: boolean): LayerSpecification =>
-    ({
-      id,
-      type: 'circle',
-      source,
-      filter: CLUSTERED,
-      paint: {
-        'circle-radius': CLUSTER_RADIUS_EXPR,
-        'circle-color': active ? p.liveFill : p.groupPastFill,
-        'circle-stroke-color': active ? p.liveRing : p.pastRing,
-        'circle-stroke-width': active ? 2 : 1.6,
-        'circle-pitch-alignment': 'viewport',
-      },
-    }) as unknown as LayerSpecification
+      CLUSTERED,
+      { 'circle-radius': CLUSTER_RADIUS_EXPR, 'circle-color': active ? p.fill : p.otherFill, 'circle-stroke-color': active ? p.ring : p.otherGroupRing, 'circle-stroke-width': 1.2 },
+      false,
+    )
+  const clusterDot = (id: string, source: string, active: boolean) =>
+    circle(id, source, CLUSTERED, { 'circle-radius': active ? GROUP_DOT_PX : GROUP_DOT_PX - 0.6, 'circle-color': active ? p.dot : p.otherDot }, false)
   const count = (id: string, source: string, active: boolean): LayerSpecification =>
     ({
+      // "28 FIRES" at the group's upper right, after a short tick from its edge (the screen's mono label; MapLibre
+      // draws Noto Sans, the only family OpenFreeMap serves)
       id,
       type: 'symbol',
       source,
       filter: CLUSTERED,
       layout: {
-        'text-field': ['get', 'point_count_abbreviated'],
+        'text-field': groupLabelText(active ? p.countUnit : p.otherCount),
         'text-font': FONT_BOLD,
-        'text-size': 11,
+        'text-size': GROUP_LABEL_PX,
+        'text-anchor': 'bottom-left',
+        'text-offset': GROUP_TEXT_OFFSET,
+        'text-letter-spacing': 0.04,
+        'icon-image': p.tick,
+        'icon-anchor': 'left',
         'text-allow-overlap': true,
+        'icon-allow-overlap': true,
+        'text-ignore-placement': true,
+        'icon-ignore-placement': true,
+        // both start at the circle's upper-right edge (45°): the tick there, the text just past its end
+        'icon-offset': GROUP_TICK_OFFSET,
       },
-      paint: { 'text-color': active || tone === 'dark' ? '#ffffff' : p.ink, 'text-halo-color': active ? p.liveHalo : p.halo, 'text-halo-width': 1.1 },
+      paint: {
+        'text-color': active ? p.count : p.otherCount,
+        'text-halo-color': p.halo,
+        'text-halo-width': 1.4,
+      },
     }) as unknown as LayerSpecification
   const hit = (id: string, source: string, filter: Filter | null): LayerSpecification =>
     ({
@@ -603,20 +711,24 @@ export function overviewLayers(theme: MapTheme, o: { narrow?: boolean } = {}): L
     }) as unknown as LayerSpecification
   const chips = overviewFilters([])
   return [
-    // other fires (not active): groups and single markers, below every active mark
+    // other fires (not active): groups and single hollow rings, below every active mark
     cluster(OVR.otherCluster, S.other, false),
-    casing(OVR.otherCasing, S.other, SINGLE, ['+', ['get', 'r'], 0.8]),
+    clusterDot(OVR.otherClusterDot, S.other, false),
+    casing(OVR.otherCasing, S.other, SINGLE),
     past(OVR.otherPoint, S.other, SINGLE),
     count(OVR.otherCount, S.other, false),
     // active fires
     cluster(OVR.activeCluster, S.active, true),
-    casing(OVR.activeCasing, S.active, SINGLE, ['case', ['get', 'small'], SMALL_DOT_PX - 1, ['+', ['get', 'r'], 2]]),
+    clusterDot(OVR.activeClusterDot, S.active, true),
+    casing(OVR.activeCasing, S.active, SINGLE),
     live(OVR.activePoint, S.active, SINGLE),
+    dot(OVR.activeDot, S.active, SINGLE),
     count(OVR.activeCount, S.active, true),
     // pinned fires (never grouped): large active fires and the fire whose card is open
-    casing(OVR.pinnedCasing, S.pinned, null, ['case', ['get', 'live'], ['+', ['get', 'r'], 2], ['+', ['get', 'r'], 0.8]]),
+    casing(OVR.pinnedCasing, S.pinned, null),
     past(OVR.pinnedPast, S.pinned, ['!', ['get', 'live']]),
     live(OVR.pinnedLive, S.pinned, ['get', 'live']),
+    dot(OVR.pinnedDot, S.pinned, ['get', 'live']),
     {
       // the fire whose card is open (filter set by the controller; it is always in the pinned source)
       id: OVR.selected,

@@ -10,7 +10,9 @@
 // Brief 3 (§14.11): the national overview's groups and small dots, the record sources (CAL FIRE in California, NIFC
 // WFIGS elsewhere) and the list-absence line of §14.14; times in the open fire's zone and the preset's clock.
 // Brief 4 (Command, CommandView.dc.html): `variant="chips"` is the same compact row as plain chips on the map with the
-// scale bar at its end and a "Legend details" button that opens the same details upward.
+// scale bar at its end and a "Legend details" button that opens the same details upward. H3 (Main.dc.html legend): the
+// overview's marker swatches follow the restyled markers (transparent circles with a centre dot, sized by type; groups
+// "N FIRES"), and the NWS fire weather outlines get an entry while alerts are in effect on the overview.
 import { ChevronDown, Info } from 'lucide-react'
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { ExtrasLegend, ExtrasNotice, LegendSwatch } from '../extras/ExtrasCommon'
@@ -20,6 +22,7 @@ import { LIST_ABSENCE, LIST_ABSENCE_SHORT, PAST_YEAR, SEASON_YEAR } from '../sta
 import { useStore } from '../state/store'
 import { useTimeFormat } from '../state/timeZone'
 import { useWorkspace } from '../state/workspace'
+import { useOfficialNow } from '../official/hooks'
 import { Segmented } from '../ui/controls'
 import { useDismiss, useNow } from '../ui/hooks'
 import { BUILDINGS_MINZOOM, buildingsCaveat } from './basemapStyle'
@@ -60,6 +63,7 @@ export function MapLegend({ inline, variant = 'row' }: { inline?: boolean; varia
   const basemap = useWorkspace((s) => s.basemap)
   const overviewFilter = useWorkspace((s) => s.overviewFilter)
   const perspective = useWorkspace((s) => s.perspective)
+  const publicPreset = useWorkspace((s) => s.preset === 'public')
   const hasIncident = useStore((s) => s.incidentId != null)
   const startedMs = useStore((s) => s.summary?.started_ms ?? null)
   const vectorOk = useMapRuntime((s) => s.providers.basemap.state !== 'failed')
@@ -98,6 +102,9 @@ export function MapLegend({ inline, variant = 'row' }: { inline?: boolean; varia
   const showBuildings = perspective === '3d' && closeZoom && vectorOk
   const overview = !hasIncident
   const otherFires = overviewFilter === 'past' ? `${PAST_YEAR} fire` : overviewFilter === 'active' ? '' : `Other ${SEASON_YEAR} fire`
+  // the overview's NWS outlines (official/mapLayer.ts draws the alerts in effect): their key while any is drawn
+  const fireWeather = useOfficialNow().fireWeather
+  const nwsShown = !hasIncident && fireWeather.alerts.some((a) => a.phase === 'active' || a.phase === 'upcoming')
   const otherGroup = overviewFilter === 'past' ? `Group of ${PAST_YEAR} fires` : `Group of other ${SEASON_YEAR} fires`
 
   let fcShort = 'No forecast'
@@ -113,8 +120,8 @@ export function MapLegend({ inline, variant = 'row' }: { inline?: boolean; varia
     <ul className="fxm-legend-row" aria-label="Legend">
       {overview && overviewFilter !== 'past' && <Row sw="fire-active">Active fire</Row>}
       {overview && overviewFilter !== 'past' && (
-        <Row sw="group-active" title="Group of active fires (number = how many)">
-          Group of active fires
+        <Row sw="group-active" title="Group of active fires (N = how many)">
+          Group of active fires <span className="fxm-legend-mono">N FIRES</span>
         </Row>
       )}
       {overview && overviewFilter !== 'past' && (
@@ -124,8 +131,13 @@ export function MapLegend({ inline, variant = 'row' }: { inline?: boolean; varia
       )}
       {overview && otherFires && <Row sw="fire-past">{otherFires}</Row>}
       {overview && otherFires && (
-        <Row sw="group-past" title={`${otherGroup} (number = how many)`}>
+        <Row sw="group-past" title={`${otherGroup} (N = how many)`}>
           {overviewFilter === 'past' ? `Group of ${PAST_YEAR} fires` : 'Group of other fires'}
+        </Row>
+      )}
+      {nwsShown && (
+        <Row sw="nws" title="National Weather Service Red Flag Warnings and Fire Weather Watches in effect (outline only)">
+          Fire weather alert (NWS)
         </Row>
       )}
       {showObserved && <Row sw="observed">Observed fire</Row>}
@@ -169,20 +181,32 @@ export function MapLegend({ inline, variant = 'row' }: { inline?: boolean; varia
           <Swatch kind="fire-active" /> {overview ? 'Fires (CAL FIRE in California, NIFC WFIGS elsewhere; official records)' : 'Other fires (CAL FIRE in California, NIFC WFIGS elsewhere; official records)'}
         </h3>
         <p>
-          One marker per fire at the agency's reported location, sized by its reported acreage. Filled orange: an agency lists the fire as active. Hollow:
-          contained or out. Close fires are grouped; active fires are never grouped with other fires, and active fires of{' '}
+          One marker per fire at the agency's reported location; its size says its type, not its exact acreage. Orange circle with a bright centre: an
+          agency lists the fire as active (smallest: under 10 acres or no size reported; largest: {PINNED_MIN_ACRES.toLocaleString('en-US')} acres or
+          more). Small hollow ring: contained or out. Close fires are grouped; active fires are never grouped with other fires, and active fires of{' '}
           {PINNED_MIN_ACRES.toLocaleString('en-US')} acres or more are never grouped. Names show for the largest fires first: zoomed out, active fires of{' '}
           {PINNED_MIN_ACRES.toLocaleString('en-US')} acres or more; closer in, active fires of {LABEL_ACTIVE_Z5_ACRES} acres or more and fires of{' '}
           {LABEL_MIN_ACRES.toLocaleString('en-US')} acres or more, then smaller ones.{' '}
-          {overview ? 'Zoom in on a fire with a prepared analysis to see its spread, or click a fire for its card.' : 'Lighter while a fire is open; zoom in on one to switch to it, or click it for its card.'}
+          {publicPreset
+            ? overview
+              ? 'Click a fire to open it.'
+              : 'Lighter while a fire is open; click one to open it.'
+            : overview
+              ? 'Zoom in on a fire with a prepared analysis to see its spread, or click a fire for its card.'
+              : 'Lighter while a fire is open; zoom in on one to switch to it, or click it for its card.'}
         </p>
         <ul>
-          <Row sw="group-active">Group of active fires (number = how many)</Row>
+          <Row sw="fire-large">Active fire of {PINNED_MIN_ACRES.toLocaleString('en-US')} acres or more (never grouped)</Row>
+          <Row sw="fire-active">Active fire</Row>
           <Row sw="small-active">Small active fire (under 10 acres or size not reported)</Row>
+          <Row sw="fire-past">Fire that is not active (contained or out)</Row>
+          <Row sw="group-active">Group of active fires ("28 FIRES": how many)</Row>
           <Row sw="group-past">{otherGroup}</Row>
         </ul>
-        <p>A group's circle is sized by the largest fire in it; click a group to zoom in. Alaska, Hawaii and US territories are not supported yet.</p>
-        <p>"Spread not prepared yet": Fire-3d has not prepared that fire's analysis. Its card can prepare it (1-3 min); Fire-3d never does so on its own.</p>
+        <p>A group's circle grows with the number of fires in it; click a group to zoom in. Alaska, Hawaii and US territories are not supported yet.</p>
+        {!publicPreset && (
+          <p>"Spread not prepared yet": Fire-3d has not prepared that fire's analysis. Its card can prepare it (1-3 min); Fire-3d never does so on its own.</p>
+        )}
         <p className="fxm-legend-note">{LIST_ABSENCE}</p>
       </section>
       {showObserved && (

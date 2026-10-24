@@ -14,3 +14,8 @@ Ports: API 8733, Vite 5193. Builder started 2026-10-24.
 
 ## Log
 - Read BRIEF-4, PLAN-4, CONTRACT 15, HANDOFF, H2 report, Main screen + renders.
+- WIP 1: overview chrome rebuilt (Public minimal / details, Command overview), ShowDetailsPill, OverviewStatus,
+  LocateButton (+ locate.ts tests), SearchBox pill variant, list panel restyle, legend swatches, markers restyled
+  (type sizes, centre dots, groups 10 + 4.2·√n, "N FIRES" + tick, smaller on phones' national view), pickFire /
+  openFireView (Public opens the fire view), zoom focus and chips off in Public, overview map stays still when panels
+  change, top plates behind the bar. Gates: typecheck ok, lint 55, tests 1318 + 2 skipped.

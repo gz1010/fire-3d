@@ -1001,3 +1001,145 @@
   line-height: 1.4;
   color: var(--m-text-2);
 }
+
+/* ------------------------------------------------------------------------------------------------ brief 4 pill */
+/* The overview's centred search pill (Main.dc.html: 560 × 52, padding 0 8 0 18, radius 999, glass .62 + blur 22,
+   hairline .22, the label for screen readers only, the 36 px "Search" button inside) and the 52 px locate-me button
+   beside it (location/LocateButton.tsx). Results, hints and messages open under the pill, as wide as it. */
+.loc-search.is-pill {
+  width: 100%;
+}
+.loc-search.is-pill .loc-search-box {
+  flex-direction: row;
+  align-items: center;
+  height: 52px;
+  box-sizing: border-box;
+  padding: 0 8px 0 18px;
+  border: 1px solid rgba(200, 200, 200, 0.22);
+  border-radius: 999px;
+  background: rgba(14, 14, 14, 0.62);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  backdrop-filter: blur(22px) saturate(140%);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+.loc-search.is-pill .loc-search-box:focus-within {
+  border-color: rgba(208, 208, 208, 0.7);
+  box-shadow:
+    0 0 0 2px rgba(208, 208, 208, 0.2),
+    0 12px 32px rgba(0, 0, 0, 0.4);
+}
+.loc-search.is-pill .loc-search-bar {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  gap: 12px;
+}
+.loc-search.is-pill .loc-search-icon {
+  color: #d0d0d0;
+}
+.loc-search.is-pill .loc-search-input {
+  font-size: 15px;
+  color: var(--m-text-body);
+}
+.loc-search.is-pill .loc-search-input::placeholder {
+  color: var(--m-text-3);
+}
+.loc-search.is-pill .loc-search-go {
+  height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(200, 200, 200, 0.12);
+  color: #e0e0e0;
+  font-size: 13px;
+  font-weight: 500;
+}
+.loc-search.is-pill .loc-search-go:hover:not(:disabled) {
+  background: rgba(200, 200, 200, 0.2);
+}
+.loc-search.is-pill .loc-search-go:disabled {
+  opacity: 1;
+  color: var(--m-text-3);
+}
+.loc-search.is-pill .loc-search-below {
+  top: calc(100% + 8px);
+}
+.loc-search.is-pill :is(.loc-search-hint, .loc-search-status, .loc-results) {
+  border-radius: 16px;
+  background: var(--m-panel-raised);
+}
+.loc-search.is-pill :is(.loc-search-hint, .loc-search-status) {
+  padding: 10px 16px;
+}
+
+.loc-locate {
+  position: relative;
+  flex: none;
+}
+.loc-locate-btn {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 1px solid rgba(200, 200, 200, 0.22);
+  border-radius: 999px;
+  background: rgba(14, 14, 14, 0.62);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  backdrop-filter: blur(22px) saturate(140%);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  color: #d0d0d0;
+  cursor: pointer;
+}
+.loc-locate-btn:hover {
+  background: rgba(30, 30, 30, 0.75);
+  color: var(--m-text);
+}
+.loc-locate-btn.is-busy {
+  cursor: progress;
+}
+.loc-locate-below {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(380px, calc(100vw - 2 * var(--m-gap)));
+  z-index: 3;
+}
+.loc-locate-below:empty {
+  display: none;
+}
+.loc-locate-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 8px 10px 14px;
+  border-radius: 14px;
+  background: var(--m-panel-raised);
+  font-size: var(--m-fs-md);
+  line-height: 1.45;
+  color: var(--m-text);
+}
+.loc-locate-msg > span {
+  flex: 1 1 auto;
+}
+@media (max-width: 760px) {
+  .loc-search.is-pill .loc-search-box {
+    height: 44px;
+    padding: 0 4px 0 14px;
+  }
+  .loc-search.is-pill .loc-search-bar {
+    gap: 8px;
+  }
+  .loc-search.is-pill .loc-search-input {
+    font-size: 15px;
+  }
+  .loc-search.is-pill .loc-search-go {
+    height: 36px;
+    padding: 0 12px;
+  }
+  .loc-locate-btn {
+    width: 44px;
+    height: 44px;
+  }
+}

@@ -84,7 +84,8 @@ export function PublicFireChrome({ credits }: { credits: ReactNode }) {
           {!wide && <ImageryChip />}
         </div>
         <div className="mw-controls" data-chrome="controls">
-          <MapControls />
+          {/* the fire view's compact cluster (brief 4 H3, CONTRACT 15.5: zoom ±, ⟲ compass ⟳); H4 places it */}
+          <MapControls variant="compact" />
         </div>
         <aside className="mw-updates" id="mw-updates" data-chrome="updates" aria-label="Incident updates">
           <UpdatesPanel>

@@ -5,6 +5,9 @@
 // an agency's official record (CAL FIRE in California, NIFC WFIGS elsewhere); the list-absence line of §14.14 says a
 // place with no marker is not an all-clear. Picking a row opens the fire card and flies the map there. The panel uses
 // the updates slot and its open flag (panels.updates): there are no incident updates without a fire.
+// Brief 4 (H3, Main.dc.html "Fires in the lower 48"): restyled (styles/overview.css); in Public a row opens the fire
+// view (decision b, fireActions.pickFire) and the panel's close button hides the overview's details (decision d); on
+// Public phones the "Show details" pill replaces the peek bar.
 import { ChevronDown, ChevronRight, ChevronUp, Flame, RefreshCw, X } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
@@ -42,7 +45,7 @@ import { Segmented, Spinner } from '../controls'
 import { OfficialNow } from '../feed/OfficialNow'
 import { useNow } from '../hooks'
 import { useListWindow } from '../useListWindow'
-import { showFireCard } from './fireActions'
+import { pickFire } from './fireActions'
 import { NARROW_QUERY, useDrawerFocus, useMediaQuery } from './hooks'
 
 const LIST_OF: Record<OverviewFilter, CatalogList[]> = { active: ['live'], season: ['live', 'season'], past: ['historical'] }
@@ -432,7 +435,10 @@ function useFocusHandOff() {
   )
 }
 
-export function OverviewPanel() {
+/** `closeHidesDetails` (Public, wide screens): the head's button is "Hide details" (the list is part of the overview's
+ *  details). `sheetPeek` (phones): the closed sheet shows the peek bar (Command); Public's "Show details" pill opens it
+ *  instead. */
+export function OverviewPanel({ closeHidesDetails = false, sheetPeek = true }: { closeHidesDetails?: boolean; sheetPeek?: boolean } = {}) {
   const open = useWorkspace((s) => s.panels.updates)
   const setPanel = useWorkspace((s) => s.setPanel)
   const narrow = useMediaQuery(NARROW_QUERY)
@@ -440,7 +446,7 @@ export function OverviewPanel() {
   useDrawerFocus(open, heading, 'updates')
   useFocusHandOff()
   if (!open) {
-    if (narrow) return <PeekBar />
+    if (narrow) return sheetPeek ? <PeekBar /> : null
     return (
       <button type="button" className="mw-btn mw-updates-open" data-panel-toggle="updates" aria-expanded={false} onClick={() => setPanel('updates', true)}>
         <Flame size={14} /> {OVERVIEW_TITLE}
@@ -448,7 +454,7 @@ export function OverviewPanel() {
     )
   }
   const pick = (f: IncidentSummary) => {
-    showFireCard(f.id)
+    pickFire(f.id)
     if (narrow) setPanel('updates', false) // phones: show the map and the card
   }
   return (
@@ -458,16 +464,28 @@ export function OverviewPanel() {
         <h2 id="ov-title" ref={heading} tabIndex={-1} data-tip="Lower 48 states; Alaska and Hawaii are not supported yet">
           {OVERVIEW_TITLE}
         </h2>
-        <button
-          type="button"
-          className="mw-icon-btn"
-          aria-label={narrow ? 'Close the fire list' : 'Collapse the fire list'}
-          data-tip={narrow ? undefined : 'Collapse'}
-          aria-expanded={true}
-          onClick={() => setPanel('updates', false)}
-        >
-          {narrow ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-        </button>
+        {closeHidesDetails ? (
+          <button
+            type="button"
+            className="mw-icon-btn ov-close"
+            aria-label="Hide details"
+            data-tip="Hide details (the fire list, map controls, readout, scale and legend)"
+            onClick={() => useWorkspace.getState().setOverviewDetails(false)}
+          >
+            <X size={16} />
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="mw-icon-btn"
+            aria-label={narrow ? 'Close the fire list' : 'Collapse the fire list'}
+            data-tip={narrow ? undefined : 'Collapse'}
+            aria-expanded={true}
+            onClick={() => setPanel('updates', false)}
+          >
+            {narrow ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+          </button>
+        )}
       </header>
       {/* official information for the overview (us-official): NWS fire weather alerts and a pointer to a fire's details */}
       <div className="mw-official-slot ov-official">

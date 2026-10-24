@@ -13,7 +13,14 @@ import {
   clusterClickZoom,
   clusterHoverText,
   DIM_OPACITY,
+  DOT_PX,
   anchorOffsets,
+  GROUP_TEXT_OFFSET,
+  GROUP_TICK_IMAGE,
+  GROUP_TICK_OFFSET,
+  groupLabelText,
+  groupRadius,
+  groupTickImage,
   isPinned,
   isSmallActive,
   LABEL_ANCHORS,
@@ -21,7 +28,11 @@ import {
   labelSide,
   NARROW_LABEL_MAX_ZOOM,
   narrowLabelAnchorOffset,
+  markerKind,
   markerRadius,
+  MARKER_MAX_PX,
+  MARKER_MIN_PX,
+  MARKER_PX,
   OVERVIEW_CHIP_LAYERS,
   OVERVIEW_CLUSTER_LAYERS,
   OVERVIEW_FIRE_LAYERS,
@@ -80,15 +91,28 @@ function style(layers: unknown[]) {
 }
 
 describe('overview markers', () => {
-  it('radius grows with the square root of the acreage, 4-13 px', () => {
-    expect(markerRadius(0)).toBe(4)
-    expect(markerRadius(null)).toBe(4)
-    expect(markerRadius(-5)).toBe(4)
-    expect(markerRadius(10_000)).toBe(7)
-    expect(markerRadius(130_000)).toBeCloseTo(13, 0)
-    expect(markerRadius(1_000_000)).toBe(13)
-    const rs = [100, 1000, 5000, 20_000, 60_000].map(markerRadius)
-    for (let i = 1; i < rs.length; i++) expect(rs[i]).toBeGreaterThan(rs[i - 1])
+  it('size says the type (brief 4, HANDOFF): small active r7, active r11, large active r15, not active r4.5', () => {
+    expect(markerKind(active('a', 0))).toBe('small')
+    expect(markerKind(active('a', null))).toBe('small')
+    expect(markerKind(active('a', 9.9))).toBe('small')
+    expect(markerKind(active('a', 10))).toBe('active')
+    expect(markerKind(active('a', 4_999))).toBe('active')
+    expect(markerKind(active('a', 5_000))).toBe('large')
+    expect(markerKind(fire({ acres: 172_912 }))).toBe('other')
+    expect([active('a', 1), active('a', 100), active('a', 172_912), fire({ acres: 60_000 })].map(markerRadius)).toEqual([7, 11, 15, 4.5])
+    expect(MARKER_PX).toEqual({ small: 7, active: 11, large: 15, other: 4.5 })
+    expect([MARKER_MIN_PX, MARKER_MAX_PX]).toEqual([4.5, 15])
+    // the white-hot centre dot: active fires only (a fire that is not active is a hollow ring)
+    expect(DOT_PX).toEqual({ small: 1.4, active: 2.2, large: 2.8, other: 0 })
+  })
+
+  it('features carry their type, radius and dot; the pinned source draws large fires at r15', () => {
+    const fc = overviewFeatures([active('l', 172_912), active('s', 2), fire({ id: 'o', acres: 900 })], 'us')
+    expect(fc.features.map((f) => [f.properties.kind, f.properties.r, f.properties.dot])).toEqual([
+      ['large', 15, 2.8],
+      ['small', 7, 1.4],
+      ['other', 4.5, 0],
+    ])
   })
 
   it('labels read "Name · acres" (no trailing "Fire"), hectares in metric, names verbatim otherwise', () => {
@@ -248,18 +272,51 @@ describe('groups (MapLibre clustering)', () => {
     )
     expect(clusterHoverText({ group: 'active', count: 3, maxAcres: 0, small: 3 }, 'metric')).toBe('3 active fires · 3 under 10 ac or size not reported · click to zoom in')
   })
-  it('bubbles are sized by the largest fire (log acres), not by the count', () => {
-    const c = overviewLayers('dark').find((l) => l.id === OVR.activeCluster) as unknown as { paint: Record<string, unknown[]> }
-    const r = c.paint['circle-radius']
-    expect(JSON.stringify(r)).toContain('max_acres')
-    expect(JSON.stringify(r)).not.toContain('point_count')
-    // ln(606) ≈ 6.4 → under 10 px; a single 172,912-ac marker is 14 px
-    const stops = r.slice(3) as number[]
-    const at = (x: number) => {
-      for (let i = 0; i < stops.length - 2; i += 2) if (x <= stops[i + 2]) return stops[i + 1] + ((x - stops[i]) / (stops[i + 2] - stops[i])) * (stops[i + 3] - stops[i + 1])
-      return stops[stops.length - 1]
+  it('groups are sized by how many fires they hold (brief 4, decision e): 10 + 4.2·√n px, at most 36', () => {
+    expect(groupRadius(4)).toBeCloseTo(18.4, 5)
+    expect(groupRadius(28)).toBeCloseTo(32.2, 1)
+    expect(groupRadius(1000)).toBe(36)
+    expect(groupRadius(0)).toBe(10)
+    for (const id of [OVR.activeCluster, OVR.otherCluster]) {
+      const c = overviewLayers('dark').find((l) => l.id === id) as unknown as { paint: Record<string, unknown> }
+      const r = c.paint['circle-radius']
+      expect(JSON.stringify(r)).toContain('point_count')
+      expect(JSON.stringify(r)).not.toContain('max_acres')
+      // evaluated as MapLibre does
+      const spec = (latest as unknown as { paint_circle: Record<string, never> }).paint_circle['circle-radius']
+      const parsed = createPropertyExpression(r as never, spec)
+      expect(parsed.result).toBe('success')
+      const expr = parsed.value as unknown as { evaluate: (g: { zoom: number }, f: unknown) => number }
+      const at = (n: number) => expr.evaluate({ zoom: 4 }, { type: 'Point', properties: { point_count: n }, geometry: { type: 'Point', coordinates: [0, 0] } })
+      expect(at(4)).toBeCloseTo(10 + 4.2 * 2, 5)
+      expect(at(28)).toBeCloseTo(10 + 4.2 * Math.sqrt(28), 5)
+      expect(at(500)).toBe(36)
     }
-    expect(at(Math.log(606))).toBeLessThan(markerRadius(172_912) + 1)
+  })
+
+  it('group labels: "28 FIRES" at the circle\'s upper right, after a short tick (Noto Sans, always shown)', () => {
+    const c = overviewLayers('dark').find((l) => l.id === OVR.activeCount) as unknown as { layout: Record<string, unknown>; paint: Record<string, unknown> }
+    expect(c.layout['text-field']).toEqual(groupLabelText('#ffb27a'))
+    expect(JSON.stringify(c.layout['text-field'])).toContain(' FIRES')
+    expect(c.layout['text-font']).toEqual(['Noto Sans Bold'])
+    expect(c.layout['icon-image']).toBe(GROUP_TICK_IMAGE.dark)
+    expect(c.layout['text-allow-overlap']).toBe(true)
+    expect(c.layout['icon-offset']).toBe(GROUP_TICK_OFFSET)
+    expect(c.layout['text-offset']).toBe(GROUP_TEXT_OFFSET)
+    // the tick starts on the circle's edge at 45° (up and to the right) for any group size
+    const spec = (latest as unknown as { layout_symbol: Record<string, never> }).layout_symbol['icon-offset']
+    const parsed = createPropertyExpression(GROUP_TICK_OFFSET as never, spec)
+    expect(parsed.result).toBe('success')
+    const expr = parsed.value as unknown as { evaluate: (g: { zoom: number }, f: unknown) => number[] }
+    for (const n of [3, 10, 28, 39, 400]) {
+      const [x, y] = expr.evaluate({ zoom: 4 }, { type: 'Point', properties: { point_count: n }, geometry: { type: 'Point', coordinates: [0, 0] } })
+      expect(Math.hypot(x, y)).toBeCloseTo(groupRadius(Math.min(n, 39)), 0)
+      expect(x).toBeGreaterThan(0)
+      expect(y).toBeLessThan(0)
+    }
+    const tick = groupTickImage('dark')
+    expect(tick.image.data.length).toBe(tick.image.width * tick.image.height * 4)
+    expect(tick.options.pixelRatio).toBe(2)
   })
 })
 
@@ -305,11 +362,32 @@ describe('layers', () => {
     expect(validateStyleMin(style(layers.map((l) => (l.id in f ? { ...l, filter: f[l.id] } : l))) as never)).toEqual([])
   })
 
-  it('markers are lighter while a fire is open', () => {
+  it('markers are lighter while a fire is open (rings, centre dots, groups, labels)', () => {
     expect(overviewPaint(false)[OVR.activePoint]['circle-opacity']).toBe(1)
     expect(overviewPaint(true)[OVR.activePoint]['circle-opacity']).toBe(DIM_OPACITY)
     expect(overviewPaint(true)[OVR.activeCluster]['circle-opacity']).toBe(DIM_OPACITY)
+    for (const id of [OVR.activeDot, OVR.pinnedDot, OVR.activeClusterDot, OVR.otherClusterDot]) expect(overviewPaint(true)[id]['circle-opacity']).toBe(DIM_OPACITY)
     expect(overviewPaint(true)[OVR.pinnedLabel]['text-opacity']).toBeLessThan(1)
+    expect(overviewPaint(true)[OVR.activeCount]['icon-opacity']).toBeLessThan(1)
+  })
+
+  it('the screens\' colours (brief 4): transparent orange circles, #ffc08a rings, white-hot dots, hollow #f0d9b0 rings', () => {
+    const layers = overviewLayers('dark') as unknown as { id: string; paint: Record<string, unknown> }[]
+    const paint = (id: string) => layers.find((l) => l.id === id)?.paint ?? {}
+    expect(paint(OVR.activePoint)['circle-color']).toBe('rgba(255,138,60,0.10)')
+    expect(paint(OVR.activePoint)['circle-stroke-color']).toBe('rgba(255,192,138,0.8)')
+    expect(paint(OVR.activeDot)['circle-color']).toBe('#fff3dc')
+    expect(paint(OVR.otherPoint)['circle-stroke-color']).toBe('rgba(240,217,176,0.8)')
+    // full size at a desktop's national zoom (about z3.9) and to z7, 1.2x by z10, 0.65x on a phone's national view (z2)
+    const spec = (latest as unknown as { paint_circle: Record<string, never> }).paint_circle['circle-radius']
+    const parsed = createPropertyExpression(paint(OVR.activePoint)['circle-radius'] as never, spec)
+    expect(parsed.result).toBe('success')
+    const expr = parsed.value as unknown as { evaluate: (g: { zoom: number }, f: unknown) => number }
+    const at = (zoom: number) => expr.evaluate({ zoom }, { type: 'Point', properties: { r: 11 }, geometry: { type: 'Point', coordinates: [0, 0] } })
+    expect(at(3.9)).toBeCloseTo(11, 5)
+    expect(at(7)).toBeCloseTo(11, 5)
+    expect(at(10)).toBeCloseTo(13.2, 5)
+    expect(at(2)).toBeCloseTo(11 * 0.65, 5)
   })
 
   it('the chip pill: stretchable, transparent corners, opaque inside, amber edge', () => {
@@ -363,11 +441,12 @@ describe('layers', () => {
     expect(parsed.result).toBe('success')
     const expr = parsed.value as unknown as { evaluate: (g: { zoom: number }, f: unknown) => { values: unknown[] } }
     const at = (zoom: number, side: string, r: number) => expr.evaluate({ zoom }, { type: 'Point', properties: { side, r }, geometry: { type: 'Point', coordinates: [0, 0] } }).values
-    expect(at(2.1, 'ww', 13)).toEqual(anchorOffsets(['left'], 13))
-    expect(at(2.1, 'ee', 4)).toEqual(anchorOffsets(['right'], 4))
-    expect(at(2.1, 'w', 13)).toEqual(anchorOffsets(LABEL_ANCHORS.w, 13))
-    expect(at(2.1, 'c', 13)).toEqual(anchorOffsets(LABEL_ANCHORS.c, 13))
-    expect(at(NARROW_LABEL_MAX_ZOOM, 'ww', 13)).toEqual(anchorOffsets(LABEL_ANCHORS.c, 13))
+    // (at the radius stops: the offsets in between are interpolated, as MapLibre does)
+    expect(at(2.1, 'ww', MARKER_MAX_PX)).toEqual(anchorOffsets(['left'], MARKER_MAX_PX))
+    expect(at(2.1, 'ee', MARKER_MIN_PX)).toEqual(anchorOffsets(['right'], MARKER_MIN_PX))
+    expect(at(2.1, 'w', MARKER_MAX_PX)).toEqual(anchorOffsets(LABEL_ANCHORS.w, MARKER_MAX_PX))
+    expect(at(2.1, 'c', MARKER_MAX_PX)).toEqual(anchorOffsets(LABEL_ANCHORS.c, MARKER_MAX_PX))
+    expect(at(NARROW_LABEL_MAX_ZOOM, 'ww', MARKER_MAX_PX)).toEqual(anchorOffsets(LABEL_ANCHORS.c, MARKER_MAX_PX))
     // features carry their side
     const fc = overviewFeatures([fire({ id: 'a', lon: -121.5, lat: 40 })], 'us')
     expect(fc.features[0].properties?.side).toBe('ww')

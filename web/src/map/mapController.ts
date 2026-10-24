@@ -51,7 +51,7 @@ import { attachRotateGesture } from '../lib/rotateGesture'
 import { fmtAt, timeFmt, type TimeFmt } from '../lib/time'
 import { mountOfficialLayers, type OfficialLayersHandle } from '../official/mapLayer'
 import { useAnnotations } from '../state/annotations'
-import { showFireCard } from '../state/fireCard'
+import { openFireView, opensFireView, pickFire } from '../state/fireCard'
 import { findFire, overviewFires, PAST_YEAR, SEASON_YEAR, type OverviewCatalog } from '../state/overview'
 import { registerRotation } from '../state/rotation'
 import { readUrlParams } from '../state/runtime'
@@ -96,6 +96,8 @@ import {
   chipImage,
   clusterClickZoom,
   clusterHoverText,
+  GROUP_TICK_IMAGE,
+  groupTickImage,
   OVERVIEW_CHIP_LAYERS,
   OVERVIEW_CLUSTER_LAYERS,
   OVERVIEW_FIRE_LAYERS,
@@ -368,6 +370,8 @@ export class MapController {
       useWorkspace.subscribe((s, p) => {
         if (s.basemap !== p.basemap) void this.applyBasemap(s.basemap)
         if (s.preset !== p.preset && this.styleReady && this.map.getLayer(LYR.incidentLabel)) this.map.setLayoutProperty(LYR.incidentLabel, 'text-field', incidentLabelField(s.preset) as never)
+        // zoom focus and the "Spread not prepared yet" chips are Command's (brief 4 decision b): re-evaluate the view
+        if (s.preset !== p.preset) this.scheduleFocus()
         if (s.perspective !== p.perspective) this.applyPerspective(s.perspective, true)
         if (s.selection !== p.selection || s.mapLayers.selection !== p.mapLayers.selection) this.updatePin()
         if (s.mapFlyTo && s.mapFlyTo.nonce !== this.flyNonce) this.flyRequested(s.mapFlyTo)
@@ -494,6 +498,10 @@ export class MapController {
     const width = map.getContainer().clientWidth
     for (const g of OVERVIEW_GROUPS) if (!map.getSource(OVERVIEW_SOURCES[g])) map.addSource(OVERVIEW_SOURCES[g], overviewSourceOptions(g, width) as never)
     for (const tone of ['dark', 'light'] as const) {
+      if (!map.hasImage(GROUP_TICK_IMAGE[tone])) {
+        const t = groupTickImage(tone)
+        map.addImage(GROUP_TICK_IMAGE[tone], t.image, t.options)
+      }
       if (map.hasImage(CHIP_IMAGE[tone])) continue
       const c = chipImage(tone)
       map.addImage(CHIP_IMAGE[tone], c.image, c.options)
@@ -717,9 +725,10 @@ export class MapController {
 
   /** Open a fire's card from the overview map and fly to its area (decision 1: clicking a fire flies to it). The same
    *  path as the list and the picker (state/fireCard.ts): an unprepared fire holds the zoom focus, so a nearby prepared
-   *  fire does not open instead (brief-3 integration review R1). */
+   *  fire does not open instead (brief-3 integration review R1). Public opens the fire view instead (brief 4 decision
+   *  b): pickFire(id). */
   private openFireFromOverview(id: string): void {
-    showFireCard(id)
+    pickFire(id)
   }
 
   // ------------------------------------------------------------------------------------------------ camera
@@ -925,9 +934,19 @@ export class MapController {
       } else this.pendingPadding = true
       return
     }
+    const settling = this.framing.phase === 'done' && g != null && performance.now() - this.framedAt < SETTLE_MS
+    // the national overview keeps the map where it is when its panels come and go (brief 4, Main.dc.html: "Show
+    // details", a location card): the point at the middle of the new free area stays under the same pixel, so nothing
+    // on the map moves; the padding still applies to the next framing ("All states", a search)
+    if (!settling && useStore.getState().incidentId == null) {
+      const c = this.map.getContainer()
+      const center = this.map.unproject([(c.clientWidth + padding.left - padding.right) / 2, (c.clientHeight + padding.top - padding.bottom) / 2])
+      this.input.ours(() => this.map.jumpTo({ center, padding }))
+      return
+    }
     // a goal framed moments ago (the layout still settling), and the lower-48 overview as framed, follow the safe area
     // while the user has not moved: fit them again
-    if (this.framing.phase === 'done' && g && (performance.now() - this.framedAt < SETTLE_MS || (g.kind === 'overview' && g.bounds === LOWER48_BOUNDS))) {
+    if (this.framing.phase === 'done' && g && (settling || (g.kind === 'overview' && g.bounds === LOWER48_BOUNDS))) {
       this.issueFit(g, animate, false)
       return
     }
@@ -1005,8 +1024,9 @@ export class MapController {
     if (this.framing.viewIsSettled()) {
       const p = this.pose()
       useWorkspace.getState().setView({ centerLon: p.lon, centerLat: p.lat, zoom: p.zoom, bearing: p.bearing, pitch: p.pitch })
-      // the overview view Back returns to: never one zoomed in far enough to focus a fire again
-      if (useStore.getState().incidentId == null && !this.overviewFireFly && p.zoom < FOCUS_OUT_ZOOM) this.overviewView = { lon: p.lon, lat: p.lat, zoom: p.zoom }
+      // the overview view Back returns to: never one zoomed in far enough to focus a fire again (Public has no zoom
+      // focus: any zoom the user left, brief 4)
+      if (useStore.getState().incidentId == null && !this.overviewFireFly && (p.zoom < FOCUS_OUT_ZOOM || useWorkspace.getState().preset === 'public')) this.overviewView = { lon: p.lon, lat: p.lat, zoom: p.zoom }
       this.scheduleFocus()
     }
     this.updateCamera()
@@ -1094,11 +1114,18 @@ export class MapController {
     const v = this.focusView()
     this.updateNearby(v)
     const st = useStore.getState()
+    // Public (brief 4 decision b): no zoom focus (a fire opens by a click and stays open while zooming out) and no
+    // "Spread not prepared yet" chips (the fire view has the prepare link); a focus change still pending is cancelled
+    const publicView = useWorkspace.getState().preset === 'public'
     // chips for the unprepared fires the view is zoomed in on (never the open one)
-    const chips = chipTargets(v, this.overviewSet, st.incidentId ? [st.incidentId] : [])
+    const chips = publicView ? [] : chipTargets(v, this.overviewSet, st.incidentId ? [st.incidentId] : [])
     if (chips.join(',') !== this.chipIds.join(',')) {
       this.chipIds = chips
       this.applyOverviewState()
+    }
+    if (publicView) {
+      this.keepShownFocus()
+      return
     }
     // any prepared fire can be focused, whatever the overview filter (it only decides the markers and the list); while
     // an official area is shown, what is open stays
@@ -1438,10 +1465,12 @@ export class MapController {
     // a camera icon opens that camera (extras/cameras.ts handles the click); it never selects a location
     const camLayers = present(EXTRAS_HOVER_LAYERS.cameras)
     if (camLayers.length && map.queryRenderedFeatures(e.point, { layers: camLayers }).length) return
-    // an unprepared fire's chip, or another fire's perimeter outline: its card (I3), no camera move, never a build
+    // an unprepared fire's chip, or another fire's perimeter outline: its card (I3), no camera move, never a build;
+    // Public opens that fire's view (brief 4 decision b)
     const cardId = this.cardTargetAt(e.point)
     if (cardId) {
-      ws.setFireCard(cardId)
+      if (opensFireView()) openFireView(cardId)
+      else ws.setFireCard(cardId)
       return
     }
     const evLayers = present([LYR.eventsCircle])
@@ -1466,11 +1495,11 @@ export class MapController {
       this.zoomToCluster(group)
       return
     }
-    // inside a fire: its own marker or label opens its card
+    // inside a fire: its own marker or label opens its card (Command); the Public fire view already shows the fire
     if (incidentId != null) {
       const own = present([LYR.incidentHit, LYR.incidentCircle, LYR.incidentLabel])
       if (own.length && map.queryRenderedFeatures(e.point, { layers: own }).length) {
-        ws.setFireCard(incidentId)
+        if (!opensFireView()) ws.setFireCard(incidentId)
         return
       }
     }

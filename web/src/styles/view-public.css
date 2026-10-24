@@ -1,0 +1,424 @@
+/* The Public map views (brief 4 H3 + H4; docs/redesign/handoff-4/screens/Main.dc.html and FireView.dc.html; PLAN-4
+   §3.3-3.4). Every rule is scoped to its chrome's root: .mw[data-view='overview'] (the national overview, both presets;
+   ui/shell/OverviewChrome.tsx) and .mw[data-view='public-fire'] (the fire view, H4). Values are the screens': top bar
+   from the tokens, the centred search pill at --m-chrome-top (560 × 52 + the 52 px locate button), the first row of
+   panels at 160 px (--ovw-row2), sides 28 px, the list panel 472 px at the right edge (12 px), the readout 360 px at
+   the bottom left, the legend 600 px at the bottom right, the disclaimer centred above the credits and the "Show
+   details" pill at the bottom right (Public). Phones (<= 760 px, decision h): a full-width search pill with a 44 px
+   locate button, the compact controls at the bottom right, the fire list as a bottom sheet. */
+
+/* ================================================================================================ overview */
+.mw[data-view='overview'] {
+  --ovw-x: var(--m-topbar-x);
+  /* the first row under the search pill (Main: 160 px = 84 + 52 + 24) */
+  --ovw-row2: calc(var(--m-chrome-top) + 76px);
+  --ovw-card-w: 360px;
+  --ovw-list-w: 472px;
+  --ovw-glass: rgba(14, 14, 14, 0.74);
+  --ovw-glass-blur: blur(22px) saturate(140%);
+  --ovw-hair: rgba(200, 200, 200, 0.18);
+}
+
+/* ------------------------------------------------------------------------------------------------ top bar */
+/* "OCT 24 2026 · 203 ACTIVE": mono 11 px, .14em, the count in fire orange (ui/public/OverviewStatus.tsx) */
+.ovw-status {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 400 11px / 1.3 var(--m-font-mono);
+  letter-spacing: 0.14em;
+  color: #d0d0d0;
+  cursor: default;
+}
+.ovw-status-sep {
+  white-space: pre;
+}
+.ovw-status-count.is-count {
+  color: var(--m-fire-2);
+}
+.ovw-status-count.is-quiet {
+  color: var(--m-text-3);
+}
+.ovw-status-count.is-warn {
+  color: var(--m-stale);
+}
+
+/* ------------------------------------------------------------------------------------------------ search row */
+/* the search pill and the locate-me button, centred under the bar; the results open under the pill */
+.mw[data-view='overview'] .ovw-search {
+  --chrome-side: top;
+  position: absolute;
+  top: var(--m-chrome-top);
+  left: 0;
+  right: 0;
+  z-index: calc(var(--m-z-chrome) + 2);
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: min(622px, calc(100% - 2 * var(--ovw-x)));
+  margin: 0 auto;
+}
+.mw[data-view='overview'] .ovw-search .loc-search {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------------------------------------------ "Show details" */
+.ovw-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 48px;
+  padding: 0 18px 0 16px;
+  border: 1px solid rgba(200, 200, 200, 0.3);
+  border-radius: 999px;
+  background: rgba(14, 14, 14, 0.66);
+  -webkit-backdrop-filter: var(--ovw-glass-blur);
+  backdrop-filter: var(--ovw-glass-blur);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  color: var(--m-text);
+  font: 500 14px / 1 var(--m-font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ovw-pill:hover {
+  background: rgba(30, 30, 30, 0.78);
+}
+.ovw-pill-icon {
+  flex: none;
+  color: #d0d0d0;
+}
+.ovw-pill-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 106, 42, 0.16);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--m-fire-3);
+}
+
+/* ------------------------------------------------------------------------------------------------ disclaimer */
+.mw[data-view='overview'] .ovw-note {
+  --chrome-side: bottom;
+  grid-area: note;
+  justify-self: center;
+  align-self: center;
+  max-width: min(640px, calc(100% - 2 * 210px));
+  margin: 0 !important;
+  white-space: normal;
+  text-align: center;
+  pointer-events: none;
+}
+.mw[data-view='overview'] .ovw-note > .fxc {
+  /* text on the bottom gradient (no chip), the bar's halo for bright map areas */
+  text-shadow:
+    0 0 3px rgba(12, 12, 12, 0.95),
+    0 0 8px rgba(12, 12, 12, 0.9),
+    0 1px 2px rgba(12, 12, 12, 0.9);
+  pointer-events: auto;
+}
+
+/* ------------------------------------------------------------------------------------------------ credits */
+.mw[data-view='overview'] .ovw-bottom .mw-footer {
+  grid-area: foot;
+  justify-content: center;
+}
+.mw[data-view='overview'] .mw-footer-attrib {
+  background: none;
+  text-align: center;
+  font: 400 10px / 14px var(--m-font-mono);
+  color: var(--m-text-4);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+.mw[data-view='overview'] .mw-footer .fxm-attrib {
+  justify-content: center;
+  padding: 0;
+  background: none;
+  color: inherit;
+}
+
+/* ------------------------------------------------------------------------------------------------ wide screens */
+@media (min-width: 761px) {
+  /* the top region becomes a positioning frame over the whole map; its slots are placed one by one */
+  .mw[data-view='overview'] .ovw-top {
+    inset: 0;
+    display: block;
+  }
+  /* left column: the map controls bar (details), then the fire card (Command) or the location card */
+  .mw[data-view='overview'] .ovw-left {
+    position: absolute;
+    top: var(--ovw-row2);
+    left: var(--ovw-x);
+    bottom: calc(var(--mw-bottom-stack) + var(--m-gap));
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--m-gap);
+    min-height: 0;
+    pointer-events: none;
+  }
+  .mw[data-view='overview'] .ovw-left > * {
+    pointer-events: auto;
+    flex: 0 1 auto;
+    min-height: 0;
+  }
+  .mw[data-view='overview'] .ovw-left > .mw-card,
+  .mw[data-view='overview'] .ovw-left > .mw-firecard {
+    width: min(var(--ovw-card-w), calc(100vw - 2 * var(--ovw-x)));
+    max-height: 100%;
+  }
+  .mw[data-view='overview'] .ovw-controls {
+    flex: none;
+    justify-self: auto;
+  }
+  /* minimal: the compact cluster at the right edge, above the "Show details" pill */
+  .mw[data-view='overview'] .ovw-cluster {
+    --chrome-side: right;
+    position: absolute;
+    right: var(--ovw-x);
+    bottom: calc(var(--mw-bottom-stack) + 16px);
+  }
+  /* the "Fires in the lower 48" panel: right 12, top 160, down to the legend */
+  .mw[data-view='overview'] .ovw-list {
+    position: absolute;
+    top: var(--ovw-row2);
+    right: var(--m-gap);
+    bottom: calc(var(--mw-bottom-stack) + var(--m-gap));
+    width: min(var(--ovw-list-w), 36vw);
+    max-height: none;
+  }
+  .mw[data-view='overview'].has-updates .ovw-list {
+    width: min(var(--ovw-list-w), 36vw);
+  }
+
+  /* bottom: the readout + scale (left) and the legend (right), then the disclaimer with the pill, then the credits */
+  .mw[data-view='overview'] .ovw-bottom {
+    left: var(--ovw-x);
+    right: var(--m-gap);
+    bottom: 2px;
+    grid-template-columns: minmax(0, auto) minmax(0, 1fr) minmax(0, auto);
+    grid-template-rows: auto auto auto;
+    grid-template-areas:
+      'coords . legend'
+      'note   note note'
+      'foot   foot foot';
+    row-gap: 10px;
+    align-items: end;
+  }
+  .mw[data-view='overview'] .ovw-bottom:not(.has-details) {
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      'note note note'
+      'foot foot foot';
+  }
+  .mw[data-view='overview'] .ovw-pill-slot {
+    --chrome-side: bottom;
+    grid-area: note;
+    justify-self: end;
+    margin: 0 calc(var(--ovw-x) - var(--m-gap)) 4px 0;
+  }
+  .mw[data-view='overview'] .ovw-readout {
+    grid-area: coords;
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+    min-width: 0;
+    pointer-events: none;
+  }
+  .mw[data-view='overview'] .ovw-readout > * {
+    pointer-events: auto;
+  }
+  .mw[data-view='overview'] .ovw-legend {
+    grid-area: legend;
+    justify-self: end;
+    width: min(600px, calc(100vw - 2 * var(--ovw-x) - 400px));
+    max-width: none;
+  }
+}
+
+/* ------------------------------------------------------------------------------------------------ readout */
+/* the overview readout (location/CoordinateStrip.tsx 'compact'): "UNITED STATES OVERVIEW / No fire open",
+   "SELECTED POINT / …" with mono eyebrows (Main.dc.html "Overview": 360 px glass, padding 14/16, radius 14) */
+.mw[data-view='overview'] .ovw-readout .mw-coords {
+  width: var(--ovw-card-w);
+  max-width: 100%;
+}
+.mw[data-view='overview'] .ovw-readout .loc-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-color: var(--ovw-hair);
+  border-radius: 14px;
+  background: rgba(14, 14, 14, 0.7);
+  -webkit-backdrop-filter: var(--ovw-glass-blur);
+  backdrop-filter: var(--ovw-glass-blur);
+}
+.mw[data-view='overview'] .ovw-readout .loc-coord {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.mw[data-view='overview'] .ovw-readout .loc-coord + .loc-coord {
+  padding-top: 10px;
+  border-top: 1px solid rgba(200, 200, 200, 0.12);
+}
+.mw[data-view='overview'] .ovw-readout .loc-coord-label {
+  font: 400 11px / 1.4 var(--m-font-mono);
+  letter-spacing: var(--m-label-track);
+  text-transform: uppercase;
+  color: #d0d0d0;
+}
+.mw[data-view='overview'] .ovw-readout .loc-coord.is-empty .loc-coord-value {
+  font: 400 14px / 1.4 var(--m-font-ui);
+  color: var(--m-text-2b);
+}
+.mw[data-view='overview'] .ovw-readout .loc-coord.is-empty:first-child .loc-coord-value {
+  color: var(--m-text-body);
+}
+
+/* the scale bar beside the readout (Main: 140 px, mono 11 px, a 1.5 px bracket, on a small glass plate) */
+.mw[data-view='overview'] .ovw-scale {
+  --chrome-side: bottom;
+  pointer-events: none;
+}
+.mw[data-view='overview'] .ovw-scale .fxm-scale {
+  padding: 8px 12px;
+  border: 1px solid rgba(200, 200, 200, 0.14);
+  border-radius: 8px;
+  background: rgba(14, 14, 14, 0.6);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  color: var(--m-text-2b);
+}
+.mw[data-view='overview'] .ovw-scale .fxm-scale-label {
+  font-size: 11px;
+}
+
+/* ------------------------------------------------------------------------------------------------ legend */
+/* Main.dc.html "Legend": 600 px glass (.74), padding 14/18, radius 14, entries 13 px with gaps 10 / 22 */
+.mw[data-view='overview'] .ovw-legend .fxm-legend {
+  padding: 14px 18px;
+  border: 1px solid var(--ovw-hair);
+  border-radius: 14px;
+  background: var(--ovw-glass);
+  -webkit-backdrop-filter: var(--ovw-glass-blur);
+  backdrop-filter: var(--ovw-glass-blur);
+  box-shadow: var(--m-shadow);
+  font-size: 13px;
+  color: var(--m-text-body);
+}
+.mw[data-view='overview'] .ovw-legend .fxm-legend-row {
+  gap: 10px 22px;
+}
+.mw[data-view='overview'] .ovw-legend .fxm-legend-row li {
+  gap: 8px;
+}
+.mw[data-view='overview'] .ovw-legend .fxm-legend-absence {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--m-text-2b);
+}
+
+/* ------------------------------------------------------------------------------------------------ cards */
+.mw[data-view='overview'] .ovw-left > .mw-card,
+.mw[data-view='overview'] .ovw-left > .mw-firecard {
+  --chrome-side: left;
+}
+
+/* ------------------------------------------------------------------------------------------------ medium widths */
+@media (min-width: 761px) and (max-width: 1279px) {
+  .mw[data-view='overview'] {
+    --ovw-list-w: 400px;
+    --ovw-card-w: 340px;
+  }
+  .mw[data-view='overview'] .ovw-legend {
+    width: min(520px, calc(100vw - 2 * var(--ovw-x) - 380px));
+  }
+}
+@media (min-width: 761px) and (max-width: 1023px) {
+  .mw[data-view='overview'] .ovw-bottom.has-details {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      'coords legend'
+      'note   note'
+      'foot   foot';
+  }
+  .mw[data-view='overview'] .ovw-legend {
+    width: auto;
+  }
+  .mw[data-view='overview'] .ovw-readout .ovw-scale {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------------------------------------ phones */
+@media (max-width: 760px) {
+  .mw[data-view='overview'] {
+    --ovw-x: var(--m-gap);
+  }
+  .mw[data-view='overview'] .ovw-search {
+    left: var(--m-gap);
+    right: var(--m-gap);
+    width: auto;
+    gap: 8px;
+  }
+  /* the region under the search row: the controls (top right) and the bottom sheets */
+  .mw[data-view='overview'] .ovw-top {
+    top: calc(var(--m-chrome-top) + 44px + var(--m-gap));
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: '. controls';
+  }
+  .mw[data-view='overview'] .ovw-left {
+    display: contents;
+  }
+  /* Public: the compact cluster above the "Show details" pill (decision h) */
+  .mw[data-view='overview'] .ovw-cluster {
+    --chrome-side: right;
+    align-self: end;
+  }
+  .mw[data-view='overview'] .ovw-bottom {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto auto;
+    grid-template-areas:
+      'coords coords'
+      'pill   pill'
+      'note   foot';
+    row-gap: 6px;
+    align-items: end;
+  }
+  .mw[data-view='overview'] .ovw-pill-slot {
+    --chrome-side: bottom;
+    grid-area: pill;
+    justify-self: end;
+  }
+  .mw[data-view='overview'] .ovw-pill {
+    height: 44px;
+  }
+  .mw[data-view='overview'] .ovw-note {
+    justify-self: start;
+    max-width: 100%;
+    text-align: left;
+  }
+  .mw[data-view='overview'] .ovw-note > .fxc {
+    font-size: 11px;
+    line-height: 15px;
+  }
+  .mw[data-view='overview'] .ovw-bottom .mw-footer {
+    justify-content: flex-end;
+  }
+  .mw[data-view='overview'] .mw-footer-attrib {
+    text-align: left;
+  }
+  /* an open card or sheet takes the bottom of the map: the pill and the cluster give way */
+  .mw[data-view='overview']:is(.has-selection, .has-firecard, .has-sheet) :is(.ovw-cluster, .ovw-pill-slot) {
+    display: none;
+  }
+}

@@ -56,11 +56,23 @@
 .mw-atmo[data-edges='fire']::after {
   background: linear-gradient(90deg, rgba(12, 12, 12, 0.9) 0%, rgba(12, 12, 12, 0.72) 55%, rgba(12, 12, 12, 0) 100%) left top / min(560px, 42vw) 100% no-repeat;
 }
-/* Public overview (Main.dc.html): top and bottom 200 px (the radial dimming is the vignette above) */
+/* Public overview (Main.dc.html): top and bottom 200 px (the radial dimming is the vignette above). Brief 4 H3: soft
+   dark plates behind the bar's logo and title (left) and its date and count (right), so basemap place names do not
+   show through them (the dark basemap's capitals at the very top of the map), whatever the zoom */
 .mw-atmo[data-edges='overview']::after {
   background:
+    radial-gradient(ellipse 340px 70px at 170px 42px, rgba(14, 14, 14, 0.72) 0%, rgba(14, 14, 14, 0.45) 55%, rgba(14, 14, 14, 0) 100%),
+    radial-gradient(ellipse 280px 60px at calc(100% - 130px) 42px, rgba(14, 14, 14, 0.6) 0%, rgba(14, 14, 14, 0) 100%),
     linear-gradient(180deg, rgba(14, 14, 14, 0.85) 0%, rgba(14, 14, 14, 0) 100%) left top / 100% min(200px, 24vh) no-repeat,
     linear-gradient(0deg, rgba(14, 14, 14, 0.9) 0%, rgba(14, 14, 14, 0) 100%) left bottom / 100% min(200px, 24vh) no-repeat;
+}
+@media (max-width: 760px) {
+  .mw-atmo[data-edges='overview']::after {
+    background:
+      radial-gradient(ellipse 280px 56px at 130px 30px, rgba(14, 14, 14, 0.72) 0%, rgba(14, 14, 14, 0.45) 55%, rgba(14, 14, 14, 0) 100%),
+      linear-gradient(180deg, rgba(14, 14, 14, 0.88) 0%, rgba(14, 14, 14, 0) 100%) left top / 100% 150px no-repeat,
+      linear-gradient(0deg, rgba(14, 14, 14, 0.9) 0%, rgba(14, 14, 14, 0) 100%) left bottom / 100% 170px no-repeat;
+  }
 }
 /* phones: the columns become bottom sheets, so the side gradients would only darken the map; the top bar and the
    bottom sheet keep a gradient behind them */
