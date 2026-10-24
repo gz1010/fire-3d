@@ -1112,13 +1112,22 @@
 }
 
 /* ------------------------------------------------------------------------------------------------ compact header */
+/* the place only where it gets a readable width (Command's bar also holds the identifier from 1280 px) */
+@media (max-width: 1179px) {
+  .mw-header .tb-place {
+    display: none;
+  }
+}
+@media (max-width: 1439px) {
+  .mw[data-view='command-fire'] .mw-header .tb-place {
+    display: none;
+  }
+}
+
 @media (max-width: 1023px) {
   /* no centre pill (it moves into the menu): the right side takes only its buttons, the name keeps the rest */
   .mw-header .tb-right {
     flex: 0 0 auto;
-  }
-  .mw-header .tb-place {
-    display: none;
   }
   .mw-wide-only {
     display: none !important;

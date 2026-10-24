@@ -3264,7 +3264,45 @@ export function viewNorthUp(): void                  // N
 
 #### H2 (foundation + Command) — as built
 
-_To be filled by H2._
+**H2a (foundation, 2026-10-24).** Tokens: `styles/map-tokens.css` carries the PLAN-4 §1 values and the new tokens
+(`--m-accent-ink`, `--m-accent-soft`, `--m-text-body`, `--m-text-2b`, `--m-text-4`, `--m-fire`…`--m-fire-4`, `--m-alert`,
+`--m-label-track`, `--m-readout-fs`, `--m-readout-lg`, `--m-coord-xl`, `--m-topbar-top` 20 / `-x` 28 / `-h` 44 (phones
+8 / 8 / 44), `--m-chrome-top` = top + h + 20 (phones + 8); `--m-header-h` kept = chrome-top − gap). Re-pointing block:
+`--gold-*` orange alphas, new `--accent-ink`. Links in the map workspace are `--m-accent-text` and underlined
+(`:where()` rule in `map-bridge.css`). Mirrors: `overlayModel.ts TOKENS/OBSERVED_RGBA/FORECAST_RGBA`, `basemapStyle.ts DARK`
+(neutral greys) + `BUILDING_COLORS.dark #555555`, `extras/style.ts EXTRAS_COLORS` (+ `selectSoft`), `official/style.ts`
+`redFlag #ee7aa0`; `index.html` Inter 400-800, `theme-color #0c0c0c`. Shared components (exact signatures):
+`TopBar({ left, centre?, right?, className?, inset? = 'map' } & HTMLAttributes)` renders `<header class="tb tb-inset-…">`
+positioned from the tokens (extra props such as `data-chrome` go to the root); `TopBarBrand({ size? })`;
+`ViewPill({ size?, className? })` (radiogroup, `.tb-view-btn[aria-checked]`, keeps focus on the new pill after a switch);
+`BackButton({ onClick, label? = 'Back to all fires', tip? })`; `LiveDot({ live, year? })`;
+`IconPill({ icon, label, tip?, pressed?, expanded?, onClick, badge?, className?, ref? } & button attributes)` (label =
+visually hidden text, so a badge's hidden text joins the name; `.has-label` shows it; `.is-on` = accent);
+`TopBarStatus({ parts, staleFrom?, tip?, onClick? })`; `TopBarPlace({ place, date?, tip? })` — all in
+`ui/shell/TopBar.tsx`, styles `styles/topbar.css`; pure helpers `ui/shell/topBarText.ts` (`placeLine(summary)`,
+`statusSegments(parts, staleFrom)`). `ui/Logo.tsx Logo({ size? = 24 })` (width; 26:22), re-exported by `ui/Header.tsx`.
+`ui/shell/fixedCopy.ts`: `PROTOTYPE_LINE`, `NOT_ALL_CLEAR`, `PROTOTYPE_LEAD`, `PROTOTYPE_TAIL`, `defaultExtra(variant)`
+(line → `LIST_ABSENCE`, corner / pill → `NOT_ALL_CLEAR`, bar → none), `fixedCopyText(variant, extra?)`;
+`FixedCopy({ variant, extra?, className? })` (`extra` undefined = the default, null = none; `.fxc-*`).
+`ui/shell/Readout.tsx ReadoutRow({ value, unit?, label, size? = 22, tone?, sub?, copy? })` (`.ro-row .ro-<size>
+.is-<tone>`, label rendered "— Label", upper-cased by CSS). Map workspace: `App.tsx MapWorkspace` keeps the map mount,
+`MapAtmosphere`, `CreditsFooter` (passed to the chrome as its `credits` prop, placed in its bottom grid), `LoadingLine`
+(the 2 px line at the top edge), `StatusOverlay`, the top-centre banners, toasts and tooltips, and mounts exactly one of
+`OverviewChrome`, `PublicFireChrome`, `CommandFireChrome` (`ui/shell/*Chrome.tsx`, each `({ credits }: { credits:
+ReactNode })`, chosen by `views.ts mapChromeOf(hasFire, preset): 'overview' | 'public-fire' | 'command-fire'`; the root
+carries `data-view`). Each chrome is today's layout moved verbatim with its header as the floating `TopBar` (`className=
+"mw-header" data-chrome="header"`). The former `MapHeader.tsx` is gone: its items live in `ui/shell/topBarItems.tsx`
+(`PanelPill`, `AnalysisPill`, `LayersPill`, `AllFiresBack`, `DemoBadge`, `IncidentIdChip`, `HeaderMenu`, `CompactMenu`,
+`UpdatesToggle`, `ShowPanelsPill`, `LOWER48_TIP`) and `ui/shell/fireBarInfo.ts useFireBarInfo()`; both are shared (no
+step owns them). `IncidentPicker({ variant? = 'pill' | 'title' })`: `title` = the bar's 18 px name, no chip inside.
+`map/MapAtmosphere.tsx MapAtmosphere({ edges })` renders `<div class="mw-atmo" data-edges aria-hidden>` (z-index
+map + 1, `styles/atmosphere.css`), a stub with no visual effect; `views.ts atmosphereEdgesOf(chrome)`. State:
+`SelectionSource` + `'device'` (`locationCheck.ts` line "Your location from your browser …"), `DeviceLocation`,
+`overviewDetails` / `setOverviewDetails`, `device` / `setDevice` (validates, memory only), `FlyTo.bearingDeg?` and
+`flyToLocal(x, z, distance?, bearingDeg?)`. CSS moves: `.fx-ws*`, `.fx-demo-badge`, `.fx-empty*` →
+`styles/forensic-entry.css`. `scripts/shot.mjs --shot-timeout <ms> --quality low` (Forensic `fixture-live` in ≈ 46 s
+under SwiftShader). `__mapChrome().unobstructed` at 1440×1000: Public overview 0.724, Public fire (Lower Sugarloaf)
+0.763, Command `fixture-live` 0.508, Command overview 0.713.
 
 #### H3+H4 (Public overview, Public fire view, Command overview) — as built
 

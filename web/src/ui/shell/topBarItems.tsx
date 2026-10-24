@@ -34,9 +34,40 @@ export function LayersPill({ className = 'mw-hide-narrow' }: { className?: strin
   return <PanelPill panel="layers" icon={<Layers size={16} />} label="Layers" tip="Layers, basemap, forecast run and units" className={className} />
 }
 
+/** The bar's first useful focus target after a chrome swap: the active view in the pill, else the compact menu. */
+function barFocusTarget(): HTMLElement | null {
+  for (const sel of ['.mw-header .tb-view-btn[aria-checked="true"]', '.mw-header .mw-hdr-menu']) {
+    const el = document.querySelector<HTMLElement>(sel)
+    if (el && el.getClientRects().length > 0) return el
+  }
+  return null
+}
+
+/** Leaving a fire swaps the chrome (the back button goes away): once the overview is shown, move focus that was on the
+ *  back button to the new bar, so keyboard users keep their place. History-aware leaving is asynchronous (Back). */
+function keepFocusAfterLeaving(): void {
+  let done = false
+  const stop = () => {
+    done = true
+    unsub()
+    window.clearTimeout(timer)
+  }
+  const unsub = useStore.subscribe((s) => {
+    if (done || s.incidentId != null) return
+    stop()
+    requestAnimationFrame(() => barFocusTarget()?.focus({ preventScroll: true }))
+  })
+  const timer = window.setTimeout(stop, 3000)
+}
+
 /** "← All fires" as the bar's round back button: back to the overview of all fires (history-aware, fireActions.ts). */
 export function AllFiresBack() {
-  return <BackButton onClick={goToOverview} label="Back to all fires" tip="Back to the overview of all fires (lower 48 states)" />
+  const back = () => {
+    const btn = document.activeElement
+    if (btn instanceof HTMLElement && btn.classList.contains('tb-back')) keepFocusAfterLeaving()
+    goToOverview()
+  }
+  return <BackButton onClick={back} label="Back to all fires" tip="Back to the overview of all fires (lower 48 states)" />
 }
 
 export function DemoBadge() {
