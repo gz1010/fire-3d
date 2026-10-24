@@ -3679,6 +3679,67 @@ Where this differs from §15.1-15.4, this paragraph is what the code does.
   checks 39/39 (profile layers, newest perimeter only and filled, time, leader, search, card, Command round trips and
   time hand-back, `?t=`, chip, hidden-tab pause, reduced motion, X back).
 
+**Review fixes** (step H3+H4 fix, 2026-10-24; two reviews of H3+H4, design fidelity and behaviour / features /
+safety; per finding in `reports/brief4-h3h4-fix.json`, screenshots `docs/screenshots/brief4-h3h4-fix-*.png`). Where this
+differs from the H3 and H4 paragraphs above, this paragraph is what the code does. No H2 frozen file, backend file or HTTP
+contract changed.
+- *Fixed copy in the fire view* (R1, blocker): the bottom bar is `FixedCopy variant="bar" extra={NOT_ALL_CLEAR}`
+  (`PROTOTYPE_LINE` · `NOT_ALL_CLEAR`, wrapping onto two short lines), so both lines stay with "H", the phones' Layers
+  drawer and search; the facts' foot keeps its own line.
+- *List notices* (R2): `ui/shell/useOverviewData.ts` (moved out of `OverviewPanel.tsx`: `LIST_OF`, `useOverviewData`,
+  new `useListNotices() → { lines, retry }`) and `ui/public/ListNoticeBanner.tsx`: while the list is not open (Public
+  minimal, phones with the sheet closed) the panel's own list-down / list-failure lines show as a banner in App.tsx's
+  top-centre slot (a portal, App.tsx unchanged), with Retry for a failed list, dismissable, back when the words change.
+- *Locate-me* (R3; decision i-7 kept): a fix only sets `workspace.device` and flies the map there
+  (`requestMapFlyTo`); `map/DeviceMarker.tsx` marks it (light-blue dot, white ring, halo, dashed ring when coarser than
+  100 m, mono "YOU"; SVG over the map, `aria-hidden`); nothing is sent. The prompt under the button (`LOCATE_FOUND`,
+  `LOCATE_CHECK_NOTE`) says it stays in this browser and what a check sends; "Check this spot" makes it the selected
+  point (`deviceSelection`, the only `selectLocation` in `LocateButton.tsx`), which the card checks like a map click;
+  "Stop showing my location" clears `device`. Card line: "Your location from your browser, checked at your request (not
+  added to the link)". `LOCATE_TIP` no longer says the point is not saved after a check.
+- *No model output in the Public card* (R4): `location/publicCard.ts withoutModel(card)` also drops the reasons and
+  details lines tagged Model (weather-model wind and dryness), the forecast's own caveats (`locationCheck.ts
+  isModelCaveat`, `ensembleCaveat`, `MODEL_SPOTTING_CAVEAT`, `MODEL_EDGE_CAVEAT`) and every model source;
+  `MODEL_IN_COMMAND` = "Model weather (wind, dryness) and the experimental spread model for this spot are in Command".
+- *Wording* (R5, R8 / DF-H34-10, R9, DF-H34-9): in Public a fire search result reads "· opens the fire view" (tooltip "Open
+  the fire view of …") and a nearest-fire row's tooltip says the same; `fireView.ts evacReasonRest(reason, value)` drops a
+  reason that only repeats "Not available in this state (<State>)"; `fireLabel(name)` ("Willow fire", "Eaton Fire") in
+  the title's hidden prefix and the circle's name; `updateYear(start, updated, now, tz)` shows the update row's year
+  whenever the start shows one or the years differ ("May 7, 2026").
+- *Group click* (R6): `clusterClickZoom` zooms at least one level in (still capped at 8, never out).
+- *Held time* (R7): `usePublicFireTime.ts leaveHold(held, { incidentId, preset })`: the hold is given back on a switch to
+  Command in the same fire and dropped when the fire closes (X, Back, another fire); kept only while the same fire stays
+  open in Public.
+- *Group counts* (DF-H34-1): the count layers collide (`text-allow-overlap` / `icon-allow-overlap` false, `icon-optional`,
+  `text-padding` 2, `symbol-sort-key` −point_count): the larger group keeps its "N FIRES", a count with no room is left
+  out (the circle's size and the hover still give it). The leader layout's count obstacles are the placed counts only.
+- *Leader lines* (DF-H34-2): `leaderLayout.ts` adds `segmentsCross`, `segmentHitsCircle`, `LINE_CLEAR_PX` (4),
+  `LEADER_MAX_LEN` 140 / `LEADER_MAX_LEN_NARROW` 90, options `lineObstacles` and `maxLen`: a candidate is skipped when its
+  leader is longer than the cap, crosses a placed leader, passes within 4 px of another marker's or group's centre
+  (circles under the item's own marker are ignored) or crosses chrome or a placed count. Measured at 1440 × 1144: 8
+  labels, 0 crossings (5 before), leaders 54-149 px from the marker centre (at most 140 beyond its ring; 268 px before);
+  Command overview 4 labels; a phone's national view now has none (no spot
+  passes; the fire list names every fire).
+- *Place names* (DF-H34-5): `leaderLayout.ts placeLabelLayers(style layers)` = every symbol layer of the "place" and
+  "water_name" source layers, so the dark style's `place_*` names are obstacles too.
+- *Hazard circle* (DF-H34-3, DF-H34-6): status and "MORE IN COMMAND" never under 10 px (`max(10px, …)`; 9 px in the
+  phones' 120 px circle, where the chevron is left out); a circle under 300 px puts the status on two lines (`@container
+  pfv-circle`). `fitName(…, floorPx = 28)`: a long name goes below 40 px over up to three lines (four at 28-30 px), its
+  words in order; one too long even then is one block clamped to four lines (`FittedName.clamp`, `.is-clamped`); the
+  circle's tooltip then gives the whole name.
+- *Facts room* (DF-H34-4): `ui/public/useFactsFit.ts useFactsFit(slot, enabled) → { level, tight, more, scrollMore }`
+  (`fitKey`, `hiddenBelow`): while the facts overflow the column, one step at a time `.pfv-left.is-snug` (gap 28, row
+  padding 7), `.is-tight` (+ circle 248), `.is-tighter` (circle 200, gap 18, padding 5), decided before paint and kept
+  for the same window size and facts words (no flip-flop); still overflowing, the foot shows "More below" (`.pfv-more`,
+  scrolls the facts). Lower Sugarloaf at 1440 × 1000 is snug with the 312 px circle; Eaton with its local alert is
+  tighter with every row and the foot in view.
+- *Key* (DF-H34-8): `perimeterKey` gives `text` "Latest perimeter · <publisher>" (`shortPerimeterSource`) and `source`
+  (the whole string, the tooltip); the time and the Stale tag never break; the key is up to 900 px, one line at 1440.
+- *Phones* (DF-H34-7): the overview's and fire view's bar buttons are 44 px; the pill's Search button and "© Credits" get
+  a transparent 44 px hit area.
+- *Not changed* (DF-H34-11, nit): the overview's bottom-row offsets and the scale bar's form (labels above a 140 px
+  bracket) stay as H3 built them (see the report).
+
 #### H5 (Forensic) — as built
 
 Built 2026-10-24 by H5 (one builder; report `reports/brief4-h5.json`, screenshots `docs/screenshots/brief4-h5-*.png`,

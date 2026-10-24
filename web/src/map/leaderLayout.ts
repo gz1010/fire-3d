@@ -227,8 +227,9 @@ export function layoutLeaders(items: readonly LeaderItem[], o: LeaderOptions): L
   for (const item of items) {
     if (placed.length >= max) break
     if (!(item.at.x >= o.free.left && item.at.x <= o.free.right && item.at.y >= o.free.top && item.at.y <= o.free.bottom)) continue
-    // the other markers and group centres a leader must not run over (its own marker is where it starts)
-    const others = circles.filter((m) => !(m.id === item.id || (Math.abs(m.x - item.at.x) < 0.5 && Math.abs(m.y - item.at.y) < 0.5)))
+    // the other markers and group centres a leader must not run over: not its own marker, nor one whose centre lies
+    // under it (every leader starts there, so none could keep clear of it)
+    const others = circles.filter((m) => m.id !== item.id && Math.hypot(m.x - item.at.x, m.y - item.at.y) > item.r)
     for (const c of leaderCandidates(item, o.free, gx)) {
       const box = c.box
       const padded = inflate(box, pad)

@@ -153,7 +153,6 @@ function computeSpots(map: MapLibreMap, insets: { top: number; right: number; bo
   const narrow = c.clientWidth < NARROW_MAP_PX
   const max = narrow ? NARROW_LEADER_MAX : LEADER_MAX
   const placed = layoutLeaders(candidates, { free, obstacles, lineObstacles, circles, max, maxLen: narrow ? LEADER_MAX_LEN_NARROW : LEADER_MAX_LEN })
-  ;(window as unknown as Record<string, unknown>).__ldrDebug = { candidates, opts: { free, obstacles, lineObstacles, circles, max, maxLen: narrow ? LEADER_MAX_LEN_NARROW : LEADER_MAX_LEN } } // TEMP-DEBUG
   const spots = placed.map((s) => {
     const x = byId.get(s.id)!
     return { ...s, name: x.name, meta: leaderAcres(x.acres, units), lngLat: x.lngLat }

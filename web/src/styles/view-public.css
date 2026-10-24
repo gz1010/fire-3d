@@ -1413,6 +1413,13 @@
     font-size: 9px;
     letter-spacing: 0.06em;
   }
+  /* 9 px (review DF-H34-3) inside the 120 px circle's lower chord: the words without the chevron */
+  .pfv-circle.is-compact .pfv-circle-more {
+    letter-spacing: 0.02em;
+  }
+  .pfv-circle.is-compact .pfv-circle-more svg {
+    display: none;
+  }
   /* the status on two lines in the small circle ("WILDFIRE" / "DECLARED OUT") */
   .pfv-circle.is-compact .pfv-circle-status {
     display: flex;
