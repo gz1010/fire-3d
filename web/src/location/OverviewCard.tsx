@@ -50,11 +50,15 @@ function openOrShow(s: IncidentSummary): void {
 function FireRow({ f, units, label }: { f: NearFire; units: ReturnType<typeof useWorkspace.getState>['units']; label?: string }) {
   const s = f.summary
   const r = readiness(s)
+  // Public on the map: every row opens the fire view (brief 4 decision b; review R5); Command: prepared fires open,
+  // the others show their card
+  const fireView = useWorkspace((w) => w.workspace === 'map' && w.preset === 'public')
+  const tip = fireView ? `Open the fire view of ${fireName(s)}` : r === 'ready' || r === 'building' ? `Zoom to ${fireName(s)}` : `Show ${fireName(s)} and its card`
   const status = fireStatus(s)
   const facts = [fireWhere(s), String(s.year), s.acres ? area(s.acres, units).text : null, status.label, READINESS_LABEL[r]].filter(Boolean).join(' · ')
   return (
     <li>
-      <button type="button" className="loc-fire-row" onClick={() => openOrShow(s)} title={r === 'ready' || r === 'building' ? `Zoom to ${fireName(s)}` : `Show ${fireName(s)} and its card`}>
+      <button type="button" className="loc-fire-row" onClick={() => openOrShow(s)} title={tip}>
         <Flame size={14} aria-hidden="true" className={`loc-result-icon is-fire${isActiveFire(s) ? ' is-active' : ''}`} />
         <span className="loc-result-text">
           <span className="loc-fire-head">

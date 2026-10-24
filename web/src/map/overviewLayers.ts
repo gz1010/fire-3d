@@ -406,10 +406,11 @@ export function clusterHoverText(c: Pick<ClusterHit, 'group' | 'count' | 'maxAcr
   return parts.join(' · ')
 }
 
-/** The zoom a group click goes to: its expansion zoom, at most CLUSTER_CLICK_MAX_ZOOM, and never out. */
+/** The zoom a group click goes to: its expansion zoom but at least one level in (Public's national view sits just under
+ *  a group's expansion zoom, review R6), at most CLUSTER_CLICK_MAX_ZOOM, and never out. */
 export function clusterClickZoom(expansionZoom: number, currentZoom: number): number {
   const z = Number.isFinite(expansionZoom) ? expansionZoom : currentZoom + 2
-  return Math.max(currentZoom, Math.min(CLUSTER_CLICK_MAX_ZOOM, z))
+  return Math.max(currentZoom, Math.min(CLUSTER_CLICK_MAX_ZOOM, Math.max(z, currentZoom + 1)))
 }
 
 /** Marker colours (brief 4, HANDOFF): the dark and aerial maps use the screens' values; the light road map darker
@@ -661,9 +662,15 @@ export function overviewLayers(theme: MapTheme, o: { narrow?: boolean } = {}): L
         'text-letter-spacing': 0.04,
         'icon-image': p.tick,
         'icon-anchor': 'left',
-        // always drawn; placed before the fire names (these layers sit above them), which then keep clear of them
-        'text-allow-overlap': true,
-        'icon-allow-overlap': true,
+        // placed before the fire names (these layers sit above them), which then keep clear of them; counts keep clear
+        // of each other too (review DF-H34-1: "19" beside "5 FIRES" read as "195 FIRES"): the larger group is placed
+        // first and a count with no room is left out (its circle's size still says how many; the hover gives the
+        // number); the tick is optional, so a count whose tick is blocked still shows
+        'text-allow-overlap': false,
+        'icon-allow-overlap': false,
+        'icon-optional': true,
+        'text-padding': 2,
+        'symbol-sort-key': ['-', 0, ['to-number', ['get', 'point_count'], 0]],
         // both start at the circle's upper-right edge (45°): the tick there, the text just past its end
         'icon-offset': GROUP_TICK_OFFSET,
       },

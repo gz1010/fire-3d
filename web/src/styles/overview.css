@@ -513,8 +513,22 @@
 
 /* ------------------------------------------------------------------------------------------------ notices */
 .mw-notprepared,
-.mw-missing {
+.mw-missing,
+.mw-list-notice {
   max-width: min(640px, calc(100vw - 24px));
+}
+/* a fire list that is down or failed, while the list is not shown (ui/public/ListNoticeBanner.tsx; review R2) */
+.mw-list-notice > svg {
+  flex: none;
+  color: var(--m-stale);
+}
+.mw-list-notice .banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mw-list-notice .mw-btn {
+  flex: none;
 }
 .mw-notprepared .btn {
   flex: none;

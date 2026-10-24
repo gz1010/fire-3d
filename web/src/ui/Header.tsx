@@ -3,6 +3,7 @@
 // as a "● LIVE Willow ▾" pill, the place and the dates in grey. Centre: the Public · Command · Forensic pill (the
 // floating switch under the compass is gone). Right: the Incident | Aircraft (n) tabs (live only), then round icon
 // pills: View options, Analysis, Share, Settings and Hide panels (H). The menus open from the pills exactly as before.
+// Below 1024 px the view pill drops to a row under the bar (phones: with "Hide panels" at that row's right end).
 // With panels collapsed ("H") only the minimal bar remains (MiniBar: logo, name, LIVE / year, time, play, the view
 // pill and "Panels H").
 import { Map as MapIcon, Maximize2, Minimize2, Pause, Play, Plane } from 'lucide-react'
@@ -45,12 +46,14 @@ function IncidentMeta() {
     ? `${fmtDayDate(start, tf.tz, { year: 'auto', refMs: end })} – ${fmtDayDate(end, tf.tz, { year: 'always' })}`
     : `${fmtDayDate(start, tf.tz, { year: 'always' })} – present`
   const where = [summary.location, summary.county ? `${summary.county} County` : null, summary.state ?? null].filter(Boolean).join(', ')
-  // TopBarPlace's look (.tb-place, .tb-date), on one line on wide screens and as two lines (place over dates) where
-  // the bar is tight, so the dates stay readable beside a long name (styles/header.css)
+  // TopBarPlace's look (.tb-place, .tb-date): one line while it fits, else the dates wrap under the place, so they stay
+  // readable beside a long name (styles/header.css; the inner span carries the dates' ellipsis, the outer the " · ")
   return (
     <span className="tb-place fx-place" data-tip={`${where || place || summary.name} · ${fmtLatLon(summary.lat, summary.lon, 3)}`}>
       {place && <span className="fx-place-name">{place}</span>}
-      <span className={`tb-date${place ? ' fx-place-date' : ''}`}>{dates}</span>
+      <span className={`tb-date${place ? ' fx-place-date' : ''}`}>
+        <span>{dates}</span>
+      </span>
     </span>
   )
 }
@@ -123,7 +126,7 @@ export function Header() {
               <AnalysisMenu />
               <ShareButton />
               <SettingsMenu />
-              <IconPill icon={<Minimize2 size={15} />} label="Hide panels (H)" className="fx-tool" onClick={() => useStore.getState().setPanelsCollapsed(true)} />
+              <IconPill icon={<Minimize2 size={15} />} label="Hide panels (H)" className="fx-tool fx-hide" onClick={() => useStore.getState().setPanelsCollapsed(true)} />
             </nav>
           </>
         }

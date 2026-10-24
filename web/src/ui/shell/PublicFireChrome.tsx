@@ -11,7 +11,8 @@
 //                Fire-3d has not prepared, "Prepare map data (1-3 min)" (it replaces the top notice in Public)
 //   right        the location card of a picked point (its model block replaced by the Command link), the compact map
 //                controls, and the map key with the scale (ui/public/FireKey.tsx)
-//   bottom       a 30 px bar: the research-prototype line (left) and the credits (right, every text kept)
+//   bottom       a 30 px bar: the research-prototype line and "Not an all-clear. Follow local officials." (left) and
+//                the credits (right, every text kept)
 // Phones (decision h): bar = X, the place and dates small, search, menu; a strip with a 120 px circle and the distance
 // chip; the facts in a bottom sheet whose peek shows the acres, the containment and the official line (the key inside
 // it). On entry the time is the latest observation (ui/public/usePublicFireTime.ts). The map, the credits component,
@@ -32,8 +33,10 @@ import { FireTitle } from '../public/FireTitle'
 import { HazardCircle } from '../public/HazardCircle'
 import { DistanceChip } from '../public/DistanceChip'
 import { ReportedPoint } from '../public/ReportedPoint'
+import { useFactsFit } from '../public/useFactsFit'
 import { usePublicFireTime } from '../public/usePublicFireTime'
 import { goToOverview } from './fireActions'
+import { NOT_ALL_CLEAR } from './fixedCopy'
 import { FixedCopy } from './FixedCopy'
 import { NARROW_QUERY, useMediaQuery } from './hooks'
 import { LayersPanel } from './LayersPanel'
@@ -96,6 +99,9 @@ export function PublicFireChrome({ credits }: { credits: ReactNode }) {
   const hasSelection = useWorkspace((s) => s.selection != null)
   const incidentId = useStore((s) => s.incidentId)
   const circle = useRef<HTMLButtonElement | null>(null)
+  const factsSlot = useRef<HTMLDivElement | null>(null)
+  // an extra row (a local officials' alert) must not push the last rows and the foot out of view (DF-H34-4)
+  const fit = useFactsFit(factsSlot, !narrow && !collapsed)
   usePublicFireTime()
   return (
     <>
@@ -135,12 +141,12 @@ export function PublicFireChrome({ credits }: { credits: ReactNode }) {
             <DistanceChip compact />
           </div>
         ) : (
-          <div className="pfv-left">
+          <div className={`pfv-left${fit.tight ? ' is-tight' : ''}`}>
             <div className="pfv-circle-slot" data-chrome="circle">
               <HazardCircle ref={circle} />
             </div>
-            <div className="pfv-facts-slot" data-chrome="facts">
-              <FireFacts />
+            <div className="pfv-facts-slot" data-chrome="facts" ref={factsSlot}>
+              <FireFacts more={fit.more} onMore={fit.scrollMore} />
             </div>
           </div>
         )}
@@ -170,8 +176,9 @@ export function PublicFireChrome({ credits }: { credits: ReactNode }) {
         {narrow && <FactsSheet key={incidentId ?? ''} />}
         <div className="pfv-foot">
           <div className="mw-note pfv-note" data-chrome="note">
-            {/* the bar's line alone: the facts (and the phones' peek) end with "Not an all-clear. Follow local officials." */}
-            <FixedCopy variant="bar" />
+            {/* both lines on every state of the view: the facts also end with it, but "H", the phones' Layers drawer and
+                search hide the facts (BRIEF-4 standing rule, HANDOFF "Fixed copy"; review R1) */}
+            <FixedCopy variant="bar" extra={NOT_ALL_CLEAR} />
           </div>
           {credits}
         </div>

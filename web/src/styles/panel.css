@@ -305,6 +305,25 @@
 .legend-cap {
   margin-left: 4px;
 }
+/* model output is experimental (CLAUDE.md, BRIEF-4 standing rules; review H5-m4): the modeled amber, dashed, as the
+   map's MODEL tag */
+.exp-tag {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 5px;
+  border: 1px dashed rgba(245, 192, 96, 0.6);
+  border-radius: 999px;
+  font: 500 9px / 14px var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #f5c060;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+.legend-cap .exp-tag {
+  display: table;
+  margin: 3px 0 0;
+}
 .forecast-legend-pad {
   padding-bottom: 12px;
 }
@@ -1118,7 +1137,10 @@ button.ac-row:hover {
   color: var(--text-3);
   font-weight: 400;
 }
+/* the sub line may use the cell's right padding, as the screen's "of 100 (Fosberg)" does; it is cut only past the
+   cell's edge (review H5-DF-7) */
 .wx-sub {
+  margin-right: -10px;
   font-size: 9.5px;
   color: #8a8a8a;
   white-space: nowrap;
@@ -1146,7 +1168,7 @@ button.ac-row:hover {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 12px;
+  gap: 4px 6px;
   margin-top: 8px;
   font-size: 10px;
   color: #8a8a8a;
@@ -1163,6 +1185,13 @@ button.ac-row:hover {
   .lrow {
     grid-template-columns: 15px 24px minmax(0, 1fr) 60px 32px;
     gap: 8px;
+  }
+}
+/* the 316 px column (≤ 1280 px): a slightly tighter sub line so "of 100 (Fosberg)" still fits its cell */
+@container wx (max-width: 300px) {
+  .wx-sub {
+    font-size: 9px;
+    letter-spacing: -0.02em;
   }
 }
 @container wx (max-width: 260px) {

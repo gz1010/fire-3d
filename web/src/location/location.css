@@ -1123,6 +1123,32 @@
 .loc-locate-msg > span {
   flex: 1 1 auto;
 }
+/* after a fix: the location is on the map and in this browser only; "Check this spot" says what it sends (review R3) */
+.loc-locate-found-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.loc-locate-found-text {
+  margin: 0;
+}
+.loc-locate-found-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--m-text-2);
+}
+.loc-locate-found-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+.loc-locate-btn.is-on {
+  color: var(--m-select);
+  border-color: rgba(143, 208, 255, 0.5);
+}
 @media (max-width: 760px) {
   .loc-search.is-pill .loc-search-box {
     height: 44px;

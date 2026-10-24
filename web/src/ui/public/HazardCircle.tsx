@@ -2,7 +2,8 @@
 // "Fire view"): a 312 px round button with a thermal texture (an SVG feTurbulence smoky glow, brightest at the
 // bottom left, slowly drifting; twinkling specks; film grain; no grid), the status words from the agency record
 // ("WILDFIRE · ACTIVE"; ui/public/fireView.ts hazardStatus), the fire's name (72 px / 800, fitted down to 40 px over two
-// lines; the full name is the button's accessible name) and "MORE IN COMMAND ›", which opens the Command view.
+// lines, a long name down to 28 px over three; the full name is the button's accessible name and, when drawn small or
+// cut, its tooltip) and "MORE IN COMMAND ›", which opens the Command view.
 // Motion: the SMIL animations are left out under prefers-reduced-motion (the texture stands still) and paused while the
 // tab is hidden (svg.pauseAnimations). Filter and gradient ids are unique per instance (useId). A fire that is not
 // listed as active glows darker (the record's words say why); a demo fire says it is simulated.
@@ -13,7 +14,7 @@ import { useStore } from '../../state/store'
 import { useTimeFormat } from '../../state/timeZone'
 import { isDemoBundle } from '../../state/workspace'
 import { applyView } from '../shell/views'
-import { fireEnd, fitName, hazardStatus } from './fireView'
+import { fireEnd, fireLabel, fitName, hazardStatus } from './fireView'
 
 /** The circle's size on the screen (px); its texture and text scale with the size it is drawn at. */
 export const CIRCLE_PX = 312
@@ -72,15 +73,17 @@ export function HazardCircle({ ref, compact = false }: { ref?: Ref<HTMLButtonEle
   const status = hazardStatus(summary, fireEnd(summary, record), demo, issuer, tf.tz)
   const name = summary?.name ?? ''
   const fitted = useMemo(() => (name ? fitName(name, measureName, NAME_ROOM) : { lines: [], px: 72 }), [name])
+  // a long name drawn small or cut at its end: the tooltip gives it whole (the accessible name always does)
+  const shortened = fitted.px < 40 || fitted.clamp === true
   const meaningId = id('m')
   return (
     <button
       ref={ref}
       type="button"
       className={`pfv-circle is-${status.tone}${compact ? ' is-compact' : ''}`}
-      aria-label={`${name || 'This'} fire: ${status.line.replace(' · ', ', ').toLowerCase()}. More in Command view`}
+      aria-label={`${name ? fireLabel(name) : 'This fire'}: ${status.line.replace(' · ', ', ').toLowerCase()}. More in Command view`}
       aria-describedby={meaningId}
-      data-tip="Open this fire in the Command view: the timeline, the experimental model, coordinates and every source"
+      data-tip={`${shortened ? `${name}. ` : ''}Open this fire in the Command view: the timeline, the experimental model, coordinates and every source`}
       onClick={() => applyView('command')}
     >
       <svg ref={svg} className="pfv-circle-tex" width={CIRCLE_PX} height={CIRCLE_PX} viewBox={`0 0 ${CIRCLE_PX} ${CIRCLE_PX}`} aria-hidden="true">
@@ -135,7 +138,7 @@ export function HazardCircle({ ref, compact = false }: { ref?: Ref<HTMLButtonEle
         ))}
       </span>
       {fitted.lines.length > 0 && (
-        <span className="pfv-circle-name" aria-hidden="true" style={{ '--pfv-name-px': `${fitted.px}px` } as CSSProperties}>
+        <span className={`pfv-circle-name${fitted.clamp ? ' is-clamped' : ''}`} aria-hidden="true" style={{ '--pfv-name-px': `${fitted.px}px` } as CSSProperties}>
           {fitted.lines.map((l, i) => (
             <span key={i}>{l}</span>
           ))}

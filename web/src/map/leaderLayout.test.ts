@@ -6,8 +6,12 @@ import {
   layoutLeaders,
   leaderAcres,
   LEADER_MAX,
+  LEADER_MAX_LEN,
+  LINE_CLEAR_PX,
   rectsOverlap,
+  segmentHitsCircle,
   segmentHitsRect,
+  segmentsCross,
   type LeaderItem,
   type Rect,
 } from './leaderLayout'
@@ -25,6 +29,16 @@ describe('geometry helpers', () => {
     expect(segmentHitsRect({ x: 0, y: 15 }, { x: 30, y: 15 }, r)).toBe(true)
     expect(segmentHitsRect({ x: 0, y: 0 }, { x: 9, y: 30 }, r)).toBe(false)
     expect(segmentHitsRect({ x: 12, y: 12 }, { x: 14, y: 14 }, r)).toBe(true)
+  })
+
+  it('segment crossings and segment-circle hits', () => {
+    expect(segmentsCross({ x: 0, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }, { x: 10, y: 0 })).toBe(true)
+    expect(segmentsCross({ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 0, y: 5 }, { x: 10, y: 5 })).toBe(false)
+    expect(segmentsCross({ x: 0, y: 0 }, { x: 4, y: 4 }, { x: 5, y: 5 }, { x: 9, y: 9 })).toBe(false)
+    expect(segmentsCross({ x: 0, y: 0 }, { x: 6, y: 6 }, { x: 5, y: 5 }, { x: 9, y: 9 })).toBe(true)
+    expect(segmentHitsCircle({ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 10, y: 3, r: 4 })).toBe(true)
+    expect(segmentHitsCircle({ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 10, y: 5, r: 4 })).toBe(false)
+    expect(segmentHitsCircle({ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 25, y: 0, r: 4 })).toBe(false)
   })
 
   it('a label box sits after the leader, its middle on the leader end', () => {
@@ -77,5 +91,35 @@ describe('layoutLeaders (decision e)', () => {
     expect(layoutLeaders([item('a', 5, 500)], { free })).toEqual([])
     const blocked = layoutLeaders([item('a', 600, 500)], { free, obstacles: [{ left: 400, top: 300, right: 800, bottom: 700 }] })
     expect(blocked).toEqual([])
+  })
+
+  // review DF-H34-2: Main.dc.html's leaders are 25-120 px and never cross
+  const spotLen = (t: { at: { x: number; y: number }; end: { x: number; y: number } }) => Math.hypot(t.end.x - t.at.x, t.end.y - t.at.y)
+  it('leaders never cross each other and stay short, even in a crowded west', () => {
+    // a crowded west coast: many large fires close together (as Idaho / Oregon / Washington on the national view)
+    const items = Array.from({ length: 16 }, (_, i) => item(`w${i}`, 150 + ((i * 37) % 160), 220 + ((i * 53) % 420), 80 + (i % 3) * 14, 28, 11 + (i % 2) * 4))
+    const circles = items.map((i) => ({ x: i.at.x, y: i.at.y, r: i.r, id: i.id }))
+    const spots = layoutLeaders(items, { free, circles })
+    expect(spots.length).toBeGreaterThan(3)
+    for (const a of spots) {
+      expect(spotLen(a) - items.find((i) => i.id === a.id)!.r).toBeLessThanOrEqual(LEADER_MAX_LEN)
+      for (const b of spots) if (a !== b) expect(segmentsCross(a.at, a.end, b.at, b.end)).toBe(false)
+    }
+  })
+
+  it('a gutter row far from its fire is not used: the leader length is capped', () => {
+    // with a 60 px cap every leader stays within it (the gutter's far rows and the long diagonals are skipped)
+    const spots = layoutLeaders([item('a', 220, 400)], { free, maxLen: 60 })
+    for (const s of spots) expect(spotLen(s) - 15).toBeLessThanOrEqual(60)
+  })
+
+  it('a leader runs over no other marker’s centre, no group count and no chrome', () => {
+    // a marker right where the up-right diagonal would run: the label goes elsewhere
+    const other = { x: 640, y: 470, r: 11, id: 'b' }
+    const [s] = layoutLeaders([item('a', 600, 500)], { free, circles: [other] })
+    expect(segmentHitsCircle(s.at, s.end, { ...other, r: LINE_CLEAR_PX })).toBe(false)
+    const count: Rect = { left: 620, top: 440, right: 700, bottom: 470 }
+    const [t] = layoutLeaders([item('a', 600, 500)], { free, lineObstacles: [count] })
+    expect(segmentHitsRect(t.at, t.end, count)).toBe(false)
   })
 })

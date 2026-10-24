@@ -7,8 +7,9 @@
 // overview (no fire open) the card shows the official line and the nearest fires (OverviewCard).
 // Brief 3 (§14.9): every time is in the fire's own zone with the preset's clock, and the reliability block names the
 // zone ("Times: Mountain Time (MDT), the fire's local time").
-// Brief 4 H4 (decision a): in the Public fire view the card shows no model output: its model sentence (and the details'
-// model section) is replaced by "The experimental spread model for this spot is in Command ›", which opens Command.
+// Brief 4 H4 (decision a): in the Public fire view the card shows no model output (location/publicCard.ts withoutModel:
+// the spread model's sentence, run and section, the weather-model wind and dryness readings, the forecast caveats and
+// the model sources); "Model weather and the experimental spread model for this spot are in Command ›" opens Command.
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { useOfficialAtPoint, type OfficialInfo } from '../official/hooks'
@@ -21,6 +22,7 @@ import { useOpenFireAccuracy } from '../state/accuracy'
 import { OverviewCard } from './OverviewCard'
 import { useLocationCheck } from './useLocationCheck'
 import { useNarrow } from './useNarrow'
+import { withoutModel } from './publicCard'
 import { MODEL_IN_COMMAND } from '../ui/public/fireView'
 import { applyView } from '../ui/shell/views'
 import './location.css'
@@ -92,16 +94,6 @@ function LocationCardBody({ sel, official }: { sel: SelectedLocation; official: 
       )}
     </CardFrame>
   )
-}
-
-/** The card without the model (the Public fire view, decision a): no model sentence, no model section in the details. */
-function withoutModel(card: LocationCardModel): LocationCardModel {
-  return {
-    ...card,
-    summary: { ...card.summary, model: null, run: null, reliability: card.summary.reliability.filter((l) => l.key !== 'model') },
-    details: card.details.filter((s) => s.key !== 'forecast'),
-    sources: card.sources.filter((s) => s.kind !== 'model'),
-  }
 }
 
 /** The Public fire view's stand-in for the model block: the model is in Command. */

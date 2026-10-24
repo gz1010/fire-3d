@@ -261,10 +261,13 @@ describe('groups (MapLibre clustering)', () => {
     })
     expect(CLUSTER.active.maxZoom).toBeLessThan(CLUSTER.other.maxZoom)
   })
-  it('a group click zooms to min(expansion zoom, 8), never out', () => {
+  it('a group click zooms to min(expansion zoom, 8), at least one level in, never out', () => {
     expect(clusterClickZoom(5, 3)).toBe(5)
     expect(clusterClickZoom(11, 6)).toBe(CLUSTER_CLICK_MAX_ZOOM)
-    expect(clusterClickZoom(4, 5)).toBe(5)
+    // at least one level in, even when the group's expansion zoom is at or under the view's (review R6)
+    expect(clusterClickZoom(4, 5)).toBe(6)
+    expect(clusterClickZoom(4, 3.92)).toBeCloseTo(4.92)
+    expect(clusterClickZoom(9, 8.5)).toBe(8.5)
     expect(clusterClickZoom(Number.NaN, 3)).toBe(5)
     expect(CLUSTER_CLICK_MAX_ZOOM).toBeLessThan(8.5)
   })
@@ -299,13 +302,17 @@ describe('groups (MapLibre clustering)', () => {
     }
   })
 
-  it('group labels: "28 FIRES" at the circle\'s upper right, after a short tick (Noto Sans, always shown)', () => {
+  it('group labels: "28 FIRES" at the circle\'s upper right, after a short tick (Noto Sans; counts never overlap)', () => {
     const c = overviewLayers('dark').find((l) => l.id === OVR.activeCount) as unknown as { layout: Record<string, unknown>; paint: Record<string, unknown> }
     expect(c.layout['text-field']).toEqual(groupLabelText('#ffb27a'))
     expect(JSON.stringify(c.layout['text-field'])).toContain(' FIRES')
     expect(c.layout['text-font']).toEqual(['Noto Sans Bold'])
     expect(c.layout['icon-image']).toBe(GROUP_TICK_IMAGE.dark)
-    expect(c.layout['text-allow-overlap']).toBe(true)
+    // counts collide with each other (review DF-H34-1): the larger group is placed first, a blocked tick is optional
+    expect(c.layout['text-allow-overlap']).toBe(false)
+    expect(c.layout['icon-allow-overlap']).toBe(false)
+    expect(c.layout['icon-optional']).toBe(true)
+    expect(c.layout['symbol-sort-key']).toEqual(['-', 0, ['to-number', ['get', 'point_count'], 0]])
     expect(c.layout['icon-offset']).toBe(GROUP_TICK_OFFSET)
     expect(c.layout['text-offset']).toBe(GROUP_TEXT_OFFSET)
     // the tick starts on the circle's edge at 45° (up and to the right) for any group size
@@ -485,7 +492,7 @@ describe('layers', () => {
     expect(at(OVR.pinnedLive)).toBeGreaterThan(at(OVR.activeCluster))
     expect(at(OVR.otherLabel)).toBeGreaterThan(at(OVR.pinnedLive))
     // brief 4: the groups' "N FIRES" sit outside their circles, above the fire names, which are placed after them and
-    // keep clear of them (the counts are always drawn)
+    // keep clear of them (the counts are placed first)
     expect(at(OVR.activeCount)).toBeGreaterThan(at(OVR.pinnedLabel))
     expect(at(OVR.otherCount)).toBeGreaterThan(at(OVR.pinnedLabel))
     expect(at(OVR.pinnedLabel)).toBeGreaterThan(at(OVR.activeLabel))

@@ -826,6 +826,19 @@
     display: none;
   }
 }
+/* a narrow dock (tablets, small phones): the range tabs wrap to a line of their own (right) instead of running over
+   the time (they did at 768-900 px) */
+@container dockmain (max-width: 560px) {
+  .tl-top {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 36px;
+    row-gap: 4px;
+  }
+  .tl-top .seg {
+    margin-left: auto;
+  }
+}
 .s-burn-old {
   fill: var(--ember);
   fill-opacity: 0.16;

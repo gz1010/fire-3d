@@ -22,6 +22,20 @@ export function publicFireTime(
   return { timeMs: s.latestMs, held: keep ?? (asked ? { id: s.id, ms: s.timeMs } : null) }
 }
 
+/** Pure: what happens to the hold when the fire view goes away (tests). Leaving for Command in the same fire gives the
+ *  held time back; closing the fire (X, Back, another fire) drops it, so a later reopen of the same fire starts from
+ *  Command's own opening time, never an old link's (review R7); the same fire still open in Public (React's development
+ *  double mount, a switch to Forensic) keeps it. */
+export function leaveHold(
+  current: { id: string; ms: number } | null,
+  s: { incidentId: string | null; preset: string },
+): { held: { id: string; ms: number } | null; giveBackMs: number | null } {
+  if (!current) return { held: null, giveBackMs: null }
+  if (s.incidentId !== current.id) return { held: null, giveBackMs: null }
+  if (s.preset === 'command') return { held: null, giveBackMs: current.ms }
+  return { held: current, giveBackMs: null }
+}
+
 export function usePublicFireTime(): void {
   useEffect(() => {
     const apply = () => {
@@ -39,13 +53,11 @@ export function usePublicFireTime(): void {
     })
     return () => {
       unsub()
-      // leaving for Command in the same fire: the time it had (or the link's) comes back
-      // (kept otherwise: React's development double mount runs this cleanup once; a hold for another fire is ignored)
+      // leaving for Command in the same fire: the time it had (or the link's) comes back; closing the fire drops it
       const s = useStore.getState()
-      if (held && held.id === s.incidentId && useWorkspace.getState().preset === 'command') {
-        s.setTimeMs(held.ms)
-        held = null
-      }
+      const r = leaveHold(held, { incidentId: s.incidentId, preset: useWorkspace.getState().preset })
+      held = r.held
+      if (r.giveBackMs != null) s.setTimeMs(r.giveBackMs)
     }
   }, [])
 }

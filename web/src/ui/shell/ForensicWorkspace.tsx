@@ -73,7 +73,7 @@ function useSafeArea(collapsed: boolean, refs: { header: RefObject<HTMLElement |
 }
 
 /** No fire focused: Forensic shows one fire at a time, so it offers the map (zoom in on a fire) and the list (and the
- *  fire card) first. */
+ *  fire card) first, with the prototype line and "Not an all-clear" at the bottom as in the fire's view. */
 function OpenFireFirst() {
   const pick = (f: IncidentSummary) => useWorkspace.getState().setFireCard(f.id)
   const hasCard = useWorkspace((s) => s.fireCardId != null)
@@ -113,6 +113,10 @@ function OpenFireFirst() {
           </div>
         )}
       </main>
+      {/* the fixed copy every view keeps (review H5-M1 / H5-DF-2): its own row at the bottom, never over the list */}
+      <footer className="fx-empty-foot">
+        <FixedCopy variant="pill" />
+      </footer>
       <TooltipLayer />
     </div>
   )

@@ -1,6 +1,7 @@
 // The fire view's map key (brief 4 H4, FireView.dc.html "Map key"; PLAN-4 §3.4, decisions a and i-3): what the map
-// shows, with its source and own time, and the scale. An old perimeter is never "now": "Latest perimeter · <source> ·
-// <its time> (<age>)" with a Stale tag on a live fire's day-old perimeter (ui/public/fireView.ts perimeterKey). A fire
+// shows, with its source and own time, and the scale, on one line. An old perimeter is never "now": "Latest perimeter ·
+// <source> · <its time> (<age>)" with a Stale tag on a live fire's day-old perimeter (ui/public/fireView.ts
+// perimeterKey; the source's short form, the whole source in the tooltip). A fire
 // Fire-3d has not prepared: "No mapped perimeter yet · reported location (<issuer>)"; prepared without a perimeter:
 // "No perimeter published yet" (the burned-area estimate is not put in its place). "Legend details" opens the map
 // legend's details for this view (map/MapLegend.tsx variant "key").
@@ -39,7 +40,7 @@ export function FireKey({ details = true }: { details?: boolean }) {
     body = (
       <span className="pfv-key-item">
         <span className="fxm-sw fxm-sw-fire-area" aria-hidden="true" />
-        <span className="pfv-key-text">
+        <span className="pfv-key-text" data-tip={`Latest perimeter: ${k.source}`}>
           {k.text}
           {!perimetersOn && <span className="pfv-key-off"> (hidden in Layers)</span>} <span className="pfv-key-time">· {k.time}</span>
           {k.age && <span className="pfv-key-time"> ({k.age})</span>}

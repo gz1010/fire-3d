@@ -18,6 +18,7 @@ import { LocateButton } from '../../location/LocateButton'
 import { CoordinateStrip } from '../../location/CoordinateStrip'
 import { LocationCard } from '../../location/LocationCard'
 import { SearchBox } from '../../location/SearchBox'
+import { DeviceMarker } from '../../map/DeviceMarker'
 import { LeaderLabels } from '../../map/LeaderLabels'
 import { ScaleBar } from '../../map/MapAttribution'
 import { MapControls } from '../../map/MapControls'
@@ -26,6 +27,7 @@ import { LIST_ABSENCE_SHORT } from '../../state/overview'
 import { useStore } from '../../state/store'
 import { useWorkspace } from '../../state/workspace'
 import { OVERVIEW_LEGEND_IN_PANEL_QUERY } from '../public/overviewLayout'
+import { ListNoticeBanner } from '../public/ListNoticeBanner'
 import { OverviewStatus } from '../public/OverviewStatus'
 import { ShowDetailsPill } from '../public/ShowDetailsPill'
 import { CoordsSlot } from './CoordsSlot'
@@ -65,6 +67,8 @@ export function OverviewChrome({ credits }: { credits: ReactNode }) {
   // "Show details" pill stands in for it (the skip link "Skip to the fire list" lands on the pill)
   const listOpen = useWorkspace((s) => s.panels.updates)
   const listShown = details || (narrow && (command || listOpen))
+  // the list's notices (a list down or failed) stay visible while the list itself is not open (decision d; review R2)
+  const listOpenFull = details || (narrow && listOpen)
   useListOpensDetails(!narrow && !command)
   return (
     <>
@@ -89,8 +93,11 @@ export function OverviewChrome({ credits }: { credits: ReactNode }) {
           </>
         }
       />
-      {/* the largest named fires' leader-line labels: over the map, under the chrome */}
+      {/* the largest named fires' leader-line labels and the browser's location (after locate-me): over the map, under
+          the chrome */}
       <LeaderLabels />
+      <DeviceMarker />
+      {!listOpenFull && <ListNoticeBanner />}
       <div className="mw-layers-slot" data-chrome="layers">
         <LayersPanel />
       </div>

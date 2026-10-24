@@ -947,3 +947,37 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* the browser's own location after "Use my location" (map/DeviceMarker.tsx; review R3): over the map, under the chrome */
+.fxm-device {
+  position: absolute;
+  inset: 0;
+  z-index: calc(var(--m-z-map) + 2);
+  overflow: visible;
+  pointer-events: none;
+}
+.fxm-device-halo {
+  fill: var(--m-select);
+  fill-opacity: 0.18;
+}
+.fxm-device-ring {
+  fill: none;
+  stroke: var(--m-select);
+  stroke-opacity: 0.7;
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+.fxm-device-dot {
+  fill: var(--m-select);
+  stroke: #ffffff;
+  stroke-width: 2;
+}
+.fxm-device-label {
+  fill: var(--m-select-strong);
+  font: 600 10px var(--m-font-mono);
+  letter-spacing: 0.14em;
+  paint-order: stroke;
+  stroke: rgba(12, 12, 12, 0.85);
+  stroke-width: 3px;
+}
+

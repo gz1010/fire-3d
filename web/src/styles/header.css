@@ -29,25 +29,43 @@
 .fx-bar .tb-date {
   font-size: 11px;
 }
-.fx-place-date::before {
-  content: ' · ';
-  font-family: var(--font-ui);
+/* "Lake County · Jun 28, 2026 – present" on one line while it fits; when it does not, the dates wrap under the place
+   (review H5-DF-6), and only a line still too long for the room is cut with an ellipsis (the full text is in the
+   tooltip). The " · " sits in the 18 px before the dates; when they wrap it falls into the box's first 18 px, which
+   the clip-path hides, so a wrapped line never starts with a dot. */
+.fx-bar .fx-place {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  align-content: center;
+  margin-left: -18px;
+  clip-path: inset(-8px -8px -8px 18px);
+  line-height: 1.3;
 }
-/* tight bars: the place over the dates */
-@media (max-width: 1600px) {
-  .fx-bar .fx-place {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    line-height: 1.3;
-  }
-  .fx-bar .fx-place > * {
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .fx-place-date::before {
-    content: none;
-  }
+.fx-bar .fx-place > * {
+  min-width: 0;
+  max-width: calc(100% - 18px);
+  margin-left: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fx-bar .fx-place-date {
+  position: relative;
+  overflow: visible;
+}
+.fx-bar .fx-place-date > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fx-place-date::before {
+  content: '·';
+  position: absolute;
+  left: -18px;
+  width: 18px;
+  text-align: center;
+  font-family: var(--font-ui);
 }
 
 /* the screens' Forensic logo: no glow */
@@ -258,14 +276,19 @@
   }
 }
 
-/* the bar's items drop the less useful text first on medium screens */
+/* the bar's items drop the less useful text first on medium screens: the "Fire-3d" word (the logo stays) gives the
+   place and the dates room on laptops (review H5-DF-6), then the place line goes */
+@media (max-width: 1400px) {
+  .fx-bar .tb-brand-name {
+    display: none;
+  }
+}
 @media (max-width: 1280px) {
   .fx-bar .tb-place {
     display: none;
   }
 }
 @media (max-width: 1180px) {
-  .fx-bar .tb-brand-name,
   .fx-bar .tb-left > .tb-sep {
     display: none;
   }
@@ -277,6 +300,28 @@
   }
   .fx-bar .hdr-tab .count-badge {
     font-size: 10px;
+  }
+}
+/* tablets and phones (≤ 1023 px; PLAN-4 decision h, review H5-DF-1 / H5-m2): the centred view pill no longer fits
+   between the picker and the tools, so it drops to a row of its own under the bar's left end. The header's box takes
+   that row in (--fx-view-row), so the measured safe area (ForensicWorkspace useSafeArea) starts below it and the
+   compass, its ⟲ ⟳ and the entry controls sit under the pill instead of beside it; the bar itself keeps its 40 px
+   row. The right column keeps its place (its top comes from --header-h, not from the header's box). Phones adjust
+   the row in forensic-narrow.css. */
+@media (max-width: 1023px) {
+  .app {
+    --fx-view-row: 48px;
+  }
+  .app:not(.is-collapsed) .app-header {
+    height: calc(var(--header-h) + var(--fx-view-row));
+  }
+  .app-header > .tb.fx-bar {
+    height: var(--header-h);
+  }
+  .fx-bar .tb-centre {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
   }
 }
 
@@ -566,7 +611,13 @@
   backdrop-filter: blur(18px);
   box-shadow: var(--shadow);
 }
-.minibar-name {
+/* the fire's name is the one item that gives way, so "Panels H" (the way back) is never pushed out (review H5-B1) */
+.minibar > * {
+  flex: none;
+}
+.minibar > .minibar-name {
+  flex: 0 1 auto;
+  min-width: 0;
   font-weight: 600;
   max-width: 260px;
 }
@@ -607,10 +658,35 @@
 .minibar .minibar-panels {
   border-radius: 999px;
 }
+@media (max-width: 1023px) {
+  .app .minibar {
+    max-width: calc(100vw - 40px);
+  }
+}
+/* phones: the bar is the fire, play and "Panels H"; the view pill (a 230 px item) waits in the full bar, one tap away.
+   The selector outweighs topbar.css's `.tb-view { display: flex }`, which loads later and used to win (review
+   H5-B1: the pill pushed "Panels H" out of the clipped bar). */
 @media (max-width: 760px) {
   .minibar .brand-name,
-  .minibar-time,
-  .minibar-view {
+  .minibar .minibar-time,
+  .minibar .tb-view.minibar-view {
     display: none;
+  }
+  /* 44 px touch targets (PLAN-4 decision h): the play and "Panels" buttons take the bar's full height */
+  .minibar .icon-btn.minibar-play,
+  .minibar .minibar-panels {
+    position: relative;
+  }
+  .minibar .icon-btn.minibar-play::before,
+  .minibar .minibar-panels::before {
+    content: '';
+    position: absolute;
+    inset: -7px;
+  }
+  .minibar .minibar-panels::before {
+    inset: -6px -3px;
+  }
+  .minibar .minibar-panels {
+    min-height: 32px;
   }
 }

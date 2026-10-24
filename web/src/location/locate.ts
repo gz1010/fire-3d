@@ -1,8 +1,11 @@
-// "Use my location" (brief 4, Main.dc.html locate-me button; PLAN-4 §3.3; CONTRACT §15.3). Pure parts, tested in
-// locate.test.ts; the button is location/LocateButton.tsx. The browser's own geolocation is asked only when the user
-// clicks the button (navigator.geolocation.getCurrentPosition; no outside location service). The answer becomes the
-// workspace's `device` (memory only: never in the URL, never stored) and the selected point ("Your location"), which
-// the location card checks like a map click. Plain messages say why there is no answer.
+// "Use my location" (brief 4, Main.dc.html locate-me button; PLAN-4 §3.3 and decision i-7; CONTRACT §15.3). Pure parts,
+// tested in locate.test.ts; the button is location/LocateButton.tsx. The browser's own geolocation is asked only when
+// the user clicks the button (navigator.geolocation.getCurrentPosition; no outside location service). The answer
+// becomes the workspace's `device` (memory only: never in the URL, never stored, never sent): the map flies there and
+// marks it (map/DeviceMarker.tsx). Only "Check this spot" makes it the selected point ("Your location"), which the
+// location card then checks like a map click; that sends the point to Fire-3d's server, and the prompt says so first
+// (H3+H4 review R3: the check used to run at once while the tooltip said the point was not saved). Plain messages say
+// why there is no answer.
 import type { DeviceLocation, SelectedLocation } from '../state/workspace'
 
 /** A fix less precise than this (metres) is marked approximate (the pin's dashed ring, the card's "approximate"). */
@@ -13,7 +16,14 @@ export const LOCATE_TIMEOUT_MS = 15_000
 export const LOCATE_MAX_AGE_MS = 60_000
 
 export const LOCATE_LABEL = 'Use my location'
-export const LOCATE_TIP = 'Use my location: your browser finds it (only when you click). Fire-3d checks that point like a map click and does not save it or put it in the link.'
+export const LOCATE_TIP =
+  'Use my location: your browser finds it (only when you click) and the map shows it. It stays in this browser (not sent, saved or put in the link) unless you choose to check that spot.'
+/** The prompt once the map shows the location (decision i-7: what a check sends, said before it is sent). */
+export const LOCATE_FOUND = 'Your location from your browser is on the map. It stays in this browser.'
+export const LOCATE_CHECK_LABEL = 'Check this spot'
+export const LOCATE_CHECK_NOTE =
+  "Checking sends this point to Fire-3d's server, which looks up the place and asks official sources (evacuation zones, alerts) about the area around it, as for a map click."
+export const LOCATE_HIDE_LABEL = 'Stop showing my location'
 
 export type LocateFailure = 'denied' | 'unavailable' | 'timeout' | 'unsupported' | 'insecure'
 

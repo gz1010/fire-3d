@@ -86,6 +86,7 @@ export function SearchBox({ variant = 'panel' }: { variant?: SearchBoxVariant } 
   const [state, setState] = useState<SearchState>(carried?.state ?? INITIAL_SEARCH)
   const units = useWorkspace((s) => s.units)
   const hasSelection = useWorkspace((s) => s.selection != null)
+  const fireView = useWorkspace((s) => s.workspace === 'map' && s.preset === 'public')
   const summary = useStore((s) => s.summary)
   const incidentId = useStore((s) => s.incidentId)
   const narrow = useNarrow()
@@ -469,6 +470,7 @@ export function SearchBox({ variant = 'panel' }: { variant?: SearchBoxVariant } 
               onAddress={(res, m) => chooseAddress(res, m)}
               onArea={(m) => chooseArea(m, null)}
               onIncident={(h) => actOnIncident(h)}
+              fireView={fireView}
             />
           </div>
         )}
@@ -488,9 +490,11 @@ interface ResultsProps {
   onAddress: (res: GeocodeResponse, m: GeocodeMatch) => void
   onArea: (m: GeocodeMatch) => void
   onIncident: (h: IncidentHit) => void
+  /** Public on the map: a fire result opens the fire view, not a card (brief 4 decision b; review R5). */
+  fireView: boolean
 }
 
-function Results({ lists, response, others, units, near, currentId, onAddress, onArea, onIncident }: ResultsProps) {
+function Results({ lists, response, others, units, near, currentId, onAddress, onArea, onIncident, fireView }: ResultsProps) {
   const areas = [...lists.places, ...lists.zips]
   return (
     <>
@@ -548,9 +552,11 @@ function Results({ lists, response, others, units, near, currentId, onAddress, o
               const current = s.id === currentId
               const facts = fireResultFacts(s, units)
               const opensCard = !current && (r === 'not-prepared' || r === 'failed')
+              // Public: every result opens the fire view (preparing the map data is offered there); Command: the card
+              const tip = fireView ? (current ? undefined : `Open the fire view of ${fireName(s)}`) : opensCard ? 'Shows the fire and its card; preparing the analysis is asked there' : undefined
               return (
                 <li key={s.id}>
-                  <button type="button" className="loc-result" onClick={() => onIncident(h)} title={opensCard ? 'Shows the fire and its card; preparing the analysis is asked there' : undefined}>
+                  <button type="button" className="loc-result" onClick={() => onIncident(h)} title={tip}>
                     <Flame size={14} aria-hidden="true" className="loc-result-icon is-fire" />
                     <span className="loc-result-text">
                       <span className="loc-result-title">
@@ -559,7 +565,7 @@ function Results({ lists, response, others, units, near, currentId, onAddress, o
                       </span>
                       <span className="loc-result-sub">
                         {facts.join(' · ')}
-                        {opensCard && ' · opens its card'}
+                        {opensCard && (fireView ? ' · opens the fire view' : ' · opens its card')}
                       </span>
                     </span>
                   </button>

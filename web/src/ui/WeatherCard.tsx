@@ -153,6 +153,11 @@ function WxBody({ now }: { now: WeatherNow }) {
       </div>
       <div className="wx-foot mono">
         {gustMph != null && <span>gusts {fmtNumber(gustMph)} mph</span>}
+        {gustMph != null && now.rosPotential != null && (
+          <span className="wx-foot-sep" aria-hidden="true">
+            ·
+          </span>
+        )}
         {now.rosPotential != null && <span data-tip="Potential head-fire rate of spread from weather + local fuels">ROS potential {fmtNumber(now.rosPotential, now.rosPotential < 10 ? 1 : 0)} ch/h</span>}
         {critical && (
           <span className="chip chip-danger wx-crit" data-tip="RH ≤ 15% with sustained wind ≥ 25 mph or gusts ≥ 35 mph">

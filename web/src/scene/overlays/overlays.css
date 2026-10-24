@@ -429,8 +429,10 @@
     left: 100%;
   }
 }
-/* phones: a smaller dial (the view pill's row is to its right); the view dock keeps 2D / 3D, depth of field, frame and
-   full screen (the exaggeration and quality are also in the bar's "View options" menu) */
+/* phones: a smaller dial (the view pill's row is above it, styles/forensic-narrow.css); ⟲ ⟳ 40 px each, 4 px apart,
+   so each touch target is 44 px with its transparent ::before (PLAN-4 decision h, review H5-m3); the view dock keeps
+   2D / 3D, depth of field, frame and full screen (the exaggeration and quality are also in the bar's "View options"
+   menu) */
 @media (max-width: 760px) {
   .sc-compass {
     width: 48px;
@@ -440,9 +442,18 @@
     width: 15px;
     height: 22px;
   }
+  .sc-turn {
+    gap: 4px;
+  }
   .sc-turn .sc-turn-btn {
-    width: 28px;
-    height: 28px;
+    position: relative;
+    width: 40px;
+    height: 40px;
+  }
+  .sc-turn .sc-turn-btn::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
   }
   .sc-dock {
     gap: 6px;
@@ -458,6 +469,15 @@
   .sc-seg {
     min-width: 34px;
     padding: 0 9px;
+  }
+}
+
+/* narrow tablets (761-900 px): the view dock is right of the timeline's column, which is narrower than the dock with
+   its two selects (the scale ran off the left edge at 768-820 px); the selects wait in "View options", as on phones */
+@media (min-width: 761px) and (max-width: 900px) {
+  .sc-dock .sc-select,
+  .sc-dock .sc-select + .sc-sep {
+    display: none;
   }
 }
 

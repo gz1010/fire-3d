@@ -5,7 +5,8 @@
 // pinned ones, 5,000 acres or more) and any fire of 20,000 acres or more, as long as MapLibre draws its own marker (not
 // inside a group). Two lines (the name in Inter 12/600, the acres in mono 10), a 0.9 px leader; placed by the pure,
 // greedy map/leaderLayout.ts inside the free map (the safe area), off the chrome, the other markers and groups, each
-// other and the selected point's label. Recomputed when the map settles, the window or the chrome changes, or the fire
+// other, the basemap's place names and the selected point's label; leaders are short (at most 140 px, 90 on a phone),
+// never cross each other and run over no other marker's middle, group centre or count. Recomputed when the map settles, the window or the chrome changes, or the fire
 // lists change (once the map is idle with them), never on the map's own idle otherwise (that would feed back); during a
 // pan or a turn the labels follow their markers (one projection each per frame); hidden while
 // zooming and from z5, where the map's own labels take over (with no collisions to manage). Below z5 the map leaves out
@@ -16,7 +17,7 @@ import type { MapGeoJSONFeature, Map as MapLibreMap } from 'maplibre-gl'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { pickFire } from '../state/fireCard'
 import { useWorkspace } from '../state/workspace'
-import { LEADER_MAX, layoutLeaders, leaderAcres, type Circle, type LeaderItem, type LeaderSpot, type Rect } from './leaderLayout'
+import { LEADER_MAX, LEADER_MAX_LEN, LEADER_MAX_LEN_NARROW, layoutLeaders, leaderAcres, placeLabelLayers, type Circle, type LeaderItem, type LeaderSpot, type Rect } from './leaderLayout'
 import { useMapRuntime } from './mapStore'
 import { GROUP_LABEL_PX, groupRadius, LABEL_MIN_ACRES, OVR, SMALL_MAP_SCALE, SMALL_MAP_ZOOM, FULL_SIZE_ZOOM, ZOOM_GROWTH } from './overviewLayers'
 
@@ -52,9 +53,9 @@ function markerScale(zoom: number): number {
 }
 
 const SINGLE_LAYERS = [OVR.pinnedLive, OVR.pinnedPast, OVR.activePoint, OVR.otherPoint]
-/** OpenFreeMap's place-name layers (the names a label should not sit on). */
-const PLACE_LABEL_LAYERS = ['label_country_1', 'label_country_2', 'label_country_3', 'label_state', 'label_city_capital', 'label_city', 'label_town', 'water_name_point_label']
 const GROUP_LAYERS = [OVR.activeCluster, OVR.otherCluster]
+
+const isCountryLayer = (id: string) => /country/.test(id)
 
 const pointOf = (f: MapGeoJSONFeature): [number, number] | null => (f.geometry.type === 'Point' ? (f.geometry.coordinates as [number, number]) : null)
 
@@ -109,7 +110,13 @@ function computeSpots(map: MapLibreMap, insets: { top: number; right: number; bo
   }
   // groups: their circle and their "N FIRES" label at the upper right
   const obstacles = chromeRects(host)
+  // a leader line may cross a place name, never the chrome or a group's count
+  const lineObstacles = [...obstacles]
   const groups = present(GROUP_LAYERS)
+  // the counts MapLibre placed (a count with no room is left out since DF-H34-1: its spot is free)
+  const counted = new Set<string>()
+  const countLayers = present([OVR.activeCount, OVR.otherCount])
+  if (countLayers.length) for (const f of map.queryRenderedFeatures({ layers: countLayers })) counted.add(`${f.source}:${f.properties?.cluster_id}`)
   if (groups.length)
     for (const f of map.queryRenderedFeatures({ layers: groups })) {
       const ll = pointOf(f)
@@ -119,17 +126,22 @@ function computeSpots(map: MapLibreMap, insets: { top: number; right: number; bo
       // a label may cross a group's thin ring (as the screen's do), never its centre or its "N FIRES"
       circles.push({ x: at.x, y: at.y, r: 5 })
       const e = r * Math.SQRT1_2
-      obstacles.push({ left: at.x + e, top: at.y - e - GROUP_LABEL_PX - 2, right: at.x + e + 64, bottom: at.y - e + 4 })
+      if (countLayers.length && !counted.has(`${f.source}:${f.properties?.cluster_id}`)) continue
+      // "28 FIRES": the tick (7 px), the count's digits (13 px Noto Sans Bold) and " FIRES" (8 px), a little room
+      const digits = String(f.properties?.point_count_abbreviated ?? f.properties?.point_count ?? '').length
+      const count = { left: at.x + e, top: at.y - e - GROUP_LABEL_PX - 2, right: at.x + e + 7 + digits * 8 + 36, bottom: at.y - e + 4 }
+      obstacles.push(count)
+      lineObstacles.push(count)
     }
   // the basemap's place names (countries, states, cities) as MapLibre drew them: an estimated box around each
-  const places = present(PLACE_LABEL_LAYERS)
+  const places = present(placeLabelLayers(map.getStyle()?.layers ?? []))
   if (places.length)
     for (const f of map.queryRenderedFeatures({ layers: places })) {
       const ll = pointOf(f)
       const name = String(f.properties?.['name:latin'] ?? f.properties?.name ?? '')
       if (!ll || !name) continue
       const at = map.project(ll)
-      const big = f.layer.id.startsWith('label_country')
+      const big = isCountryLayer(f.layer.id)
       const words = name.split(/\s+/)
       const w = (big ? Math.max(...words.map((x) => x.length)) * 10 : name.length * 7) + 8
       const h = big ? words.length * 20 : 18
@@ -138,8 +150,9 @@ function computeSpots(map: MapLibreMap, insets: { top: number; right: number; bo
   candidates.sort((a, b) => b.acres - a.acres || a.id.localeCompare(b.id))
   const byId = new Map(candidates.map((x) => [x.id, x]))
   // a phone's national view holds the lower 48 in a few hundred pixels: fewer names
-  const max = c.clientWidth < NARROW_MAP_PX ? NARROW_LEADER_MAX : LEADER_MAX
-  const placed = layoutLeaders(candidates, { free, obstacles, circles, max })
+  const narrow = c.clientWidth < NARROW_MAP_PX
+  const max = narrow ? NARROW_LEADER_MAX : LEADER_MAX
+  const placed = layoutLeaders(candidates, { free, obstacles, lineObstacles, circles, max, maxLen: narrow ? LEADER_MAX_LEN_NARROW : LEADER_MAX_LEN })
   const spots = placed.map((s) => {
     const x = byId.get(s.id)!
     return { ...s, name: x.name, meta: leaderAcres(x.acres, units), lngLat: x.lngLat }

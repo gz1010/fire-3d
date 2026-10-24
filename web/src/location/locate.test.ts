@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import locateButtonSource from './LocateButton.tsx?raw'
-import { APPROXIMATE_OVER_M, deviceFromPosition, deviceSelection, deviceZoom, LOCATE_MESSAGES, locateFailure } from './locate'
+import { APPROXIMATE_OVER_M, deviceFromPosition, deviceSelection, deviceZoom, LOCATE_CHECK_NOTE, LOCATE_FOUND, LOCATE_MESSAGES, LOCATE_TIP, locateFailure } from './locate'
 
 describe('use my location (brief 4)', () => {
   it('maps the browser error codes to plain messages; never a default place', () => {
@@ -42,5 +42,22 @@ describe('use my location (brief 4)', () => {
     // the request sits inside the click handler, not an effect
     const handler = /const locate = \(\) => \{([\s\S]*?)\n {2}\}/.exec(src)?.[1] ?? ''
     expect(handler).toContain('getCurrentPosition')
+  })
+
+  it('keeps the location in the browser until the user asks to check it, and says what a check sends (review R3)', () => {
+    const src = locateButtonSource
+    // the fix only sets the device location and flies the map there: no point check, no request
+    const handler = /const locate = \(\) => \{([\s\S]*?)\n {2}\}/.exec(src)?.[1] ?? ''
+    expect(handler).toContain('setDevice(d)')
+    expect(handler).toContain('requestMapFlyTo')
+    expect(handler).not.toContain('selectLocation')
+    // "Check this spot" is the only way the point becomes the selection (and is checked by Fire-3d's server)
+    const check = /const check = \(\) => \{([\s\S]*?)\n {2}\}/.exec(src)?.[1] ?? ''
+    expect(check).toContain('selectLocation(deviceSelection(d)')
+    expect(src.match(/selectLocation\(/g)).toHaveLength(1)
+    expect(LOCATE_FOUND).toMatch(/stays in this browser/)
+    expect(LOCATE_CHECK_NOTE).toMatch(/sends this point to Fire-3d's server/)
+    expect(LOCATE_TIP).toMatch(/unless you choose to check/)
+    expect(LOCATE_TIP).not.toMatch(/checks that point/)
   })
 })

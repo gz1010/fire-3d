@@ -28,48 +28,25 @@ import {
   LIST_ABSENCE,
   LIST_ABSENCE_SHORT,
   listCheckedText,
-  listErrorLines,
   listHealth,
-  listSourceNotices,
   newestRecordMs,
   newestRecordText,
   OVERVIEW_FILTERS,
   overviewCounts,
-  overviewFires,
   type ListHealth,
-  type OverviewFilter,
 } from '../../state/overview'
-import { useStore, type CatalogList } from '../../state/store'
+import { useStore } from '../../state/store'
 import { useWorkspace } from '../../state/workspace'
 import { Segmented, Spinner } from '../controls'
 import { OfficialNow } from '../feed/OfficialNow'
 import { useNow } from '../hooks'
 import { useListWindow } from '../useListWindow'
 import { pickFire } from './fireActions'
+import { LIST_OF, useOverviewData } from './useOverviewData'
 import { NARROW_QUERY, useDrawerFocus, useMediaQuery } from './hooks'
 
-const LIST_OF: Record<OverviewFilter, CatalogList[]> = { active: ['live'], season: ['live', 'season'], past: ['historical'] }
 /** The overview panel's title and its collapsed button (brief 3: the lower 48). */
 export const OVERVIEW_TITLE = 'Fires in the lower 48'
-
-function useOverviewData() {
-  const catalog = useStore((s) => s.catalog)
-  const filter = useWorkspace((s) => s.overviewFilter)
-  const nowMs = useNow(30_000)
-  const rows = useMemo(() => overviewFires(catalog, filter), [catalog, filter])
-  const lists = LIST_OF[filter]
-  const loading = lists.some((l) => catalog.listLoading[l])
-  const errors = lists.map((l) => catalog.listErrors[l]).filter((e): e is string => e != null)
-  const checked = lists.map((l) => catalog.updatedMs[l]).filter((t): t is number => t != null)
-  const shownSources = lists.map((l) => catalog.sources?.[l])
-  const health = listHealth(shownSources)
-  const notices = listSourceNotices(shownSources, nowMs)
-  const errorLines = listErrorLines(lists, catalog.listErrors, catalog.updatedMs, nowMs)
-  // "checked": when Fire-3d fetched the lists (sources[].retrieved_ms), never the time of the answer (panel F2)
-  const checkedMs = health.fetchedMs ?? (checked.length ? Math.min(...checked) : null)
-  const checkedNewestMs = health.fetchedMs != null ? health.fetchedNewestMs : checked.length ? Math.max(...checked) : null
-  return { catalog, filter, rows, loading, notices, health, errorLines, nowMs, error: errors.length ? [...new Set(errors)].join('; ') : null, checkedMs, checkedNewestMs, listCount: lists.length }
-}
 
 /** The fires of the list in the map view (the whole list with "Show all", or when no map is shown). Memoised on the
  *  rows and the view. */

@@ -6,14 +6,18 @@ import type { CalFireOfficial, EvacuationOfficial, FireWeatherOfficial, Official
 import {
   distanceChipText,
   distanceToFire,
+  evacReasonRest,
   factsSource,
   fireDateLine,
   fireEnd,
   fireFacts,
+  fireLabel,
   fitName,
   hazardStatus,
   perimeterKey,
   recordFigures,
+  shortPerimeterSource,
+  updateYear,
   type FactsInput,
 } from './fireView'
 
@@ -137,11 +141,22 @@ describe('fitting the name in the circle', () => {
     // and two lines when they are
     expect(fitName('Big Fire', measure)).toEqual({ lines: ['Big', 'Fire'], px: 72 })
   })
-  it('never goes under 40 px: a very long name keeps two lines at 40 px', () => {
+  it('takes a long name below 40 px over up to three (at 28-30 px four) lines, every word kept in order (review DF-H34-6)', () => {
     const f = fitName('Pontotoc Pennington Road Complex North', measure)
-    expect(f.px).toBe(40)
-    expect(f.lines).toHaveLength(2)
-    expect(fitName('Supercalifragilisticexpialidocious', measure)).toEqual({ lines: ['Supercalifragilisticexpialidocious'], px: 40 })
+    expect(f.px).toBeLessThan(40)
+    expect(f.px).toBeGreaterThanOrEqual(28)
+    expect(f.lines.length).toBeLessThanOrEqual(3)
+    expect(f.lines.join(' ')).toBe('Pontotoc Pennington Road Complex North')
+    expect(Math.max(...f.lines.map((l) => measure(l, f.px)))).toBeLessThanOrEqual(256)
+    expect(f.clamp).toBeUndefined()
+    // the name that lost its middle words before: "Campbell -…" over "Wildlife Mg…"
+    const c = fitName('Campbell -N Cumberland Wildlife Mgt Area', measure)
+    expect(c.lines.join(' ').replace('- ', '-')).toBe('Campbell -N Cumberland Wildlife Mgt Area')
+    expect(Math.max(...c.lines.map((l) => measure(l, c.px)))).toBeLessThanOrEqual(256)
+  })
+
+  it('clamps a name too long even at 28 px as one block (cut at its end, never in the middle)', () => {
+    expect(fitName('Supercalifragilisticexpialidocious', measure)).toEqual({ lines: ['Supercalifragilisticexpialidocious'], px: 28, clamp: true })
   })
 })
 
@@ -200,7 +215,9 @@ describe('distance chip (decision i-7)', () => {
 describe('map key (decision i-3)', () => {
   it('names the perimeter’s source and own time; a live fire’s day-old perimeter is stale', () => {
     const k = perimeterKey({ t_ms: NOW - 30 * 3_600_000, source: 'NIFC WFIGS daily perimeters' }, NOW, true, TF)
-    expect(k.text).toBe('Latest perimeter · NIFC WFIGS daily perimeters')
+    // the publisher in the key (one line), the source as the data names it in the tooltip (review DF-H34-8)
+    expect(k.text).toBe('Latest perimeter · NIFC WFIGS')
+    expect(k.source).toBe('NIFC WFIGS daily perimeters')
     expect(k.time).toMatch(/^Oct 23, .* MDT$/)
     expect(k.age).toBe('30 h ago')
     expect(k.stale).toBe(true)
@@ -229,8 +246,9 @@ describe('facts (decision i-1, i-2: verbatim, own times, never N/A)', () => {
     expect(fwRow.sub).toContain('not an all-clear')
     expect(fwRow.sub).toContain('checked 2 min ago')
     const ev = rows.find((r) => r.key === 'evacuation')!
+    // the state is in the label; the sub-line does not repeat the value (review DF-H34-10 / R8)
     expect(ev).toMatchObject({ value: 'Not available in this state', label: 'Evacuation zones (CO)' })
-    expect(ev.sub).toContain('Colorado')
+    expect(ev.sub).toBe('follow local officials')
     for (const r of rows) expect(`${r.value} ${r.sub ?? ''}`).not.toMatch(/\bN\/A\b|\bsafe\b|low risk/i)
   })
 
@@ -277,5 +295,44 @@ describe('facts (decision i-1, i-2: verbatim, own times, never N/A)', () => {
     expect(src.line).toBe('USFS via NIFC WFIGS · NWS · checked 2 min ago')
     expect(src.link).toEqual({ url: 'https://example.gov/record', label: 'NIFC WFIGS' })
     expect(factsSource(input({ demo: true })).badge).toBe('demo')
+  })
+})
+
+describe('review fixes (H3+H4 fix)', () => {
+  it('keeps only a further explanation of "Not available in this state" (DF-H34-10, R8)', () => {
+    const v = 'Not available in this state'
+    expect(evacReasonRest('Not available in this state (Washington)', v)).toBeNull()
+    expect(evacReasonRest('Not available in this state', v)).toBeNull()
+    expect(evacReasonRest('Not available in this state (Oregon): the state feed is offline', v)).toBe('the state feed is offline')
+    expect(evacReasonRest('The state has no public zone feed', v)).toBe('The state has no public zone feed')
+    expect(evacReasonRest(null, v)).toBeNull()
+  })
+
+  it('shows the update row’s year whenever the start shows one or the years differ (DF-H34-9)', () => {
+    const tz = 'America/Los_Angeles'
+    const start = Date.UTC(2025, 8, 1, 16)
+    const may7 = Date.UTC(2026, 4, 7, 18, 53)
+    expect(updateYear(start, may7, NOW, tz)).toBe('always')
+    // a fire of this year, updated this year: no year needed
+    expect(updateYear(JUN28, Date.UTC(2026, 9, 22), NOW, tz)).toBe('auto')
+    expect(updateYear(null, may7, NOW, tz)).toBe('auto')
+    const rows = fireFacts(input({ summary: { ...pastFire, updated_ms: may7 }, tf: timeFmt(tz, '12h') }))
+    expect(rows.find((r) => r.key === 'started')?.value).toBe('Sep 1, 2025')
+    expect(rows.find((r) => r.key === 'updated')?.value).toBe('May 7, 2026')
+  })
+
+  it('never says "Fire fire" (R9)', () => {
+    expect(fireLabel('Willow')).toBe('Willow fire')
+    expect(fireLabel('Cedar Canyon Fire')).toBe('Cedar Canyon Fire')
+    expect(fireLabel('Eaton fire')).toBe('Eaton fire')
+    expect(fireLabel('Firestone')).toBe('Firestone fire')
+  })
+
+  it('names the perimeter’s publisher in the key (DF-H34-8)', () => {
+    expect(shortPerimeterSource('NIFC WFIGS daily perimeters (final extent, mapped 2025-01-31)')).toBe('NIFC WFIGS')
+    expect(shortPerimeterSource('NIFC WFIGS daily perimeter (fixture)')).toBe('NIFC WFIGS')
+    expect(shortPerimeterSource('NIFC WFIGS')).toBe('NIFC WFIGS')
+    expect(shortPerimeterSource('CAL FIRE perimeter')).toBe('CAL FIRE')
+    expect(shortPerimeterSource('(fixture)')).toBe('(fixture)')
   })
 })

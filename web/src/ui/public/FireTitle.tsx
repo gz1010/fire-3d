@@ -8,7 +8,7 @@ import { useStore } from '../../state/store'
 import { useTimeFormat } from '../../state/timeZone'
 import { placeLine } from '../shell/topBarText'
 import { DistanceChip } from './DistanceChip'
-import { fireDateLine, fireEnd, recordActive } from './fireView'
+import { fireDateLine, fireEnd, fireLabel, recordActive } from './fireView'
 
 export function FireTitle({ chip = true, compact = false }: { chip?: boolean; compact?: boolean }) {
   const { summary, loading } = useStore(useShallow((s) => ({ summary: s.summary && s.summary.id === s.incidentId ? s.summary : null, loading: s.incidentLoading })))
@@ -19,7 +19,7 @@ export function FireTitle({ chip = true, compact = false }: { chip?: boolean; co
   return (
     <div className={`pfv-title${compact ? ' is-compact' : ''}`}>
       <h1 className="pfv-place">
-        {summary && <span className="mw-sr-only">{summary.name} fire · </span>}
+        {summary && <span className="mw-sr-only">{fireLabel(summary.name)} · </span>}
         {place ?? summary?.name ?? (loading ? 'Loading the fire…' : 'Fire')}
       </h1>
       {date && <p className="pfv-date">{date}</p>}

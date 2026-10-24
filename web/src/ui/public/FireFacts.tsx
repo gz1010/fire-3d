@@ -8,7 +8,7 @@
 // Between the rows and that foot, the map data's state (decision a): an unprepared fire's "Prepare map data (1-3 min)"
 // (this replaces the top notice in Public), the preparation's progress, a failed preparation, or a prepared fire without a
 // perimeter. On short windows the rows scroll and the foot (sources, "Not an all-clear") stays in view.
-import { Check, Copy } from 'lucide-react'
+import { Check, ChevronDown, Copy } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useOfficialNow, useOfficialPanelTime } from '../../official/hooks'
@@ -112,7 +112,9 @@ export function MapDataState() {
   )
 }
 
-export function FireFacts({ rowsOnly = false, peek = false }: { rowsOnly?: boolean; peek?: boolean } = {}) {
+/** `more` (the desktop column, PublicFireChrome useFactsFit): rows are hidden below; the foot shows "More below", which
+ *  scrolls them into view with `onMore`. */
+export function FireFacts({ rowsOnly = false, peek = false, more = false, onMore }: { rowsOnly?: boolean; peek?: boolean; more?: boolean; onMore?: () => void } = {}) {
   const info = useOfficialNow()
   const panelMs = useOfficialPanelTime()
   const metric = useWorkspace((s) => s.units === 'metric')
@@ -126,6 +128,11 @@ export function FireFacts({ rowsOnly = false, peek = false }: { rowsOnly?: boole
   const shown = peek ? rows.filter((r) => r.key === 'burned' || r.key === 'contained') : rows
   const foot = (
     <div className="pfv-facts-foot">
+      {more && onMore && (
+        <button type="button" className="pfv-more" onClick={onMore} data-tip="More official facts below: scroll the list">
+          More below <ChevronDown size={13} aria-hidden="true" />
+        </button>
+      )}
       <p className="pfv-src">
         {src.badge === 'official' && <span className="pfv-badge">Official</span>}
         {src.badge === 'demo' && <span className="pfv-badge is-demo">Demo</span>}

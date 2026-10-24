@@ -21,8 +21,9 @@ import { recordEndTimes } from '../../official/record'
 import type { SummaryLine } from '../shell/officialSummary'
 
 // ------------------------------------------------------------------------------------------------ fixed wording
-/** The location card's model block in the fire view, and the Layers drawer's note (decision a). */
-export const MODEL_IN_COMMAND = 'The experimental spread model for this spot is in Command'
+/** The location card's model block in the fire view, and the Layers drawer's note (decision a). The card also leaves
+ *  out the weather model's wind and dryness readings (review R4), so the link names them. */
+export const MODEL_IN_COMMAND = 'Model weather (wind, dryness) and the experimental spread model for this spot are in Command'
 export const LAYERS_IN_COMMAND =
   'Modeled spread (experimental), the burned-area estimate from satellite detections, the detections and event locations are in Command'
 /** An unprepared fire (decision a): under the facts, in place of the top notice. */
@@ -101,12 +102,35 @@ export function hazardStatus(summary: IncidentSummary | null, end: FireEnd | nul
 export interface FittedName {
   lines: string[]
   px: number
+  /** The name did not fit even at `floorPx` over four lines: draw `lines[0]` as one wrapping block clamped to four
+   *  lines, so the ellipsis falls at the very end (never in the middle of the name). */
+  clamp?: boolean
+}
+
+/** Up to `max` lines of `text` that each fit `maxWidth` at `px` (greedy, breaking after spaces and hyphens), else null. */
+function wrapLines(text: string, measure: (text: string, px: number) => number, px: number, maxWidth: number, max: number): string[] | null {
+  // the words with their break: "Campbell", "-N", … (a hyphen stays at the end of the part before it)
+  const parts = text.split(/(?<=[ -])/)
+  const lines: string[] = []
+  let cur = ''
+  for (const part of parts) {
+    const next = cur + part
+    if (!cur || measure(next.trimEnd(), px) <= maxWidth) {
+      cur = next
+      continue
+    }
+    lines.push(cur.trimEnd())
+    cur = part
+  }
+  if (cur.trim()) lines.push(cur.trimEnd())
+  return lines.length <= max && lines.every((l) => measure(l, px) <= maxWidth) ? lines : null
 }
 
 /** The name in the circle: 72 px on one line when it fits `maxWidth`, else the largest size down to 40 px on one line
- *  or two (two lines win when 8 px or more larger); a name too long even then keeps 40 px and two lines (the circle
- *  clips the end; the full name is the button's accessible name). `measure(text, px)` gives a text's width. */
-export function fitName(name: string, measure: (text: string, px: number) => number, maxWidth = 256, maxPx = 72, minPx = 40): FittedName {
+ *  or two (two lines win when 8 px or more larger). A longer name goes on down to `floorPx` (28) over up to three
+ *  lines (four at 30 and 28 px); one too long even then is one block clamped to four lines (its end is cut, never its
+ *  middle; the full name is the button's accessible name and tooltip). `measure(text, px)` gives a text's width. */
+export function fitName(name: string, measure: (text: string, px: number) => number, maxWidth = 256, maxPx = 72, minPx = 40, floorPx = 28): FittedName {
   const text = name.trim().replace(/\s+/g, ' ')
   const fits = (lines: string[], px: number) => lines.every((l) => measure(l, px) <= maxWidth)
   const best = (lines: string[]): number | null => {
@@ -127,11 +151,18 @@ export function fitName(name: string, measure: (text: string, px: number) => num
   }
   if (one != null && (!two || two.px < one + 8)) return { lines: [text], px: one }
   if (two) return two
-  if (splits.length) {
-    const even = [...splits].sort((a, b) => Math.max(measure(a[0], 1), measure(a[1], 1)) - Math.max(measure(b[0], 1), measure(b[1], 1)))[0]
-    return { lines: even, px: minPx }
+  // a long name: smaller, over up to three lines (four at the smallest sizes; the words in order, none dropped)
+  for (let px = minPx - 2; px >= floorPx; px -= 2) {
+    const lines = wrapLines(text, measure, px, maxWidth, px <= floorPx + 2 ? 4 : 3)
+    if (lines) return { lines, px }
   }
-  return { lines: [text], px: minPx }
+  return { lines: [text], px: floorPx, clamp: true }
+}
+
+/** The fire's name as a phrase ("Willow fire", but "Eaton Fire" stays "Eaton Fire"): never "Fire fire". */
+export function fireLabel(name: string): string {
+  const n = name.trim()
+  return /\bfire$/i.test(n) ? n : `${n} fire`
 }
 
 // ------------------------------------------------------------------------------------------------ distance chip
@@ -198,8 +229,10 @@ export function distanceChipText(d: DistanceToFire, units: 'us' | 'metric', peri
 
 // ------------------------------------------------------------------------------------------------ key
 export interface PerimeterKey {
-  /** "Latest perimeter · NIFC WFIGS daily perimeters" */
+  /** "Latest perimeter · NIFC WFIGS" (the publisher; the key stays one line) */
   text: string
+  /** The source as the data names it ("NIFC WFIGS daily perimeters (final extent, mapped 2025-01-31)"): the tooltip. */
+  source: string
   /** Its own time: "Oct 23, 2:30 PM MDT" (the year when it differs from now's). */
   time: string
   /** "(6 h ago)" for a live fire; null for a past fire (an archive: the date says it). */
@@ -207,9 +240,21 @@ export interface PerimeterKey {
   stale: boolean
 }
 
+/** The perimeter source's short form for the key: without its notes in brackets and without "(daily) perimeters"
+ *  ("NIFC WFIGS daily perimeters (final extent, mapped 2025-01-31)" → "NIFC WFIGS"); the whole string stays the
+ *  key's tooltip. */
+export function shortPerimeterSource(source: string): string {
+  const s = source
+    .replace(/\s*\([^)]*\)/g, '')
+    .replace(/\s+(daily\s+)?perimeters?$/i, '')
+    .trim()
+  return s || source.trim()
+}
+
 export function perimeterKey(p: Pick<Perimeter, 't_ms' | 'source'>, nowMs: number, live: boolean, tf: TimeFmt): PerimeterKey {
   return {
-    text: `Latest perimeter · ${p.source}`,
+    text: `Latest perimeter · ${shortPerimeterSource(p.source)}`,
+    source: p.source,
     time: fmtAt(p.t_ms, tf, { zone: true, year: 'auto', refMs: nowMs }),
     age: live ? fmtRelative(p.t_ms, nowMs) : null,
     stale: perimeterStale(p.t_ms, nowMs, live),
@@ -291,6 +336,21 @@ function fireWeatherRow(f: FireWeatherOfficial, nowMs: number): FactRow {
   }
 }
 
+/** The backend's reason less what the row already says: "Not available in this state (Washington)" under the value
+ *  "Not available in this state" and the label "Evacuation zones (WA)" adds nothing, so only a further explanation
+ *  is kept. */
+export function evacReasonRest(reason: string | null | undefined, value: string): string | null {
+  if (!reason || !reason.trim()) return null
+  const r = reason.trim()
+  if (!r.toLowerCase().startsWith(value.toLowerCase())) return r
+  const rest = r
+    .slice(value.length)
+    .replace(/^\s*\([^)]*\)/, '')
+    .replace(/^[\s:;,.·—–-]+/, '')
+    .trim()
+  return rest || null
+}
+
 function evacuationRow(e: EvacuationOfficial, state: string | null, nowMs: number, tf: TimeFmt): FactRow {
   const base = { key: 'evacuation' as const, label: `Evacuation zones${state ? ` (${state})` : ''}`, size: 17 as const }
   const who = evacuationWho(e)
@@ -300,7 +360,7 @@ function evacuationRow(e: EvacuationOfficial, state: string | null, nowMs: numbe
     case 'not-available': {
       const l = e.links?.[0]
       // §14.14 short form, never "N/A"; the state's own pages when the backend names them
-      return { ...base, value: 'Not available in this state', sub: join([e.reason && e.reason !== 'Not available in this state' ? e.reason : null, 'follow local officials']), link: l && https(l.url) ? { url: l.url, label: l.label } : null }
+      return { ...base, value: 'Not available in this state', sub: join([evacReasonRest(e.reason, 'Not available in this state'), 'follow local officials']), link: l && https(l.url) ? { url: l.url, label: l.label } : null }
     }
     case 'none-listed':
       return { ...base, value: 'None listed', sub: join([`No order or warning listed near this fire`, who, checked(e.checkedMs, nowMs), 'not an all-clear']) }
@@ -330,6 +390,14 @@ function evacuationRow(e: EvacuationOfficial, state: string | null, nowMs: numbe
   }
 }
 
+/** The update row's year: shown whenever the Started row shows one (a fire from another year) or the update falls in
+ *  another year than the start, so "May 7" never reads as earlier than "Sep 1, 2025". */
+export function updateYear(startMs: number | null, updatedMs: number, nowMs: number, tz: string): 'always' | 'auto' {
+  if (startMs == null) return 'auto'
+  const y = (ms: number) => wallParts(ms, tz).year
+  return y(startMs) !== y(nowMs) || y(updatedMs) !== y(startMs) ? 'always' : 'auto'
+}
+
 /** The facts rows (decision i): record figures, the start, the reported location, NWS fire weather, evacuation zones,
  *  local officials' alerts (only while one is in effect) and the record's update time. */
 export function fireFacts(i: FactsInput): FactRow[] {
@@ -351,7 +419,7 @@ export function fireFacts(i: FactsInput): FactRow[] {
   rows.push(evacuationRow(i.evacuation, s?.state ?? null, i.nowMs, i.tf))
   if (i.local) rows.push({ key: 'local', value: "Alert in effect", label: "Local officials' alert", size: 17, tone: 'alert', sub: i.local.text, link: i.local.link ?? null })
   if (fig.updatedMs != null)
-    rows.push({ key: 'updated', value: fmtDayDate(fig.updatedMs, tz, { year: 'auto', refMs: i.nowMs }), unit: fmtClock(fig.updatedMs, i.tf, { zone: true }), label: 'Last official update', size: 26 })
+    rows.push({ key: 'updated', value: fmtDayDate(fig.updatedMs, tz, { year: updateYear(startMs, fig.updatedMs, i.nowMs, tz), refMs: i.nowMs }), unit: fmtClock(fig.updatedMs, i.tf, { zone: true }), label: 'Last official update', size: 26 })
   else rows.push({ key: 'updated', value: 'No update time given', label: 'Last official update', size: 17 })
   return rows
 }
