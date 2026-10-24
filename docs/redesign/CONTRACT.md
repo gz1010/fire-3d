@@ -3901,4 +3901,53 @@ rule is scoped to `.app`, `.fx-bar`, `.minibar`, `.fx-empty*` or a Forensic-only
 
 #### Final check — as built
 
-_To be filled by the final check._
+Step H6 (`final-verification-4`), 2026-10-24: report `reports/final-verification-4.json`, screenshots
+`docs/screenshots/brief4-final-*.png`, notes `progress/brief4-final-verification-4.md`. No interface of §15.1-15.4
+changed; no backend source, HTTP contract or H2 frozen file changed.
+- *Start*: nothing of the build was left uncommitted (working tree clean at `bf3e79c`).
+- *Gates*: typecheck ok; lint 55 warnings, all in `src/scene` (none added); web tests 101 files, 1383 passed, 2 skipped;
+  build ok; backend `uv run pytest -q` 1009 passed.
+- *Backend test isolation* (H2's known failure): `tests/test_endpoint_contracts.py`'s module fixture `client` read the
+  developer's own `data/cache`, so `test_health_lists_status_and_errors` depended on its age. With a live list fresh in
+  that cache (CAL FIRE 10 min TTL; any running dev server refreshes it) and the cached WFIGS `IrwinID LIKE '{000000%'`
+  answer past its 24 h TTL, the unknown id `2099-nope-fire-000000` reached the blocked transport, `resolve_listed`
+  counted a failed lookup and raised `ListsUnavailable`, and the API answered 503 instead of 404. Reproduced (503) right
+  after this step's API fetched the live list. Fix (test setup only): the fixture points `config.CACHE_DIR` at an empty
+  temp folder and calls `catalog.clear_cache()` before and after. The suite then passes in that same cache state. With
+  an empty cache the 404 comes from conftest's refusal raising `RuntimeError`, which `_catalog_summary` treats as "not
+  listed"; a real outage (`HttpError`) still answers 503 by design (§14.2).
+- *Small fixes*: (1) the fire view's date line on phones broke inside a date ("DECLARED OUT DEC" / "15 2025"):
+  `ui/public/FireTitle.tsx keepDatesWhole(line)` wraps each "MON D YYYY" in `.pfv-date-day` (nowrap, `view-public.css`),
+  so the line breaks only between them; (2) the map compass needle lost its 80 ms CSS transition (`map/map.css`), which
+  spun it the long way round when the heading crossed ±180° (H5's known issue); it follows the heading every frame.
+- *Screenshots* (Chrome + SwiftShader; viewed): 1440×1000 unless noted: `public-overview-minimal` and
+  `public-overview-details` (1440×1144, Main), `command-overview`, `public-fire-lower-sugarloaf`,
+  `public-fire-fixture-live`, `public-fire-unprepared-willow` (listed, no bundle), `command-fire-fixture-live`
+  (`&sel=36.215,-121.43`), `forensic-fixture-live`, `rotated-public` (35°), `rotated-command` (−40°), `rotated-forensic`
+  (35°), and phones 390×844 @2x `phone-public-overview`, `phone-public-fire`, `phone-command`. No console error on any.
+- *Smoke run* (scratch Playwright, not in the repo; Chrome + SwiftShader, 1440×1000): rotation 56/56 (55 in one run; the Forensic 2D → 3D check passed on a re-run once the script waited for the tilt
+  rather than a fixed pause under SwiftShader) (Q, E, Q Q
+  pressed together, N, the ⟲ ⟳ buttons, a quarter-turn compass drag, compass click in the Public overview, Public fire
+  view, Command in a fire, Command overview and Forensic; 2D ↔ 3D keeps the heading in Command and Forensic, E turns
+  Forensic's 2D view; map 30° → Forensic 30°, turned there to 330° → Command 330°); reduced motion 27/27 (no running CSS
+  or Web Animation and no playing SVG animation on nine views; a turn lands at once; control: the hazard circle
+  animates without reduced motion); fixed copy, safety words and console errors 56/56 on 14 views (incl. Forensic with
+  no fire and four phone views): "Research prototype — not for operational use" (the overview's §14.14 form "RESEARCH
+  PROTOTYPE · Not for operational use. " + `LIST_ABSENCE`, decision i-5) and "…not an all-clear. Follow local
+  officials." visible, no "safe" / "low risk" / "FireTrace" on screen, no console error (Forensic logs one three.js
+  warning, "THREE.Clock … deprecated").
+- *Scans* (count only; the key is never printed): `FIRMS_MAP_KEY` value 0 times in 1372 tracked files, 0 in the
+  `f318347..HEAD` diffs and 0 in their commit messages; "FireTrace" 0 in code and UI (docs name it only in the rule);
+  "safe" / "low risk" 0 in brief-4 UI strings (only in tests that assert their absence; the older caveat "does not
+  establish the safety of a route or an area" is unchanged).
+- *README*: the screenshots are the brief-4 set, a new "The three views at a glance" section (each view, turning the
+  map, the dimming, the fixed copy), and the lines that described the old look (click → fire card and zoom focus in
+  Public, rotation only in 3D, the header's satellite chip, the coordinate strip, the cyan Forensic pin) now say
+  what the app does; every data-source credit is unchanged.
+- *Left for later* (details in the report's `known_issues`): Safari trackpad and touch twists are checked only with
+  synthetic events (a person should try them on a Mac and a phone); every measurement used SwiftShader (no GPU; the
+  hazard circle's CPU cost on a laptop is not measured); a checked device point reaches Fire-3d's server like a map
+  click (keeping it out of server logs needs a backend change); Command's readout scrolls on real fires at 1440×1000;
+  phones keep Command's default controls row and some 26-32 px Forensic dock buttons; the fire view has no skip link of
+  its own (`App.tsx` is frozen); and BRIEF-4's later list (search suggestions, Forensic search, the globe intro,
+  Wildfire-FM).
