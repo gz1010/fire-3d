@@ -108,6 +108,7 @@ import {
   NARROW_PX,
   narrowLabelAnchorOffset,
   overviewData,
+  labelFilters,
   overviewFilters,
   overviewLayers,
   overviewPaint,
@@ -438,6 +439,7 @@ export class MapController {
           this.keys.fc = ''
           this.markDirty('forecast')
         }
+        if (s.leaderIds !== p.leaderIds) this.applyLabelFilters()
       }),
     )
     this.unsubs.push(
@@ -537,6 +539,7 @@ export class MapController {
     this.markDirty('observed', 'forecast', 'vectors', 'statics')
     this.updateOverview()
     this.updateFireCardRing()
+    this.applyLabelFilters()
     this.updatePin()
     if (useWorkspace.getState().basemap === 'aerial') this.watchImagery()
     // chips and outlines need the new style's layers: evaluate the view again
@@ -644,6 +647,12 @@ export class MapController {
       this.overviewDim = dim
       for (const [id, props] of Object.entries(overviewPaint(dim))) if (map.getLayer(id)) for (const [k, v] of Object.entries(props)) map.setPaintProperty(id, k, v)
     }
+  }
+
+  /** The overview's MapLibre labels leave out the fires the leader-line overlay names (brief 4 H3, decision e). */
+  private applyLabelFilters(): void {
+    if (!this.styleReady) return
+    for (const [id, f] of Object.entries(labelFilters(useMapRuntime.getState().leaderIds))) if (this.map.getLayer(id)) this.map.setFilter(id, f as FilterSpecification)
   }
 
   /** The card's selection ring; the fire moves into the pinned source (never inside a group). */

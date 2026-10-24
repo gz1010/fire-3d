@@ -24,6 +24,7 @@ import { Segmented } from '../controls'
 import { ENSEMBLE_LABEL } from '../options'
 import { switchWorkspace } from './handoff'
 import { NARROW_QUERY, useDrawerFocus, useMediaQuery } from './hooks'
+import { OVERVIEW_LEGEND_IN_PANEL_QUERY } from '../public/overviewLayout'
 
 const BASEMAPS: { value: Basemap; desc: string }[] = [
   { value: 'dark', desc: 'Subdued roads and places; fire layers stand out' },
@@ -212,6 +213,9 @@ export function LayersPanel() {
   const overview = useStore((s) => s.incidentId == null)
   const changed = useWorkspace((s) => (Object.keys(DEFAULT_MAP_LAYERS) as MapLayerKey[]).some((k) => s.mapLayers[k] !== DEFAULT_MAP_LAYERS[k]))
   const narrow = useMediaQuery(NARROW_QUERY)
+  // brief 4 H3: below 1200 px the overview has no room for its legend on the map (the fire list needs the height); it
+  // is here instead, as on phones
+  const overviewLegendHere = useMediaQuery(OVERVIEW_LEGEND_IN_PANEL_QUERY) && overview
   const heading = useRef<HTMLHeadingElement | null>(null)
   useDrawerFocus(open, heading, 'layers')
   useRevealSelectedCamera(open)
@@ -241,7 +245,7 @@ export function LayersPanel() {
           </div>
           <BasemapNote />
         </Section>
-        {narrow && (
+        {(narrow || overviewLegendHere) && (
           <Section title="Legend">
             <div className="mw-legend-inline">
               <MapLegend />

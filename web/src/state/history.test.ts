@@ -18,6 +18,13 @@ describe('history rules', () => {
     expect(historyWrite('2026-a', '2026-a', false, true)).toBe('none')
   })
 
+  it('brief 4: the Public fire view is an explicit open (one push from the overview); zooming out never rewrites it', () => {
+    // openFireView selects with source 'card' (state/fireCard.ts), never 'zoom': Public has no zoom focus
+    expect(historyWrite(null, '2026-a', false, false)).toBe('push')
+    expect(historyWrite('2026-a', '2026-b', false, false)).toBe('push') // another fire from the open fire view
+    expect(historyWrite('2026-a', null, false, false)).toBe('push') // "Back to all fires" when not opened from the overview
+  })
+
   it('builds the address of a navigation: drops the previous fire\'s t / mode and the one-shot params', () => {
     const href = 'http://x/app/?ws=map&incident=2026-a&mode=live&t=123&preset=command&basemap=roads&view=1,2,3&sel=1,2#h'
     expect(navigationUrl(href, '2025-b')).toBe('/app/?ws=map&incident=2025-b&preset=command&basemap=roads#h')

@@ -76,8 +76,10 @@ function locationType(p: SelectedLocation): string {
     case 'incident':
       return 'Incident reported location (where the incident was reported, not necessarily where it started)'
     case 'device':
-      // brief 4: the browser's own location after the user asked for it; it is not sent anywhere
-      return p.approximate ? 'Your location from your browser (approximate; it stays in your browser)' : 'Your location from your browser (it stays in your browser)'
+      // brief 4: the browser's own location after the user asked for it. Fire-3d checks the point like a map click (its
+      // own lookups for the place and official information), never saves it and never puts it in the link (H3: the
+      // earlier "it stays in your browser" was not exact)
+      return p.approximate ? 'Your location from your browser (approximate; not saved or added to the link)' : 'Your location from your browser (not saved or added to the link)'
   }
 }
 

@@ -14,6 +14,11 @@
   --ovw-row2: calc(var(--m-chrome-top) + 76px);
   --ovw-card-w: 360px;
   --ovw-list-w: 472px;
+  --ovw-list-w-eff: min(var(--ovw-list-w), 36vw);
+  /* the scale bar beside the readout (its plate + the gap) */
+  --ovw-scale-w: 172px;
+  /* the disclaimer + pill row and the credits under the panels (the fire list runs down to it on shorter screens) */
+  --ovw-low: 88px;
   --ovw-glass: rgba(14, 14, 14, 0.74);
   --ovw-glass-blur: blur(22px) saturate(140%);
   --ovw-hair: rgba(200, 200, 200, 0.18);
@@ -189,11 +194,11 @@
     top: var(--ovw-row2);
     right: var(--m-gap);
     bottom: calc(var(--mw-bottom-stack) + var(--m-gap));
-    width: min(var(--ovw-list-w), 36vw);
+    width: var(--ovw-list-w-eff);
     max-height: none;
   }
   .mw[data-view='overview'].has-updates .ovw-list {
-    width: min(var(--ovw-list-w), 36vw);
+    width: var(--ovw-list-w-eff);
   }
 
   /* bottom: the readout + scale (left) and the legend (right), then the disclaimer with the pill, then the credits */
@@ -332,29 +337,39 @@
   --chrome-side: left;
 }
 
-/* ------------------------------------------------------------------------------------------------ medium widths */
+/* ------------------------------------------------------------------------------------------------ medium sizes */
+/* (ui/public/overviewLayout.ts) Narrower or shorter windows: the fire list keeps its height down to the disclaimer row;
+   the legend sits left of it (from 1200 px wide; below that it is in the Layers panel), the scale bar gives way below
+   1280 px */
 @media (min-width: 761px) and (max-width: 1279px) {
   .mw[data-view='overview'] {
     --ovw-list-w: 400px;
-    --ovw-card-w: 340px;
+    --ovw-card-w: 320px;
+    --ovw-scale-w: 0px;
   }
-  .mw[data-view='overview'] .ovw-legend {
-    width: min(520px, calc(100vw - 2 * var(--ovw-x) - 380px));
+  .mw[data-view='overview'] .ovw-scale {
+    display: none;
   }
 }
-@media (min-width: 761px) and (max-width: 1023px) {
-  .mw[data-view='overview'] .ovw-bottom.has-details {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-areas:
-      'coords legend'
-      'note   note'
-      'foot   foot';
+@media (min-width: 761px) and (max-width: 1399px) and (max-height: 1079px) {
+  .mw[data-view='overview'] {
+    --ovw-scale-w: 0px;
+  }
+  .mw[data-view='overview'] .ovw-scale {
+    display: none;
+  }
+}
+@media (min-width: 761px) and (max-width: 1279px), (min-width: 761px) and (max-height: 1079px) {
+  .mw[data-view='overview'] .ovw-list {
+    bottom: var(--ovw-low);
+  }
+  /* the official block gives the fire rows more of the height */
+  .mw[data-view='overview'] .ov-official {
+    max-height: 18vh;
   }
   .mw[data-view='overview'] .ovw-legend {
-    width: auto;
-  }
-  .mw[data-view='overview'] .ovw-readout .ovw-scale {
-    display: none;
+    margin-right: calc(var(--ovw-list-w-eff) + var(--m-gap));
+    width: calc(100vw - var(--ovw-list-w-eff) - var(--ovw-x) - var(--ovw-card-w) - var(--ovw-scale-w) - 3 * var(--m-gap) - 24px);
   }
 }
 

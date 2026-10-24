@@ -536,6 +536,15 @@
   top: auto;
   bottom: calc(100% + 8px);
 }
+/* brief 4 H3: the hint floats in the page beside the controls, in the free map area (map/hintPlacement.ts; never over
+   a readout, a panel or official text); hidden until placed */
+.fxm-orbit-hint.is-floating {
+  position: fixed;
+  right: auto;
+  bottom: auto;
+  z-index: calc(var(--m-z-header) + 2);
+  font-family: var(--m-font-ui);
+}
 
 /* ------------------------------------------------------------------------------------------ legend */
 .fxm-legend {
@@ -767,6 +776,7 @@
   background: rgba(238, 122, 160, 0.12);
 }
 .fxm-legend-mono {
+  margin-left: 4px;
   font: 500 11px / 1 var(--m-font-mono);
   letter-spacing: 0.06em;
   color: #ffe3bd;
@@ -864,4 +874,58 @@
 .fxm-legend-absence {
   color: var(--m-text-2);
   font-size: 0.92em;
+}
+
+/* ------------------------------------------------------------------------------------------ leader labels */
+/* the overview's leader-line labels (map/LeaderLabels.tsx; HANDOFF "Map labels", Main.dc.html): a 0.9 px #cfcfcf
+   leader at .55, the name in Inter 12 / 600 #f0f0f0 and the acres in mono 10 #cfcfcf, with the screen's dark halo
+   (#050703 at .85) so they read over bright photos; over the map, under the chrome */
+.ldr-layer {
+  position: absolute;
+  inset: 0;
+  z-index: calc(var(--m-z-map) + 2);
+  pointer-events: none;
+}
+.ldr-layer[hidden] {
+  display: none;
+}
+.ldr-lines {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+.ldr-lines path {
+  fill: none;
+  stroke: #cfcfcf;
+  stroke-opacity: 0.55;
+  stroke-width: 0.9;
+}
+.ldr {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: pointer;
+  text-shadow:
+    0 0 2px rgba(5, 7, 3, 0.95),
+    0 0 4px rgba(5, 7, 3, 0.85),
+    0 1px 2px rgba(5, 7, 3, 0.9);
+}
+.ldr.is-left {
+  align-items: flex-end;
+  text-align: right;
+}
+.ldr-name {
+  font: 600 12px / 15px var(--m-font-ui);
+  color: var(--m-text);
+}
+.ldr-meta {
+  font: 400 10px / 13px var(--m-font-mono);
+  letter-spacing: 0.04em;
+  color: #cfcfcf;
+}
+.ldr:hover .ldr-name {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }

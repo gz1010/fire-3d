@@ -152,6 +152,15 @@ describe('Public: a picked fire opens the fire view (brief 4 decision b)', () =>
     expect(useWorkspace.getState().fireCardId).toBe(unprepared.id)
   })
 
+  it('Public has no zoom focus and no "Spread not prepared yet" chips; a pending focus change is cancelled', () => {
+    const src = mapControllerSource.replace(/\s+/g, ' ')
+    expect(src).toMatch(/const publicView = useWorkspace\.getState\(\)\.preset === 'public'/)
+    expect(src).toMatch(/const chips = publicView \? \[\] : chipTargets\(/)
+    expect(src).toMatch(/if \(publicView\) \{ this\.keepShownFocus\(\) return \}/)
+    // a preset switch evaluates the view again (Command's focus and chips come back)
+    expect(src).toMatch(/if \(s\.preset !== p\.preset\) this\.scheduleFocus\(\)/)
+  })
+
   it('every other card path in the map controller follows the preset (chip, outline, own marker)', () => {
     const src = mapControllerSource.replace(/\s+/g, ' ')
     expect(src).toMatch(/if \(cardId\) \{ if \(opensFireView\(\)\) openFireView\(cardId\) else ws\.setFireCard\(cardId\)/)

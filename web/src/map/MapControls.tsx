@@ -15,7 +15,8 @@
 // Development builds also take ?ctl=bar|compact to show a variant in today's slot (screenshots; compiled out of
 // production).
 import { ChevronsDown, ChevronsUp, Crosshair, Layers, Map as MapIcon, Minus, Plus, RotateCcw, RotateCw, X } from 'lucide-react'
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { createPortal } from 'react-dom'
 import { headingLabel, isRotated } from '../lib/compass'
 import { controlsShift, useSearchUi } from '../location/searchUi'
 import { useNarrow } from '../location/useNarrow'
@@ -24,6 +25,7 @@ import { useStore } from '../state/store'
 import { useWorkspace, type Basemap, type PanelKey, type Perspective } from '../state/workspace'
 import { Segmented, SelectMenu } from '../ui/controls'
 import { useCompassDrag } from '../ui/useCompassDrag'
+import { placeHint, type Box, type HintSide } from './hintPlacement'
 import { useMapRuntime } from './mapStore'
 import { aerialPhotoLine, BASEMAP_DESCRIPTION, BASEMAP_LABEL, BASEMAP_SHORT } from './providers'
 
@@ -50,6 +52,8 @@ const BASEMAPS: Basemap[] = ['dark', 'roads', 'aerial']
  *  it so the new hint (2D rotation, Q / E, the compass drag) shows once more. */
 const HINT_KEY = 'fire3d.rotateHintSeen'
 const HINT_MS = 12_000
+/** The hint counts as seen after this long on screen (or when dismissed). */
+const HINT_SEEN_AFTER_MS = 2_500
 
 /** The one-time hint (brief 4 wording: every way to turn the map, Mac trackpads included). */
 export const ROTATE_HINT =
@@ -78,18 +82,71 @@ function devVariant(): MapControlsVariant | null {
   return v === 'bar' || v === 'compact' ? v : null
 }
 
-/** The one-time rotate / tilt hint, hanging off the controls (shown once per browser for 12 s). */
-function RotateHint({ side }: { side: 'below' | 'above' }) {
+/** The visible chrome regions of the map workspace the hint must not cover (every [data-chrome] slot and the top-centre
+ *  banners), leaving out the controls' own slot. */
+function hintObstacles(anchor: HTMLElement): Box[] {
+  const own = anchor.closest('[data-chrome]')
+  const out: Box[] = []
+  document.querySelectorAll<HTMLElement>('.mw [data-chrome], .mw .top-center > *').forEach((el) => {
+    if (el === own || el.contains(anchor) || anchor.contains(el)) return
+    const r = el.getBoundingClientRect()
+    if (r.width < 1 || r.height < 1) return
+    out.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom })
+  })
+  return out
+}
+
+/** The one-time rotate / tilt hint (shown once per browser for 12 s), beside the controls in the free map area: never
+ *  over a readout, a panel or official text (map/hintPlacement.ts; brief 4 H3). It floats in the page (position:
+ *  fixed) and moves when the chrome or the window changes. */
+function RotateHint({ side, anchor }: { side: 'below' | 'above'; anchor: RefObject<HTMLElement | null> }) {
   const [hint, setHint] = useState(() => !hintSeen())
+  const ref = useRef<HTMLDivElement | null>(null)
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
   useEffect(() => {
     if (!hint) return
-    markHintSeen()
+    // seen once it has been on screen a moment: a chrome that mounts and swaps at once (a linked fire opening over the
+    // overview) does not use it up
+    const seen = window.setTimeout(markHintSeen, HINT_SEEN_AFTER_MS)
     const t = window.setTimeout(() => setHint(false), HINT_MS)
-    return () => window.clearTimeout(t)
+    return () => {
+      window.clearTimeout(seen)
+      window.clearTimeout(t)
+    }
   }, [hint])
-  if (!hint) return null
-  return (
-    <div className={`fxm-orbit-hint is-${side}`} role="note">
+  useLayoutEffect(() => {
+    if (!hint) return
+    let raf = 0
+    const place = () => {
+      raf = 0
+      const a = anchor.current
+      const el = ref.current
+      if (!a || !el) return
+      const r = a.getBoundingClientRect()
+      const prefer: HintSide = side
+      const p = placeHint({ left: r.left, top: r.top, right: r.right, bottom: r.bottom }, { w: el.offsetWidth, h: el.offsetHeight }, { w: window.innerWidth, h: window.innerHeight }, hintObstacles(a), prefer)
+      setPos((cur) => (p == null ? cur : cur && cur.left === p.left && cur.top === p.top ? cur : { left: p.left, top: p.top }))
+    }
+    const schedule = () => {
+      if (!raf) raf = requestAnimationFrame(place)
+    }
+    place()
+    window.addEventListener('resize', schedule)
+    const unsub = useWorkspace.subscribe((s, p) => {
+      if (s.safeInsets !== p.safeInsets || s.selection !== p.selection || s.fireCardId !== p.fireCardId) schedule()
+    })
+    // chrome that settles after the first paint (lists, cards loading)
+    const late = window.setTimeout(schedule, 600)
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+      window.removeEventListener('resize', schedule)
+      window.clearTimeout(late)
+      unsub()
+    }
+  }, [hint, side, anchor])
+  if (!hint || typeof document === 'undefined') return null
+  return createPortal(
+    <div ref={ref} className="fxm-orbit-hint is-floating" role="note" style={pos ? { left: pos.left, top: pos.top } : { left: 0, top: 0, visibility: 'hidden' }}>
       <span>{ROTATE_HINT}</span>
       <button
         type="button"
@@ -102,7 +159,8 @@ function RotateHint({ side }: { side: 'below' | 'above' }) {
       >
         <X size={13} aria-hidden="true" />
       </button>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -161,7 +219,7 @@ function Compass({ look }: { look: 'default' | 'handoff' }) {
 
 /** The 3D orbit group (tilt, top-down, north up; the rotate buttons too when the controls have none of their own)
  *  and the one-time gesture hint. */
-function OrbitGroup({ pitch, rotate, hintSide }: { pitch: number; rotate: boolean; hintSide: 'below' | 'above' }) {
+function OrbitGroup({ pitch, rotate, hintSide, anchor }: { pitch: number; rotate: boolean; hintSide: 'below' | 'above'; anchor: RefObject<HTMLElement | null> }) {
   const actions = useMapRuntime((s) => s.actions)
   const btn = (label: string, onClick: () => void, icon: ReactNode, disabled = false) => (
     <button type="button" className="fxm-icon-btn" aria-label={label} data-tip={label} disabled={!actions || disabled} onClick={onClick}>
@@ -185,7 +243,7 @@ function OrbitGroup({ pitch, rotate, hintSide }: { pitch: number; rotate: boolea
       <button type="button" className="mw-btn fxm-orbit-text" data-tip="Turn the map so north is up (N)" disabled={!actions} onClick={() => actions?.northUp()}>
         North up
       </button>
-      <RotateHint side={hintSide} />
+      <RotateHint side={hintSide} anchor={anchor} />
     </div>
   )
 }
@@ -331,7 +389,7 @@ export function MapControls({ variant: asked, anchor = 'top', layers = false, cl
     )
 
   if (variant === 'bar') {
-    const orbit = perspective === '3d' ? <OrbitGroup pitch={pitch} rotate={false} hintSide={anchor === 'bottom' ? 'above' : 'below'} /> : null
+    const orbit = perspective === '3d' ? <OrbitGroup pitch={pitch} rotate={false} hintSide={anchor === 'bottom' ? 'above' : 'below'} anchor={ctlRef} /> : null
     return (
       <div className={`mw-ctl fxm-ctl is-bar is-anchor-${anchor}${extra}`} role="toolbar" aria-label="Map controls" ref={ctlRef}>
         {anchor === 'bottom' && orbit}
@@ -349,7 +407,7 @@ export function MapControls({ variant: asked, anchor = 'top', layers = false, cl
           {layers && <LayersButton />}
         </div>
         {anchor !== 'bottom' && orbit}
-        {perspective !== '3d' && <RotateHint side={anchor === 'bottom' ? 'above' : 'below'} />}
+        {perspective !== '3d' && <RotateHint side={anchor === 'bottom' ? 'above' : 'below'} anchor={ctlRef} />}
       </div>
     )
   }
@@ -366,7 +424,7 @@ export function MapControls({ variant: asked, anchor = 'top', layers = false, cl
         <FrameButton narrow={narrow} />
       </div>
       {perspective === '3d' ? (
-        <OrbitGroup pitch={pitch} rotate hintSide="below" />
+        <OrbitGroup pitch={pitch} rotate hintSide="below" anchor={ctlRef} />
       ) : (
         // 2D: ⟲ ⟳ on their own short row under the controls, where the 3D orbit row goes (decision f: visible turn
         // buttons in every mode; the main row has no room for them on phones)

@@ -521,6 +521,17 @@ export function overviewFilters(chips: readonly string[] = []): Record<string, F
  *  `text-variable-anchor-offset` in ems (the chip is two lines of about 13 ems). */
 export const CHIP_NEXT_ANCHORS: unknown[] = ['top', [0, 1.9], 'bottom', [0, -1.9], 'left', [1.4, 0], 'right', [-1.4, 0]]
 
+/** The label layers' filters (brief 4 H3): single fires only in the grouped sources, and never a fire whose name the
+ *  leader-line overlay already shows (map/LeaderLabels.tsx, `leaderIds`). */
+export function labelFilters(leaderIds: readonly string[] = []): Record<string, Filter> {
+  const notLed: Filter = ['!', ['in', ['get', 'id'], ['literal', [...leaderIds]]]]
+  return {
+    [OVR.otherLabel]: ['all', SINGLE, notLed],
+    [OVR.activeLabel]: ['all', SINGLE, notLed],
+    [OVR.pinnedLabel]: notLed,
+  }
+}
+
 /** The selection ring's filter: the fire whose card is open (always in the pinned source). */
 export function selectedFilter(cardId: string | null): Filter {
   return ['==', ['get', 'id'], cardId ?? '']
@@ -638,10 +649,9 @@ export function overviewLayers(theme: MapTheme, o: { narrow?: boolean } = {}): L
         'text-letter-spacing': 0.04,
         'icon-image': p.tick,
         'icon-anchor': 'left',
+        // always drawn; placed before the fire names (these layers sit above them), which then keep clear of them
         'text-allow-overlap': true,
         'icon-allow-overlap': true,
-        'text-ignore-placement': true,
-        'icon-ignore-placement': true,
         // both start at the circle's upper-right edge (45°): the tick there, the text just past its end
         'icon-offset': GROUP_TICK_OFFSET,
       },
@@ -716,14 +726,12 @@ export function overviewLayers(theme: MapTheme, o: { narrow?: boolean } = {}): L
     clusterDot(OVR.otherClusterDot, S.other, false),
     casing(OVR.otherCasing, S.other, SINGLE),
     past(OVR.otherPoint, S.other, SINGLE),
-    count(OVR.otherCount, S.other, false),
     // active fires
     cluster(OVR.activeCluster, S.active, true),
     clusterDot(OVR.activeClusterDot, S.active, true),
     casing(OVR.activeCasing, S.active, SINGLE),
     live(OVR.activePoint, S.active, SINGLE),
     dot(OVR.activeDot, S.active, SINGLE),
-    count(OVR.activeCount, S.active, true),
     // pinned fires (never grouped): large active fires and the fire whose card is open
     casing(OVR.pinnedCasing, S.pinned, null),
     past(OVR.pinnedPast, S.pinned, ['!', ['get', 'live']]),
@@ -750,6 +758,9 @@ export function overviewLayers(theme: MapTheme, o: { narrow?: boolean } = {}): L
     label(OVR.otherLabel, S.other, SINGLE),
     label(OVR.activeLabel, S.active, SINGLE),
     label(OVR.pinnedLabel, S.pinned, null),
+    // groups' "N FIRES" (outside their circles since brief 4): above the names, placed first, so names avoid them
+    count(OVR.otherCount, S.other, false),
+    count(OVR.activeCount, S.active, true),
     // the chips of the fires after the first, then the first fire's on top: the top layers are placed first, so the
     // first chip claims its place and the others give way to it
     chip(OVR.otherChipNext, S.other, chips[OVR.otherChipNext], true),

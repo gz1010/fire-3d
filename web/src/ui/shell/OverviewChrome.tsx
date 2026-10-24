@@ -25,6 +25,7 @@ import { MapLegend } from '../../map/MapLegend'
 import { LIST_ABSENCE_SHORT } from '../../state/overview'
 import { useStore } from '../../state/store'
 import { useWorkspace } from '../../state/workspace'
+import { OVERVIEW_LEGEND_IN_PANEL_QUERY } from '../public/overviewLayout'
 import { OverviewStatus } from '../public/OverviewStatus'
 import { ShowDetailsPill } from '../public/ShowDetailsPill'
 import { CoordsSlot } from './CoordsSlot'
@@ -53,11 +54,17 @@ export function OverviewChrome({ credits }: { credits: ReactNode }) {
   const detailsAsked = useWorkspace((s) => s.overviewDetails)
   const collapsed = useStore((s) => s.panelsCollapsed)
   const narrow = useMediaQuery(NARROW_QUERY)
+  // below 1200 px the legend lives in the Layers panel (ui/public/overviewLayout.ts)
+  const legendInPanel = useMediaQuery(OVERVIEW_LEGEND_IN_PANEL_QUERY)
   const command = preset === 'command'
   // what shows: Command always has its details; Public only after "Show details". Phones: the list is a sheet.
   const details = !narrow && (command || detailsAsked)
   // phones: Command keeps today's controls row and coordinate line; Public the compact cluster only (decision h)
   const phoneCommand = narrow && command
+  // the fire list's slot: the details (wide screens), Command's peek bar or the open sheet (phones). Otherwise the
+  // "Show details" pill stands in for it (the skip link "Skip to the fire list" lands on the pill)
+  const listOpen = useWorkspace((s) => s.panels.updates)
+  const listShown = details || (narrow && (command || listOpen))
   useListOpensDetails(!narrow && !command)
   return (
     <>
@@ -115,7 +122,7 @@ export function OverviewChrome({ credits }: { credits: ReactNode }) {
               <MapControls variant="compact" />
             </div>
           ))}
-        {(details || narrow) && (
+        {listShown && (
           <aside className="mw-updates ovw-list" id="mw-updates" data-chrome="updates" aria-label="Fires in the lower 48">
             <OverviewPanel closeHidesDetails={!command && !narrow} sheetPeek={command} />
           </aside>
@@ -134,7 +141,7 @@ export function OverviewChrome({ credits }: { credits: ReactNode }) {
             )}
           </div>
         )}
-        {details && (
+        {details && !legendInPanel && (
           <div className="mw-legend-slot ovw-legend" data-chrome="legend">
             <MapLegend />
           </div>
@@ -143,7 +150,7 @@ export function OverviewChrome({ credits }: { credits: ReactNode }) {
           <FixedCopy variant="line" extra={narrow ? `${LIST_ABSENCE_SHORT}. Follow local officials.` : undefined} />
         </div>
         {!command && (
-          <div className="ovw-pill-slot" data-chrome="details">
+          <div className="ovw-pill-slot" id={listShown ? undefined : 'mw-updates'} data-chrome="details">
             <ShowDetailsPill sheet={narrow} />
           </div>
         )}

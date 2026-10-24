@@ -76,7 +76,7 @@ export type SearchBoxVariant = 'panel' | 'pill'
 
 export const PILL_PLACEHOLDER = 'Check an address, town, ZIP or coordinates'
 /** Phones: the same, short enough for a 390 px screen beside the Search button. */
-export const PILL_PLACEHOLDER_SHORT = 'Address, town, ZIP or coordinates'
+export const PILL_PLACEHOLDER_SHORT = 'Address, town or ZIP'
 
 export function SearchBox({ variant = 'panel' }: { variant?: SearchBoxVariant } = {}) {
   const pill = variant === 'pill'

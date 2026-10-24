@@ -111,6 +111,9 @@ export interface MapRuntimeState {
   tint: TintLevel
   /** Brief 4: a chrome's tint request (map/useMapTint.ts), null = the view's default (MapAtmosphere). */
   tintRequest: TintLevel | null
+  /** Brief 4 H3 (decision e): fires whose MapLibre label the leader-line overlay replaces (map/LeaderLabels.tsx: the
+   *  ones it names, and the smaller ones past its 12); the map leaves their own labels out. Sorted; [] = none. */
+  leaderIds: readonly string[]
 }
 
 export const useMapRuntime = create<MapRuntimeState>()((set) => ({
@@ -129,6 +132,7 @@ export const useMapRuntime = create<MapRuntimeState>()((set) => ({
   viewBox: null,
   tint: 'fire',
   tintRequest: null,
+  leaderIds: [],
 }))
 
 /** Set one provider's status (no-op when unchanged). */

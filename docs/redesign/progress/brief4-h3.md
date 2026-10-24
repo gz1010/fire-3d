@@ -19,3 +19,8 @@ Ports: API 8733, Vite 5193. Builder started 2026-10-24.
   (type sizes, centre dots, groups 10 + 4.2·√n, "N FIRES" + tick, smaller on phones' national view), pickFire /
   openFireView (Public opens the fire view), zoom focus and chips off in Public, overview map stays still when panels
   change, top plates behind the bar. Gates: typecheck ok, lint 55, tests 1318 + 2 skipped.
+- WIP 2: leader-line labels (map/leaderLayout.ts pure + tests, map/LeaderLabels.tsx; MapLibre labels of named and
+  past-the-cap fires hidden through useMapRuntime.leaderIds), the rotate hint placed beside the controls in the free
+  map area (map/hintPlacement.ts + tests; marked seen after 2.5 s on screen), group counts above the names, medium /
+  short screens (legend left of the list below 1080 px high, in the Layers panel below 1200 px), device wording fixed
+  ("not saved or added to the link"), browser checks: clicks 9/9, locate-me 7/7, contrast >= 4.94:1.
