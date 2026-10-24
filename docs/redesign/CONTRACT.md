@@ -3153,3 +3153,127 @@ The clean re-check after 14.16 found nine minor problems (R1-R9, report `docs/re
   the lower 48 (2026: 356 of 1,178 fires of 300 acres or more without a NIFC perimeter); the hourly re-check of a
   daily weather block; the 12 test fires' real build times (30-539 s, 18 and 22 min while a weather host did not
   answer); about 32,400 towns and places besides the 3,222 counties.
+
+---
+
+## 15. Brief 4 (handoff restyle) interfaces
+
+Added for brief 4 (`docs/redesign/BRIEF-4.md`, `PLAN-4.md`, design spec `handoff-4/HANDOFF.md`). Restyle and layout
+only: no HTTP or data contract changes (`SPEC.md`, `contracts.py`, `api/types.ts` unchanged). Steps: **H2** foundation +
+Command (alone, first), then **H3+H4** (Public overview, Public fire view, Command overview) and **H5** (Forensic) in
+parallel. Each step fills its own "As built" sub-heading at the end of this section and edits nothing else here.
+Everything marked *frozen* is owned by H2 and changes after H2 only through the orchestrator.
+
+### 15.1 Tokens and CSS variables
+
+- `styles/map-tokens.css` (H2, frozen): new values for the existing `--m-*` tokens (PLAN-4 §1 table: greys, glass
+  `rgba(14,14,14,.62-.86)` + `blur(22px) saturate(140%)`, hairlines `rgba(200,200,200,…)`, accent `#ff7a3d`, selection
+  `#9fd6ff`, fire `#ff6a2a`/`#ff8a3c`, modeled `#f5c060`, stale `#e8b04a`, official `#8fd3a8`) and new tokens:
+  `--m-accent-ink #1a0a03`, `--m-accent-soft`, `--m-text-body #e6e6e6`, `--m-text-2b #bdbdbd`, `--m-text-4 #8a8a8a`,
+  `--m-fire`, `--m-fire-2`, `--m-fire-3`, `--m-fire-4`, `--m-alert #ee7aa0`, `--m-label-track .14em`, `--m-readout-fs 22px`,
+  `--m-readout-lg 26px`, `--m-coord-xl 30px`, `--m-topbar-top 20px`, `--m-topbar-x 28px`, `--m-topbar-h 44px`,
+  `--m-chrome-top` (first row under the floating bar). The `html[data-workspace='map']` re-pointing block keeps working
+  (its `--gold-*` alphas become orange).
+- TypeScript mirrors (MapLibre paint cannot read CSS vars), kept equal to the tokens: `map/overlayModel.ts TOKENS`,
+  `OBSERVED_RGBA`, `FORECAST_RGBA`, `map/basemapStyle.ts DARK` (H2), `extras/style.ts EXTRAS_COLORS` (H2),
+  `official/style.ts OFFICIAL_COLORS.redFlag → #ee7aa0` (H2), `map/overviewLayers.ts PALETTE` (H3+H4).
+- `styles/theme.css` (H5): Forensic UI tokens greyed (`--glass`, `--hairline*`, `--text*`, `--bg-*`), `--gold*` = the UI
+  accent `#ff7a3d` family, new `--accent-ink #1a0a03`; scene colours (`--lattice-*`, `--fire*`, `--ev-*`, `--ac-*`) kept;
+  `--chart-observed #ff8a3c`, `--chart-forecast #f5c060`, `--chart-cursor #e6e6e6`.
+- Runtime CSS variables on `.mw-atmo` (H2, `map/MapAtmosphere.tsx`): `--mw-vignette` (0-1, from the map zoom:
+  `clamp((zoom − 3) / 7, .25, 1)`), `--mw-vig-x`, `--mw-vig-y`, `--mw-vig-r` (centre and half the shorter side of the
+  safe area, px). Attribute `data-edges="overview" | "fire" | "command"` selects the static edge gradients.
+- `web/index.html` (H2, frozen): Inter weights 400-800, `theme-color #0c0c0c`.
+
+### 15.2 Shared components (H2, frozen)
+
+```ts
+// ui/shell/TopBar.tsx (+ styles/topbar.css): the floating bar used by every view (map chromes and Forensic Header)
+export function TopBar(p: { left: ReactNode; centre?: ReactNode; right?: ReactNode; className?: string; inset?: 'map' | 'forensic' }): JSX.Element
+export function ViewPill(p: { size?: 'sm' | 'md' }): JSX.Element            // Public · Command · Forensic (views.ts applyView)
+export function BackButton(p: { onClick: () => void; label?: string }): JSX.Element   // 36 px round, default "Back to all fires"
+export function LiveDot(p: { live: boolean; year?: number | null }): JSX.Element      // "● LIVE" mono, else the year chip
+export function IconPill(p: { icon: ReactNode; label: string; tip?: string; pressed?: boolean; expanded?: boolean; onClick: () => void; badge?: ReactNode }): JSX.Element
+export function TopBarStatus(p: { parts: string[]; staleFrom?: number; tip?: string; onClick?: () => void }): JSX.Element
+// ui/Logo.tsx (re-exported by ui/Header.tsx)
+export function Logo(p: { size?: number }): JSX.Element
+// ui/shell/fixedCopy.ts + FixedCopy.tsx
+export const PROTOTYPE_LINE = 'Research prototype — not for operational use'
+export const NOT_ALL_CLEAR = 'Not an all-clear. Follow local officials.'
+export function FixedCopy(p: { variant: 'line' | 'corner' | 'bar' | 'pill'; extra?: string }): JSX.Element
+// ui/shell/Readout.tsx: "value unit — LABEL" rows (Command readout, Public fire facts)
+export function ReadoutRow(p: { value: ReactNode; unit?: string; label: string; size?: 22 | 26 | 17; tone?: 'stale' | 'official' | 'alert'; sub?: ReactNode; copy?: string }): JSX.Element
+// map/MapAtmosphere.tsx: vignette + edge gradients, mounted once in MapWorkspace between the map and the chrome
+export function MapAtmosphere(p: { edges: 'overview' | 'fire' | 'command' }): JSX.Element
+```
+
+- `App.tsx` `MapWorkspace` (frozen): one map mount, `MapAtmosphere`, credits, status overlays, banners, toasts and
+  tooltips, plus exactly one chrome: `OverviewChrome` (no fire, both presets; H3+H4), `PublicFireChrome` (H3+H4),
+  `CommandFireChrome` (H2). Switching preset or opening a fire never remounts the map. Every floating element keeps
+  `[data-chrome]` and `--chrome-side` (CONTRACT §3.1).
+- `map/MapControls.tsx` gains `variant: 'bar' | 'compact'` (H2): `bar` = 2D/3D, basemap, ⟲, compass, ⟳, −, +, framing,
+  optional Layers icon (Main details, Command); `compact` = vertical zoom ±, ⟲, compass, ⟳ (Public minimal and fire view).
+- `extras/ImageryChip.tsx` gains `variant: 'chip' | 'status'` (H2): `status` = the bar's mono "VIIRS NOAA · 375 M · 6.2 H
+  AGO" with the same actions.
+- `ui/feed/OfficialNow.tsx` `Row` (H2): collapsible one-line rows (`collapsed` meta = issuer · own time · checked);
+  rows with an evacuation order or warning, a local officials' alert or an NWS alert in effect start open.
+- `location/CommandReadout.tsx` (H2, frozen): the Command left readout (PLAN-4 §3.2).
+
+### 15.3 Shared state
+
+```ts
+// state/workspace.ts (H2 adds; behaviour by H3+H4)
+export type SelectionSource = 'click' | 'coords' | 'address' | 'event' | 'incident' | 'device'
+export interface DeviceLocation { lat: number; lon: number; accuracyM: number | null; tMs: number }
+interface WorkspaceState {
+  overviewDetails: boolean            // Public overview "Show details" (default false; Command overview shows details always)
+  setOverviewDetails(open: boolean): void
+  device: DeviceLocation | null       // browser geolocation after an explicit click; never in the URL, never persisted
+  setDevice(d: DeviceLocation | null): void
+}
+// state/store.ts (H2 adds, frozen): the heading travels with the workspace hand-off
+flyTo: { x: number; z: number; distance?: number; bearingDeg?: number; nonce: number } | null
+// state/rotation.ts (H2, frozen): one rotation target at a time (the mounted map or the Forensic camera)
+export interface RotationTarget { rotateBy(deg: number): void; northUp(): void; setBearing(deg: number): void; bearing(): number }
+export function registerRotation(t: RotationTarget): () => void
+export function rotateView(deg: number): void        // Q = −15, E = +15 (state/runtime.ts useHotkeys, outside text fields)
+export function viewNorthUp(): void                  // N
+// lib/compass.ts (H2, pure, tested): pointerBearing(cx, cy, x, y), normalizeDeg(d), stepDeg(d, step)
+// ui/useCompassDrag.ts (H2): pointer drag around a compass element → setBearing; a click without drag → northUp
+// lib/rotateGesture.ts (H2): attachRotateGesture(el, { start, rotate(deltaDeg), end }) for Safari's gesturestart/change/end
+```
+
+- `map/mapStore.ts MapActions` (H2): adds `setBearing(deg)` and `setTint(level: 'overview' | 'fire' | 'none')`; the map
+  keeps its heading on 2D↔3D; every camera call stays inside `this.input.ours(…)` (map/userInput.test.ts).
+- `scene/sceneStore.ts` (H5): `CameraCommandKind` adds `'rotate'` (with `deg`) and `'set-heading'` (with `deg`);
+  `CameraRig` registers a `RotationTarget`, rotates in 2D and 3D and keeps the heading on 2D↔3D.
+- Public fire view (H3+H4): `fireActions.openFireView(id)` = `setFireCard(null)` + `selectIncident(id, { source: 'card' })`
+  (one history push, no build); zoom focus is off while the Public preset is shown (PLAN-4 decision b); the Public fire
+  map profile shows the newest perimeter only (PLAN-4 decision a). Names may change when built; record them below.
+
+### 15.4 Fixed wording added in brief 4
+
+- `PROTOTYPE_LINE` and `NOT_ALL_CLEAR` on every view (Public overview line: "RESEARCH PROTOTYPE · Not for operational
+  use. " + §14.14 `LIST_ABSENCE`).
+- Fire view key: "Latest perimeter · <source> · <its own time> (<age>)" (+ Stale), "No mapped perimeter yet · reported
+  location (<issuer>)", "No perimeter published yet". Facts: evacuation "Not available in this state" (§14.14 short
+  form; never "N/A"), fire weather "None in effect". Distance chip: "<n> mi · <direction> of you", with what it measures
+  ("to the mapped edge" / "to the reported location, not its edge").
+
+### 15.5 As built
+
+#### H2 (foundation + Command) — as built
+
+_To be filled by H2._
+
+#### H3+H4 (Public overview, Public fire view, Command overview) — as built
+
+_To be filled by H3+H4._
+
+#### H5 (Forensic) — as built
+
+_To be filled by H5._
+
+#### Final check — as built
+
+_To be filled by the final check._
