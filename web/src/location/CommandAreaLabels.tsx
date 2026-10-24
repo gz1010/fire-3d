@@ -11,7 +11,7 @@ import { LYR } from '../map/layers'
 import { useMapRuntime } from '../map/mapStore'
 import { useTimeFormat } from '../state/timeZone'
 import { useWorkspace } from '../state/workspace'
-import { labelWidth, overlaps, pickAnchor, placeLeader, type Box, type LeaderPlan, type LeaderShape, type Pt } from './areaLabels'
+import { labelWidth, overlaps, placeAlong, rankAnchors, type Box, type LeaderPlan, type LeaderShape, type Pt } from './areaLabels'
 
 /** At most this many outline points are projected per label (every n-th vertex of long outlines). */
 const MAX_POINTS = 1500
@@ -44,8 +44,16 @@ function outlinePoints(map: MapLibreMap, layer: string): Pt[] {
   return out
 }
 
-const OBSERVED_SHAPE: LeaderShape = { dx: 50, dy: -48, run: 60 }
-const MODELED_SHAPE: LeaderShape = { dx: 38, dy: 40, run: 40 }
+/** The screen's leaders (up and right for the observed fire, down and right for the modeled spread), then the same
+ *  leader flipped vertically when the preferred one has no room. */
+const OBSERVED_SHAPES: LeaderShape[] = [
+  { dx: 50, dy: -48, run: 60 },
+  { dx: 50, dy: 48, run: 60 },
+]
+const MODELED_SHAPES: LeaderShape[] = [
+  { dx: 38, dy: 40, run: 40 },
+  { dx: 38, dy: -40, run: 40 },
+]
 
 function samePlaced(a: Placed[], b: Placed[]): boolean {
   return (
@@ -81,16 +89,15 @@ export function CommandAreaLabels() {
       const host = c.getBoundingClientRect()
       if (chip && chip.width > 0) avoid.push({ left: chip.left - host.left - 6, top: chip.top - host.top - 6, right: chip.right - host.left + 6, bottom: chip.bottom - host.top + 6 })
       const next: Placed[] = []
-      const add = (key: Placed['key'], layer: string, name: string, meta: string, shape: LeaderShape, score: (p: Pt) => number) => {
-        const a = pickAnchor(outlinePoints(map, layer), area, score)
-        if (!a) return
-        const p = placeLeader(a, labelWidth(name, meta), shape, area, avoid)
+      const add = (key: Placed['key'], layer: string, name: string, meta: string, shapes: readonly LeaderShape[], score: (p: Pt) => number) => {
+        // the best-scoring outline points first; the next ones when a label would leave the free map or cover another
+        const p = placeAlong(rankAnchors(outlinePoints(map, layer), area, score), labelWidth(name, meta), shapes, area, avoid)
         if (!p) return
         avoid.push(p.box)
         next.push({ ...p, key, name, meta })
       }
-      if (observedMeta) add('observed', LYR.observedEdge, 'Observed fire', observedMeta, OBSERVED_SHAPE, (p) => p.x - p.y)
-      if (modeledMeta) add('modeled', LYR.forecastLine10, 'Modeled spread', modeledMeta, MODELED_SHAPE, (p) => p.x + 0.6 * p.y)
+      if (observedMeta) add('observed', LYR.observedEdge, 'Observed fire', observedMeta, OBSERVED_SHAPES, (p) => p.x - p.y)
+      if (modeledMeta) add('modeled', LYR.forecastLine10, 'Modeled spread', modeledMeta, MODELED_SHAPES, (p) => p.x + 0.6 * p.y)
       // a label never covers the other's anchor
       const clean = next.filter((p) => !next.some((q) => q !== p && overlaps(p.box, { left: q.anchor.x - 2, right: q.anchor.x + 2, top: q.anchor.y - 2, bottom: q.anchor.y + 2 })))
       setPlaced((prev) => (samePlaced(prev, clean) ? prev : clean))

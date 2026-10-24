@@ -153,6 +153,18 @@
   display: none;
 }
 
+/* Text on the map (no panel): a soft dark halo under the readout, the right column and the bottom line keeps meta
+   text at 4.5:1 or more where bright map labels or aerial photos show through the edge gradients at low zoom (decision
+   l; measured on Lower Sugarloaf and Eaton with the aerial basemap). Glass panels opened from them drop it. */
+.mw[data-view='command-fire'] :is(.cro:not(.is-sheet), .mw-updates-panel.is-column) {
+  text-shadow:
+    0 0 6px rgba(12, 12, 12, 0.9),
+    0 1px 2px rgba(12, 12, 12, 0.85);
+}
+.mw[data-view='command-fire'] :is(.cro:not(.is-sheet), .mw-updates-panel.is-column) :is(.popover, [data-popover], .on-btn, .mw-chip) {
+  text-shadow: none;
+}
+
 /* ------------------------------------------------------------------------------------------------ readout */
 .cro {
   color: var(--m-text-body);
@@ -342,8 +354,18 @@
   padding-top: 2px;
   border-top: 1px solid var(--cmd-hair-2);
 }
+/* Forensic's chart readout (styles/dock.css) also uses .ro-row with white-space: nowrap and its own grid and line
+   height; restate the shared row's values here so long issuers wrap instead of being cut */
 .cro-rows .ro-row {
   padding: 6px 0;
+  white-space: normal;
+  line-height: normal;
+  align-items: baseline;
+  column-gap: 10px;
+  row-gap: 2px;
+}
+.cro-rows .ro-label {
+  color: var(--m-text-3);
 }
 .cro-rows .ro-17 {
   padding-top: 5px;
@@ -456,8 +478,32 @@
   border: 0;
   border-radius: 0;
   box-shadow: none;
+}
+/* the column keeps its head, its foot and "View all updates" in view; only the rows scroll (with a fade while more is
+   below) when open rows need more room than the window leaves */
+.mw-updates-panel.is-column {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.mw-updates-panel.is-column > .on.is-command {
+  flex: 0 1 auto;
+  min-height: 0;
+}
+.mw-updates-panel.is-column .on.is-command > :not(.on-rows),
+.mw-updates-panel.is-column > .cmd-col-foot {
+  flex: none;
+}
+.mw-updates-panel.is-column .on-rows {
+  flex: 0 1 auto;
+  min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
   scrollbar-width: thin;
+}
+.mw-updates-panel.is-column.has-more .on-rows {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
 }
 .on.is-command {
   gap: 0;
@@ -622,9 +668,12 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-/* "View all updates": the column opens into a glass panel (Official now, data status, the feed) */
+/* "View all updates": the column opens into a glass panel (Official now, data status, the feed); the phones' Updates
+   sheet shows the same rows */
+.mw-official-slot > .on.is-command {
+  padding: 10px 14px 8px;
+}
 .mw-updates-panel.is-command-panel .mw-official-slot {
-  padding: 10px 14px 6px;
   border-bottom: 1px solid var(--m-border);
 }
 .mw-updates-panel.is-command-panel .mw-panel-head h2 {
@@ -913,19 +962,18 @@
   .mw[data-view='command-fire'] .mw-header .picker-btn.is-title {
     min-width: 88px;
   }
-  /* the readout is a bottom sheet: its peek line always, the whole readout when opened */
+  /* the readout is a sheet above the timeline: its peek line always, the whole readout when opened */
   .mw[data-view='command-fire'] .mw-card {
     height: auto;
-    border-radius: var(--m-radius) var(--m-radius) 0 0;
+    border-radius: var(--m-radius);
   }
   .cro.is-sheet {
     display: flex;
     flex-direction: column;
     max-height: 100%;
-    padding: 0 14px 10px;
+    padding: 0 6px 0 14px;
     border: 1px solid var(--m-border);
-    border-bottom: 0;
-    border-radius: var(--m-radius) var(--m-radius) 0 0;
+    border-radius: var(--m-radius);
     background: var(--m-panel-strong);
     -webkit-backdrop-filter: var(--m-panel-blur);
     backdrop-filter: var(--m-panel-blur);
@@ -935,7 +983,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    min-height: 40px;
+    min-height: 44px;
     flex: none;
   }
   .cro-peek-label {
@@ -967,7 +1015,7 @@
     min-height: 0;
     overflow: auto;
     overscroll-behavior: contain;
-    padding-bottom: 6px;
+    padding: 0 8px 12px 0;
   }
   .cro.is-sheet:not(.is-open) .mw-sheet-handle {
     display: none;
@@ -990,15 +1038,17 @@
     gap: 4px 10px;
     flex-wrap: wrap;
   }
+  /* both fixed lines stay whole (they wrap; the credits toggle keeps the end of the line) */
   .mw[data-view='command-fire'] .cmd-note {
-    flex: 0 1 auto;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    flex: 1 1 0;
+    white-space: normal;
   }
   .mw[data-view='command-fire'] .mw-note > .fxc {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+  }
+  .mw[data-view='command-fire'] .cmd-foot > .mw-footer {
+    flex: none;
+    align-self: flex-end;
   }
   .cmd-search-pop {
     position: fixed;

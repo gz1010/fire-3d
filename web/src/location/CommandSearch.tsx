@@ -75,7 +75,7 @@ export function CommandSearch() {
         onClick={() => setOpen(!open)}
       />
       {open && (
-        <div className="cmd-search-pop" id="cmd-search-pop" role="dialog" aria-label="Check an address">
+        <div className="cmd-search-pop" id="cmd-search-pop" role="dialog" aria-label="Check an address" data-popover="">
           <SearchBox />
         </div>
       )}

@@ -31,3 +31,12 @@ Ports: API 8732, Vite 5192 (a Vite on 5192 -> 8732 was already running from H2a;
   CommandFireChrome + view-command.css. Gates green (lint 55).
 - Next: map leader labels (DOM), MapControls variant="bar" once H2c lands it, phones 390x844, 1024x768, contrast,
   screenshots, CONTRACT, report.
+
+## Resumed after the container restart (snapshot 4de210b)
+- Gates green on the snapshot (typecheck, lint 55, 1265 tests). Area labels (CommandAreaLabels, DOM leaders) work.
+- Contrast (scratch contrast.mjs/.py): Lower Sugarloaf aerial min 5.43 (0 fails); Eaton aerial at z8 one meta run 4.05
+  (map labels under the right column) -> soft text shadow on Command's text-on-map.
+- Found: Forensic dock.css `.ro-row` (white-space: nowrap) leaks into ReadoutRow -> long labels cut; scoped fix here,
+  note for the orchestrator.
+- Next: fixes, then screenshots (fixture-live, Lower Sugarloaf aerial, expanded row, View all, fire card, 1024, phone),
+  CONTRACT 15.5 H2b, report, commit.

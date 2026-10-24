@@ -74,6 +74,30 @@ export function placeLeader(anchor: Pt, w: number, shape: LeaderShape, area: Box
   return null
 }
 
+/** The outline points inside `area`, best score first, at least `spacing` px apart (the candidates to anchor on). */
+export function rankAnchors(points: readonly Pt[], area: Box, score: (p: Pt) => number, max = 12, spacing = 28): Pt[] {
+  const scored = points.filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y) && inside(p, area)).map((p) => ({ p, s: score(p) }))
+  scored.sort((a, b) => b.s - a.s)
+  const out: Pt[] = []
+  for (const { p } of scored) {
+    if (out.length >= max) break
+    if (out.some((q) => Math.hypot(q.x - p.x, q.y - p.y) < spacing)) continue
+    out.push(p)
+  }
+  return out
+}
+
+/** The first placement that fits: the anchors in order (best first), each with the shapes in order (each on the right,
+ *  then mirrored left). Null when none fits inside `area` without covering `avoid`. */
+export function placeAlong(anchors: readonly Pt[], w: number, shapes: readonly LeaderShape[], area: Box, avoid: readonly Box[] = []): LeaderPlan | null {
+  for (const a of anchors)
+    for (const shape of shapes) {
+      const p = placeLeader(a, w, shape, area, avoid)
+      if (p) return p
+    }
+  return null
+}
+
 /** Rough width (px) of a two-line label: the name in Inter 13 px, the meta in mono 10.5 px (uppercase). */
 export function labelWidth(name: string, meta: string): number {
   return Math.ceil(Math.max(name.length * 7.4, meta.length * 7.0)) + 4

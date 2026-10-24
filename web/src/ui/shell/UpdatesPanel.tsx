@@ -11,7 +11,7 @@
 // all updates", which opens the column into a glass panel with the same rows, the data status (every source's time)
 // and the updates feed, scrollable. Phones keep the Updates sheet (with Command's rows).
 import { ChevronDown, ChevronRight, ChevronUp, Clock, Flag, ListChecks, Megaphone, ShieldAlert, TriangleAlert, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useOfficialNow } from '../../official/hooks'
 import { useStore } from '../../state/store'
@@ -189,6 +189,38 @@ function OfficialSummary() {
   )
 }
 
+/** Whether the element `selector` inside `root` scrolls with more below its visible part (Command's column: its rows'
+ *  bottom edge then fades). Follows the rows' sizes (a row opening), their number and the scroll position. */
+function useMoreBelow(root: RefObject<HTMLElement | null>, selector: string, active: boolean): boolean {
+  const [more, setMore] = useState(false)
+  useLayoutEffect(() => {
+    const el = active ? root.current?.querySelector<HTMLElement>(selector) : null
+    if (!el) return
+    const check = () => setMore(el.scrollHeight - el.clientHeight - el.scrollTop > 4)
+    const ro = new ResizeObserver(check)
+    const observe = () => {
+      ro.disconnect()
+      ro.observe(el)
+      for (const c of Array.from(el.children)) ro.observe(c)
+    }
+    observe()
+    check()
+    const mo = new MutationObserver(() => {
+      observe()
+      check()
+    })
+    mo.observe(el, { childList: true })
+    el.addEventListener('scroll', check, { passive: true })
+    return () => {
+      ro.disconnect()
+      mo.disconnect()
+      el.removeEventListener('scroll', check)
+      setMore(false)
+    }
+  }, [root, selector, active])
+  return more
+}
+
 /** Command, wider screens: the right column (no panel) or, after "View all updates", the glass panel with the data
  *  status and the feed. Focus follows the switch: into the panel's heading, back to "View all updates". */
 function CommandUpdates({ children, heading }: { children: ReactNode; heading: RefObject<HTMLHeadingElement | null> }) {
@@ -196,6 +228,10 @@ function CommandUpdates({ children, heading }: { children: ReactNode; heading: R
   const [expanded, setExpanded] = useState(false)
   const viewAll = useRef<HTMLButtonElement | null>(null)
   const focusNext = useRef<'heading' | 'view-all' | null>(null)
+  // the rows scroll between the column's head and its foot when open rows make them taller than the room left; their
+  // bottom edge fades while more is below
+  const column = useRef<HTMLElement | null>(null)
+  const moreBelow = useMoreBelow(column, '.on-rows', !expanded)
   useEffect(() => {
     const t = focusNext.current
     focusNext.current = null
@@ -214,7 +250,7 @@ function CommandUpdates({ children, heading }: { children: ReactNode; heading: R
   )
   if (!expanded)
     return (
-      <section className="mw-updates-panel is-column" aria-labelledby="mw-updates-title" data-drawer="updates">
+      <section ref={column} className={`mw-updates-panel is-column${moreBelow ? ' has-more' : ''}`} aria-labelledby="mw-updates-title" data-drawer="updates">
         <h2 id="mw-updates-title" className="mw-sr-only" ref={heading} tabIndex={-1}>
           Incident updates
         </h2>
