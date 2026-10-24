@@ -1,7 +1,27 @@
 // Where the search popover is on screen (owner: location). The search box publishes its popover's box while it is
 // open; the location card moves out of its way (desktop: pushed down; phones: the bottom sheet gets shorter), so a
 // message or result list never covers the card's title or close button (civilian audit G3). Memory only.
+// Brief 4 (review H2-m2): the map chromes each mount their own search box, and opening or closing a fire swaps the
+// chrome. When a fire opens or closes or the preset changes, a box with a message or a result list open hands its
+// text and popover over (`carry`); the box the next chrome mounts right after takes them (within CARRY_MS), so
+// "Showing Monterey, CA. To check a spot, …" survives the fire closing behind a town search.
 import { create } from 'zustand'
+import type { Popover } from './search'
+
+/** What a search box hands to the next one: its text and an open message or result list. */
+export interface SearchCarry {
+  text: string
+  popover: Extract<Popover, { kind: 'message' } | { kind: 'results' }>
+  atMs: number
+}
+
+/** A chrome swap mounts the next box at once; a later mount (Command's popover opened again) starts fresh. */
+export const CARRY_MS = 1500
+
+/** The carried state for a box mounting at `nowMs` (null when none or stale). Pure. */
+export function freshCarry(c: SearchCarry | null, nowMs: number): SearchCarry | null {
+  return c && nowMs - c.atMs >= 0 && nowMs - c.atMs <= CARRY_MS ? c : null
+}
 
 export interface PopoverBox {
   /** Viewport px. */
@@ -16,9 +36,14 @@ interface SearchUi {
    *  true while its popover is open. Other layouts show the box all the time and ignore it. */
   searchOpen: boolean
   setSearchOpen: (open: boolean) => void
+  /** Handed over between search boxes across a chrome swap (see the header). */
+  carry: SearchCarry | null
+  setCarry: (c: SearchCarry | null) => void
 }
 
 export const useSearchUi = create<SearchUi>()((set) => ({
+  carry: null,
+  setCarry: (carry) => set({ carry }),
   searchOpen: false,
   setSearchOpen: (open) => set((s) => (s.searchOpen === open ? s : { searchOpen: open })),
   popover: null,

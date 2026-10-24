@@ -174,7 +174,9 @@ function observedFireCheck(input: LocationCheckInput, local: [number, number] | 
   if (gap || !local || !manifest || !rasters.observedArrival.layer) return { state: 'gap', gap: gap ?? 'nodata' }
   const s = sampleArrival(rasters.observedArrival.layer, local[0], local[1], manifest.grid.extent_m, manifest.time_origin_ms)
   if (s.kind === 'arrival' && s.ms <= timeMs + TIME_TOL_MS) return { state: 'burned', arrivalMs: s.ms }
-  if (s.kind === 'arrival' || s.kind === 'never') return { state: 'not_burned', asOfMs: timeMs }
+  // "not burned by <time>, as far as satellite observations show": never later than the latest observation (the
+  // forecast part and a live fire's NOW show that observation; review H2-B1)
+  if (s.kind === 'arrival' || s.kind === 'never') return { state: 'not_burned', asOfMs: Math.min(timeMs, manifest.time_range.now_ms) }
   return { state: 'gap', gap: s.kind === 'outside' ? 'outside_modeled_area' : 'nodata' }
 }
 

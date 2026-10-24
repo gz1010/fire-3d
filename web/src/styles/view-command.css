@@ -32,6 +32,15 @@
   overflow: hidden;
 }
 
+/* the demo badge says "Demo" in Command's bar at every width, so the place keeps its room (the full wording is in its
+   tooltip, its accessible text and the readout's demo note; review DF-15) */
+.mw[data-view='command-fire'] .mw-header .mw-demo-long {
+  display: none;
+}
+.mw[data-view='command-fire'] .mw-header .mw-demo-short {
+  display: inline;
+}
+
 /* the satellite status line (extras/ImageryChip.tsx variant="status") */
 .xs-statusbox {
   min-width: 0;
@@ -51,10 +60,18 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.xs-status-main > span {
+.xs-status-text {
+  display: flex;
+  min-width: 0;
+}
+.xs-status-head {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: pre;
+}
+.xs-status-tail {
+  flex: none;
 }
 .xs-status-icon {
   flex: none;
@@ -106,6 +123,10 @@
   z-index: 2;
   text-shadow: none;
   pointer-events: auto;
+}
+/* the box fills the popover (the generic box is --m-search-w, 360 px; review DF-10) */
+.cmd-search-pop .loc-search {
+  width: 100%;
 }
 .cmd-search-pop .loc-search-box {
   background: var(--m-panel-strong);
@@ -460,6 +481,14 @@
 }
 .cro-more-body .loc-block {
   border-top-color: var(--cmd-hair);
+}
+/* the section titles inside ("Sources and freshness", "Scientific values"): small uppercase labels are mono with
+   tracking, as the readout's own eyebrows (HANDOFF fonts; review DF-19) */
+.cro-more-body .mw-eyebrow {
+  font: 600 10.5px / 1.3 var(--m-font-mono);
+  letter-spacing: var(--m-label-track);
+  text-transform: uppercase;
+  color: var(--m-text-3);
 }
 .cro-more-body .loc-section + .loc-section {
   margin-top: 8px;
@@ -882,7 +911,13 @@
   display: flex;
   flex-direction: column;
   white-space: nowrap;
-  text-shadow: 0 1px 6px #000;
+  /* a denser version of the readout's halo (decision l): the meta stays at 4.5:1 or more over bright aerial roads and
+     the AOI line at low zoom (review DF-12; measured on Eaton aerial at z9) */
+  text-shadow:
+    0 0 2px rgba(12, 12, 12, 1),
+    0 0 4px rgba(12, 12, 12, 0.95),
+    0 0 8px rgba(12, 12, 12, 0.9),
+    0 1px 2px rgba(12, 12, 12, 0.9);
 }
 .cmd-label.is-left {
   align-items: flex-end;
@@ -895,6 +930,15 @@
 .cmd-label-meta {
   font: 400 10.5px / 15px var(--m-font-mono);
   text-transform: uppercase;
+  /* a soft dark plate under the coloured line: over bright aerial roads the halo alone left it at 3.8:1 (decision l;
+     review DF-12). Invisible over the dimmed map. */
+  align-self: flex-start;
+  border-radius: 3px;
+  background: rgba(12, 12, 12, 0.6);
+  box-shadow: 0 0 5px 2px rgba(12, 12, 12, 0.6);
+}
+.cmd-label.is-left .cmd-label-meta {
+  align-self: flex-end;
 }
 .cmd-label.is-observed .cmd-label-meta {
   color: var(--m-fire-3);
@@ -916,6 +960,56 @@
   .cro-point {
     font-size: 26px;
     line-height: 32px;
+  }
+}
+/* below 1280 px the credits fold behind "© Credits" (App.tsx CreditsFooter fold; decision i-9, review DF-11): five
+   wrapped lines pushed the controls and the timeline up and the readout's rows off screen. The full credits open
+   above the bottom row, every text kept. Phones use the same fold (overview.css). */
+@media (min-width: 761px) and (max-width: 1279px) {
+  .mw[data-view='command-fire'] .mw-footer.is-fold {
+    position: relative;
+    display: flex;
+    justify-content: flex-end;
+  }
+  .mw[data-view='command-fire'] .mw-credits-toggle {
+    --chrome-side: bottom;
+    flex: none;
+    height: 20px;
+    padding: 0 8px;
+    border: 1px solid var(--m-border);
+    border-radius: 4px;
+    background: var(--m-panel);
+    color: var(--m-text-2);
+    font: 400 10px / 18px var(--m-font-mono);
+    letter-spacing: 0.04em;
+    text-shadow: none;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .mw[data-view='command-fire'] .mw-credits-toggle:hover,
+  .mw[data-view='command-fire'] .mw-credits-toggle[aria-expanded='true'] {
+    color: var(--m-text);
+  }
+  .mw[data-view='command-fire'] .mw-credits-toggle:focus-visible {
+    outline: none;
+    box-shadow: var(--m-focus-ring);
+  }
+  .mw[data-view='command-fire'] .mw-footer.is-open .mw-footer-attrib {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 6px);
+    width: min(440px, calc(100vw - 2 * var(--cmd-x)));
+    padding: 8px 10px;
+    border: 1px solid var(--m-border);
+    border-radius: var(--m-radius-sm);
+    background: var(--m-panel-raised);
+    box-shadow: var(--m-shadow);
+    text-align: left;
+    text-shadow: none;
+    z-index: 2;
+  }
+  .mw[data-view='command-fire'] .mw-footer-attrib[hidden] {
+    display: none;
   }
 }
 @media (max-width: 1023px) {

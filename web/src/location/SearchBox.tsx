@@ -48,7 +48,7 @@ import {
   type SearchPlan,
   type SearchState,
 } from './search'
-import { useSearchUi } from './searchUi'
+import { freshCarry, useSearchUi } from './searchUi'
 import type { GeocodeMatch, GeocodeResponse } from './types'
 import { useNarrow } from './useNarrow'
 import './location.css'
@@ -64,10 +64,17 @@ function flyZoom(): number {
 
 const fireName = (s: Pick<IncidentSummary, 'name'>) => (/\bfire$/i.test(s.name) ? `the ${s.name}` : s.name)
 
+/** The text and popover the previous chrome's box handed over (searchUi.ts carry), read when this box first renders. */
+function readCarry(): { text: string; state: SearchState } | null {
+  const c = freshCarry(useSearchUi.getState().carry, Date.now())
+  return c ? { text: c.text, state: { ...INITIAL_SEARCH, popover: c.popover } } : null
+}
+
 export function SearchBox() {
-  const [text, setText] = useState('')
+  const [carried] = useState(readCarry)
+  const [text, setText] = useState(carried?.text ?? '')
   const [focused, setFocused] = useState(false)
-  const [state, setState] = useState<SearchState>(INITIAL_SEARCH)
+  const [state, setState] = useState<SearchState>(carried?.state ?? INITIAL_SEARCH)
   const units = useWorkspace((s) => s.units)
   const hasSelection = useWorkspace((s) => s.selection != null)
   const summary = useStore((s) => s.summary)
@@ -94,6 +101,32 @@ export function SearchBox() {
     }
     stateRef.current = next
     setState(next)
+  }, [])
+
+  // a fire opening or closing, or another preset, swaps the chrome and with it this box: hand the text and an open
+  // message or result list to the next box (searchUi.ts carry). Zustand calls these before React renders the next
+  // chrome, whose box reads the carry when it first renders and clears it once mounted.
+  const textRef = useRef(text)
+  useEffect(() => {
+    textRef.current = text
+  }, [text])
+  useEffect(() => {
+    useSearchUi.getState().setCarry(null) // taken (or stale)
+    const save = () => {
+      const p = stateRef.current.popover
+      if (stateRef.current.pending == null && (p.kind === 'message' || p.kind === 'results'))
+        useSearchUi.getState().setCarry({ text: textRef.current, popover: p, atMs: Date.now() })
+    }
+    const offFire = useStore.subscribe((s, p) => {
+      if ((s.incidentId == null) !== (p.incidentId == null)) save()
+    })
+    const offPreset = useWorkspace.subscribe((s, p) => {
+      if (s.preset !== p.preset) save()
+    })
+    return () => {
+      offFire()
+      offPreset()
+    }
   }, [])
 
   // "/" focuses the box (not while typing elsewhere); unmount cancels a lookup in flight

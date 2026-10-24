@@ -35,3 +35,15 @@ export function selectedLabel(sel: SelectedLocation): string {
   if (sel.source === 'device') return 'Your location (from your browser)'
   return sel.adjusted ? 'Selected point · moved' : 'Selected point'
 }
+
+/** A bundle source that is an agency's incident record: CAL FIRE (California) or the NIFC WFIGS incident record
+ *  (elsewhere; §14.12.6). */
+const AGENCY_RECORD_SOURCE = /CAL FIRE|NIFC WFIGS incident/i
+
+/** The agency named after a record value in the readout ("Record updated · CAL FIRE"): only when the bundle was built
+ *  from that agency's incident record (`sources` = manifest.data_sources) and it is not demo data. Synthetic or local
+ *  values never carry an official issuer (review H2-B3; the brief-2 coordinate strip's rule). */
+export function recordIssuer(issuer: string | null | undefined, sources: readonly { name: string }[] | null | undefined, demo: boolean): string | null {
+  if (!issuer || demo || !sources?.some((d) => AGENCY_RECORD_SOURCE.test(d.name))) return null
+  return issuer
+}

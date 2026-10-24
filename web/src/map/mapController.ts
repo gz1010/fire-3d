@@ -69,6 +69,7 @@ import { drapedLayers, HATCH_IMAGE, hatchImage, incidentLabelField, LAYER_GROUPS
 import { recordHoverLines, zoneHoverLines } from './hoverText'
 import { fmtLatLon, SelectionPin } from './markers'
 import { COVERS_POINT_COST, COVERS_TEXT_COST, type ScreenBox } from './pinLabel'
+import { aoiSidesInside, type AoiSide } from './aoiLabels'
 import { EMPTY_OVERLAYS, motionMs, patchOverlays, setProvider, useMapRuntime, type MapActions } from './mapStore'
 import {
   aoiFeatures,
@@ -208,6 +209,9 @@ export class MapController {
   private styleReady = false
   /** The overview labels use a narrow map's anchors (onStyleLoad, updateLabelAnchors). */
   private narrowLabels = false
+  /** "Outside modeled area" label anchors (lon/lat per side) and the label layer's current filter (sides shown). */
+  private aoiAnchors: { side: AoiSide; lon: number; lat: number }[] = []
+  private aoiFilterKey = ''
   private rasters: RasterSet | null = null
   private rasterKey = ''
   private bufs: Buffers | null = null
@@ -370,7 +374,7 @@ export class MapController {
         if (s.mapLayers !== p.mapLayers) this.applyLayerVisibility(p.mapLayers)
         if (s.safeInsets !== p.safeInsets) {
           this.applySafeInsets(true)
-          this.placePinLabel()
+          this.placeScreenLabels()
         }
         if (s.fireCardId !== p.fireCardId) this.updateFireCardRing()
         if (s.overviewFilter !== p.overviewFilter || s.units !== p.units) {
@@ -508,6 +512,7 @@ export class MapController {
     this.narrowLabels = width < NARROW_PX
     for (const layer of overviewLayers(theme, { narrow: this.narrowLabels })) map.addLayer(layer)
     for (const layer of topLayers(theme, useWorkspace.getState().preset)) map.addLayer(layer)
+    this.aoiFilterKey = '' // the new label layer has no filter yet
     this.applyLayerVisibility(null)
     // a tint asked for while this style was loading
     this.applyTint(false)
@@ -1007,7 +1012,7 @@ export class MapController {
     this.updateCamera()
     this.updateAoiInView()
     this.updateViewBox()
-    this.placePinLabel()
+    this.placeScreenLabels()
     this.publishFraming()
   }
 
@@ -1308,8 +1313,8 @@ export class MapController {
       this.publishFraming()
     })
     map.on('moveend', (e: { originalEvent?: unknown }) => this.onMoveEnd(e.originalEvent != null))
-    // the selection label's corner once the map (and the fire's labels) settle
-    map.on('idle', () => this.placePinLabel())
+    // the selection label's corner and the modeled area's labels once the map (and the fire's labels) settle
+    map.on('idle', () => this.placeScreenLabels())
     map.on('click', (e) => this.onClick(e))
     map.on('mousemove', (e) => this.onHover(e))
     map.on('mouseout', () => this.hideHover())
@@ -1670,8 +1675,35 @@ export class MapController {
     this.placePinLabel()
   }
 
-  /** The selection label's corner (markers.ts pinLabelSide): inside the free map area (the safe area), off the fire's
-   *  own point and label and the key events. Runs when the map settles, the safe area changes or the pin does. */
+  /** Labels kept inside the free map area once the map settles (moveend, idle, a safe-area change). */
+  private placeScreenLabels(): void {
+    this.placeAoiLabels()
+    this.placePinLabel()
+  }
+
+  /** "Outside modeled area": only the sides whose label stays inside the free map area (map/aoiLabels.ts; review
+   *  DF-14), so none shows through the chrome's text. A filter on the label layer, changed only when the set changes. */
+  private placeAoiLabels(): void {
+    const map = this.map
+    if (!this.styleReady || !map.getLayer(LYR.aoiLabel)) return
+    const c = map.getContainer()
+    const i = useWorkspace.getState().safeInsets
+    const free = { left: i.left, top: i.top, right: c.clientWidth - i.right, bottom: c.clientHeight - i.bottom }
+    const size = this.theme() === 'aerial' ? 12 : 10.5
+    const anchors = this.aoiAnchors.map((a) => {
+      const p = map.project([a.lon, a.lat])
+      return { side: a.side, x: p.x, y: p.y }
+    })
+    const sides = aoiSidesInside(anchors, free, size)
+    const key = sides.join(',')
+    if (key === this.aoiFilterKey) return
+    this.aoiFilterKey = key
+    map.setFilter(LYR.aoiLabel, ['in', ['get', 'side'], ['literal', sides]])
+  }
+
+  /** The selection label's corner (pinLabel.ts pinLabelLayout; one line, or the coordinates stacked): inside the free map
+   *  area (the safe area) and the map, off the fire's own point and label and the key events. Runs when the map
+   *  settles, the safe area changes or the pin does. */
   private placePinLabel(): void {
     if (!this.styleReady) return
     const map = this.map
@@ -1782,10 +1814,15 @@ export class MapController {
       const a = aoiFeatures(m)
       this.setData(SRC.aoi, a.outline)
       this.setData(SRC.aoiLabels, a.labels)
+      this.aoiAnchors = a.labels.features.flatMap((f) =>
+        f.geometry.type === 'Point' ? [{ side: f.properties?.side as AoiSide, lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] }] : [],
+      )
     } else {
       this.setData(SRC.aoi, EMPTY)
       this.setData(SRC.aoiLabels, EMPTY)
+      this.aoiAnchors = []
     }
+    this.placeAoiLabels()
     const sum: IncidentSummary | null = s.summary
     this.setData(
       SRC.incident,

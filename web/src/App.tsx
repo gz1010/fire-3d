@@ -27,7 +27,7 @@ import { MapAttribution } from './map/MapAttribution'
 import { MapAtmosphere } from './map/MapAtmosphere'
 import { CommandFireChrome } from './ui/shell/CommandFireChrome'
 import { buildFailed, needsBuild, openFire } from './ui/shell/fireActions'
-import { NARROW_QUERY, useMediaQuery } from './ui/shell/hooks'
+import { CREDITS_FOLD_QUERY, NARROW_QUERY, useMediaQuery } from './ui/shell/hooks'
 import { MapBoundary } from './ui/shell/MapBoundary'
 import { OverviewChrome } from './ui/shell/OverviewChrome'
 import { MissingFireNotice } from './ui/shell/OverviewPanel'
@@ -222,13 +222,15 @@ function SkipLinks({ overview }: { overview: boolean }) {
 }
 
 /** The map credits. Phones (brief 2 C-R2): folded with the research note into one line, behind a labelled "© Credits"
- *  toggle that opens the full credits above the bottom row (like MapLibre's compact attribution on narrow maps). */
-function CreditsFooter({ narrow }: { narrow: boolean }) {
+ *  toggle that opens the full credits above the bottom row (like MapLibre's compact attribution on narrow maps).
+ *  `fold` (brief 4 review DF-11, decision i-9): the same fold on wider screens, Command in a fire below 1280 px, where
+ *  the credits would wrap to five lines and push the readout's rows off screen. Every credit text is kept. */
+function CreditsFooter({ narrow, fold = narrow }: { narrow: boolean; fold?: boolean }) {
   const [open, setOpen] = useState(false)
-  const folded = narrow && !open
+  const folded = fold && !open
   return (
-    <footer className={`mw-footer${narrow ? ' is-narrow' : ''}${open ? ' is-open' : ''}`}>
-      {narrow && (
+    <footer className={`mw-footer${narrow ? ' is-narrow' : ''}${fold ? ' is-fold' : ''}${open ? ' is-open' : ''}`}>
+      {fold && (
         <button type="button" className="mw-credits-toggle" aria-expanded={open} aria-controls="mw-credits" data-chrome="credits-toggle" onClick={() => setOpen((o) => !o)}>
           © Credits
         </button>
@@ -295,6 +297,7 @@ function MapWorkspace() {
   const overview = useStore((s) => s.incidentId == null)
   const collapsed = useStore((s) => s.panelsCollapsed)
   const narrow = useMediaQuery(NARROW_QUERY)
+  const midWidth = useMediaQuery(CREDITS_FOLD_QUERY)
   const notPrepared = useNotPrepared()
   const chrome = mapChromeOf(!overview, preset)
   useNarrowSheets(narrow)
@@ -314,7 +317,7 @@ function MapWorkspace() {
     hasFireCard && 'has-firecard',
     sheetOpen && 'has-sheet',
   ]
-  const credits = <CreditsFooter narrow={narrow} />
+  const credits = <CreditsFooter narrow={narrow} fold={narrow || (chrome === 'command-fire' && midWidth)} />
   return (
     <div className={cls.filter(Boolean).join(' ')} ref={root} data-view={chrome}>
       <SkipLinks overview={overview} />

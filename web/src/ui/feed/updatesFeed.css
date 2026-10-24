@@ -29,7 +29,8 @@
   align-items: center;
   gap: 8px;
   padding: 8px 10px 6px;
-  background: var(--m-panel-strong);
+  /* near-opaque: the items scroll under this sticky bar (review DF-9; --m-panel-strong is .86 since brief 4) */
+  background: var(--m-panel-raised);
   border-bottom: 1px solid var(--m-border);
 }
 .uf-seg {
@@ -297,21 +298,21 @@
   white-space: nowrap;
 }
 .uf-kind-observation {
-  color: #8ec5ff;
+  color: var(--m-fire-3);
 }
 .uf-kind-estimate {
-  color: #f2c97d;
+  color: var(--m-fire-4);
   border-style: dashed;
 }
 .uf-kind-model {
-  color: #f5b45a;
+  color: var(--m-forecast);
   border-style: dotted;
 }
 .uf-kind-official {
-  color: #8ee0a8;
+  color: var(--m-official-ink);
 }
 .uf-kind-annotation {
-  color: #cbb9ef;
+  color: var(--m-text-2);
 }
 .uf-auto {
   display: inline-flex;
@@ -524,7 +525,7 @@
   cursor: help;
 }
 .uf-item.is-official:not(.is-selected) {
-  box-shadow: inset 2px 0 0 color-mix(in srgb, #8ee0a8 55%, transparent);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--m-official-ink) 55%, transparent);
 }
 .uf-item.is-ended:not(.is-selected) .uf-title {
   color: var(--m-text-2);
@@ -533,7 +534,7 @@
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  color: var(--m-accent);
+  color: var(--m-accent-text); /* links: light grey, underlined (review DF-7) */
   font-weight: 500;
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -613,7 +614,7 @@
   gap: 5px;
   padding: 7px 8px 8px;
   border-bottom: 1px solid var(--m-border);
-  background: color-mix(in srgb, var(--m-panel-strong) 94%, #8ee0a8 6%);
+  background: color-mix(in srgb, var(--m-panel-strong) 94%, var(--m-official-ink) 6%);
   color: var(--m-text);
   font-size: var(--m-fs-sm);
 }
@@ -622,7 +623,7 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
-  color: #8ee0a8;
+  color: var(--m-official-ink);
 }
 .on-head > svg {
   flex: none;
@@ -679,7 +680,7 @@
   color: var(--m-text-2);
 }
 .on-row.is-alert .on-row-icon {
-  color: #ff9ccd;
+  color: var(--m-alert);
 }
 .on-row-label {
   flex: none;
@@ -765,7 +766,7 @@
   align-items: center;
   gap: 3px;
   margin-right: 8px;
-  color: var(--m-accent);
+  color: var(--m-accent-text); /* links: light grey, underlined (review DF-7) */
   font-size: var(--m-fs-xs);
   font-weight: 500;
   text-decoration: underline;
@@ -782,7 +783,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--m-accent);
+  color: var(--m-accent-text); /* links: light grey, underlined (review DF-7) */
   font: inherit;
   text-decoration: underline;
   text-underline-offset: 2px;

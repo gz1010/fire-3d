@@ -673,7 +673,7 @@
 }
 /* a local officials' message's own link (its issuer's, else the record it was read from) */
 .os-link {
-  color: var(--m-accent);
+  color: var(--m-accent-text); /* links: light grey, underlined (review DF-7) */
   text-decoration: underline;
   text-underline-offset: 2px;
 }

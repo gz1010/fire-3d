@@ -632,7 +632,7 @@
   box-shadow: var(--m-shadow, 0 8px 28px rgba(0, 0, 0, 0.45));
 }
 .xs-chip.is-on {
-  border-color: var(--m-info, #60a5fa);
+  border-color: var(--m-info, #cfcfcf);
 }
 .xs-chip-main,
 .xs-chip-more {
@@ -655,7 +655,7 @@
 }
 .xs-chip-main > svg {
   flex: none;
-  color: var(--m-info, #60a5fa);
+  color: var(--m-info, #cfcfcf);
 }
 .xs-chip-label {
   flex: none;
@@ -675,6 +675,7 @@
 .xs-chip-keep {
   flex: none;
 }
+.xs-chip-one,
 .xs-chip-plat,
 .xs-chip-time {
   min-width: 0;
@@ -738,7 +739,7 @@
   padding: 0 2px;
   border: 0;
   background: none;
-  color: var(--m-accent, #5b9dff);
+  color: var(--m-accent-text, #e0e0e0);
   font: inherit;
   font-size: var(--m-fs-xs, 11px);
   text-decoration: underline;

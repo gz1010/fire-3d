@@ -5,16 +5,22 @@
 // (dragend -> moveSelection). DOM text only (no HTML strings). A MapLibre Marker follows the terrain in 3D.
 // The label sits up and to the right of the dot, as the screens; it moves to another corner (the leader mirrored) when
 // that one would leave the free map area (the part the chrome leaves open) or cover the fire's own label
-// (map/pinLabel.ts pinLabelSide).
+// (map/pinLabel.ts pinLabelLayout); where no corner has room for one line it stacks the coordinates (latitude, then
+// longitude), as at 1024 px in Command or on a phone.
 import { Marker, type Map as MapLibreMap } from 'maplibre-gl'
 import type { SelectedLocation } from '../state/workspace'
-import { pinLabelSide, type PinSide, type ScreenBox } from './pinLabel'
+import { pinLabelLayout, type PinLayout, type PinSide, type ScreenBox } from './pinLabel'
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
-/** "34.19210° N, 118.11234° W" */
-export function fmtLatLon(lat: number, lon: number, digits = 5): string {
-  return `${Math.abs(lat).toFixed(digits)}° ${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lon).toFixed(digits)}° ${lon >= 0 ? 'E' : 'W'}`
+/** "34.19210° N" (latitude) or "118.11234° W" (longitude). */
+function fmtAxis(v: number, pos: string, neg: string, digits: number): string {
+  return `${Math.abs(v).toFixed(digits)}° ${v >= 0 ? pos : neg}`
+}
+
+/** "34.19210° N, 118.11234° W" (`sep` ", "); the selected point's map label uses " · ", as the screens. */
+export function fmtLatLon(lat: number, lon: number, digits = 5, sep = ', '): string {
+  return `${fmtAxis(lat, 'N', 'S', digits)}${sep}${fmtAxis(lon, 'E', 'W', digits)}`
 }
 
 /** The dot, its halo and the leader to the label (24 px left of the label box), drawn around the marker's centre. */
@@ -45,7 +51,9 @@ export class SelectionPin {
   private readonly chip: HTMLDivElement
   private onMove: ((lat: number, lon: number) => void) | null = null
   private shown = false
-  private side: PinSide = 'up-right'
+  private layout: PinLayout = { side: 'up-right', stacked: false }
+  /** the label is the coordinates (it can stack), not an address or a name */
+  private coordsLabel = false
 
   constructor() {
     const root = document.createElement('div')
@@ -77,7 +85,22 @@ export class SelectionPin {
       return
     }
     const coords = fmtLatLon(sel.lat, sel.lon)
-    this.label.textContent = sel.label ?? coords
+    this.coordsLabel = sel.label == null
+    if (sel.label != null) this.label.textContent = sel.label
+    else {
+      // "39.23708° N · 106.43677° W" (the screens' separator); two parts so the label can stack them
+      const lat = document.createElement('span')
+      lat.className = 'fxm-pin-lat'
+      lat.textContent = fmtAxis(sel.lat, 'N', 'S', 5)
+      const dot = document.createElement('span')
+      dot.className = 'fxm-pin-sep'
+      dot.textContent = ' · '
+      const lon = document.createElement('span')
+      lon.className = 'fxm-pin-lon'
+      lon.textContent = fmtAxis(sel.lon, 'E', 'W', 5)
+      this.label.replaceChildren(lat, dot, lon)
+    }
+    if (!this.coordsLabel && this.layout.stacked) this.setLayout({ ...this.layout, stacked: false })
     const notes: string[] = []
     if (sel.approximate) notes.push('approximate')
     if (sel.adjusted) notes.push('adjusted')
@@ -93,19 +116,32 @@ export class SelectionPin {
     this.shown = true
   }
 
-  /** Put the label in the corner that stays inside `free` (screen px of the map container) and hides the least
-   *  (`covers`: pinLabel.ts costs); call when the map settles, the safe area changes or the selection changes. */
+  /** Put the label in the corner (one line, or the coordinates stacked) that stays inside `free` (screen px of the map
+   *  container) and hides the least (`covers`: pinLabel.ts costs); call when the map settles, the safe area changes or
+   *  the selection changes. */
   place(map: MapLibreMap, free: ScreenBox, covers?: (box: ScreenBox, side: PinSide) => number): void {
     if (!this.shown) return
-    const w = this.chip.offsetWidth
-    const h = this.chip.offsetHeight
-    if (!w || !h) return
+    const was = this.layout.stacked
+    const size = (stacked: boolean) => {
+      this.root.classList.toggle('is-stacked', stacked)
+      return { w: this.chip.offsetWidth, h: this.chip.offsetHeight }
+    }
+    const wide = size(false)
+    const stacked = this.coordsLabel ? size(true) : null
+    this.root.classList.toggle('is-stacked', was)
+    if (!wide.w || !wide.h) return
+    const c = map.getContainer()
     const p = map.project(this.marker.getLngLat())
-    const side = pinLabelSide({ x: p.x, y: p.y }, { w, h }, free, this.side, covers)
-    if (side === this.side) return
-    this.side = side
-    this.root.classList.toggle('is-left', side.endsWith('left'))
-    this.root.classList.toggle('is-down', side.startsWith('down'))
+    const view = { left: 0, top: 0, right: c.clientWidth, bottom: c.clientHeight }
+    this.setLayout(pinLabelLayout({ x: p.x, y: p.y }, { wide, stacked }, free, this.layout, covers, view))
+  }
+
+  private setLayout(l: PinLayout): void {
+    if (l.side === this.layout.side && l.stacked === this.layout.stacked) return
+    this.layout = l
+    this.root.classList.toggle('is-left', l.side.endsWith('left'))
+    this.root.classList.toggle('is-down', l.side.startsWith('down'))
+    this.root.classList.toggle('is-stacked', l.stacked)
   }
 
   remove(): void {

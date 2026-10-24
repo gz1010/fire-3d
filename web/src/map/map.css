@@ -57,7 +57,12 @@
   font-size: 12px;
   line-height: 1.3;
   white-space: nowrap;
-  text-shadow: 0 0 2px rgba(0, 0, 0, 0.9), 0 1px 6px #000;
+  /* the map labels' halo (decision l; review DF-12): readable over bright aerial photos */
+  text-shadow:
+    0 0 2px rgba(12, 12, 12, 1),
+    0 0 4px rgba(12, 12, 12, 0.95),
+    0 0 8px rgba(12, 12, 12, 0.9),
+    0 1px 2px rgba(12, 12, 12, 0.9);
   pointer-events: none;
 }
 .fxm-pin-label {
@@ -73,6 +78,17 @@
 }
 .fxm-pin.is-down .fxm-pin-chip {
   top: 25px;
+}
+/* a narrow free area (Command at 1024 px, phones): latitude and longitude on two lines (markers.ts SelectionPin.place) */
+.fxm-pin.is-stacked .fxm-pin-label {
+  display: flex;
+  flex-direction: column;
+}
+.fxm-pin.is-left.is-stacked .fxm-pin-label {
+  align-items: flex-end;
+}
+.fxm-pin.is-stacked .fxm-pin-sep {
+  display: none;
 }
 .fxm-pin.is-left svg {
   transform: scaleX(-1);
@@ -507,6 +523,13 @@
   font-size: var(--m-fs-sm);
   line-height: 1.4;
   z-index: 3;
+}
+/* 2D: ⟲ ⟳ on their own row under the default controls row (the 3D orbit row holds them in 3D); 44 px on phones */
+@media (max-width: 760px) {
+  .fxm-turn-row .fxm-icon-btn {
+    width: 44px;
+    height: 44px;
+  }
 }
 /* a bar at the bottom of the screen (Command): the hint opens upwards */
 .fxm-orbit-hint.is-above {

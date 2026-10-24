@@ -593,7 +593,7 @@ function Freshness({ model }: { model: CompactTimelineModel }) {
         Latest observation <time dateTime={new Date(latest).toISOString()}>{fmt(latest)}</time> ({fmtRelative(latest, wall)})
         {stale && <span className="ctl-stale">Stale</span>}
       </span>
-      <span className="ctl-clock" data-tip="The actual current time; the blue dotted mark on the track shows where it falls">
+      <span className="ctl-clock" data-tip="The actual current time; the grey dotted mark on the track shows where it falls">
         <svg className="ctl-clock-glyph" width="6" height="12" aria-hidden="true" focusable="false">
           <line x1="3" x2="3" y1="0" y2="9" />
           <circle cx="3" cy="10" r="2" />
@@ -643,7 +643,7 @@ function SlimTop({ model, forecast, command }: { model: CompactTimelineModel; fo
           <span className="ctl-fcinfo is-missing">{model.forecastStatus === 'none' && !live ? (command ? 'No hindcast run for this fire' : 'No model re-run for this fire') : (FORECAST_STATE[model.forecastStatus] ?? '')}</span>
         )}
         {live ? (
-          <span className="ctl-clock" data-tip="The actual current time; the blue dotted mark on the track shows where it falls">
+          <span className="ctl-clock" data-tip="The actual current time; the grey dotted mark on the track shows where it falls">
             <svg className="ctl-clock-glyph" width="6" height="12" aria-hidden="true" focusable="false">
               <line x1="3" x2="3" y1="0" y2="9" />
               <circle cx="3" cy="10" r="2" />

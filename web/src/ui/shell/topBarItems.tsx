@@ -73,7 +73,12 @@ export function AllFiresBack() {
 export function DemoBadge() {
   return (
     <span className="mw-demo-badge" role="note" data-tip="Development fixture: terrain, fuels, fire and weather are synthetic, not a real incident">
-      <span className="mw-demo-long">Demo · simulated data</span>
+      {/* the full wording is always the accessible text; the bar shows the long or the short form (Command's bar and
+          medium widths: "Demo", so the place keeps its room; review DF-15) */}
+      <span className="mw-sr-only">Demo · simulated data</span>
+      <span className="mw-demo-long" aria-hidden="true">
+        Demo · simulated data
+      </span>
       <span className="mw-demo-short" aria-hidden="true">
         Demo
       </span>

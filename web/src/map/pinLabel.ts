@@ -1,6 +1,7 @@
 // Where the selected point's label goes around its dot (brief 4; map/markers.ts SelectionPin). Pure, tested
 // (pinLabel.test.ts). The screens put it up and to the right; it takes another corner, with the leader mirrored, when
-// that one would leave the free map area (the part the chrome leaves open: the safe area) or cover another label.
+// that one would leave the free map area (the part the chrome leaves open: the safe area) or cover another label, and
+// stacks the coordinates on two lines when no one-line corner fits (a narrow free area: Command at 1024 px, phones).
 
 /** Where the label goes around the dot, in order of preference (the screens' up-right first). */
 export type PinSide = 'up-right' | 'up-left' | 'down-right' | 'down-left'
@@ -36,10 +37,48 @@ export function overflowPx(b: ScreenBox, free: ScreenBox): number {
 export const OVERFLOW_COST_PER_PX = 3
 export const COVERS_TEXT_COST = 40
 export const COVERS_POINT_COST = 15
+/** Each pixel past the map's own edge (cut off by the screen, not just under the chrome) costs this much on top. */
+export const OFFSCREEN_COST_PER_PX = 10
+/** The stacked label (latitude, longitude and "SELECTED" on three lines) is narrower but taller; it costs this much on
+ *  top, so the one-line label wins whenever it fits as well. */
+export const STACKED_COST = 8
 
-/** Which corner the selection label takes: the cheapest by `OVERFLOW_COST_PER_PX` × the pixels outside the free map area
- *  plus `covers(box, side)` (what it would hide: COVERS_TEXT_COST, COVERS_POINT_COST or their sum). Ties keep the
- *  current corner (no flip-flop while panning), else the preference order. */
+export interface PinLayout {
+  side: PinSide
+  /** coordinates on two lines (a narrow free area: Command at 1024 px, phones) */
+  stacked: boolean
+}
+
+/** Where the selection label goes: the cheapest corner, one-line or stacked, by `OVERFLOW_COST_PER_PX` × the pixels
+ *  outside the free map area, `OFFSCREEN_COST_PER_PX` × the pixels outside the map itself (`view`), `covers(box,
+ *  side)` (what it would hide: COVERS_TEXT_COST, COVERS_POINT_COST or their sum) and `STACKED_COST` for the stacked
+ *  label (`sizes.stacked`; null when the label cannot stack, as an address). Ties keep the current layout (no flip-flop
+ *  while panning), else the preference order (one-line corners first). */
+export function pinLabelLayout(
+  dot: { x: number; y: number },
+  sizes: { wide: { w: number; h: number }; stacked?: { w: number; h: number } | null },
+  free: ScreenBox,
+  current: PinLayout,
+  covers: (box: ScreenBox, side: PinSide) => number = () => 0,
+  view: ScreenBox | null = null,
+): PinLayout {
+  const options: PinLayout[] = [
+    ...PIN_SIDES.map((side) => ({ side, stacked: false })),
+    ...(sizes.stacked ? PIN_SIDES.map((side) => ({ side, stacked: true })) : []),
+  ]
+  const cost = (o: PinLayout) => {
+    const size = o.stacked && sizes.stacked ? sizes.stacked : sizes.wide
+    const b = pinLabelBox(dot.x, dot.y, size.w, size.h, o.side)
+    return OVERFLOW_COST_PER_PX * overflowPx(b, free) + (view ? OFFSCREEN_COST_PER_PX * overflowPx(b, view) : 0) + covers(b, o.side) + (o.stacked ? STACKED_COST : 0)
+  }
+  const costs = options.map((o) => cost(o))
+  const best = Math.min(...costs)
+  const cur = options.findIndex((o) => o.side === current.side && o.stacked === current.stacked)
+  if (cur >= 0 && costs[cur] <= best) return current
+  return options[costs.indexOf(best)] ?? current
+}
+
+/** The corner alone for a one-line label (pinLabelLayout without stacking or the map's edge). */
 export function pinLabelSide(
   dot: { x: number; y: number },
   size: { w: number; h: number },
@@ -47,12 +86,5 @@ export function pinLabelSide(
   current: PinSide,
   covers: (box: ScreenBox, side: PinSide) => number = () => 0,
 ): PinSide {
-  const cost = (side: PinSide) => {
-    const b = pinLabelBox(dot.x, dot.y, size.w, size.h, side)
-    return OVERFLOW_COST_PER_PX * overflowPx(b, free) + covers(b, side)
-  }
-  const costs = new Map(PIN_SIDES.map((s) => [s, cost(s)] as const))
-  const best = Math.min(...costs.values())
-  if ((costs.get(current) ?? Infinity) <= best) return current
-  return PIN_SIDES.find((s) => costs.get(s) === best) ?? current
+  return pinLabelLayout(dot, { wide: size }, free, { side: current, stacked: false }, covers).side
 }

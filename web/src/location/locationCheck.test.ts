@@ -185,6 +185,8 @@ describe('observed fire at the point (reconstructed arrival)', () => {
     expect(checkLocation(withArrival(14)).observedFire).toEqual({ state: 'not_burned', asOfMs: ORIGIN + 10 * HOUR })
     expect(checkLocation(withArrival(NEVER)).observedFire).toEqual({ state: 'not_burned', asOfMs: ORIGIN + 10 * HOUR })
     expect(checkLocation(withArrival(Number.NaN)).observedFire).toEqual({ state: 'gap', gap: 'nodata' })
+    // past the latest observation (now_ms = 96 h: the forecast part) the observation is dated by that observation
+    expect(checkLocation({ ...withArrival(NEVER), timeMs: ORIGIN + 120 * HOUR }).observedFire).toEqual({ state: 'not_burned', asOfMs: m.time_range.now_ms })
     expect(checkLocation(withArrival(-1, { nodata: -1 })).observedFire).toEqual({ state: 'gap', gap: 'nodata' })
   })
   it('is unknown outside the modeled area, without a bundle and while loading', () => {

@@ -118,13 +118,21 @@ export function ImageryChip({ variant = 'chip' }: { variant?: ImageryChipVariant
         <span ref={chipRef} className={`xs-status${shown ? ' is-on' : ''}`}>
           <button type="button" className="tb-status is-button xs-status-main" aria-pressed={!!shown} onClick={show} aria-label={label} data-tip={tip}>
             <Satellite size={12} aria-hidden="true" className="xs-status-icon" />
-            <span aria-hidden="true">
-              {segs.map((seg, i) => (
-                <Fragment key={i}>
-                  {i > 0 && <span className="tb-status-sep"> · </span>}
-                  <span className={seg.stale ? 'is-stale' : undefined}>{seg.text}</span>
-                </Fragment>
-              ))}
+            {/* platform · pixel size shrink first (ellipsis); the age, the part that says how old the data is (amber
+                when stale), never truncates (review DF-13). A single segment (no image) shrinks as a whole. */}
+            <span className="xs-status-text" aria-hidden="true">
+              {segs.length > 1 && (
+                <span className="xs-status-head">
+                  {segs.slice(0, -1).map((seg, i) => (
+                    <Fragment key={i}>
+                      {i > 0 && <span className="tb-status-sep"> · </span>}
+                      <span className={seg.stale ? 'is-stale' : undefined}>{seg.text}</span>
+                    </Fragment>
+                  ))}
+                  <span className="tb-status-sep"> · </span>
+                </span>
+              )}
+              {segs.length > 0 && <span className={`${segs.length > 1 ? 'xs-status-tail' : 'xs-status-head'}${segs[segs.length - 1].stale ? ' is-stale' : ''}`}>{segs[segs.length - 1].text}</span>}
             </span>
           </button>
           <button ref={more} type="button" className="xs-status-more" aria-expanded={open} aria-haspopup="dialog" aria-label="More satellite images" data-tip="More images" onClick={() => setOpen((o) => !o)}>
@@ -146,7 +154,8 @@ export function ImageryChip({ variant = 'chip' }: { variant?: ImageryChipVariant
               </span>
             ) : (
               <span className="xs-chip-text" aria-hidden="true">
-                {text}
+                {/* its own box: text straight in the flex row is clipped mid-word, never ellipsised (review DF-13) */}
+                <span className="xs-chip-one">{text}</span>
               </span>
             )}
           </button>

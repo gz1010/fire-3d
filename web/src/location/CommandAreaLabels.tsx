@@ -1,17 +1,20 @@
-// Command's map labels with leaders (brief 4, CommandView.dc.html; PLAN-4 §3.2): "Observed fire" with the time the map
-// shows, and "Modeled spread" with the time it is modeled to ("BY OCT 25, 13:30 PDT · EXPERIMENTAL"). A DOM overlay
+// Command's map labels with leaders (brief 4, CommandView.dc.html; PLAN-4 §3.2): "Observed fire" with its area and the
+// time the map shows (never later than the latest observation: areaLabels.ts observedLabelMeta), and "Modeled spread" with the time it is modeled to ("BY OCT 25, 13:30 PDT · EXPERIMENTAL"). A DOM overlay
 // over the map (aria-hidden: the legend names both layers): after the map settles it reads the drawn outlines
 // (queryRenderedFeatures on the observed edge and the modeled 10 % outline), anchors each label on the outline (the
 // observed one up and to the right, the modeled one down and to the right), keeps it inside the free map (the safe area)
-// and off the selection pin's chip, and hides while the map moves. Pure placement: areaLabels.ts.
+// and off the selection pin's chip, the fire's own point and label ("<name> / REPORTED") and the key events' dots and
+// labels (as MapLibre placed them), drops it when no slot is free, and hides while the map moves. Pure placement:
+// areaLabels.ts.
 import type { Map as MapLibreMap } from 'maplibre-gl'
 import { useEffect, useState } from 'react'
 import { fmtAt } from '../lib/time'
 import { LYR } from '../map/layers'
 import { useMapRuntime } from '../map/mapStore'
+import { useStore } from '../state/store'
 import { useTimeFormat } from '../state/timeZone'
 import { useWorkspace } from '../state/workspace'
-import { labelWidth, overlaps, placeAlong, rankAnchors, type Box, type LeaderPlan, type LeaderShape, type Pt } from './areaLabels'
+import { labelWidth, observedLabelMeta, seriesAcresAt, overlaps, placeAlong, rankAnchors, type Box, type LeaderPlan, type LeaderShape, type Pt } from './areaLabels'
 
 /** At most this many outline points are projected per label (every n-th vertex of long outlines). */
 const MAX_POINTS = 1500
@@ -69,11 +72,22 @@ export function CommandAreaLabels() {
   const showObserved = useWorkspace((s) => s.mapLayers.observed)
   const showForecast = useWorkspace((s) => s.mapLayers.forecast)
   const insets = useWorkspace((s) => s.safeInsets)
+  const latestMs = useStore((s) => s.manifest?.time_range.now_ms ?? null)
+  const series = useStore((s) => s.timeseries)
+  const units = useWorkspace((s) => s.units)
   const tf = useTimeFormat()
   const [placed, setPlaced] = useState<Placed[]>([])
   const [moving, setMoving] = useState(false)
 
-  const observedMeta = showObserved && observed.status === 'ready' && observed.asOfMs != null && observed.burnedPx > 0 ? fmtAt(observed.asOfMs, tf, { zone: true }) : null
+  // the observed label's line with the area, and without it when that is too wide for the free map ("|"-joined, so the
+  // effect below depends on a string)
+  const observedMetas =
+    showObserved && observed.status === 'ready' && observed.asOfMs != null && observed.burnedPx > 0
+      ? [
+          observedLabelMeta(observed.asOfMs, latestMs, (ms) => seriesAcresAt(series, ms), units, (ms) => fmtAt(ms, tf, { zone: true })),
+          observedLabelMeta(observed.asOfMs, latestMs, () => null, units, (ms) => fmtAt(ms, tf, { zone: true })),
+        ].join('|')
+      : null
   const frame = forecast.frame
   const modeledMeta = showForecast && forecast.status === 'ready' && frame && frame.kind !== 'before-start' ? `By ${fmtAt(frame.byMs, tf, { zone: true })} · experimental` : null
 
@@ -88,16 +102,24 @@ export function CommandAreaLabels() {
       const chip = c.querySelector('.fxm-pin-chip')?.getBoundingClientRect()
       const host = c.getBoundingClientRect()
       if (chip && chip.width > 0) avoid.push({ left: chip.left - host.left - 6, top: chip.top - host.top - 6, right: chip.right - host.left + 6, bottom: chip.bottom - host.top + 6 })
+      // the map's own points and labels this overlay must not cover (only what MapLibre actually drew)
+      const under = [LYR.incidentLabel, LYR.incidentCircle, LYR.eventsLabel, LYR.eventsCircle].filter((id) => map.getLayer(id))
+      const blocked = (b: Box) => under.length > 0 && map.queryRenderedFeatures([[b.left, b.top], [b.right, b.bottom]], { layers: under }).length > 0
       const next: Placed[] = []
-      const add = (key: Placed['key'], layer: string, name: string, meta: string, shapes: readonly LeaderShape[], score: (p: Pt) => number) => {
-        // the best-scoring outline points first; the next ones when a label would leave the free map or cover another
-        const p = placeAlong(rankAnchors(outlinePoints(map, layer), area, score), labelWidth(name, meta), shapes, area, avoid)
-        if (!p) return
-        avoid.push(p.box)
-        next.push({ ...p, key, name, meta })
+      const add = (key: Placed['key'], layer: string, name: string, metas: readonly string[], shapes: readonly LeaderShape[], score: (p: Pt) => number) => {
+        // the best-scoring outline points first; the next ones when a label would leave the free map or cover another;
+        // then the next (shorter) meta line
+        const anchors = rankAnchors(outlinePoints(map, layer), area, score)
+        for (const meta of metas) {
+          const p = placeAlong(anchors, labelWidth(name, meta), shapes, area, avoid, blocked)
+          if (!p) continue
+          avoid.push(p.box)
+          next.push({ ...p, key, name, meta })
+          return
+        }
       }
-      if (observedMeta) add('observed', LYR.observedEdge, 'Observed fire', observedMeta, OBSERVED_SHAPES, (p) => p.x - p.y)
-      if (modeledMeta) add('modeled', LYR.forecastLine10, 'Modeled spread', modeledMeta, MODELED_SHAPES, (p) => p.x + 0.6 * p.y)
+      if (observedMetas) add('observed', LYR.observedEdge, 'Observed fire', [...new Set(observedMetas.split('|'))], OBSERVED_SHAPES, (p) => p.x - p.y)
+      if (modeledMeta) add('modeled', LYR.forecastLine10, 'Modeled spread', [modeledMeta], MODELED_SHAPES, (p) => p.x + 0.6 * p.y)
       // a label never covers the other's anchor
       const clean = next.filter((p) => !next.some((q) => q !== p && overlaps(p.box, { left: q.anchor.x - 2, right: q.anchor.x + 2, top: q.anchor.y - 2, bottom: q.anchor.y + 2 })))
       setPlaced((prev) => (samePlaced(prev, clean) ? prev : clean))
@@ -120,7 +142,7 @@ export function CommandAreaLabels() {
       map.off('idle', schedule)
       if (raf) cancelAnimationFrame(raf)
     }
-  }, [map, insets, observedMeta, modeledMeta])
+  }, [map, insets, observedMetas, modeledMeta])
 
   if (!map || moving || placed.length === 0) return null
   return (

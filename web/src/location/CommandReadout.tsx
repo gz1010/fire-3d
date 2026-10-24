@@ -6,7 +6,8 @@
 //   the MODEL line (dated, experimental) and the model's accuracy line;
 //   the official information at the point (compact: the first zone verbatim, the NWS line, not an all-clear);
 //   "value — LABEL" rows from the agency record: BURNED, CONTAINED, REPORTED LOCATION · issuer (copy, centre),
-//   INCIDENT ID (copy), RECORD UPDATED · issuer;
+//   INCIDENT ID (copy), RECORD UPDATED · issuer (the issuer only when the bundle used that agency's record, never for
+//   demo or local data: readoutText.ts recordIssuer);
 //   "More about this spot": the run figure, the model run and the arrival quantiles, the main factors, updated and
 //   reliability, and the details (sources, uncertainty, scientific values); open or closed is remembered per preset.
 // Without a selected point: "Click the map or search to select a point" and the record rows. The data and words come
@@ -29,7 +30,7 @@ import { ReadoutRow } from '../ui/shell/Readout'
 import { useCardPrefs } from './cardPrefs'
 import { CoverageNotice, KindTag, OfficialSection } from './CardParts'
 import { CopyButton } from './CoordinateStrip'
-import { coordinateLine, nearSentence, selectedLabel } from './readoutText'
+import { coordinateLine, nearSentence, recordIssuer, selectedLabel } from './readoutText'
 import type { LocationCardModel, NearHere } from './describe'
 import { DetailsBody, ReasonsBlock, ReliabilityBlock } from './LocationCard'
 import { useLocationCheck } from './useLocationCheck'
@@ -219,17 +220,19 @@ export function RecordRows() {
       summary: s.summary && s.summary.id === s.incidentId ? s.summary : null,
       incidentId: s.incidentId,
       demo: isDemoBundle(s.incidentId, s.manifest),
+      sources: s.manifest?.data_sources ?? null,
     })),
   )
   const tf = useTimeFormat()
   const nowMs = useNow(60_000)
   const { summary, incidentId } = st
   if (!incidentId) return null
-  const issuer = summary ? recordIssuerLabel(summary) : null
+  // the agency is named only when the bundle used its incident record (never for demo, synthetic or local data)
+  const issuer = summary ? recordIssuer(recordIssuerLabel(summary), st.sources, st.demo) : null
   const issuerTag = issuer ? ` · ${issuer}` : ''
   const reported = summary && Number.isFinite(summary.lat) && Number.isFinite(summary.lon) ? summary : null
   const yearMode = summary ? recordYearMode([summary.updated_ms], tf.tz, [summary.year, localYear(nowMs, tf.tz)]) : 'never'
-  const agencyId = summary ? agencyIdLine(summary) : null
+  const agencyId = summary && issuer ? agencyIdLine(summary) : null
   return (
     <section className="cro-rows" aria-label="Agency record and identifiers">
       {summary ? (
@@ -263,7 +266,7 @@ export function RecordRows() {
               <Crosshair size={13} />
             </button>
           </span>
-          <span className="ro-label">— Reported location{issuerTag}</span>
+          <span className="ro-label">— Reported location{issuer ? issuerTag : ' (incident data)'}</span>
         </div>
       )}
       <ReadoutRow size={17} value={incidentId} label="Incident ID" copy={incidentId} sub={agencyId ?? undefined} />

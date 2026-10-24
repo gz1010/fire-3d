@@ -667,7 +667,12 @@
 .ctl-handle-label .ctl-kind.is-beyond {
   color: var(--m-text-3);
 }
+/* slim (the screen): the forecast is dashed #f5c060 at full strength wherever the handle is; only the past after the
+   handle is dimmed (the bright copy up to the handle shows the played part) */
 .ctl.is-slim .ctl-lanes.is-dim {
+  opacity: 1;
+}
+.ctl.is-slim .ctl-lanes.is-dim .ctl-lane-obs {
   opacity: 0.55;
 }
 .ctl.is-slim .ctl-lane-obs {
@@ -737,6 +742,10 @@
   text-decoration: underline;
   text-decoration-color: var(--m-accent);
   text-underline-offset: 3px;
+}
+/* the active stop is marked by its underline only: a stale "LATEST" keeps its amber (data age) */
+.ctl.is-slim .ctl-stop.is-active.is-stale {
+  color: var(--m-stale);
 }
 .ctl.is-slim .ctl-stop.is-off {
   color: var(--m-text-4);

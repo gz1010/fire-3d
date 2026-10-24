@@ -3431,6 +3431,63 @@ rotation 38/38 in Public, Command and the overview (Q / E / N, buttons, compass 
 guards including Command's search popover, 2D ↔ 3D, a synthetic Safari twist, vignette strength, edges and tint per
 chrome), Command keys 27/27, hand-off and tint 5/5; reduced motion turns at once with no transitions.
 
+**Review fixes** (step h2-fix, 2026-10-24; two reviews of H2, design and behaviour; per finding in
+`reports/brief4-h2-fix.json`). Where this differs from the text above, this paragraph is what the code does.
+- *Command readout record rows* (H2-B3): the issuer tag ("Record updated · CAL FIRE", "Reported location · <issuer>")
+  and the agency ID sub-line appear only when the bundle was built from that agency's incident record
+  (`manifest.data_sources` lists CAL FIRE or the NIFC WFIGS incident record) and it is not demo data:
+  `location/readoutText.ts recordIssuer(issuer, sources, demo)`. Otherwise "Record updated" and "Reported location
+  (incident data)".
+- *"Observed fire" map label* (H2-B1, DF-16): `location/areaLabels.ts observedLabelMeta(timeMs, latestMs, acres, units,
+  fmt)` = "≈6,875 ac · Oct 22, 13:30 PDT" (the reconstructed area from the hourly series, `seriesAcresAt`, the
+  Analysis "Fire Area" line; hectares in metric); past the latest observation (`time_range.now_ms`; the forecast part,
+  a live fire's NOW) it reads "Latest · <that observation's time>", never a forecast or future time. A line too wide
+  for the free map falls back to the line without the area. The location check's "Not burned by …" is clamped the same
+  way (`locationCheck.ts`, `asOfMs = min(timeMs, now_ms)`).
+- *Hand-off heading* (H2-B2, decision k): `ui/shell/handoff.ts returnBearing(forensicBearing, turnedInForensic,
+  mapBearing)`. Map → Forensic remembers the map's heading; Forensic → map carries the Forensic heading only when the
+  user turned the Forensic camera there (a drag that changed the heading, or any camera command other than
+  frame-fire / zoom, such as north up or H5's turns), else restores the map's own heading (or the stored view's, or
+  north up when Forensic was opened directly). A north-up 2D map stays north up after Forensic and back (browser check
+  3/3).
+- *Map controls* (H2-m1): the default row (Public, overview and Command on phones until H3+H4 switch them) shows ⟲ ⟳ on
+  a short row of their own under it in 2D (`.fxm-turn-row`, 44 px on phones); in 3D the orbit row holds them as
+  before. `bar` with `anchor="bottom"` opens the basemap menu upward (DF-1); in the map workspace a menu item's hint
+  sits on its own line under the label (`map-bridge.css .select-pop`).
+- *Search across chrome swaps* (H2-m2): when a fire opens or closes or the preset changes, a search box with a message
+  or a result list open hands its text and popover to the next chrome's box (`location/searchUi.ts carry`, `SearchCarry`,
+  `CARRY_MS` 1500, `freshCarry(c, nowMs)`; saved from zustand subscriptions before React renders the next chrome, read
+  by the new box's first render).
+- *Selected-point label* (DF-2, DF-17): `map/pinLabel.ts pinLabelLayout(dot, { wide, stacked? }, free, current,
+  covers?, view?) → { side, stacked }` adds the stacked label (latitude, longitude, "SELECTED" on three lines; only for
+  a coordinates label) at `STACKED_COST` 8 and `OFFSCREEN_COST_PER_PX` 10 for pixels cut off by the screen;
+  `pinLabelSide` is the one-line wrapper. `SelectionPin` measures both forms, sets `.fxm-pin.is-stacked`; the label
+  reads "39.23708° N · 106.43677° W" (`fmtLatLon(lat, lon, digits, sep)`).
+- *Map labels* (DF-3, DF-14, DF-12): Command's area labels also stay off the map's own labels and points as MapLibre
+  drew them (`areaLabels.ts` `Blocked` predicate on `placeLeader` / `placeAlong`: `queryRenderedFeatures` on the
+  incident and event label / circle layers) and are dropped when no slot is free; they and the selected-point label
+  carry a four-layer dark halo, and the coloured meta line sits on a soft dark plate (`rgba(12,12,12,.6)`, feathered):
+  composited contrast on Eaton aerial at z9 went from 2.57:1 to ≥ 5.6:1 (pin label 4.25 → 4.88). "Outside modeled area" labels: `map/aoiLabels.ts aoiLabelBox(side, x, y, size)` / `aoiSidesInside(anchors,
+  free, size)`; the controller filters `fx-aoi-label` to the sides whose label box stays inside the safe area
+  (`placeAoiLabels`, with the pin label on moveend, idle and safe-area changes).
+- *Slim timeline* (DF-4, DF-5): the forecast lane is full-strength dashed `#f5c060` wherever the handle is (only the
+  past after the handle is dimmed); a stale active stop keeps its amber (the underline marks it).
+- *Colours and links* (DF-6, DF-7, DF-8): `--m-info` is a neutral grey `#cfcfcf` (light blue means the selected point
+  only; the wall-clock mark and its tooltip say "grey dotted mark"); `.on-link`, `.on-link-btn`, `.uf-link`, `.os-link`
+  and `.xs-caption-more` are `--m-accent-text`, underlined; feed kind tags use tokens (observation `--m-fire-3`,
+  estimate `--m-fire-4` dashed, model `--m-forecast` dotted, official `--m-official-ink`, annotation `--m-text-2`; NWS
+  alert icon `--m-alert`).
+- *Smaller layout fixes*: the feed's sticky filter bar is `--m-panel-raised` (DF-9); Command's search box fills its
+  400 px popover (DF-10); the top-bar status keeps the age whole (platform and pixel size shrink first;
+  `.xs-status-head` / `.xs-status-tail`) and the Public satellite chip ellipsises (DF-13); the demo badge reads "Demo"
+  in Command's bar (full wording in its accessible text, tooltip and the readout's note; DF-15); the floating bar's text
+  has the readout's halo and the logo a drop-shadow (DF-18, partly: the Command overview's top band is H3+H4's);
+  "More about this spot" section titles are mono with tracking (DF-19).
+- *Readout room* (DF-11, partly): below 1280 px Command folds the credits behind "© Credits"
+  (`App.tsx CreditsFooter({ narrow, fold })`, `ui/shell/hooks.ts CREDITS_FOLD_QUERY`; every text kept, opened above the
+  bottom row). The official block at the point stays under MODEL (PLAN-4 §3.2); the rows below it scroll into view
+  with the fade where the window is short.
+
 #### H3+H4 (Public overview, Public fire view, Command overview) — as built
 
 _To be filled by H3+H4._

@@ -7,7 +7,8 @@
 // Brief 4 (H2c, decision f): the map turns in 2D as in 3D. The compass can be dragged around its centre to set the
 // heading (ui/useCompassDrag.ts; a click without a drag is still "north up", ← / → on it turn 15°), ⟲ ⟳ turn 15°, and
 // Q / E / N do the same from anywhere (state/runtime.ts). Three looks:
-//   default  today's row (top right of the chromes that do not pass a variant), rotate buttons in the 3D orbit row;
+//   default  today's row (top right of the chromes that do not pass a variant), rotate buttons in the 3D orbit row
+//            and, in 2D, on a short row of their own under it;
 //   bar      one glass bar as the handoff's Main details (2D/3D, basemap, ⟲ compass ⟳, −, +, framing, optional
 //            Layers icon); the 3D orbit row goes on the side away from the screen edge it sits on (`anchor`);
 //   compact  a vertical cluster: zoom in / out, ⟲, compass, ⟳ (Public minimal and the fire view).
@@ -224,7 +225,9 @@ function PerspectiveSwitch() {
   return <Segmented value={perspective} options={PERSPECTIVES} onChange={setPerspective} ariaLabel="Perspective" size="sm" />
 }
 
-function BasemapMenu() {
+/** The basemap pick. `up`: the menu opens above the button (a bar at the bottom of the screen, as Command's, where a menu
+ *  opening downward would cover the timeline). */
+function BasemapMenu({ up = false }: { up?: boolean }) {
   const basemap = useWorkspace((s) => s.basemap)
   const setBasemap = useWorkspace((s) => s.setBasemap)
   const fallback = useWorkspace((s) => s.basemapFallback)
@@ -238,7 +241,7 @@ function BasemapMenu() {
       onChange={setBasemap}
       label={`Basemap: ${BASEMAP_LABEL[basemap]}`}
       tip="Basemap"
-      placement="bottom-end"
+      placement={up ? 'top-start' : 'bottom-end'}
       width={270}
       className="fxm-basemap-btn"
       display={
@@ -334,7 +337,7 @@ export function MapControls({ variant: asked, anchor = 'top', layers = false, cl
         {anchor === 'bottom' && orbit}
         <div className="fxm-ctl-row">
           <PerspectiveSwitch />
-          <BasemapMenu />
+          <BasemapMenu up={anchor === 'bottom'} />
           <div className="fxm-turn" role="group" aria-label="Turn the map">
             <RotateButton dir={-1} />
             <Compass look="handoff" />
@@ -362,7 +365,16 @@ export function MapControls({ variant: asked, anchor = 'top', layers = false, cl
         <ZoomButton delta={1} />
         <FrameButton narrow={narrow} />
       </div>
-      {perspective === '3d' && <OrbitGroup pitch={pitch} rotate hintSide="below" />}
+      {perspective === '3d' ? (
+        <OrbitGroup pitch={pitch} rotate hintSide="below" />
+      ) : (
+        // 2D: ⟲ ⟳ on their own short row under the controls, where the 3D orbit row goes (decision f: visible turn
+        // buttons in every mode; the main row has no room for them on phones)
+        <div className="fxm-orbit fxm-turn-row" role="group" aria-label="Turn the map">
+          <RotateButton dir={-1} />
+          <RotateButton dir={1} />
+        </div>
+      )}
     </div>
   )
 }

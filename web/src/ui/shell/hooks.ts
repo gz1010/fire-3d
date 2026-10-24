@@ -3,6 +3,8 @@ import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, typ
 
 /** Phone layout: drawers become bottom sheets (keep in sync with the 760px media queries in styles/map-layout.css). */
 export const NARROW_QUERY = '(max-width: 760px)'
+/** Command in a fire folds its credits behind "© Credits" below this width (view-command.css 1279px; review DF-11). */
+export const CREDITS_FOLD_QUERY = '(max-width: 1279px)'
 /** Full header (the view switch in the bar, the satellite chip next to the panel toggles; map-layout.css 1023px). */
 export const WIDE_QUERY = '(min-width: 1024px)'
 

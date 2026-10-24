@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { lonLatToUtm } from '../lib/reproject'
-import { coordinateLine, nearSentence, selectedLabel } from './readoutText'
+import { coordinateLine, nearSentence, recordIssuer, selectedLabel } from './readoutText'
 
 describe("Command readout text (brief 4)", () => {
   it('writes the coordinate line: DMS, UTM with the zone, the datum', () => {
@@ -29,4 +29,21 @@ describe("Command readout text (brief 4)", () => {
     expect(selectedLabel({ ...base, source: 'event', approximate: true })).toBe('Event location · estimated')
     expect(selectedLabel({ ...base, source: 'device' })).toBe('Your location (from your browser)')
   })
+
+  it('names the record issuer only when the bundle used that agency record, never for demo or local data (review H2-B3)', () => {
+    const calfire = [{ name: 'CAL FIRE incidents' }, { name: 'NASA FIRMS active fire detections' }]
+    const wfigs = [{ name: 'NIFC WFIGS incident record (IRWIN)' }, { name: 'NIFC WFIGS fire perimeters' }]
+    const synthetic = [{ name: 'Terrain (synthetic)' }, { name: 'Fire observations (synthetic)' }]
+    expect(recordIssuer('CAL FIRE', calfire, false)).toBe('CAL FIRE')
+    expect(recordIssuer('USFS via NIFC WFIGS', wfigs, false)).toBe('USFS via NIFC WFIGS')
+    // fixture-live: a demo bundle with synthetic sources, whose summary still names an agency
+    expect(recordIssuer('CAL FIRE', synthetic, true)).toBeNull()
+    expect(recordIssuer('CAL FIRE', synthetic, false)).toBeNull()
+    // perimeters alone are not the incident record; no manifest yet; no issuer
+    expect(recordIssuer('NIFC WFIGS', [{ name: 'NIFC WFIGS fire perimeters' }], false)).toBeNull()
+    expect(recordIssuer('CAL FIRE', null, false)).toBeNull()
+    expect(recordIssuer(null, calfire, false)).toBeNull()
+    expect(recordIssuer('CAL FIRE', calfire, true)).toBeNull()
+  })
 })
+
