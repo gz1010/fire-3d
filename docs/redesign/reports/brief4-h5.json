@@ -75,10 +75,10 @@
   ],
   "notes_for_others": "Global CSS changed by H5 (theme.css, controls.css, header.css, overlays.css, layout.css): hard-coded golds are now the accent or greys; the map workspace's values are unchanged because map-tokens.css re-points the tokens and map-bridge.css covers the rest (Public and Command screenshots compared). New theme tokens usable anywhere: --accent-ink, --accent-hover, --text-body, --link, --fire-3, --bar-top, --edge. Forensic-only overrides are scoped with :root[data-workspace='forensic'] (menu icons grey; range sliders grey via --range-fill / --range-ring). sceneStore.issueCameraCommand(kind, deg?) now takes 'rotate' and 'set-heading'; CameraRig registers the Forensic RotationTarget, so Q / E / N work in Forensic. No H2 frozen file was edited. H3+H4: map/map.css .fxm-compass svg has a transition that spins the needle across ±180° (consider dropping it as H5 did). The scratch checks (session scratchpad, not in the repo): h5-rotate-check.mjs, h5-measure.mjs, h5-shots.sh, h5-needle.mjs.",
   "commits": [
-    "f17b7fd brief 4 H3/H5: work-in-progress snapshot (orchestrator; holds H5's first tokens, header, panels, rotation)",
-    "464f1ba brief 4 H3/H5: work-in-progress snapshot (orchestrator)",
-    "80ffc02 brief 4 H3/H5: work-in-progress snapshot (orchestrator; H5 rotation fixes, weather card, place line)",
+    "464f1ba brief 4 H3/H5: work-in-progress snapshot (orchestrator; holds most of H5: tokens, global CSS, header, panels, dock, compass, rotation, heading.ts)",
+    "80ffc02 brief 4 H3/H5: work-in-progress snapshot (orchestrator; two more H5 files)",
     "db098f8 brief 4 H5: Forensic restyle and rotation finished (dock 112 px, medium-screen bar, CONTRACT 15.5, report)",
-    "(this commit) brief 4 H5: report commit list"
+    "6d50771 brief 4 H5: report commit list",
+    "(this commit) brief 4 H5: report commit list corrected"
   ]
 }
