@@ -15,6 +15,7 @@
 import type { ReactNode } from 'react'
 import { ImageryChip } from '../../extras/ImageryChip'
 import { useExtrasFeedItems } from '../../extras/runtime'
+import { CommandAreaLabels } from '../../location/CommandAreaLabels'
 import { CommandReadout } from '../../location/CommandReadout'
 import { CommandSearch } from '../../location/CommandSearch'
 import { ScaleBar } from '../../map/MapAttribution'
@@ -51,9 +52,9 @@ export function CommandFireChrome({ credits }: { credits: ReactNode }) {
           <>
             <AllFiresBack />
             <IncidentPicker variant="title" />
-            <LiveDot live={bar.live} year={bar.year} />
+            {!narrow && <LiveDot live={bar.live} year={bar.year} />}
             <TopBarPlace place={bar.place} />
-            {bar.demo && <DemoBadge />}
+            {bar.demo && !narrow && <DemoBadge />}
           </>
         }
         centre={<ViewPill className="mw-wide-only" />}
@@ -73,6 +74,8 @@ export function CommandFireChrome({ credits }: { credits: ReactNode }) {
           </>
         }
       />
+      {/* "Observed fire" / "Modeled spread" with leaders, over the map and under the chrome */}
+      <CommandAreaLabels />
       <div className="mw-layers-slot" data-chrome="layers">
         <LayersPanel />
       </div>
@@ -88,6 +91,14 @@ export function CommandFireChrome({ credits }: { credits: ReactNode }) {
         </div>
         {narrow && (
           <>
+            {/* phones: the bar keeps the fire's name; LIVE (or the year) and the demo badge sit under it, left of the
+                map controls */}
+            {(bar.live || bar.year != null || bar.demo) && (
+              <div className="cmd-badges" data-chrome="badges">
+                <LiveDot live={bar.live} year={bar.year} />
+                {bar.demo && <DemoBadge />}
+              </div>
+            )}
             <div className="mw-imagery" data-chrome="imagery">
               <ImageryChip variant="status" />
             </div>
@@ -111,7 +122,7 @@ export function CommandFireChrome({ credits }: { credits: ReactNode }) {
         {!narrow && (
           <div className="cmd-row">
             <div className="mw-controls cmd-controls" data-chrome="controls">
-              <MapControls />
+              <MapControls variant="bar" anchor="bottom" />
             </div>
             <div className="mw-legend-slot cmd-legend" data-chrome="legend">
               <MapLegend variant="chips" />

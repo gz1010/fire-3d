@@ -13,7 +13,7 @@
 // from the location check shared with the Public card (LocationCard.tsx useLocationCheck, describe.ts). Phones: a
 // bottom sheet whose peek line is the selected point (else the reported location).
 import { ChevronDown, ChevronUp, Crosshair, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { recordIssuerLabel } from '../api/records'
 import { formatDecimalPair, formatLat, formatLon } from '../lib/geodesy'
@@ -44,22 +44,35 @@ function useUtmZone(): number | null {
 }
 
 // ------------------------------------------------------------------------------------------------ header + point
+/** Phones: folds the open sheet back to its peek line (null on wider screens). */
+const CollapseSheet = createContext<(() => void) | null>(null)
+
 function Head({ sel, title }: { sel: SelectedLocation | null; title: string }) {
   const clear = useWorkspace((s) => s.clearSelection)
+  const collapse = useContext(CollapseSheet)
   return (
     <header className="cro-head">
       <h2 className="cro-eyebrow" id="cro-title">
         {title}
       </h2>
-      {sel && (
+      {(sel || collapse) && (
         <span className="cro-actions">
-          <CopyButton text={formatDecimalPair(sel.lat, sel.lon)} label="Copy coordinates" />
-          <button type="button" className="mw-icon-btn cro-btn" aria-label="Center the map on the selected point" data-tip="Center the map here" onClick={() => flyTo(sel.lat, sel.lon)}>
-            <Crosshair size={14} />
-          </button>
-          <button type="button" className="mw-icon-btn cro-btn" aria-label="Clear the selected point" data-tip="Clear the selected point" onClick={clear}>
-            <X size={14} />
-          </button>
+          {sel && (
+            <>
+              <CopyButton text={formatDecimalPair(sel.lat, sel.lon)} label="Copy coordinates" />
+              <button type="button" className="mw-icon-btn cro-btn" aria-label="Center the map on the selected point" data-tip="Center the map here" onClick={() => flyTo(sel.lat, sel.lon)}>
+                <Crosshair size={14} />
+              </button>
+              <button type="button" className="mw-icon-btn cro-btn" aria-label="Clear the selected point" data-tip="Clear the selected point" onClick={clear}>
+                <X size={14} />
+              </button>
+            </>
+          )}
+          {collapse && (
+            <button type="button" className="mw-icon-btn cro-btn" aria-expanded={true} aria-controls="cro-body" aria-label="Show the one-line coordinates" onClick={collapse}>
+              <ChevronDown size={16} />
+            </button>
+          )}
         </span>
       )}
     </header>
@@ -304,19 +317,21 @@ export function CommandReadout() {
   return (
     <section className={`cro${narrow ? ' is-sheet' : ''}${open ? ' is-open' : ''}`} aria-labelledby={open ? 'cro-title' : undefined} aria-label={open ? undefined : 'Coordinates, WGS84'}>
       {narrow && <span className="mw-sheet-handle" aria-hidden="true" />}
-      {narrow && <Peek sel={sel} open={sheetOpen} onToggle={() => setSheetOpen((o) => !o)} />}
+      {narrow && !sheetOpen && <Peek sel={sel} open={false} onToggle={() => setSheetOpen(true)} />}
       {open && (
-        <div className="cro-body" id="cro-body">
-          {sel ? (
-            <SelectedCheck sel={sel} zone={zone} />
-          ) : (
-            <>
-              <Head sel={null} title="Selected point" />
-              <p className="cro-empty">Click the map or search to select a point</p>
-              <RecordRows />
-            </>
-          )}
-        </div>
+        <CollapseSheet.Provider value={narrow ? () => setSheetOpen(false) : null}>
+          <div className="cro-body" id="cro-body">
+            {sel ? (
+              <SelectedCheck sel={sel} zone={zone} />
+            ) : (
+              <>
+                <Head sel={null} title="Selected point" />
+                <p className="cro-empty">Click the map or search to select a point</p>
+                <RecordRows />
+              </>
+            )}
+          </div>
+        </CollapseSheet.Provider>
       )}
     </section>
   )

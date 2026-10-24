@@ -641,6 +641,7 @@
   bottom: 10px;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 10px;
 }
 .cmd-row {
@@ -658,12 +659,6 @@
   --chrome-side: bottom;
   flex: none;
   justify-self: auto;
-}
-/* the 3D orbit row sits above the bar (the controls grow upward from the timeline) */
-.mw[data-view='command-fire'] .cmd-controls .fxm-ctl {
-  display: flex;
-  flex-direction: column-reverse;
-  align-items: flex-start;
 }
 .mw[data-view='command-fire'] .cmd-legend {
   flex: 1 1 auto;
@@ -804,6 +799,57 @@
   text-shadow: none;
 }
 
+/* ------------------------------------------------------------------------------------------------ map labels */
+/* "Observed fire" / "Modeled spread" with hairline leaders (location/CommandAreaLabels.tsx): over the map, under the
+   chrome; name Inter 13 / 600, meta mono 10.5 in the layer's colour (HANDOFF "Map labels") */
+.cmd-labels {
+  position: absolute;
+  inset: 0;
+  z-index: calc(var(--m-z-map) + 2);
+  pointer-events: none;
+}
+.cmd-labels-lines {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+.cmd-labels-lines path {
+  fill: none;
+  stroke-width: 0.9;
+  stroke-opacity: 0.75;
+}
+.cmd-labels-lines path.is-observed {
+  stroke: var(--m-fire-3);
+}
+.cmd-labels-lines path.is-modeled {
+  stroke: var(--m-forecast);
+}
+.cmd-label {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  white-space: nowrap;
+  text-shadow: 0 1px 6px #000;
+}
+.cmd-label.is-left {
+  align-items: flex-end;
+  text-align: right;
+}
+.cmd-label-name {
+  font: 600 13px / 16px var(--m-font-ui);
+  color: var(--m-text);
+}
+.cmd-label-meta {
+  font: 400 10.5px / 15px var(--m-font-mono);
+  text-transform: uppercase;
+}
+.cmd-label.is-observed .cmd-label-meta {
+  color: var(--m-fire-3);
+}
+.cmd-label.is-modeled .cmd-label-meta {
+  color: var(--m-forecast);
+}
+
 /* ------------------------------------------------------------------------------------------------ medium widths */
 @media (max-width: 1279px) {
   .mw[data-view='command-fire'] {
@@ -837,9 +883,35 @@
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-rows: auto auto;
     grid-template-areas:
-      '.    controls'
-      'chip chip';
+      'badges controls'
+      'chip   chip';
     gap: var(--m-gap);
+  }
+  /* LIVE (or the year) and the demo badge under the bar, left of the map controls */
+  .cmd-badges {
+    --chrome-side: top;
+    grid-area: badges;
+    align-self: center;
+    justify-self: start;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    text-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.8),
+      0 0 10px rgba(0, 0, 0, 0.6);
+  }
+  .cmd-badges .mw-demo-badge {
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 999px;
+    font: 600 10px / 1 var(--m-font-mono);
+    letter-spacing: 0.12em;
+    text-shadow: none;
+  }
+  /* the fire's name keeps a readable width */
+  .mw[data-view='command-fire'] .mw-header .picker-btn.is-title {
+    min-width: 88px;
   }
   /* the readout is a bottom sheet: its peek line always, the whole readout when opened */
   .mw[data-view='command-fire'] .mw-card {
